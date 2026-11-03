@@ -1,0 +1,21 @@
+import SteppedFlapjack.Test.Ffi
+import SteppedFlapjack.Test.PanCost
+import SteppedFlapjack.Test.PanEvaluateParity
+import SteppedFlapjack.Test.PanMemoryModel
+import SteppedFlapjack.Test.PanSemAssignErrorExactParity
+import SteppedFlapjack.Test.PanSemDecCallErrorParity
+import SteppedFlapjack.Test.PanSemDecErrorExactParity
+import SteppedFlapjack.Test.PanSemExtCallErrorParity
+import SteppedFlapjack.Test.PanSemIteErrorExactParity
+import SteppedFlapjack.Test.PanSemReturnRaiseErrorParity
+import SteppedFlapjack.Test.PanSemStateEvalParity
+import SteppedFlapjack.Test.PanSemStore32ErrorExactParity
+import SteppedFlapjack.Test.PanSemStoreErrorExactParity
+import SteppedFlapjack.Test.PanSteppedSemantics
+import SteppedFlapjack.Test.PanValueAcceleratorFfi
+import SteppedFlapjack.Test.PanValueFfiClockSemantics
+import SteppedFlapjack.Test.PanValueFfiFuel
+import SteppedFlapjack.Test.PanValueFfiSemantics
+import SteppedFlapjack.Test.PanValueMemoryFfi
+
+/-! Compile-time checks of the stepped semantics; building this module runs them. -/
