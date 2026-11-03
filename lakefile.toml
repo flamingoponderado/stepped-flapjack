@@ -1,0 +1,13 @@
+name = "SteppedFlapjack"
+version = "0.1.0"
+defaultTargets = ["SteppedFlapjack"]
+
+# Flapjack, the Lean 4 port of the Pancake compiler. This package holds the
+# step-counted source semantics that is being split out of it (flapjack#1251).
+[[require]]
+name = "Flapjack"
+git = "https://github.com/flamingoponderado/flapjack"
+rev = "main"
+
+[[lean_lib]]
+name = "SteppedFlapjack"
