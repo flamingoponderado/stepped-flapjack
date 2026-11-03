@@ -43,9 +43,12 @@ keep their names in the `Flapjack` namespace.
   counts;
 - `SteppedFlapjack.Pancake.Semantics.PanSem.EvalExecutedCountedBridge`, the
   counted expression evaluator against `PanSem`;
-- their tests, under `SteppedFlapjack/Test/`. They are compile-time checks, so
-  `lake build` runs them. Several build on the fixtures of the matching
-  `Flapjack.Test.*` modules, which stay in Flapjack.
+- their tests, under `SteppedFlapjack/Test/`, in the separate
+  `SteppedFlapjackTests` library. They are compile-time checks, so
+  `lake build` runs them. They do not import Flapjack's test modules: the
+  fixtures they need are copied from the Flapjack tests they were split from,
+  and `SteppedFlapjack.Test.PanValueFfiSemantics` holds the shared stateful-FFI
+  fixtures.
 
 Code shared with the clocked evaluator stays in Flapjack, in
 `Flapjack.PanValueFfiCore` and `Flapjack.PanExpressionEvaluatorBase`.

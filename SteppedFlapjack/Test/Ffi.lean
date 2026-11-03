@@ -1,8 +1,11 @@
+import Flapjack.RiscV.Link
+import Flapjack.Ffi
 import SteppedFlapjack.PanValueFfiSemantics
 
 /-!
 The stepped counterpart of the I/O-event prefix lemma checked in `Flapjack.Test.Ffi`.
-Moved from flapjack with the stepped semantics (flapjack#1251).
+Split from that module (flapjack#1251), with copies of the fixtures it
+uses, so that this package does not import Flapjack's tests.
 -/
 
 namespace Flapjack

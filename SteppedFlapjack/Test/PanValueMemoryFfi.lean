@@ -1,12 +1,93 @@
-import Flapjack.Test.PanValueMemoryFfi
 import SteppedFlapjack.PanValueFfiSemantics
 
 /-!
 The stepped evaluator with the memory FFI handler of `Flapjack.Test.PanValueMemoryFfi`.
-Moved from flapjack with the stepped semantics (flapjack#1251).
+Split from that module (flapjack#1251), with copies of the fixtures it
+uses, so that this package does not import Flapjack's tests.
 -/
 
 namespace Flapjack
+
+def memoryFfiTestContext : PanValueFfiContext Nat :=
+  { sharedDomain := fun _ => true
+    byteAlign := id
+    bigEndian := false
+    wordToBytes := fun _ _ => []
+    wordOfBytes := fun _ _ => 0
+    wordToByte := fun value => UInt8.ofNat value
+    byteToWord := fun value => value.toNat
+    valueToNat := id }
+
+def memoryFfiTestState : FfiState Unit :=
+  { oracle := fun _ state _ _ => .returned state []
+    state := ()
+    ioEvents := [] }
+
+def memoryFfiTestHandler : PanValueStatefulFfiHandler Nat Unit :=
+  fun _ _ _ _ _ locals ffi => some (locals, ffi)
+
+def memoryFfiTestMemoryAccess : PanValueMemoryAccess Nat :=
+  { domain := fun _ => true
+    wordOp := fun _ _ => some 0
+    compare := fun _ _ _ => 0
+    shift := fun _ _ _ => some 0
+    readWord := fun domain memory _ address =>
+      if domain address then
+        match memory address with
+        | some (.word value) => some value
+        | _ => none
+      else none
+    readByte := fun _ _ _ _ => none
+    read16 := fun _ _ _ _ => none
+    read32 := fun _ _ _ _ => none
+    storeWord := fun domain memory _ address value =>
+      if domain address then some (updatePanValueMemory memory address (.word value))
+      else none
+    storeByte := fun _ _ _ _ _ => none
+    store16 := fun _ _ _ _ _ => none
+    store32 := fun _ _ _ _ _ => none
+    sharedRead := fun _ _ _ _ => none
+    sharedStore := fun _ _ _ _ _ => none }
+
+def memoryFfiAccelerator : PanValueMemoryFfiHandler Nat Unit :=
+  fun function configuration _ array _ locals memory ffi =>
+    if function == "accelerator" then
+      some (locals, updatePanValueMemory memory array (.word (configuration + 1)), ffi)
+    else none
+
+def memoryFfiDecliningHandler : PanValueMemoryFfiHandler Nat Unit :=
+  fun _ _ _ _ _ _ _ _ => none
+
+def memoryFfiFinalState : FfiState Unit :=
+  { oracle := fun _ _ _ _ => .final .failed
+    state := ()
+    ioEvents := [] }
+
+def memoryFfiInitial : PanValueFfiProgramState Nat Unit :=
+  { source :=
+      { structs := []
+        globals := fun _ => none
+        functions := []
+        returnShapes := []
+        exceptions := []
+        memory := fun _ => none
+        baseAddress := 0
+        topAddress := 1000
+        bytesInWord := 1 }
+    ffi := memoryFfiTestState }
+
+def memoryFfiMain : Prog Nat :=
+  .seq
+    (.extCall "accelerator" (.const 7) (.const 0) (.const 200) (.const 1))
+    (.return (.load .one (.const 200)))
+
+def memoryFfiFinalMain : Prog Nat :=
+  .extCall "unknown" (.const 7) (.const 0) (.const 200) (.const 0)
+
+def memoryFfiDeclarations : List (Decl Nat) :=
+  [.function
+    { name := "main", inline := false, exported := true, params := [],
+      body := memoryFfiMain, returnShape := .one }]
 
 def memoryFfiSteppedResult :=
   evalPanValueFfiProgramStepped memoryFfiTestContext memoryFfiInitial

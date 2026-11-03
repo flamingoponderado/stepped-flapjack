@@ -1,18 +1,77 @@
-import Flapjack.Test.PanSemReturnRaiseErrorParity
-import SteppedFlapjack.PanValueFfiSemantics
+import Flapjack.Pancake.Semantics.PanSem
+import SteppedFlapjack.Test.PanValueFfiSemantics
 
 /-!
 The non-clocked step evaluator `evalPanValueFfiProgSteps` on the `Return` and
 `Raise` fixtures of `Flapjack.Test.PanSemReturnRaiseErrorParity`. It reaches
 the same `panValueReturnResult`/`panValueRaiseResult` helpers as the clocked
 evaluator; these guards check the carried state.
-Moved from flapjack with the stepped semantics (flapjack#1251).
+Split from that module (flapjack#1251), with copies of the fixtures it
+uses, so that this package does not import Flapjack's tests.
 -/
 
 namespace Flapjack.Test.PanSemReturnRaiseErrorParity
 
 open Flapjack
 open Flapjack.RiscV
+
+private abbrev Word64 := Word 64
+
+def returnRaiseState (clock : Nat) : PanSemState Word64 (FfiState Unit) :=
+  { locals := fun name =>
+      if name == "x" then some (.word (BitVec.ofNat 64 3)) else none
+    globals := fun _ => none
+    structs := []
+    code := []
+    exceptionShapes := fun _ => none
+    memory := fun _ => none
+    memaddrs := fun _ => false
+    sharedMemaddrs := fun _ => false
+    clock := clock
+    be := false
+    ffi := statefulTestFfiState
+    baseAddress := BitVec.ofNat 64 0
+    topAddress := BitVec.ofNat 64 100 }
+
+def contractsWith (exceptionShapes : InfoMap Shape) : PanValueCallContracts :=
+  { returnShapes := [], exceptionShapes := exceptionShapes }
+
+def isWordOption (expected : Nat) (value : Option (PanValue Word64)) : Bool :=
+  match value with
+  | some (.word word) => word == BitVec.ofNat 64 expected
+  | _ => false
+
+def isMissingLocal (value : Option (PanValue Word64)) : Bool := value.isNone
+
+def isWordValue (expected : Nat) (value : PanValue Word64) : Bool :=
+  match value with
+  | .word word => word == BitVec.ofNat 64 expected
+  | _ => false
+
+def isWordList (expected : Nat) : List (PanValue Word64) → Bool
+  | [.word word] => word == BitVec.ofNat 64 expected
+  | _ => false
+
+def retEvalFail : Prog Word64 := .return (.var .local "z")
+
+def retOversized : Prog Word64 := .return (.rStruct (List.replicate 33 (.const 0)))
+
+def retOk : Prog Word64 := .return (.const (BitVec.ofNat 64 7))
+
+def raiseMissingShape : Prog Word64 := .raise "E" (.const (BitVec.ofNat 64 7))
+
+def raiseMismatch : Prog Word64 := .raise "E" (.rStruct [.const (BitVec.ofNat 64 7)])
+
+def raiseEvalFail : Prog Word64 := .raise "E" (.var .local "z")
+
+def raiseOversized : Prog Word64 :=
+  .raise "E" (.rStruct (List.replicate 33 (.const 0)))
+
+def oneExceptionContracts : Option PanValueCallContracts :=
+  some (contractsWith [("E", .one)])
+
+def oversizedExceptionContracts : Option PanValueCallContracts :=
+  some (contractsWith [("E", .comb (List.replicate 33 .one))])
 
 def nonClockedEvaluate (program : Prog Word64)
     (contracts : Option PanValueCallContracts := none) :

@@ -8,7 +8,6 @@ import SteppedFlapjack.PanValueFfiClockProjection
 import SteppedFlapjack.PanValueFfiClockStepsBridge
 import SteppedFlapjack.PanCost
 import SteppedFlapjack.Pancake.Semantics.PanSem.EvalExecutedCountedBridge
-import SteppedFlapjack.Tests
 
 /-!
 # stepped-flapjack
@@ -30,5 +29,6 @@ phase 4 of flapjack#1251:
   counted expression evaluator against `PanSem.evalExecuted`.
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
-their names in the `Flapjack` namespace.
+their names in the `Flapjack` namespace. The tests are in the separate
+`SteppedFlapjackTests` library, rooted at `SteppedFlapjack.Tests`.
 -/

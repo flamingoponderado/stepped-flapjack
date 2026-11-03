@@ -1,16 +1,32 @@
-import Flapjack.Test.PanSemAssignErrorExactParity
-import SteppedFlapjack.PanValueFfiSemantics
+import Flapjack.Pancake.Semantics.PanSemStateEval
+import SteppedFlapjack.Test.PanValueFfiSemantics
 
 /-!
 The non-clocked evaluator rejects the `Assign` failures of
 `Flapjack.Test.PanSemAssignErrorExactParity` with `Error`.
-Moved from flapjack with the stepped semantics (flapjack#1251).
+Split from that module (flapjack#1251), with copies of the fixtures it
+uses, so that this package does not import Flapjack's tests.
 -/
 
 namespace Flapjack.Test.PanSemAssignErrorExactParity
 
 open Flapjack
 open Flapjack.RiscV
+
+private abbrev Word64 := Word 64
+
+private def exactDomain : Word64 → Bool :=
+  fun address => address == 8
+
+private def exactAccess : PanValueMemoryAccess Word64 :=
+  panValueMemoryAccessOfModel panSemBitVec64WordModel exactDomain
+    (fun _ => false) false
+
+private def exactMemory : Word64 → Option (PanValue Word64) :=
+  fun _ => some (.word 0)
+
+private def localsWordX : VarName → Option (PanValue Word64) :=
+  fun name => if name == "x" then some (.word 3) else none
 
 private def nonClockedEvaluate (program : Prog Word64)
     (memoryAccess : Option (PanValueMemoryAccess Word64) := none) :
@@ -29,6 +45,12 @@ private def isErrorSteppedKeepingX (value : Nat)
        | _ => false) &&
         (globals "g").isNone
   | _ => false
+
+private def assignLocalEvalFailProgram : Prog Word64 :=
+  .assign .local "x" (.var .local "z")
+
+private def assignFreshLocalProgram : Prog Word64 :=
+  .assign .local "y" (.const 9)
 
 private def assignNonClockedEvalFailGuard : Bool :=
   isErrorSteppedKeepingX 3 (nonClockedEvaluate assignLocalEvalFailProgram

@@ -1,6 +1,6 @@
 name = "SteppedFlapjack"
 version = "0.1.0"
-defaultTargets = ["SteppedFlapjack"]
+defaultTargets = ["SteppedFlapjack", "SteppedFlapjackTests"]
 
 # Flapjack, the Lean 4 port of the Pancake compiler. This package holds the
 # step-counted source semantics split out of it (flapjack#1251).
@@ -12,3 +12,9 @@ rev = "issue-1251-phase4-move"
 
 [[lean_lib]]
 name = "SteppedFlapjack"
+
+# Compile-time checks of the stepped semantics, kept out of the library root
+# so that `import SteppedFlapjack` does not load them.
+[[lean_lib]]
+name = "SteppedFlapjackTests"
+roots = ["SteppedFlapjack.Tests"]

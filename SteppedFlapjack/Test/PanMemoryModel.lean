@@ -1,12 +1,30 @@
-import Flapjack.Test.PanMemoryModel
+import Flapjack.RiscV.PanMemory
 import SteppedFlapjack.PanSteppedSemantics
 
 /-!
 The stepped evaluator on the memory-model programs of `Flapjack.Test.PanMemoryModel`, including step counts.
-Moved from flapjack with the stepped semantics (flapjack#1251).
+Split from that module (flapjack#1251), with copies of the fixtures it
+uses, so that this package does not import Flapjack's tests.
 -/
 
 namespace Flapjack
+
+def memoryModelMemory : PanFlatMemory (RiscV.Word 64) :=
+  fun address =>
+    if address == BitVec.ofNat 64 8 then
+      some (BitVec.ofNat 64 0x0807060504030201)
+    else none
+
+def memoryModel : PanMemoryModel (RiscV.Word 64) :=
+  RiscV.panRiscVMemoryModel
+
+def structuredFlatDomain : PanMemoryDomain (RiscV.Word 64) :=
+  fun address => address == BitVec.ofNat 64 8 || address == BitVec.ofNat 64 16
+
+def structuredFlatProgram : Prog (RiscV.Word 64) :=
+  .seq (.store (.const (BitVec.ofNat 64 8))
+      (.rStruct [.const (BitVec.ofNat 64 3), .const (BitVec.ofNat 64 5)]))
+    (.return (.load (.comb [.one, .one]) (.const (BitVec.ofNat 64 8))))
 
 def memoryModelSteppedStructuredFlatProgram : Bool :=
   match evalPanValueSteppedProg (α := RiscV.Word 64)
@@ -77,8 +95,11 @@ def memoryModelSteppedVariadicAdd : Option (RiscV.Word 64 × Nat) :=
       | _ => none
 
 #guard memoryModelSteppedByteProgram = some (BitVec.ofNat 64 0xaa, 7)
+
 #guard memoryModelSteppedShared16Program = some (BitVec.ofNat 64 0xbeef, 9)
+
 #guard memoryModelSteppedSharedOutOfDomain = none
+
 #guard memoryModelSteppedVariadicAdd = some (BitVec.ofNat 64 6, 5)
 
 end Flapjack

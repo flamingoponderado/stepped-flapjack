@@ -1,5 +1,6 @@
 import Flapjack.PanValueFfiClockCorrectness
 import SteppedFlapjack.PanValueFfiSemantics
+
 /-!
 # Clocked-to-stepped source projection
 

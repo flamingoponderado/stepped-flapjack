@@ -1,16 +1,43 @@
-import Flapjack.Test.PanValueFfiClockSemantics
+import Flapjack.PanValueFfiClockSemantics
 import SteppedFlapjack.PanValueFfiClockProjection
 import SteppedFlapjack.Test.PanValueFfiSemantics
 
 /-!
 Clocked results compared with the stepped evaluator and projected to stepped
 results, on the programs of `Flapjack.Test.PanValueFfiClockSemantics`.
-Moved from flapjack with the stepped semantics (flapjack#1251).
+Split from that module (flapjack#1251), with copies of the fixtures it
+uses, so that this package does not import Flapjack's tests.
 -/
 
 namespace Flapjack
 
 open RiscV
+
+def clockedTickAtZero :
+    Option (PanValueFfiClockResult (Word 64) Unit) :=
+  evalPanValueFfiClockProg statefulTestContext statefulTestPrimitive
+    statefulTestHandler [] [] 0 100 8 20 (fun _ => none) (fun _ => none)
+    (fun _ => none) statefulTestFfiState 0 .tick
+
+def clockedTickAtOne :
+    Option (PanValueFfiClockResult (Word 64) Unit) :=
+  evalPanValueFfiClockProg statefulTestContext statefulTestPrimitive
+    statefulTestHandler [] [] 0 100 8 20 (fun _ => none) (fun _ => none)
+    (fun _ => none) statefulTestFfiState 1 .tick
+
+def clockedFinalFfi : Option (PanValueFfiClockResult (Word 64) Unit) :=
+  evalPanValueFfiClockProg statefulTestContext statefulTestPrimitive
+    statefulTestHandler [] [] (BitVec.ofNat 64 0) (BitVec.ofNat 64 100)
+    (BitVec.ofNat 64 8) 10 (fun _ => none) (fun _ => none) (fun _ => none)
+    statefulTestFinalState 10
+    ((.dec "x" .one (.const (BitVec.ofNat 64 0))
+      (.shMemLoad .op8 .local "x" (.const (BitVec.ofNat 64 10)))) : Prog (Word 64))
+
+def clockedCallFinalFfiFunctions : List (FunName × List VarName × Prog (Word 64)) :=
+  [("finalExt", [],
+    .extCall "final" (.const (BitVec.ofNat 64 8))
+      (.const (BitVec.ofNat 64 1)) (.const (BitVec.ofNat 64 8))
+      (.const (BitVec.ofNat 64 1)))]
 
 def clockedCallFinalFfiSteps : Option (PanValueFfiSteppedResult (Word 64) Unit) :=
   evalPanValueFfiCallSteps statefulTestContext statefulTestPrimitive

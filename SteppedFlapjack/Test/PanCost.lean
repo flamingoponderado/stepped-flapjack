@@ -1,4 +1,5 @@
 import SteppedFlapjack.PanCost
+
 namespace Flapjack
 
 def panCostTestPrimitive : PanPrimitiveHandler Nat := fun _ _ => none

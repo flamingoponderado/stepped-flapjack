@@ -1,11 +1,13 @@
-import Flapjack.Test.PanEvaluateParity
-import SteppedFlapjack.PanValueFfiSemantics
+import Flapjack.Pancake.Semantics.PanSem
+import Flapjack.Pancake.Semantics.PanSemStateEval
+import SteppedFlapjack.Test.PanValueFfiSemantics
 
 /-!
 The non-clocked Call evaluator receives declaration-derived returnShapes
 through PanValueCallContracts. A malformed callee return must produce Error
 with the callee post-state, matching the direct HOL malformed-return oracle.
-Moved from flapjack with the stepped semantics (flapjack#1251).
+Split from `Flapjack.Test.PanEvaluateParity` (flapjack#1251), with copies of the
+fixtures it uses, so that this package does not import Flapjack's tests.
 -/
 
 namespace Flapjack.Test.PanEvaluateParity

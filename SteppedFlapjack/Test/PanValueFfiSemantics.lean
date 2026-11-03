@@ -1,17 +1,65 @@
-import Flapjack.Test.PanValueFfiCore
 import SteppedFlapjack.PanValueFfiSemantics
+import Flapjack.RiscV.PanMemory
 
 /-!
-Executable checks for the stateful stepped source evaluator, on the fixtures of
-`Flapjack.Test.PanValueFfiCore`. The oracle returns a fixed word for shared
+Executable checks for the stateful stepped source evaluator, and the shared
+stateful-FFI fixtures of this package's tests. The oracle returns a fixed word for shared
 reads and echoes write payloads, which makes both the `SharedMem` event and the
 stepped result observable.
-Moved from flapjack with the stepped semantics (flapjack#1251).
+Split from `Flapjack.Test.PanValueFfiSemantics` (flapjack#1251), with copies of the
+fixtures it uses, so that this package does not import Flapjack's tests.
 -/
 
 namespace Flapjack
 
 open RiscV
+
+def statefulTestDecodeLittleEndian : List UInt8 → Nat → Nat
+  | [], _ => 0
+  | byte :: bytes, index => byte.toNat * 256 ^ index +
+      statefulTestDecodeLittleEndian bytes (index + 1)
+
+def statefulTestWordToBytes (value : Word 64) (bigEndian : Bool) : List UInt8 :=
+  let bytes := (List.range 8).map (fun index =>
+    UInt8.ofNat ((value.toNat / 256 ^ index) % 256))
+  if bigEndian then bytes.reverse else bytes
+
+def statefulTestWordOfBytes (bigEndian : Bool) (bytes : List UInt8) : Word 64 :=
+  let bytes := if bigEndian then bytes.reverse else bytes
+  BitVec.ofNat 64 (statefulTestDecodeLittleEndian bytes 0)
+
+def statefulTestOracle : FfiOracle Unit :=
+  fun name state _ bytes =>
+    match name with
+    | .sharedMem .mappedRead =>
+        .returned state (statefulTestWordToBytes (BitVec.ofNat 64 0x42) false)
+    | .sharedMem .mappedWrite => .returned state bytes
+    | .extCall _ => .returned state bytes
+
+def statefulTestFfiState : FfiState Unit :=
+  { oracle := statefulTestOracle, state := (), ioEvents := [] }
+
+def statefulTestContext : PanValueFfiContext (Word 64) :=
+  { sharedDomain := fun _ => true
+    byteAlign := fun address => panRiscVByteAlign (BitVec.ofNat 64 8) address
+    bigEndian := false
+    wordToBytes := statefulTestWordToBytes
+    wordOfBytes := statefulTestWordOfBytes
+    wordToByte := fun value => UInt8.ofNat value.toNat
+    byteToWord := fun value => BitVec.ofNat 64 value.toNat
+    valueToNat := fun value => value.toNat }
+
+def statefulTestHandler : PanValueStatefulFfiHandler (Word 64) Unit :=
+  fun _ _ _ _ _ locals ffi => some (locals, ffi)
+
+def statefulTestPrimitive : PanPrimitiveHandler (Word 64) :=
+  fun _ _ => none
+
+def statefulTestMemory : Word 64 → Option (PanValue (Word 64)) :=
+  fun address =>
+    if address == BitVec.ofNat 64 8 then
+      some (.word (BitVec.ofNat 64 0x0000000000000042))
+    else none
 
 def statefulSharedProgram : Option (Word 64 × Nat × Nat) :=
   (evalPanValueFfiProgramSteps statefulTestContext statefulTestPrimitive
@@ -26,6 +74,12 @@ def statefulSharedProgram : Option (Word 64 × Nat × Nat) :=
     fun result => match result.1 with
       | .returned _ _ _ ffi [.word value] => (value, result.2, ffi.ioEvents.length)
       | _ => (BitVec.ofNat 64 0, 0, 0)
+
+def statefulTestFinalOracle : FfiOracle Unit :=
+  fun _ _ _ _ => .final .failed
+
+def statefulTestFinalState : FfiState Unit :=
+  { oracle := statefulTestFinalOracle, state := (), ioEvents := [] }
 
 def statefulSharedFinalResult :=
   evalPanValueFfiProgramSteps statefulTestContext statefulTestPrimitive
@@ -43,6 +97,7 @@ def statefulSharedFinal : Bool :=
   | _ => false
 
 #guard statefulSharedProgram = some (BitVec.ofNat 64 0x42, 11, 2)
+
 #guard statefulSharedFinal
 
 def statefulDecCallFinalResult :=
@@ -105,6 +160,10 @@ def isErrorStepped {α σ : Type} : Option (PanValueFfiSteppedResult α σ) → 
   | some (.error _ _ _ _, _) => true
   | _ => false
 
+def isErrorControl {α σ : Type} : Option (PanValueFfiControlResult α σ) → Bool
+  | some (.error _ _ _ _) => true
+  | _ => false
+
 def statefulNormalCallRejected : Bool :=
   isErrorStepped
     (evalPanValueFfiCallSteps statefulTestContext statefulTestPrimitive
@@ -132,6 +191,7 @@ def statefulContinueCallRejected : Bool :=
     "continue" [])
 
 #guard statefulBreakCallRejected
+
 #guard statefulContinueCallRejected
 
 def statefulMissingCallRejected : Bool :=
@@ -143,6 +203,10 @@ def statefulMissingCallRejected : Bool :=
     "missing" [])
 
 #guard statefulMissingCallRejected
+
+def isWordLocal (expected : Word 64) : Option (PanValue (Word 64)) → Bool
+  | some (.word value) => value == expected
+  | _ => false
 
 def errorPreservesCalleeLocal (expected : Word 64) :
     Option (PanValueFfiSteppedResult (Word 64) Unit) → Bool
@@ -187,8 +251,11 @@ def statefulCalleeErrorEmptiesLocals : Bool :=
     "errp" [.const (BitVec.ofNat 64 9)])
 
 #guard statefulBreakParamPreservesLocal
+
 #guard statefulContinueParamPreservesLocal
+
 #guard statefulFallThroughParamPreservesLocal
+
 #guard statefulCalleeErrorEmptiesLocals
 
 def statefulExtCallProgram : Option (Word 64 × Nat × Nat) :=
@@ -207,9 +274,28 @@ def statefulExtCallProgram : Option (Word 64 × Nat × Nat) :=
 
 #guard statefulExtCallProgram = some (BitVec.ofNat 64 0x42, 9, 1)
 
+def statefulPublicProgramState : PanValueFfiProgramState (Word 64) Unit :=
+  { source :=
+      { structs := []
+        globals := fun _ => none
+        functions := []
+        returnShapes := []
+        exceptions := []
+        memory := statefulTestMemory
+        baseAddress := BitVec.ofNat 64 0
+        topAddress := BitVec.ofNat 64 100
+        bytesInWord := BitVec.ofNat 64 8 }
+    ffi := statefulTestFfiState }
+
 def statefulExactPublicProgramState : PanValueFfiExactProgramState (Word 64) Unit :=
   { legacy := statefulPublicProgramState
     memoryAccess := panValueMemoryAccessOfModel RiscV.panRiscVMemoryModel }
+
+def statefulOversizedValues : Exp (Word 64) :=
+  .rStruct (List.replicate 33 (.const (BitVec.ofNat 64 1)))
+
+def statefulOversizedShape : Shape :=
+  .comb (List.replicate 33 .one)
 
 #guard
   isErrorControl (evalPanValueFfiProgram statefulTestContext statefulPublicProgramState
@@ -297,6 +383,7 @@ def statefulExactStoreByteProgram : Option (Word 64 × Nat) :=
       | _ => none
 
 #guard statefulExactStore32Program = some (BitVec.ofNat 64 0x11223344, 1)
+
 #guard statefulExactStoreByteProgram = some (BitVec.ofNat 64 0xab, 1)
 
 #guard

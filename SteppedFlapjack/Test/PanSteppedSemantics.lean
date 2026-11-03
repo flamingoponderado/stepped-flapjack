@@ -1,4 +1,5 @@
 import SteppedFlapjack.PanSteppedSemantics
+
 namespace Flapjack
 
 def steppedTestLocals : VarName → Option (PanValue Nat) := fun name =>
