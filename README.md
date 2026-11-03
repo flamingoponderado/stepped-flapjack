@@ -4,12 +4,8 @@ Step-counted source semantics for structured Pancake programs, split out of
 [Flapjack](https://github.com/flamingoponderado/flapjack), the Lean 4 port of
 the Pancake compiler. This package depends on Flapjack as a Lake package.
 
-> [!NOTE]
-> **Work in progress.** The split follows
-> [flapjack#1251](https://github.com/flamingoponderado/flapjack/issues/1251).
-> For now this repository contains only a placeholder module that builds
-> against Flapjack. The stepped code itself still lives in Flapjack and moves
-> here in phase 4 of that plan.
+The code moved here in phase 4 of
+[flapjack#1251](https://github.com/flamingoponderado/flapjack/issues/1251).
 
 ## Why a separate package
 
@@ -29,22 +25,30 @@ runs, and HOL needs exactly those runs to define divergence. Flapjack's
 compiler and its HOL correspondence therefore do not need the stepped code,
 so it is moving here.
 
-## What will move here
+## Contents
 
-Per flapjack#1251, phase 4:
+Module names changed from `Flapjack.*` to `SteppedFlapjack.*`. Declarations
+keep their names in the `Flapjack` namespace.
 
-- the stepped evaluators: `PanValueFfiSemantics` (`evalPanValueFfiProgSteps`
-  and its program wrappers) and `PanSteppedSemantics`;
-- the clocked-to-stepped bridge: `PanValueFfiClockProjection`;
-- the fuel and event monotonicity theorems: `PanValueFfiFuel`,
-  `PanValueFfiEventMonotonicity`, and the stepped parts of
-  `PanValueFfiClockCorrectness` and `PanValueFfiClockFuel`;
-- `PanCost`, the source-level resource model built on step counts;
-- their tests.
+- the counted expression evaluators: `SteppedFlapjack.PanValueExpCounted` and
+  `SteppedFlapjack.PanExpressionEvaluator`;
+- the stepped evaluators: `SteppedFlapjack.PanValueFfiSemantics`
+  (`evalPanValueFfiProgSteps` and its program wrappers) and
+  `SteppedFlapjack.PanSteppedSemantics`;
+- the fuel and event monotonicity theorems: `SteppedFlapjack.PanValueFfiFuel`
+  and `SteppedFlapjack.PanValueFfiEventMonotonicity`;
+- the clocked-to-stepped bridge: `SteppedFlapjack.PanValueFfiClockProjection`
+  and `SteppedFlapjack.PanValueFfiClockStepsBridge`;
+- `SteppedFlapjack.PanCost`, the source-level resource model built on step
+  counts;
+- `SteppedFlapjack.Pancake.Semantics.PanSem.EvalExecutedCountedBridge`, the
+  counted expression evaluator against `PanSem`;
+- their tests, under `SteppedFlapjack/Test/`. They are compile-time checks, so
+  `lake build` runs them. Several build on the fixtures of the matching
+  `Flapjack.Test.*` modules, which stay in Flapjack.
 
-Code they share with the clocked evaluator stays in Flapjack. Phase 1 moves
-it into the neutral modules `Flapjack.PanValueFfiCore` and
-`Flapjack.PanValueExpCounted`.
+Code shared with the clocked evaluator stays in Flapjack, in
+`Flapjack.PanValueFfiCore` and `Flapjack.PanExpressionEvaluatorBase`.
 
 ## Building
 
