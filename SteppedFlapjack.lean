@@ -11,6 +11,8 @@ import SteppedFlapjack.Pancake.Semantics.PanSem.EvalExecutedCountedBridge
 import SteppedFlapjack.StepPreservation.Basic
 import SteppedFlapjack.RiscVSteps
 import SteppedFlapjack.LabToTargetSteps
+import SteppedFlapjack.StackSteps.Defs
+import SteppedFlapjack.StackToLabSteps
 
 /-!
 # stepped-flapjack
@@ -39,7 +41,14 @@ phase 4 of flapjack#1251:
   `lab_to_target` `compile_correct` proof with the target run bounded by
   `labTickBound` ticks per source clock tick, assembled as
   `compileCorrectWithin` and specialised to RISC-V as
-  `compileCorrectWithin_riscv` (stepped-flapjack#2, phase B).
+  `compileCorrectWithin_riscv` (stepped-flapjack#2, phase B);
+- `SteppedFlapjack.StackSteps.Defs`: `steps`, a fine-grained step count of a
+  StackSem run, counting every `evaluate` invocation (stepped-flapjack#2,
+  phase C);
+- `SteppedFlapjack.StackToLabSteps`: adapted copies of Flapjack's `stack_to_lab`
+  `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
+  ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
+  the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
