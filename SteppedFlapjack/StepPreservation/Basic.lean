@@ -22,9 +22,11 @@ At the bottom of the chain, `machineHaltsWithin` counts ticks of the clock of
 `evaluateTargetHOL`, the original `targetSem$evaluate`. That clock is
 evaluator fuel, not an exact count of machine instructions. One tick is spent
 on each executed machine instruction, on each FFI or code-cache entry, and on
-observing the halt address. A run that executes `m` instructions and makes `f`
-FFI and code-cache calls therefore needs `m + f + 1` ticks. A tick bound is an
-upper bound on the executed instructions. A run halts within `n` ticks exactly
+observing the halt address. A run that halts at the halt address after `m`
+instructions and `f` FFI and code-cache entries uses `m + f + 1` ticks. A run
+that halts through a final FFI event uses `m + f`, because that entry is also
+the halting tick. Either way a tick bound is an upper bound on the executed
+instructions. A run halts within `n` ticks exactly
 when it halts at clock `n` (`machineHaltsWithin_iff_at`). A bounded halt is a
 terminating behaviour of the original `machine_sem`
 (`machineSemHOL_terminate_of_haltsWithin`).
