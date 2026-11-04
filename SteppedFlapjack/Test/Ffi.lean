@@ -1,4 +1,3 @@
-import Flapjack.RiscV.Link
 import Flapjack.Ffi
 import SteppedFlapjack.PanValueFfiSemantics
 
