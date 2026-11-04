@@ -21,6 +21,7 @@ import SteppedFlapjack.Test.PanValueMemoryFfi
 import SteppedFlapjack.Test.RiscVSteps
 import SteppedFlapjack.Test.Axioms
 import SteppedFlapjack.Test.StackSteps
+import SteppedFlapjack.Test.StackNamesSteps
 import SteppedFlapjack.Test.StackToLabSteps
 import SteppedFlapjack.Test.StepPreservation
 

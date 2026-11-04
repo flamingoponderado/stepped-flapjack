@@ -12,6 +12,7 @@ import SteppedFlapjack.StepPreservation.Basic
 import SteppedFlapjack.RiscVSteps
 import SteppedFlapjack.LabToTargetSteps
 import SteppedFlapjack.StackSteps.Defs
+import SteppedFlapjack.StackNamesSteps
 import SteppedFlapjack.StackToLabSteps
 
 /-!
@@ -48,7 +49,11 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.StackToLabSteps`: adapted copies of Flapjack's `stack_to_lab`
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
-  the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1).
+  the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackNamesSteps`: adapted copies of Flapjack's `stack_names`
+  `comp_correct` proof with the step count preserved exactly, assembled as
+  `steps_progCompHOL` and `compCorrectWithin`, and lifted to the entry run from
+  `make_init` as `stackNamesSemanticsWithin` (stepped-flapjack#2, phase C2).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
