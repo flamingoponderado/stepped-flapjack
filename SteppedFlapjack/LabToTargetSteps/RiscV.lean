@@ -8,8 +8,10 @@ import Flapjack.RiscV.CorrectnessEncoding.Length
 On RISC-V every emitted instruction is four bytes long, so `StepsFit` holds
 with `unit = 4` for the phase A step counts `(riscvAst i).length`. With
 `riscv_encoder_correct_within`, `compileCorrectWithin` then needs no encoder
-hypothesis: the target run takes at most
-`labTickBound 4 code2 s1.codeBuffer * s1.clock` ticks.
+hypothesis: evaluating the target with a clock of at most
+`labTickBound 4 code2 s1.codeBuffer * s1.clock` ticks gives the source result.
+That clock is sufficient, not the exact number of ticks the run uses, so it is
+an upper bound on the ticks used.
 
 This is stepped-flapjack infrastructure with no HOL counterpart
 (stepped-flapjack#2, phase B).
@@ -28,8 +30,10 @@ theorem riscv_stepsFit : StepsFit 4 (fun i => (riscvAst i).length) riscvTarget :
   ⟨by decide, fun i => (riscvEnc_length_eq i).ge⟩
 
 /-- `compileCorrectWithin` on RISC-V, counted in total target ticks: a source
-run with clock `s1.clock` is matched by a target run of between `s1.clock` and
-`labTickBound 4 code2 s1.codeBuffer * s1.clock` ticks. -/
+run with clock `s1.clock` is matched by the target evaluated at some clock `n`
+with `s1.clock ≤ n ≤ labTickBound 4 code2 s1.codeBuffer * s1.clock`. `n` is a
+sufficient clock, so the upper bound bounds the ticks used; the lower bound
+says nothing about them. -/
 theorem compileCorrectWithin_riscv {F : Type} (p : BitVec 64)
     (s1 : LabSem.State 64 Config F) (res : MachineResult)
     (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)

@@ -107,8 +107,8 @@ theorem compileCorrectWithinFor_all {width : Nat} [NeZero width] {S Q F : Type}
 
 /-- The original `compile_correct` with the target run bounded: for an
 encoder correct within `steps` ticks per instruction with
-`StepsFit unit steps`, the target run takes at most `k` ticks beyond the
-source clock with `k ≤ (L - 1) * s1.clock`, where
+`StepsFit unit steps`, the target evaluated at clock `s1.clock + k` gives the
+source result for some `k ≤ (L - 1) * s1.clock`, where
 `L = labTickBound unit code2 s1.codeBuffer` bounds the ticks of one source
 instruction. The unused `t2` of the original is omitted. -/
 theorem compileCorrectWithin {width : Nat} [NeZero width] {S Q : Type} {F : Type}
@@ -124,9 +124,11 @@ theorem compileCorrectWithin {width : Nat} [NeZero width] {S Q : Type} {F : Type
       evaluateTargetHOL mc s1.ffi (s1.clock + k) ms1 = (res, ms2, s2.ffi) :=
   fun h => compileCorrectWithinFor_all s1 res mc s2 code2 labs t1 ms1 p h
 
-/-- `compileCorrectWithin` counted in total target ticks: the target run takes
-between `s1.clock` and `L * s1.clock` ticks, where
-`L = labTickBound unit code2 s1.codeBuffer`. -/
+/-- `compileCorrectWithin` counted in total target ticks: the target evaluated
+at some clock `n` with `s1.clock ≤ n ≤ L * s1.clock` gives the source result,
+where `L = labTickBound unit code2 s1.codeBuffer`. `n` is a sufficient clock,
+so `L * s1.clock` bounds the ticks used; the lower bound says nothing about
+them. -/
 theorem compileCorrectWithin_total {width : Nat} [NeZero width] {S Q : Type} {F : Type}
     (unit : Nat) (steps : HolAsm width → Nat)
     (p : BitVec width) (s1 : Flapjack.Compiler.Backend.LabSem.State width Config F)
