@@ -10,6 +10,7 @@ import SteppedFlapjack.PanCost
 import SteppedFlapjack.Pancake.Semantics.PanSem.EvalExecutedCountedBridge
 import SteppedFlapjack.StepPreservation.Basic
 import SteppedFlapjack.RiscVSteps
+import SteppedFlapjack.LabToTargetSteps
 
 /-!
 # stepped-flapjack
@@ -33,7 +34,12 @@ phase 4 of flapjack#1251:
   composition across passes, and machine step counts (stepped-flapjack#2);
 - `SteppedFlapjack.RiscVSteps`: adapted copies of Flapjack's RISC-V encoder
   correctness cases with each step count bounded, assembled as
-  `riscv_encoder_correct_within` (stepped-flapjack#2, phase A).
+  `riscv_encoder_correct_within` (stepped-flapjack#2, phase A);
+- `SteppedFlapjack.LabToTargetSteps`: adapted copies of Flapjack's
+  `lab_to_target` `compile_correct` proof with the target run bounded by
+  `labTickBound` ticks per source clock tick, assembled as
+  `compileCorrectWithin` and specialised to RISC-V as
+  `compileCorrectWithin_riscv` (stepped-flapjack#2, phase B).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
