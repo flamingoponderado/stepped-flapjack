@@ -100,11 +100,11 @@ def leafCost (B : Nat) (bounds : BitVec width × BitVec width) : HolProg width �
   | .stackLoad _ n =>
       if asmOffsetOkExact 0 bounds (wordOffset n) then 1 else stackLoadSteps n
   | .storeConsts _ _ _ => storeConstsSteps width B
-  | .bitmapLoad _ _ => 7
-  | .stackGetSize _ => 5
-  | .stackSetSize _ => 5
-  | .stackLoadAny _ _ => 5
-  | .stackStoreAny _ _ => 5
+  | .bitmapLoad _ _ => 9
+  | .stackGetSize _ => 6
+  | .stackSetSize _ => 6
+  | .stackLoadAny _ _ => 6
+  | .stackStoreAny _ _ => 6
   | _ => 1
 
 
@@ -175,5 +175,187 @@ theorem steps_stackFree_le (pointer n : Nat) :
     rw [stackFree.eq_1, if_neg h0, if_neg h, stackFreeSteps.eq_1, if_neg h0, if_neg h]
     rw [singleStackFree]
     exact steps_seq_inst_le ih
+
+/-- A sequence of instructions, used to state step bounds without the
+`listSeqHOL`/`map` mismatch. -/
+def instSeq : List (HolInst width) → HolProg width
+  | [] => .skip
+  | [x] => .inst x
+  | x :: y :: xs => .seq (.inst x) (instSeq (y :: xs))
+
+theorem instSeq_eq (xs : List (HolInst width)) :
+    instSeq xs = listSeqHOL (xs.map (fun i => (.inst i : HolProg width))) := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    cases xs with
+    | nil => rfl
+    | cons y ys => simp [instSeq, listSeqHOL, ih]
+
+/-- A sequence of instructions takes at most twice the list length. -/
+theorem steps_instSeq_le (xs : List (HolInst width)) :
+    ∀ s : StackSemStateFiniteExact width C F, steps (instSeq xs, s) ≤ 2 * xs.length + 1 := by
+  induction xs with
+  | nil =>
+    intro s
+    simp [instSeq, steps_skip]
+  | cons x xs ih =>
+    intro s
+    cases xs with
+    | nil =>
+      simp [instSeq, steps_inst]
+    | cons y ys =>
+      simp only [List.length_cons]
+      change steps (.seq (.inst x) (instSeq (y :: ys)), s) ≤ 2 * (ys.length + 1 + 1) + 1
+      have h := steps_seq_inst_le (i := x) (s := s) ih
+      simp only [List.length_cons] at h
+      omega
+
+theorem steps_bitmapLoad_le (pointer register value : Nat)
+    (s : StackSemStateFiniteExact width C F) :
+    steps (listSeqHOL
+      [.inst (.mem .load register (.addr (pointer + 1) (storeOffset .bitmapBase))),
+        addInst register value, leftShiftInst register (wordShiftAmount width),
+        .inst (.mem .load register (.addr register 0))], s) ≤ 9 := by
+  simp only [addInst, leftShiftInst]
+  change steps (instSeq
+    [.mem .load register (.addr (pointer + 1) (storeOffset .bitmapBase)),
+      .arith (.binop .add register register (.reg value)),
+      .arith (.shift .lsl register register (.imm (BitVec.ofNat width (wordShiftAmount width)))),
+      .mem .load register (.addr register 0)], s) ≤ 9
+  exact steps_instSeq_le _ s
+
+/-- A sequence of two components with state-independent bounds. -/
+theorem steps_seq_le {a b : HolProg width} {s : StackSemStateFiniteExact width C F} {ba bb : Nat}
+    (ha : ∀ s' : StackSemStateFiniteExact width C F, steps (a, s') ≤ ba)
+    (hb : ∀ s' : StackSemStateFiniteExact width C F, steps (b, s') ≤ bb) :
+    steps (.seq a b, s) ≤ 1 + ba + bb := by
+  rw [steps_seq]
+  have h1 := ha s
+  rcases hfx : fixClock s (evaluate (a, s)) with ⟨res, s1⟩
+  cases res with
+  | none =>
+    dsimp only
+    have h2 := hb s1
+    omega
+  | some r =>
+    dsimp only
+    omega
+
+theorem steps_stackStore_le (address register count : Nat)
+    (s : StackSemStateFiniteExact width C F) :
+    steps (stackStore address register count, s) ≤
+      3 + upshiftSteps count + downshiftSteps count := by
+  have hup : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (upshift address count, s') ≤ upshiftSteps count :=
+    steps_upshift_le (width := width) address count
+  have hdown : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (downshift address count, s') ≤ downshiftSteps count :=
+    steps_downshift_le (width := width) address count
+  have hstore : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.inst (.mem .store register (.addr address 0)), s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hinner : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.seq (.inst (.mem .store register (.addr address 0)))
+        (downshift address count), s') ≤ 1 + 1 + downshiftSteps count := by
+    intro s'; exact steps_seq_le hstore hdown
+  have houter := steps_seq_le (s := s) hup hinner
+  rw [stackStore]
+  omega
+
+theorem steps_stackLoad_le (register count : Nat)
+    (s : StackSemStateFiniteExact width C F) :
+    steps (stackLoad register count, s) ≤ 4 + upshiftSteps count := by
+  have hup : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (upshift register count, s') ≤ upshiftSteps count :=
+    steps_upshift_le (width := width) register count
+  have hload : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.inst (.mem .load register (.addr register 0)), s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hinner : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.seq (upshift register count) (.inst (.mem .load register (.addr register 0))), s') ≤
+        1 + upshiftSteps count + 1 := by
+    intro s'; exact steps_seq_le hup hload
+  have h := hinner s
+  rw [stackLoad]
+  omega
+
+theorem steps_stackGetSize_le (register pointer : Nat)
+    (s : StackSemStateFiniteExact width C F) :
+    steps (.seq (.seq (moveInst register pointer) (subInst register (pointer + 1)))
+      (rightShiftInst register (wordShiftAmount width)), s) ≤ 6 := by
+  have hmove : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (moveInst register pointer, s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hsub : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (subInst register (pointer + 1), s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hshift : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (rightShiftInst register (wordShiftAmount width), s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hinner : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.seq (moveInst register pointer) (subInst register (pointer + 1)), s') ≤ 3 := by
+    intro s'; exact steps_seq_le hmove hsub
+  have houter := steps_seq_le (s := s) hinner hshift
+  omega
+
+theorem steps_stackSetSize_le (register pointer : Nat)
+    (s : StackSemStateFiniteExact width C F) :
+    steps (.seq (leftShiftInst register (wordShiftAmount width))
+      (.seq (moveInst pointer (pointer + 1)) (addInst pointer register)), s) ≤ 6 := by
+  have hshift : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (leftShiftInst register (wordShiftAmount width), s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hmove : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (moveInst pointer (pointer + 1), s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hadd : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (addInst pointer register, s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hinner : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.seq (moveInst pointer (pointer + 1)) (addInst pointer register), s') ≤ 3 := by
+    intro s'; exact steps_seq_le hmove hadd
+  have houter := steps_seq_le (s := s) hshift hinner
+  omega
+
+theorem steps_stackLoadAny_le (register index pointer : Nat)
+    (s : StackSemStateFiniteExact width C F) :
+    steps (.seq (.seq (moveInst register index) (addInst register pointer))
+      (.inst (.mem .load register (.addr register 0))), s) ≤ 6 := by
+  have hmove : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (moveInst register index, s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hadd : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (addInst register pointer, s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hload : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.inst (.mem .load register (.addr register 0)), s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hinner : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.seq (moveInst register index) (addInst register pointer), s') ≤ 3 := by
+    intro s'; exact steps_seq_le hmove hadd
+  have houter := steps_seq_le (s := s) hinner hload
+  omega
+
+theorem steps_stackStoreAny_le (register index pointer : Nat)
+    (s : StackSemStateFiniteExact width C F) :
+    steps (.seq (.inst (.arith (.binop .add pointer pointer (.reg index))))
+      (.seq (.inst (.mem .store register (.addr pointer 0)))
+        (.inst (.arith (.binop .sub pointer pointer (.reg index))))), s) ≤ 6 := by
+  have hadd : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.inst (.arith (.binop .add pointer pointer (.reg index))), s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hstore : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.inst (.mem .store register (.addr pointer 0)), s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hsub : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.inst (.arith (.binop .sub pointer pointer (.reg index))), s') ≤ 1 := by
+    intro s'; exact le_of_eq (steps_inst _ s')
+  have hinner : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.seq (.inst (.mem .store register (.addr pointer 0)))
+        (.inst (.arith (.binop .sub pointer pointer (.reg index)))), s') ≤ 3 := by
+    intro s'; exact steps_seq_le hstore hsub
+  have houter := steps_seq_le (s := s) hadd hinner
+  omega
 
 end SteppedFlapjack.StackRemoveSteps
