@@ -13,6 +13,7 @@ import SteppedFlapjack.RiscVSteps
 import SteppedFlapjack.LabToTargetSteps
 import SteppedFlapjack.StackSteps.Defs
 import SteppedFlapjack.StackToLabSteps
+import SteppedFlapjack.StackRemoveSteps.Defs
 
 /-!
 # stepped-flapjack
@@ -48,7 +49,11 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.StackToLabSteps`: adapted copies of Flapjack's `stack_to_lab`
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
-  the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1).
+  the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackRemoveSteps.Defs`: program-dependent expansion costs for
+  the `stack_remove` pass, including `leafCost` and the step-count bounds for
+  the `upshift`, `downshift` and `stackFree` expansions
+  (stepped-flapjack#2, phase C3, in progress).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
