@@ -18,3 +18,12 @@ jobs:
       - uses: leanprover/lean-action@v1
         with:
           use-mathlib-cache: true
+
+      # The axiom audit also runs inside the build above, but lean-action restores
+      # .lake from earlier commits, and Lake does not see a newly added unimported
+      # source file as a reason to rebuild it. Elaborate it afresh here.
+      - name: Audit axioms of every SteppedFlapjack declaration
+        run: lake lean SteppedFlapjack/Test/Axioms.lean
+
+      - name: Check non-test modules are warning-free
+        run: ./scripts/check-warnings.sh

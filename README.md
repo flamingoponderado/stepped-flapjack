@@ -69,3 +69,13 @@ current `main`.
 BSD 3-Clause, the same as Flapjack. See [`LICENSE`](LICENSE) and
 [`COPYRIGHT`](COPYRIGHT) for the upstream CakeML and HOL4 notices that apply
 to the ported code.
+
+## Checks
+
+CI runs an axiom audit (`SteppedFlapjack/Test/Axioms.lean`, elaborated afresh
+with `lake lean`): it fails if any declaration of a `SteppedFlapjack` module,
+private ones included, depends on an axiom other than `propext`,
+`Classical.choice` and `Quot.sound`, which also rejects `sorry`, or if a
+non-test source file is not imported through `SteppedFlapjack`. It then runs
+`scripts/check-warnings.sh`, which fails on any warning outside
+`SteppedFlapjack/Test/`.
