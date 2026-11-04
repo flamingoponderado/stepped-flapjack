@@ -18,11 +18,16 @@ compiled (for example, on the size of its largest struct). Bounds compose
 through `LinearBound.comp`, so the bound for the whole compiler is the
 composition of the per-pass bounds.
 
-At the bottom of the chain, `machineHaltsWithin` counts target machine steps.
-`evaluateTargetHOL` takes one clock tick per machine step, so a run halts
-within `n` steps exactly when it halts at clock `n`
-(`machineHaltsWithin_iff_at`). A bounded halt is a terminating behaviour of
-the original `machine_sem` (`machineSemHOL_terminate_of_haltsWithin`).
+At the bottom of the chain, `machineHaltsWithin` counts ticks of the clock of
+`evaluateTargetHOL`, the original `targetSem$evaluate`. That clock is
+evaluator fuel, not an exact count of machine instructions. One tick is spent
+on each executed machine instruction, on each FFI or code-cache entry, and on
+observing the halt address. A run that executes `m` instructions and makes `f`
+FFI and code-cache calls therefore needs `m + f + 1` ticks. A tick bound is an
+upper bound on the executed instructions. A run halts within `n` ticks exactly
+when it halts at clock `n` (`machineHaltsWithin_iff_at`). A bounded halt is a
+terminating behaviour of the original `machine_sem`
+(`machineSemHOL_terminate_of_haltsWithin`).
 
 This is stepped-flapjack infrastructure; nothing here has a HOL counterpart.
 -/
@@ -115,7 +120,10 @@ theorem StepPreserving.weaken {S T : Type} {srcWithin : S → Nat → Prop}
 /-! ## Machine step counts -/
 
 /-- The machine run from `ms` halts with `outcome` and I/O trace `events`
-within `n` machine steps. -/
+within `n` ticks of the `evaluateTargetHOL` clock. Ticks count executed
+machine instructions, FFI and code-cache entries, and the final observation
+of the halt address (see the module docstring), so `n` also bounds the
+number of executed instructions. -/
 def machineHaltsWithin {width : Nat} [NeZero width] {state projection σ : Type}
     (mc : MachineConfig width state projection) (ffi : HolFfiState σ) (ms : state)
     (outcome : HolOutcome) (events : List HolIoEvent) (n : Nat) : Prop :=
@@ -130,7 +138,7 @@ theorem machineHaltsWithin_mono {width : Nat} [NeZero width] {state projection �
   obtain ⟨k, hk, rest⟩ := h
   exact ⟨k, Nat.le_trans hk hnm, rest⟩
 
-/-- Halting within `n` steps is halting at clock `n`. A halted run keeps its
+/-- Halting within `n` ticks is halting at clock `n`. A halted run keeps its
 result when the clock grows (`evaluateTargetAddClock`). -/
 theorem machineHaltsWithin_iff_at {width : Nat} [NeZero width] {state projection σ : Type}
     (mc : MachineConfig width state projection) (ffi : HolFfiState σ) (ms : state)
