@@ -9,7 +9,8 @@ imported through `SteppedFlapjack` or if it finds no declarations at all.
 
 Lake does not track the source listing as a dependency of this module, so
 locally a newly added, unimported file is only reported once this module
-rebuilds. CI builds the package from scratch, so it always runs. -/
+rebuilds. CI therefore also runs `lake lean SteppedFlapjack/Test/Axioms.lean`,
+which elaborates this file afresh. -/
 
 namespace SteppedFlapjack.Test.Axioms
 

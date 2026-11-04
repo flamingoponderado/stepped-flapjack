@@ -72,9 +72,10 @@ to the ported code.
 
 ## Checks
 
-CI builds both libraries, which includes an axiom audit
-(`SteppedFlapjack/Test/Axioms.lean`): the build fails if any declaration of a
-`SteppedFlapjack` module depends on an axiom other than `propext`,
-`Classical.choice` and `Quot.sound`, which also rejects `sorry`. It then runs
+CI runs an axiom audit (`SteppedFlapjack/Test/Axioms.lean`, elaborated afresh
+with `lake lean`): it fails if any declaration of a `SteppedFlapjack` module,
+private ones included, depends on an axiom other than `propext`,
+`Classical.choice` and `Quot.sound`, which also rejects `sorry`, or if a
+non-test source file is not imported through `SteppedFlapjack`. It then runs
 `scripts/check-warnings.sh`, which fails on any warning outside
 `SteppedFlapjack/Test/`.
