@@ -1,4 +1,5 @@
 import SteppedFlapjack.Test.Ffi
+import SteppedFlapjack.Test.LabToTargetSteps
 import SteppedFlapjack.Test.PanCost
 import SteppedFlapjack.Test.PanEvaluateParity
 import SteppedFlapjack.Test.PanMemoryModel
@@ -17,6 +18,7 @@ import SteppedFlapjack.Test.PanValueFfiClockSemantics
 import SteppedFlapjack.Test.PanValueFfiFuel
 import SteppedFlapjack.Test.PanValueFfiSemantics
 import SteppedFlapjack.Test.PanValueMemoryFfi
+import SteppedFlapjack.Test.RiscVSteps
 import SteppedFlapjack.Test.StepPreservation
 
 /-! Compile-time checks of the stepped semantics; building this module runs them. -/
