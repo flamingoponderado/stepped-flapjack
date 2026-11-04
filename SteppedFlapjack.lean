@@ -8,6 +8,7 @@ import SteppedFlapjack.PanValueFfiClockProjection
 import SteppedFlapjack.PanValueFfiClockStepsBridge
 import SteppedFlapjack.PanCost
 import SteppedFlapjack.Pancake.Semantics.PanSem.EvalExecutedCountedBridge
+import SteppedFlapjack.StepPreservation.Basic
 
 /-!
 # stepped-flapjack
@@ -26,7 +27,9 @@ phase 4 of flapjack#1251:
   clocked evaluator to stepped results, which cannot cover timed-out runs;
 - `SteppedFlapjack.PanCost`: source-level step costs;
 - `SteppedFlapjack.Pancake.Semantics.PanSem.EvalExecutedCountedBridge`: the
-  counted expression evaluator against `PanSem.evalExecuted`.
+  counted expression evaluator against `PanSem.evalExecuted`;
+- `SteppedFlapjack.StepPreservation.Basic`: linear step bounds, their
+  composition across passes, and machine step counts (stepped-flapjack#2).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
