@@ -18,3 +18,9 @@ jobs:
       - uses: leanprover/lean-action@v1
         with:
           use-mathlib-cache: true
+
+      # The axiom audit (SteppedFlapjack.Test.Axioms) runs as part of the build
+      # above: it fails the SteppedFlapjackTests library if any declaration uses
+      # an axiom beyond propext, Classical.choice and Quot.sound (sorry included).
+      - name: Check non-test modules are warning-free
+        run: ./scripts/check-warnings.sh
