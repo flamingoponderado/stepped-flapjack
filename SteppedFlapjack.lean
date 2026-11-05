@@ -1,3 +1,4 @@
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.FiniteAssembly
 import SteppedFlapjack.PanValueExpCounted
 import SteppedFlapjack.PanExpressionEvaluator
 import SteppedFlapjack.PanSteppedSemantics
@@ -92,6 +93,9 @@ phase 4 of flapjack#1251:
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.FiniteAssembly`: a stack-removal
+  run bound with finite code, oracle and bitmap budgets computed from the initial
+  state and source-step bound;
 - `SteppedFlapjack.StackRemoveSteps.Defs`: program-dependent expansion costs for
   the `stack_remove` pass, including `leafCost` and the step-count bounds for
   the `upshift`, `downshift` and `stackFree` expansions

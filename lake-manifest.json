@@ -5,7 +5,7 @@
    "type": "git",
    "subDir": null,
    "scope": "",
-   "rev": "a184a4a5fe56caeae29a27541392916fa7334503",
+   "rev": "a83740defe1df86bdb5974894bd0bda114c4dd93",
    "name": "Flapjack",
    "manifestFile": "lake-manifest.json",
    "inputRev": "main",
