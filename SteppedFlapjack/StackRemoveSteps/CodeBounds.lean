@@ -22,6 +22,7 @@ namespace SteppedFlapjack.StackRemoveSteps.CompCorrect
 
 open Flapjack Flapjack.Compiler.Backend.StackLang Flapjack.Compiler.Backend.StackRemove
 open Flapjack.StackSemStateOps Flapjack.StackSemControl Flapjack.StackSemEvaluate
+open Flapjack.StackSemMeasure
 open Flapjack.Compiler.Encoders.Asm
 open Flapjack.Compiler.Encoders.Asm
 
@@ -1185,7 +1186,9 @@ theorem codeBounds_loop {B K : Nat} {bounds : BitVec width × BitVec width}
     (r : Option (StackSemResult width))
     (h : evaluate ((.loop body : HolProg width), s) = (r, t))
     (ihBody : ∀ r t, evaluate (body, s) = (r, t) → codeBound B bounds K t ∧ oracleBound B bounds K t)
-    (ihLoop : ∀ (middle : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width)) (t : StackSemStateFiniteExact width C F), evaluate ((.loop body : HolProg width), decClock middle) = (r, t) →
+    (ihLoop : ∀ (bodyResult : Option (StackSemResult width)) (middle : StackSemStateFiniteExact width C F),
+      evaluate (body, s) = (bodyResult, middle) → middle.clock ≠ 0 →
+      ∀ (r : Option (StackSemResult width)) (t : StackSemStateFiniteExact width C F), evaluate ((.loop body : HolProg width), decClock middle) = (r, t) →
       codeBound B bounds K middle → oracleBound B bounds K middle →
       codeBound B bounds K t ∧ oracleBound B bounds K t)
     : codeBound B bounds K t ∧ oracleBound B bounds K t := by
@@ -1193,10 +1196,10 @@ theorem codeBounds_loop {B K : Nat} {bounds : BitVec width × BitVec width}
   have hp := ihBody res post he
   rw [evaluate_loop, StackSemEvaluateClock.fixClockEvaluate, he] at h
   dsimp only at h
-  split_ifs at h
+  split_ifs at h with hc hz
   · obtain ⟨-, rfl⟩ := h
     exact codeBounds_transfer (emptyEnv_code post).1 (emptyEnv_code post).2 hp.1 hp.2
-  · exact ihLoop post r t h hp.1 hp.2
+  · exact ihLoop res post he hz r t h hp.1 hp.2
   · obtain ⟨-, rfl⟩ := h; exact hp
 
 theorem codeBounds_rawCall {B K : Nat} {bounds : BitVec width × BitVec width}
@@ -1206,7 +1209,7 @@ theorem codeBounds_rawCall {B K : Nat} {bounds : BitVec width × BitVec width}
     (ih : ∀ (prog body : HolProg width) (first : HolProg width),
       sptLookup dest s.code = some prog → destSeq prog = some (first, body) →
       ∀ (res : Option (StackSemResult width)) (post : StackSemStateFiniteExact width C F),
-      evaluate (body, decClock s) = (res, post) →
+      s.clock ≠ 0 → evaluate (body, decClock s) = (res, post) →
       codeBound B bounds K post ∧ oracleBound B bounds K post)
     (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
     codeBound B bounds K t ∧ oracleBound B bounds K t := by
@@ -1224,11 +1227,11 @@ theorem codeBounds_rawCall {B K : Nat} {bounds : BitVec width × BitVec width}
       rw [evaluate_rawCall] at h; simp only [hc, hd] at h
       rcases he : evaluate (body, decClock s) with ⟨res, post⟩
       rw [he] at h
-      split_ifs at h
+      split_ifs at h with hz hb
       · obtain ⟨-, rfl⟩ := h
         exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
-      · obtain ⟨-, rfl⟩ := h; exact ih prog body first hc hd res post he
-      · obtain ⟨-, rfl⟩ := h; exact ih prog body first hc hd res post he
+      · obtain ⟨-, rfl⟩ := h; exact ih prog body first hc hd res post hz he
+      · obtain ⟨-, rfl⟩ := h; exact ih prog body first hc hd res post hz he
 
 theorem codeBounds_jumpLower {B K : Nat} {bounds : BitVec width × BitVec width}
     (r1 r2 dest : Nat) (s t : StackSemStateFiniteExact width C F)
@@ -1236,7 +1239,7 @@ theorem codeBounds_jumpLower {B K : Nat} {bounds : BitVec width × BitVec width}
     (h : evaluate ((.jumpLower r1 r2 dest : HolProg width), s) = (r, t))
     (ih : ∀ (prog : HolProg width), findCode (.inl dest) s.regs s.code = some prog →
       ∀ (res : Option (StackSemResult width)) (post : StackSemStateFiniteExact width C F),
-      evaluate (prog, decClock s) = (res, post) →
+      s.clock ≠ 0 → evaluate (prog, decClock s) = (res, post) →
       codeBound B bounds K post ∧ oracleBound B bounds K post)
     (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
     codeBound B bounds K t ∧ oracleBound B bounds K t := by
@@ -1267,11 +1270,11 @@ theorem codeBounds_jumpLower {B K : Nat} {bounds : BitVec width × BitVec width}
           | some prog =>
             rcases he : evaluate (prog, decClock s) with ⟨res, post⟩
             rw [evaluate_jumpLower] at h; simp only [h1, h2, hc, he] at h
-            split_ifs at h
+            split_ifs at h with hcmp hz hb
             · obtain ⟨-, rfl⟩ := h
               exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
-            · obtain ⟨-, rfl⟩ := h; exact ih prog hc _ _ he
-            · obtain ⟨-, rfl⟩ := h; exact ih prog hc _ _ he
+            · obtain ⟨-, rfl⟩ := h; exact ih prog hc _ _ hz he
+            · obtain ⟨-, rfl⟩ := h; exact ih prog hc _ _ hz he
             · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
 
 theorem codeBounds_ffi {B K : Nat} {bounds : BitVec width × BitVec width}
@@ -1422,5 +1425,186 @@ theorem codeBounds_install {B K : Nat} {bounds : BitVec width × BitVec width}
                             · intro index name program hm
                               exact install_oracleBound s horacle index name program hm
                           · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+
+theorem codeBounds_call {B K : Nat} {bounds : BitVec width × BitVec width}
+    (ret : Option (HolProg width × Nat × Nat × Nat)) (dest : Sum Nat Nat)
+    (handler : Option (HolProg width × Nat × Nat))
+    (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.call ret dest handler : HolProg width), s) = (r, t))
+    (ih : ∀ (prog : HolProg width) (start post : StackSemStateFiniteExact width C F)
+      (res : Option (StackSemResult width)),
+      LexNat (StackSemMeasure.stackSemMeasure prog start)
+        (StackSemMeasure.stackSemMeasure (.call ret dest handler) s) →
+      evaluate (prog, start) = (res, post) →
+      codeBound B bounds K start → oracleBound B bounds K start →
+      codeBound B bounds K post ∧ oracleBound B bounds K post)
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  cases ret with
+  | none =>
+    cases hc : findCode dest s.regs s.code with
+    | none =>
+      rw [evaluate_call] at h; simp only [hc] at h
+      obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+    | some prog =>
+      cases handler with
+      | some hd =>
+        rw [evaluate_call] at h; simp only [hc] at h
+        obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+      | none =>
+        by_cases hz : s.clock = 0
+        · rw [evaluate_call] at h; simp only [hc, hz, if_true] at h
+          obtain ⟨-, rfl⟩ := h
+          exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+        · have hm := StackSemMeasure.callee_measure_lt prog (.call none dest none) s hz
+          rcases he : evaluate (prog, decClock s) with ⟨res, post⟩
+          have hp := ih prog (decClock s) post res hm he
+            (codeBound_congr (decClock_code s).1 hcode) (oracleBound_congr (decClock_code s).2 horacle)
+          rw [evaluate_call] at h; simp only [hc, hz, if_false] at h
+          rw [StackSemEvaluateClock.fixClockEvaluate, he] at h
+          split_ifs at h <;> obtain ⟨-, rfl⟩ := h <;> exact hp
+  | some retinfo =>
+    rcases retinfo with ⟨retHandler, link, l1, l2⟩
+    cases hc : findCode dest (s.regs.eraseEq link) s.code with
+    | none =>
+      rw [evaluate_call] at h; simp only [hc] at h
+      obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+    | some prog =>
+      by_cases hz : s.clock = 0
+      · rw [evaluate_call] at h; simp only [hc, hz, if_true] at h
+        obtain ⟨-, rfl⟩ := h
+        exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+      · let start := decClock (setVar link (.loc l1 l2) s)
+        have hs : codeBound B bounds K start ∧ oracleBound B bounds K start := by
+          exact codeBounds_transfer ((decClock_code _).1.trans (setVar_code _ _ _).1)
+            ((decClock_code _).2.trans (setVar_code _ _ _).2) hcode horacle
+        have hs0 : (setVar link (.loc l1 l2) s).clock ≠ 0 := by simpa [setVar] using hz
+        have hm := StackSemMeasure.callee_measure_lt prog (.call (some (retHandler, link, l1, l2)) dest handler)
+          (setVar link (.loc l1 l2) s) hs0
+        have hpar : StackSemMeasure.stackSemMeasure (.call (some (retHandler, link, l1, l2)) dest handler)
+            (setVar link (.loc l1 l2) s) =
+            StackSemMeasure.stackSemMeasure (.call (some (retHandler, link, l1, l2)) dest handler) s := by
+          simp [StackSemMeasure.stackSemMeasure, setVar]
+        rw [hpar] at hm
+        rcases he : evaluate (prog, start) with ⟨res, post⟩
+        have hp := ih prog start post res hm he hs.1 hs.2
+        have hk (cont : HolProg width) :
+            LexNat (StackSemMeasure.stackSemMeasure cont post)
+              (StackSemMeasure.stackSemMeasure (.call (some (retHandler, link, l1, l2)) dest handler) s) := by
+          have hx := StackSemMeasure.call_continuation_measure_lt cont
+            (.call (some (retHandler, link, l1, l2)) dest handler) s link l1 l2
+            (evaluate (prog, start)) hz
+          change LexNat (StackSemMeasure.stackSemMeasure cont
+            (fixClock start (evaluate (prog, start))).2) _ at hx
+          rw [StackSemEvaluateClock.fixClockEvaluate, he] at hx
+          exact hx
+        rw [evaluate_call] at h; simp only [hc, hz, if_false] at h
+        rw [StackSemEvaluateClock.fixClockEvaluate] at h
+        change evaluate (prog, decClock (setVar link (.loc l1 l2) s)) = (res, post) at he
+        rw [he] at h
+        cases res with
+        | none => dsimp only at h; obtain ⟨-, rfl⟩ := h; exact hp
+        | some result =>
+          cases result <;> dsimp only at h
+          all_goals try (obtain ⟨-, rfl⟩ := h; exact hp)
+          case result value =>
+            split_ifs at h
+            · obtain ⟨-, rfl⟩ := h; exact hp
+            · exact ih retHandler post t r (hk retHandler) h hp.1 hp.2
+          case exception value =>
+            cases handler with
+            | none =>
+              dsimp only at h
+              obtain ⟨-, rfl⟩ := h; exact hp
+            | some handlerInfo =>
+              rcases handlerInfo with ⟨handlerBody, hl1, hl2⟩
+              dsimp only at h
+              split_ifs at h
+              · obtain ⟨-, rfl⟩ := h; exact hp
+              · exact ih handlerBody post t r (hk handlerBody) h hp.1 hp.2
+
+theorem codeBounds_evaluate {B K : Nat} {bounds : BitVec width × BitVec width}
+    (p : HolProg width) (s t : StackSemStateFiniteExact width C F)
+    (r : Option (StackSemResult width)) (h : evaluate (p, s) = (r, t))
+    (hc : codeBound B bounds K s) (ho : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  cases hp : p <;> rw [hp] at h <;> first
+    | exact codeBounds_skip _ _ _ h hc ho
+    | exact codeBounds_break _ _ _ _ h hc ho
+    | exact codeBounds_continue _ _ _ _ h hc ho
+    | exact codeBounds_halt _ _ _ _ h hc ho
+    | exact codeBounds_tick _ _ _ h hc ho
+    | exact codeBounds_ret _ _ _ _ h hc ho
+    | exact codeBounds_raise _ _ _ _ h hc ho
+    | exact codeBounds_locValue _ _ _ _ _ _ h hc ho
+    | exact codeBounds_inst _ _ _ _ h hc ho
+    | exact codeBounds_get _ _ _ _ _ h hc ho
+    | exact codeBounds_set _ _ _ _ _ h hc ho
+    | exact codeBounds_opCurrHeap _ _ _ _ _ _ h hc ho
+    | exact codeBounds_stackAlloc _ _ _ _ h hc ho
+    | exact codeBounds_stackFree _ _ _ _ h hc ho
+    | exact codeBounds_stackLoad _ _ _ _ _ h hc ho
+    | exact codeBounds_stackGetSize _ _ _ _ h hc ho
+    | exact codeBounds_bitmapLoad _ _ _ _ _ h hc ho
+    | exact codeBounds_stackStore _ _ _ _ _ h hc ho
+    | exact codeBounds_stackSetSize _ _ _ _ h hc ho
+    | exact codeBounds_codeBufferWrite _ _ _ _ _ h hc ho
+    | exact codeBounds_dataBufferWrite _ _ _ _ _ h hc ho
+    | exact codeBounds_alloc _ _ _ _ h hc ho
+    | exact codeBounds_storeConsts _ _ _ _ _ _ h hc ho
+    | exact codeBounds_stackLoadAny _ _ _ _ _ h hc ho
+    | exact codeBounds_stackStoreAny _ _ _ _ _ h hc ho
+    | exact codeBounds_install _ _ _ _ _ _ _ _ h hc ho
+    | exact codeBounds_ffi _ _ _ _ _ _ _ _ _ h hc ho
+    | skip
+  case shMemOp op reg addr =>
+    cases addr with
+    | addr a w => exact codeBounds_shMemOp op reg a w s t r h hc ho
+  case seq a b =>
+    apply codeBounds_seq a b s t r h ?_ ?_ hc ho
+    · intro rr post hr hca hoa
+      exact codeBounds_evaluate a s post rr hr hca hoa
+    · intro middle hm rr post hr hcm hom
+      have hmle := seq_second_measure_lt a b s (evaluate (a, s))
+      rw [StackSemEvaluateClock.fixClockEvaluate, hm] at hmle
+      exact codeBounds_evaluate b middle post rr hr hcm hom
+  case ite cmp reg ri a b =>
+    apply codeBounds_ite cmp reg ri a b s t r h ?_ ?_ hc ho
+    · intro rr post hr
+      exact codeBounds_evaluate a s post rr hr hc ho
+    · intro rr post hr
+      exact codeBounds_evaluate b s post rr hr hc ho
+  case loop body =>
+    apply codeBounds_loop body s t r h ?_ ?_
+    · intro rr post hr
+      exact codeBounds_evaluate body s post rr hr hc ho
+    · intro result middle hm hz rr post hr hcm hom
+      have hlt := loop_reentry_measure_lt body s (evaluate (body, s)) (by
+        rw [StackSemEvaluateClock.fixClockEvaluate, hm]; exact hz)
+      rw [StackSemEvaluateClock.fixClockEvaluate, hm] at hlt
+      exact codeBounds_evaluate (.loop body) (decClock middle) post rr hr
+        (codeBound_congr (decClock_code middle).1 hcm) (oracleBound_congr (decClock_code middle).2 hom)
+  case rawCall dest =>
+    apply codeBounds_rawCall dest s t r h ?_ hc ho
+    intro prog body first hf hd rr post hz hr
+    have hlt := callee_measure_lt body (.rawCall dest) s hz
+    exact codeBounds_evaluate body (decClock s) post rr hr
+      (codeBound_congr (decClock_code s).1 hc) (oracleBound_congr (decClock_code s).2 ho)
+  case jumpLower r1 r2 dest =>
+    apply codeBounds_jumpLower r1 r2 dest s t r h ?_ hc ho
+    intro prog hf rr post hz hr
+    have hlt := callee_measure_lt prog (.jumpLower r1 r2 dest) s hz
+    exact codeBounds_evaluate prog (decClock s) post rr hr
+      (codeBound_congr (decClock_code s).1 hc) (oracleBound_congr (decClock_code s).2 ho)
+  case call ret dest handler =>
+    apply codeBounds_call ret dest handler s t r h ?_ hc ho
+    intro prog start post rr hlt hr hcs hos
+    exact codeBounds_evaluate prog start post rr hr hcs hos
+termination_by stackSemMeasure p s
+decreasing_by
+  all_goals subst p
+  all_goals try (rw [StackSemEvaluateClock.fixClockEvaluate, hm] at hlt)
+  all_goals try (rw [StackSemEvaluateClock.fixClockEvaluate, hm] at hmle)
+  all_goals first | assumption | (simpa only [StackSemEvaluateClock.fixClockEvaluate, hm] using hmle) | (simpa only [StackSemEvaluateClock.fixClockEvaluate, hm] using hlt) | exact seq_first_measure_lt _ _ _ | exact if_first_measure_lt _ _ _ _ _ _ | exact if_second_measure_lt _ _ _ _ _ _ | exact loop_body_measure_lt _ _
 
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
