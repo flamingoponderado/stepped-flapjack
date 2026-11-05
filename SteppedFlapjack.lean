@@ -7,6 +7,7 @@ import SteppedFlapjack.StackAllocSteps.LeafSteps
 import SteppedFlapjack.StackAllocSteps.ControlSteps
 import SteppedFlapjack.StackAllocSteps.JumpSteps
 import SteppedFlapjack.StackAllocSteps.CallSteps
+import SteppedFlapjack.StackAllocSteps.UniformLeaf
 import SteppedFlapjack.StackAllocSteps.AllocGenFullSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveLoopSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveDataSteps
@@ -137,6 +138,8 @@ phase 4 of flapjack#1251:
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackAllocSteps.UniformLeaf`: a uniform leaf factor for
+  word widths of at least eight bits, independent of runtime stack length.
 - `SteppedFlapjack.StackAllocSteps.CallSteps`: the bounded tail-call case.
 - `SteppedFlapjack.StackAllocSteps.JumpSteps`: step bounds for indirect
   jumps and raw calls through compiled code.
