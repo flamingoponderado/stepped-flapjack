@@ -1,4 +1,4 @@
-import SteppedFlapjack.WordToStackSteps.StraightLine
+import SteppedFlapjack.WordToStackSteps.Loops
 import SteppedFlapjack.WordSteps.CallSteps
 import SteppedFlapjack.StackToLabSteps.GeneratedHaltSteps
 import SteppedFlapjack.StackToLabSteps.NamesComposition
@@ -183,6 +183,8 @@ phase 4 of flapjack#1251:
   and structural machine-instruction runtime bounds for Word-to-Stack compilation.
 - `SteppedFlapjack.WordToStackSteps.StraightLine`: a proved bound for nested
   sequences and branches in a loop-free, call-free WordSem fragment.
+- `SteppedFlapjack.WordToStackSteps.Loops`: structural target-step bounds for
+  compiled call-free loops, in terms of the actual initial clock.
 - `SteppedFlapjack.WordSteps.Defs`: a WordSem evaluator-invocation counter
   with checked leaf, sequence, conditional, loop, and tail-call equations.
 - `SteppedFlapjack.WordSteps.CallSteps`: returning-call equations covering all
