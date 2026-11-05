@@ -1,3 +1,4 @@
+import SteppedFlapjack.StackAllocSteps.GenMoveDataSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveRootsSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveBitmapsSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveBitmapSteps
@@ -125,6 +126,8 @@ phase 4 of flapjack#1251:
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackAllocSteps.GenMoveDataCorrect`, `GenMoveDataSteps`:
+  clock and fuel-based bounds for generational data and references;
 - `SteppedFlapjack.StackAllocSteps.GenMoveRootsCorrect`, `GenMoveRootsSteps`:
   clock and stack-length bounds for generational root traversal;
 - `SteppedFlapjack.StackAllocSteps.GenMoveBitmapsCorrect`, `GenMoveBitmapsSteps`:
