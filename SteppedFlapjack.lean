@@ -26,10 +26,11 @@ import SteppedFlapjack.StackRemoveSteps.CompCorrect.Loop
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.JumpLower
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.RawCall
 import SteppedFlapjack.StackRemoveSteps.CallCostBounds
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.Call
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallTail
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnNone
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnHandler
-import SteppedFlapjack.StackRemoveSteps.CompCorrect.Call
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.LeafStepsAll
 
 /-!
 # stepped-flapjack
@@ -122,7 +123,10 @@ phase 4 of flapjack#1251:
   (stepped-flapjack#2, phase C3, in progress);
 - `SteppedFlapjack.StackRemoveSteps.CompCorrect.Call`: the `call` assembly,
   dispatching on the `ret`/`handler` shapes (stepped-flapjack#2, phase C3,
-  in progress).
+  in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.LeafStepsAll`: one step bound
+  covering all 28 non-recursive constructors, so the top-level induction needs a
+  single leaf case (stepped-flapjack#2, phase C3, in progress).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
