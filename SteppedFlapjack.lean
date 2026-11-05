@@ -1,3 +1,6 @@
+import SteppedFlapjack.LoopToWordSteps.ConditionalRiscV
+import SteppedFlapjack.LoopToWordSteps.ConditionalStack
+import SteppedFlapjack.LoopToWordSteps.Conditional
 import SteppedFlapjack.LoopToWordSteps.RiscVComposition
 import SteppedFlapjack.LoopToWordSteps.StackReady
 import SteppedFlapjack.LoopToWordSteps.Sequence
@@ -213,6 +216,9 @@ phase 4 of flapjack#1251:
   no-handler bound for all non-error, non-timeout outcomes.
 - `SteppedFlapjack.WordToStackSteps.ReturningNoneSteps`: complete no-handler
   zero-clock simulation and a source-step-based matching-return bound.
+- `SteppedFlapjack.LoopToWordSteps.Conditional`: Loop-to-Word step preservation with conditional branches.
+- `SteppedFlapjack.LoopToWordSteps.ConditionalStack`: conditional source programs in the proved Word-to-Stack fragment.
+- `SteppedFlapjack.LoopToWordSteps.ConditionalRiscV`: conditional Loop programs composed through the RISC-V backend.
 - `SteppedFlapjack.LoopToWordSteps.Sequence`: Loop-to-Word step preservation for direct statements, sequences, and marks.
 - `SteppedFlapjack.LoopToWordSteps.StackReady`: common Loop-to-Stack fragment and composed bounded simulation.
 - `SteppedFlapjack.LoopToWordSteps.RiscVComposition`: bounded Loop execution composed through the RISC-V backend.
