@@ -426,4 +426,121 @@ theorem oracleBound_congr {B K : Nat} {bounds : BitVec width × BitVec width}
     oracleBound B bounds K t := by
   intro index name program hl
   exact h index name program (by rw [← ho]; exact hl)
+theorem stackShMemLoad_code (r : Nat) (address : BitVec width)
+    (s : StackSemStateFiniteExact width C F) :
+    (StackSemShMem.shMemLoad r address s).2.code = s.code := by
+  simp only [StackSemShMem.shMemLoad]
+  split_ifs with hd
+  · cases hc : callFFIHOL s.ffi (.sharedMem .mappedRead) [0] (panWordToBytesHOL address false) with
+    | final outcome => simp
+    | ret newFfi newBytes => simp
+  · simp
+
+theorem stackShMemLoadByte_code (r : Nat) (address : BitVec width)
+    (s : StackSemStateFiniteExact width C F) :
+    (StackSemShMem.shMemLoadByte r address s).2.code = s.code := by
+  simp only [StackSemShMem.shMemLoadByte]
+  split_ifs with hd
+  · cases hc : callFFIHOL s.ffi (.sharedMem .mappedRead) [1] (panWordToBytesHOL address false) with
+    | final outcome => simp
+    | ret newFfi newBytes => simp
+  · simp
+
+theorem stackShMemLoad16_code (r : Nat) (address : BitVec width)
+    (s : StackSemStateFiniteExact width C F) :
+    (StackSemShMem.shMemLoad16 r address s).2.code = s.code := by
+  simp only [StackSemShMem.shMemLoad16]
+  split_ifs with hd
+  · cases hc : callFFIHOL s.ffi (.sharedMem .mappedRead) [2] (panWordToBytesHOL address false) with
+    | final outcome => simp
+    | ret newFfi newBytes => simp
+  · simp
+
+theorem stackShMemLoad32_code (r : Nat) (address : BitVec width)
+    (s : StackSemStateFiniteExact width C F) :
+    (StackSemShMem.shMemLoad32 r address s).2.code = s.code := by
+  simp only [StackSemShMem.shMemLoad32]
+  split_ifs with hd
+  · cases hc : callFFIHOL s.ffi (.sharedMem .mappedRead) [4] (panWordToBytesHOL address false) with
+    | final outcome => simp
+    | ret newFfi newBytes => simp
+  · simp
+
+theorem stackShMemStore_code (r : Nat) (address : BitVec width)
+    (s : StackSemStateFiniteExact width C F) :
+    (StackSemShMem.shMemStore r address s).2.code = s.code := by
+  cases hv : getVar r s with
+  | none => simp [StackSemShMem.shMemStore, hv]
+  | some v =>
+    cases v with
+    | word w =>
+      simp only [StackSemShMem.shMemStore, hv]
+      split_ifs with hd
+      · cases hc : callFFIHOL s.ffi (.sharedMem .mappedWrite) [0] (panWordToBytesHOL w false ++ panWordToBytesHOL address false) with
+        | final outcome => simp
+        | ret newFfi newBytes => simp
+      · simp
+    | loc l => simp [StackSemShMem.shMemStore, hv]
+
+theorem stackShMemStoreByte_code (r : Nat) (address : BitVec width)
+    (s : StackSemStateFiniteExact width C F) :
+    (StackSemShMem.shMemStoreByte r address s).2.code = s.code := by
+  cases hv : getVar r s with
+  | none => simp [StackSemShMem.shMemStoreByte, hv]
+  | some v =>
+    cases v with
+    | word w =>
+      simp only [StackSemShMem.shMemStoreByte, hv]
+      split_ifs with hd
+      · cases hc : callFFIHOL s.ffi (.sharedMem .mappedWrite) [1] ([getByteHOL8 0 w false] ++ panWordToBytesHOL address false) with
+        | final outcome => simp
+        | ret newFfi newBytes => simp
+      · simp
+    | loc l => simp [StackSemShMem.shMemStoreByte, hv]
+
+theorem stackShMemStore16_code (r : Nat) (address : BitVec width)
+    (s : StackSemStateFiniteExact width C F) :
+    (StackSemShMem.shMemStore16 r address s).2.code = s.code := by
+  cases hv : getVar r s with
+  | none => simp [StackSemShMem.shMemStore16, hv]
+  | some v =>
+    cases v with
+    | word w =>
+      simp only [StackSemShMem.shMemStore16, hv]
+      split_ifs with hd
+      · cases hc : callFFIHOL s.ffi (.sharedMem .mappedWrite) [2] ((panWordToBytesHOL w false).take 2 ++ panWordToBytesHOL address false) with
+        | final outcome => simp
+        | ret newFfi newBytes => simp
+      · simp
+    | loc l => simp [StackSemShMem.shMemStore16, hv]
+
+theorem stackShMemStore32_code (r : Nat) (address : BitVec width)
+    (s : StackSemStateFiniteExact width C F) :
+    (StackSemShMem.shMemStore32 r address s).2.code = s.code := by
+  cases hv : getVar r s with
+  | none => simp [StackSemShMem.shMemStore32, hv]
+  | some v =>
+    cases v with
+    | word w =>
+      simp only [StackSemShMem.shMemStore32, hv]
+      split_ifs with hd
+      · cases hc : callFFIHOL s.ffi (.sharedMem .mappedWrite) [4] ((panWordToBytesHOL w false).take 4 ++ panWordToBytesHOL address false) with
+        | final outcome => simp
+        | ret newFfi newBytes => simp
+      · simp
+    | loc l => simp [StackSemShMem.shMemStore32, hv]
+
+theorem stackShMemOp_code (op : WordMemOp) (r : Nat) (address : BitVec width)
+    (s t : StackSemStateFiniteExact width C F)
+    (h : (StackSemShMem.shMemOp op r address s).2 = t) : t.code = s.code := by
+  rw [← h]
+  cases op
+  case load => exact stackShMemLoad_code r address s
+  case load8 => exact stackShMemLoadByte_code r address s
+  case load16 => exact stackShMemLoad16_code r address s
+  case load32 => exact stackShMemLoad32_code r address s
+  case store => exact stackShMemStore_code r address s
+  case store8 => exact stackShMemStoreByte_code r address s
+  case store16 => exact stackShMemStore16_code r address s
+  case store32 => exact stackShMemStore32_code r address s
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
