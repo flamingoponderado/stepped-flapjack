@@ -2,6 +2,9 @@ import SteppedFlapjack.StackToLabSteps.GeneratedHaltSteps
 import SteppedFlapjack.StackToLabSteps.NamesComposition
 import SteppedFlapjack.StackToLabSteps.FullInitLabSteps
 import SteppedFlapjack.StackToLabSteps.FullInitRemoveLabSteps
+import SteppedFlapjack.StackToLabSteps.FullInitAllocSteps
+import SteppedFlapjack.StackToLabSteps.FullInitStackLabSteps
+import SteppedFlapjack.StackToLabSteps.FullInitRiscVSteps
 import SteppedFlapjack.StackToLabSteps.PipelineComposition
 import SteppedFlapjack.StackToLabSteps.RiscVPipeline
 import SteppedFlapjack.LabToTargetSteps.LabRiscVComposition
@@ -174,6 +177,8 @@ phase 4 of flapjack#1251:
   word widths of at least eight bits, independent of runtime stack length.
 - `SteppedFlapjack.StackAllocSteps.MakeInitEntrySteps`: bounded entry
   simulation for the actual allocation make-init state.
+- `SteppedFlapjack.StackToLabSteps.FullInitAllocSteps`, `FullInitStackLabSteps`,
+  `FullInitRiscVSteps`: actual initialized stack execution through RISC-V.
 - `SteppedFlapjack.StackToLabSteps.FullInitRemoveLabSteps`: bounded actual
   stack-removal initialization composed through LabSem.
 - `SteppedFlapjack.StackRemoveSteps.InitEntrySteps`, `InitHypSteps`: initialized
