@@ -31,6 +31,7 @@ import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallTail
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnNone
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnHandler
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.LeafStepsAll
+import SteppedFlapjack.StackRemoveSteps.CodeBounds
 
 /-!
 # stepped-flapjack
