@@ -3,12 +3,9 @@ import SteppedFlapjack.StackRemoveSteps.CompCorrect.Call
 /-! A single step bound covering every non-recursive `HolProg` constructor
 (stepped-flapjack#2, phase C3).
 
-The induction's leaf dispatch needs `steps (comp ... p, t) <= leafCost B bounds p`
-for all 28 leaves at once. The identity leaves take one step; `get`/`set` compile
-to a conditional on the store name with a one-step program in each branch;
-`opCurrHeap` and `dataBufferWrite` compile to one instruction; the eight
-expansions are bounded in `LeafSteps`; `storeConsts` comes from the code-supplied
-bound. The six recursive constructors are excluded by `hp`. -/
+Every non-recursive constructor other than `storeConsts` has a step bound
+under the source/target relation. The constant-store case is proved separately
+using the successful source run and its bitmap length. -/
 
 namespace SteppedFlapjack.StackRemoveSteps.CompCorrect
 
@@ -21,11 +18,8 @@ variable {width : Nat} [NeZero width] {C F : Type}
 
 theorem steps_comp_leaf_le (jump : Bool) (bounds : BitVec width × BitVec width)
     (pointer B : Nat) (program : HolProg width) (t : StackSemStateFiniteExact width C F)
-    (storeConstsBound : ∀ (temporary bitmap : Nat) (stub : Option Nat)
-      (source target : StackSemStateFiniteExact width C F),
-      stateRelHOL jump bounds pointer source target →
-      steps (comp jump bounds pointer (.storeConsts temporary bitmap stub), target) ≤
-        leafCost B bounds (.storeConsts temporary bitmap stub))
+    (notStoreConsts : ∀ (temporary bitmap : Nat) (stub : Option Nat),
+      program ≠ .storeConsts temporary bitmap stub)
     (source : StackSemStateFiniteExact width C F)
     (relation : stateRelHOL jump bounds pointer source t)
     (hp : isRecursive program = false) :
@@ -152,6 +146,6 @@ theorem steps_comp_leaf_le (jump : Bool) (bounds : BitVec width × BitVec width)
     exact steps_comp_stackStoreAny_le _ _ _ _ _ _ t
   | bitmapLoad destination address =>
     exact steps_comp_bitmapLoad_le _ _ _ _ _ _ t
-  | storeConsts source bitmap stub => exact storeConstsBound source bitmap stub _ _ relation
+  | storeConsts source bitmap stub => exact False.elim (notStoreConsts source bitmap stub rfl)
 
 end SteppedFlapjack.StackRemoveSteps.CompCorrect

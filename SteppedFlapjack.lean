@@ -20,6 +20,8 @@ import SteppedFlapjack.StackToLabSteps
 import SteppedFlapjack.StackRemoveSteps.Defs
 import SteppedFlapjack.StackRemoveSteps.CopyEachSteps
 import SteppedFlapjack.StackRemoveSteps.CopyLoopSteps
+import SteppedFlapjack.StackRemoveSteps.StoreConstsSteps
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.StoreConsts
 import SteppedFlapjack.StackRemoveSteps.LeafCostBounds
 import SteppedFlapjack.StackRemoveSteps.LeafSteps
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.Statement
