@@ -121,6 +121,14 @@ theorem steps_inst (i : HolInst width) (s : StackSemStateFiniteExact width C F) 
     steps (.inst i, s) = 1 :=
   steps_leaf _ _ (by simp [isRecursive])
 
+/-- A `Break` node takes one step. -/
+theorem steps_break (n : Nat) (s : StackSemStateFiniteExact width C F) :
+    steps (.break n, s) = 1 := by
+  change stepsHOL (.break n) s = 1
+  rw [stepsHOL]
+  simp
+  all_goals (intro; simp)
+
 theorem steps_skip (s : StackSemStateFiniteExact width C F) : steps (.skip, s) = 1 :=
   steps_leaf _ _ (by simp [isRecursive])
 
@@ -663,6 +671,32 @@ theorem steps_ite_skip_add_le (r : Nat) (ri : HolRegImm width) (temporary : Nat)
       · omega
     · omega
   exact Nat.add_le_add_left h 1
+
+/-- The sentinel run of `copyEach` (pattern register equal to 1) takes three steps. -/
+theorem steps_copyEach_sentinel {width : Nat} [NeZero width] {C F : Type}
+    (temporary bitmap : Nat) (s : StackSemStateFiniteExact width C F)
+    (h : StackSemStateOps.getVar 1 s = some (.word (BitVec.ofNat width 1))) :
+    steps (copyEach temporary bitmap, s) ≤ 3 := by
+  have hdef : (copyEach temporary bitmap : HolProg width)
+      = (.loop (.ite .notEqual 1 (.imm 1)
+          (listSeqHOL [loadInst temporary bitmap, addBytesInWordInst bitmap,
+            .ite .test 1 (.imm 1) .skip (addInst temporary 3),
+            rightShiftInst 1 1, storeInst temporary 2, addBytesInWordInst 2])
+          (.break 0) : HolProg width)) := rfl
+  rw [hdef, steps_loop, steps_ite]
+  rw [h]
+  simp only [StackSemStateOps.getVarImm, HolRegImm.toWordRegImm, wordSemWordCmp,
+    Compiler.Encoders.Asm.wordCmpHOL]
+  simp
+  rw [evaluate_ite]
+  rw [h]
+  simp only [StackSemStateOps.getVarImm, HolRegImm.toWordRegImm, wordSemWordCmp,
+    Compiler.Encoders.Asm.wordCmpHOL]
+  simp
+  rw [evaluate_break]
+  simp only [fixClock, StackSemControl.contLoop]
+  rw [steps_break]
+  simp
 
 theorem steps_innerBody_le (temporary bitmap : Nat) (s : StackSemStateFiniteExact width C F) :
     steps (listSeqHOL [loadInst temporary bitmap, addBytesInWordInst bitmap,
