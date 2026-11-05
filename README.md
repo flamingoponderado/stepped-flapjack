@@ -37,6 +37,11 @@ keep their names in the `Flapjack` namespace.
   `SteppedFlapjack.PanSteppedSemantics`;
 - the fuel and event monotonicity theorems: `SteppedFlapjack.PanValueFfiFuel`
   and `SteppedFlapjack.PanValueFfiEventMonotonicity`;
+- Flapjack-specific clocked-evaluator fuel monotonicity, clock/timeout contracts,
+  and clock-shift prerequisites: `SteppedFlapjack.PanValueFfiClockFuel`,
+  `SteppedFlapjack.PanValueFfiClockCorrectness`, and
+  `SteppedFlapjack.PanValueFfiClockShift`; these describe the fuel-indexed
+  evaluator and are not direct ports of HOL declarations;
 - the clocked-to-stepped bridge: `SteppedFlapjack.PanValueFfiClockProjection`
   and `SteppedFlapjack.PanValueFfiClockStepsBridge`;
 - `SteppedFlapjack.PanCost`, the source-level resource model built on step

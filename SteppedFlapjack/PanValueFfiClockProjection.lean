@@ -1,4 +1,4 @@
-import Flapjack.PanValueFfiClockCorrectness
+import SteppedFlapjack.PanValueFfiClockCorrectness
 import SteppedFlapjack.PanValueFfiSemantics
 
 /-!
