@@ -1,3 +1,4 @@
+import SteppedFlapjack.StackToLabSteps.GeneratedHaltSteps
 import SteppedFlapjack.StackRawCallSteps.LeafSteps
 import SteppedFlapjack.StackRawCallSteps.IfSteps
 import SteppedFlapjack.StackRawCallSteps.LoopSteps
@@ -160,6 +161,8 @@ phase 4 of flapjack#1251:
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
 - `SteppedFlapjack.StackAllocSteps.UniformLeaf`: a uniform leaf factor for
   word widths of at least eight bits, independent of runtime stack length.
+- `SteppedFlapjack.StackToLabSteps.GeneratedHaltSteps`: a four-step bound
+  for the generated halt procedure and bounded flattening without a cost assumption.
 - `SteppedFlapjack.StackAllocSteps.ThreePassComposition`: an entry-step
   bound composing raw-call optimization, allocation, and stack removal.
 - `SteppedFlapjack.StackRawCallSteps.EntrySteps` and
