@@ -1,3 +1,9 @@
+import SteppedFlapjack.LoopToWordSteps.LoopRiscV
+import SteppedFlapjack.LoopToWordSteps.LoopProgram
+import SteppedFlapjack.LoopToWordSteps.LoopBound
+import SteppedFlapjack.LoopToWordSteps.LoopSetup
+import SteppedFlapjack.LoopToWordSteps.LoopResult
+import SteppedFlapjack.LoopToWordSteps.SixBound
 import SteppedFlapjack.LoopToWordSteps.Outcome
 import SteppedFlapjack.LoopToWordSteps.LoopCost
 import SteppedFlapjack.LoopToWordSteps.ConditionalRiscV
@@ -218,6 +224,12 @@ phase 4 of flapjack#1251:
   no-handler bound for all non-error, non-timeout outcomes.
 - `SteppedFlapjack.WordToStackSteps.ReturningNoneSteps`: complete no-handler
   zero-clock simulation and a source-step-based matching-return bound.
+- `SteppedFlapjack.LoopToWordSteps.SixBound`: sixfold sequence and conditional simulation.
+- `SteppedFlapjack.LoopToWordSteps.LoopResult`: loop-result classification.
+- `SteppedFlapjack.LoopToWordSteps.LoopSetup`: derived loop cut and timeout setup.
+- `SteppedFlapjack.LoopToWordSteps.LoopBound`: quantitative loop induction.
+- `SteppedFlapjack.LoopToWordSteps.LoopProgram`: nested-loop fragment and Word compilation shape.
+- `SteppedFlapjack.LoopToWordSteps.LoopRiscV`: nested-loop executions composed through RISC-V.
 - `SteppedFlapjack.LoopToWordSteps.Outcome`: source-to-machine outcome and trace correspondence.
 - `SteppedFlapjack.LoopToWordSteps.LoopCost`: cost of the compiled loop wrapper and continuing iterations.
 - `SteppedFlapjack.LoopToWordSteps.Conditional`: Loop-to-Word step preservation with conditional branches.
