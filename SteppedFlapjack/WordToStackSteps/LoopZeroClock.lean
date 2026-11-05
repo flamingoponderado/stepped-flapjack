@@ -315,9 +315,444 @@ theorem zeroTick {width : Nat} [NeZero width] {C F : Type}
     · simp only [compCorrectResult, Option.map_none, ne_eq, not_true_eq_false, ↓reduceIte]
       exact Clock.stateRelDecClock ac k f frame source target lens 0 related
 
+theorem zeroGet {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (register : Nat) (name : WordStoreHOL)
+    (source : WordSemStateFiniteExact width (Nat × C) F) :
+    ZeroSimulation ac (.get register name) source := by
+  intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises
+  rcases premises with ⟨execution,notError,related,conventions,flat,compilation,
+    lengthBound,bitmapBound,bitmapPrefix,labels,maxBound⟩
+  simp only [WordSemStateFiniteExact.evaluate] at execution
+  cases read : WordSemStateFiniteExact.getStore name source with
+  | none => simp [read] at execution; obtain ⟨rfl,rfl⟩ := execution; contradiction
+  | some value =>
+    simp only [read,Prod.mk.injEq] at execution
+    obtain ⟨rfl,rfl⟩ := execution
+    have even : register % 2 = 0 := by
+      simpa [postAllocConventionsHOL,everyVarHOL,everyStackVarHOL,
+        callArgConventionHOL,isPhyVar] using conventions
+    have twice : register = 2*(register/2) := by omega
+    have bound : register/2 < frame+k := by
+      simp only [maxVarHOL] at maxBound
+      omega
+    have storeRel : source.store = target.store.eraseEq .handler :=
+      related.2.2.2.2.2.2.2.2.2.2.2.1
+    have targetRead : target.store.lookup (StackSemRegisterTransfers.storeOfSyntax (storeNameOfWord name)) = some value := by
+      unfold WordSemStateFiniteExact.getStore at read
+      rw [storeRel] at read
+      cases name <;>
+        simp only [storeNameOfWord,StackSemRegisterTransfers.storeOfSyntax,
+          HolFiniteMapExact.eraseEq,FDOMSUB_HOL] at read ⊢ <;>
+        simp only [reduceCtorEq,ite_false,ite_true] at read <;>
+        exact read
+    have useStore : target.useStore = true := related.2.2.2.2.2.1
+    have run : ∀ r, r ≤ k → StackSemEvaluate.evaluate (.get r (storeNameOfWord name),target) =
+        (none,StackSemStateOps.setVar r value target) := by
+      intro r _
+      simp [StackSemEvaluate.evaluate_get,useStore,targetRead]
+    obtain ⟨post,actual,postRel,_,_⟩ := RegisterWrite.wRegWrite1Thm1 ac k f frame
+      (register/2) source target lens value (fun r => .get r (storeNameOfWord name))
+      related bound run
+    have programEq := congrArg Prod.fst compilation
+    simp only [compNative] at programEq
+    subst compiled
+    refine ⟨post,none,?_,?_⟩
+    · simpa only [← twice] using actual
+    · simpa only [compCorrectResult,Option.map_none,ne_eq,not_true_eq_false,
+        ↓reduceIte,← twice] using postRel
+
+theorem zeroLocValue {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (register location : Nat)
+    (source : WordSemStateFiniteExact width (Nat × C) F) :
+    ZeroSimulation ac (.locValue register location) source := by
+  intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises
+  rcases premises with ⟨execution,notError,related,conventions,flat,compilation,
+    lengthBound,bitmapBound,bitmapPrefix,labels,maxBound⟩
+  simp only [WordSemStateFiniteExact.evaluate] at execution
+  by_cases present : sptMem location source.code
+  swap
+  · simp [present] at execution
+    obtain ⟨rfl,rfl⟩ := execution
+    contradiction
+  · simp only [present,if_true,Prod.mk.injEq] at execution
+    obtain ⟨rfl,rfl⟩ := execution
+    have even : register % 2 = 0 := by
+      simpa [postAllocConventionsHOL,everyVarHOL,everyStackVarHOL,
+        callArgConventionHOL,isPhyVar] using conventions
+    have twice : register = 2*(register/2) := by omega
+    have bound : register/2 < frame+k := by
+      simp only [maxVarHOL] at maxBound
+      omega
+    have codeDomain : sptDomain target.code =
+        (fun n => n=raiseStubLocation ∨ n=storeConstsStubLocation ∨ sptDomain source.code n) :=
+      related.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+    have valid : StackSem.locCheckExact target.code (location,0) := by
+      apply Or.inl
+      refine ⟨rfl, ?_⟩
+      change sptDomain target.code location
+      rw [codeDomain]
+      exact Or.inr (Or.inr present)
+    have run : ∀ r, r ≤ k → StackSemEvaluate.evaluate (.locValue r location 0,target) =
+        (none,StackSemStateOps.setVar r (.loc location 0) target) := by
+      intro r _
+      simp [StackSemEvaluate.evaluate_locValue,valid]
+    obtain ⟨post,actual,postRel,_,_⟩ := RegisterWrite.wRegWrite1Thm1 ac k f frame
+      (register/2) source target lens (.loc location 0) (fun r => .locValue r location 0)
+      related bound run
+    have programEq := congrArg Prod.fst compilation
+    simp only [compNative] at programEq
+    subst compiled
+    refine ⟨post,none,?_,?_⟩
+    · simpa only [← twice] using actual
+    · simpa only [compCorrectResult,Option.map_none,ne_eq,not_true_eq_false,
+        ↓reduceIte,← twice] using postRel
+
+theorem zeroSet {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (name : WordStoreHOL)
+    (expression : WordLangExpHOL (BitVec width))
+    (source : WordSemStateFiniteExact width (Nat × C) F) :
+    ZeroSimulation ac (.set name expression) source := by
+  intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises
+  rcases premises with ⟨execution,notError,related,conventions,flat,compilation,
+    lengthBound,bitmapBound,bitmapPrefix,labels,maxBound⟩
+  cases expression <;> simp [flatExpConventions] at flat
+  rename_i register
+  simp only [WordSemStateFiniteExact.evaluate] at execution
+  have notHandler : name ≠ .handler := by
+    intro eq; subst name; simp only [true_or,if_true,Prod.mk.injEq] at execution
+    obtain ⟨rfl,rfl⟩ := execution; contradiction
+  have notBitmap : name ≠ .bitmapBase := by
+    intro eq; subst name; simp only [or_true,if_true,Prod.mk.injEq] at execution
+    obtain ⟨rfl,rfl⟩ := execution; contradiction
+  simp only [notHandler,notBitmap,false_or,if_false,WordSemStateFiniteExact.wordExp] at execution
+  cases read : WordSemStateFiniteExact.getVar register source with
+  | none => simp [read] at execution; obtain ⟨rfl,rfl⟩ := execution; contradiction
+  | some value =>
+    simp only [read,Prod.mk.injEq] at execution
+    obtain ⟨rfl,rfl⟩ := execution
+    have even : register % 2 = 0 := by
+      simpa [postAllocConventionsHOL,everyVarHOL,everyStackVarHOL,
+        callArgConventionHOL,everyVarExpHOL,isPhyVar] using conventions
+    rcases format : Compiler.Backend.WordToStackRegFormat.wReg1 register (k,f,frame) with ⟨loads,reg⟩
+    obtain ⟨loaded,loadRun,clockEq,loadRel,_,_,_,_,_,loadedRead⟩ :=
+      LoadRegister.evaluateWStackLoadWReg1 ac k f frame register reg loads
+        source target lens value format even read related
+    have useStore : loaded.useStore = true := loadRel.2.2.2.2.2.1
+    have codec : StackSemRegisterTransfers.storeOfSyntax (storeNameOfWord name) = name := by
+      cases name <;> rfl
+    have programEq := congrArg Prod.fst compilation
+    have compiledEq : compiled = wStackLoadNative loads (.set (storeNameOfWord name) reg) := by
+      cases name <;> simp only [compNative,format] at programEq <;>
+        first | exact programEq.symm | contradiction
+    subst compiled
+    refine ⟨StackSemStateOps.setStore name value loaded,none,?_,?_⟩
+    · simp only [LoadRegister.evaluateWStackLoadSeq,
+        StackSemEvaluate.evaluate_seq,loadRun]
+      have fix : StackSemControl.fixClock target ((none : Option (StackSemResult width)),loaded) = (none,loaded) := by
+        have le : loaded.clock ≤ target.clock := by omega
+        simp only [StackSemControl.fixClock,Nat.min_eq_right le]
+      rw [fix]
+      simp only [StackSemEvaluate.evaluate_set,useStore,not_true_eq_false,if_false,
+        loadedRead,codec]
+    · simpa only [compCorrectResult,Option.map_none,ne_eq,not_true_eq_false,
+        ↓reduceIte] using StateRelStoreUpdate.stateRelSetStore ac k f frame source
+          loaded lens 0 name value notHandler loadRel
+
+theorem zeroCodeBufferWrite {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (r1 r2 : Nat)
+    (source : WordSemStateFiniteExact width (Nat × C) F) :
+    ZeroSimulation ac (.codeBufferWrite r1 r2) source := by
+  intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises
+  rcases premises with ⟨execution,notError,related,conventions,flat,compilation,
+    lengthBound,bitmapBound,bitmapPrefix,labels,maxBound⟩
+  obtain ⟨w1,w2,cb,read1,read2,writeEq,rfl,rfl⟩ :=
+    CodeBufferWrite.sourceSuccess r1 r2 source sourcePost result execution notError
+  have evens : r1%2=0 ∧ r2%2=0 := by
+    simpa [postAllocConventionsHOL,everyVarHOL,everyStackVarHOL,
+      callArgConventionHOL,isPhyVar] using conventions
+  rcases fmt1 : Compiler.Backend.WordToStackRegFormat.wReg1 r1 (k,f,frame) with ⟨xs,reg1⟩
+  rcases fmt2 : Compiler.Backend.WordToStackRegFormat.wReg2 r2 (k,f,frame) with ⟨ys,reg2⟩
+  obtain ⟨t1,run1,clock1,rel1,_,_,_,_,regNe,loaded1⟩ :=
+    LoadRegister.evaluateWStackLoadWReg1 ac k f frame r1 reg1 xs source target lens
+      (.word w1) fmt1 evens.1 read1 related
+  obtain ⟨t2,run2,clock2,_,rel2,_,_,otherReads,_,loaded2⟩ :=
+    LoadRegisterTwo.evaluateWStackLoadWReg2 ac k f frame r2 reg2 ys source t1 lens
+      (.word w2) fmt2 evens.2 read2 rel1
+  have read1Final : StackSemStateOps.getVar reg1 t2 = some (.word w1) := by
+    rw [otherReads reg1 regNe]
+    exact loaded1
+  have bufferEq : t2.codeBuffer = source.codeBuffer :=
+    rel2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  have programEq := congrArg Prod.fst compilation
+  simp only [compNative,fmt1,fmt2] at programEq
+  subst compiled
+  refine ⟨{t2 with codeBuffer := cb},none,?_,?_⟩
+  · simp only [wStackLoadAppend,Function.comp_apply]
+    rw [LoadRegister.evaluateWStackLoadSeq,StackSemEvaluate.evaluate_seq,run1]
+    have fix1 : StackSemControl.fixClock target ((none : Option (StackSemResult width)),t1) = (none,t1) := by
+      have le : t1.clock ≤ target.clock := by omega
+      simp only [StackSemControl.fixClock,Nat.min_eq_right le]
+    simp only [fix1]
+    rw [LoadRegister.evaluateWStackLoadSeq,StackSemEvaluate.evaluate_seq,run2]
+    have fix2 : StackSemControl.fixClock t1 ((none : Option (StackSemResult width)),t2) = (none,t2) := by
+      have le : t2.clock ≤ t1.clock := by omega
+      simp only [StackSemControl.fixClock,Nat.min_eq_right le]
+    simp only [fix2]
+    simp only [StackSemEvaluate.evaluate_codeBufferWrite,read1Final,loaded2,bufferEq,writeEq]
+  · simpa only [compCorrectResult,Option.map_none,ne_eq,not_true_eq_false,
+      ↓reduceIte] using CodeBufferWrite.codeBufferRelation cb rel2
+
+
+theorem zeroDataBufferWrite {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (r1 r2 : Nat)
+    (source : WordSemStateFiniteExact width (Nat × C) F) :
+    ZeroSimulation ac (.dataBufferWrite r1 r2) source := by
+  intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises
+  rcases premises with ⟨execution,notError,related,conventions,flat,compilation,
+    lengthBound,bitmapBound,bitmapPrefix,labels,maxBound⟩
+  obtain ⟨w1,w2,cb,read1,read2,writeEq,rfl,rfl⟩ :=
+    DataBufferWrite.sourceSuccess r1 r2 source sourcePost result execution notError
+  have evens : r1%2=0 ∧ r2%2=0 := by
+    simpa [postAllocConventionsHOL,everyVarHOL,everyStackVarHOL,
+      callArgConventionHOL,isPhyVar] using conventions
+  rcases fmt1 : Compiler.Backend.WordToStackRegFormat.wReg1 r1 (k,f,frame) with ⟨xs,reg1⟩
+  rcases fmt2 : Compiler.Backend.WordToStackRegFormat.wReg2 r2 (k,f,frame) with ⟨ys,reg2⟩
+  obtain ⟨t1,run1,clock1,rel1,_,_,_,_,regNe,loaded1⟩ :=
+    LoadRegister.evaluateWStackLoadWReg1 ac k f frame r1 reg1 xs source target lens
+      (.word w1) fmt1 evens.1 read1 related
+  obtain ⟨t2,run2,clock2,_,rel2,_,_,otherReads,_,loaded2⟩ :=
+    LoadRegisterTwo.evaluateWStackLoadWReg2 ac k f frame r2 reg2 ys source t1 lens
+      (.word w2) fmt2 evens.2 read2 rel1
+  have read1Final : StackSemStateOps.getVar reg1 t2 = some (.word w1) := by
+    rw [otherReads reg1 regNe]
+    exact loaded1
+  have bufferEq : t2.dataBuffer = source.dataBuffer :=
+    rel2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  have capacity : cb.buffer.length+cb.spaceLeft = source.dataBuffer.buffer.length+source.dataBuffer.spaceLeft := by
+    unfold wordSemBufferWrite at writeEq
+    split at writeEq
+    · rename_i guard
+      have equal := Option.some.inj writeEq
+      subst cb
+      simp only [List.length_append,List.length_singleton]
+      omega
+    · cases writeEq
+  have programEq := congrArg Prod.fst compilation
+  simp only [compNative,fmt1,fmt2] at programEq
+  subst compiled
+  refine ⟨{t2 with dataBuffer := cb},none,?_,?_⟩
+  · simp only [wStackLoadAppend,Function.comp_apply]
+    rw [LoadRegister.evaluateWStackLoadSeq,StackSemEvaluate.evaluate_seq,run1]
+    have fix1 : StackSemControl.fixClock target ((none : Option (StackSemResult width)),t1) = (none,t1) := by
+      have le : t1.clock ≤ target.clock := by omega
+      simp only [StackSemControl.fixClock,Nat.min_eq_right le]
+    simp only [fix1]
+    rw [LoadRegister.evaluateWStackLoadSeq,StackSemEvaluate.evaluate_seq,run2]
+    have fix2 : StackSemControl.fixClock t1 ((none : Option (StackSemResult width)),t2) = (none,t2) := by
+      have le : t2.clock ≤ t1.clock := by omega
+      simp only [StackSemControl.fixClock,Nat.min_eq_right le]
+    simp only [fix2]
+    have useStack : t2.useStack = true := rel2.2.2.2.2.1
+    simp only [StackSemEvaluate.evaluate_dataBufferWrite,useStack,not_true_eq_false,if_false,read1Final,loaded2,bufferEq,writeEq]
+  · simpa only [compCorrectResult,Option.map_none,ne_eq,not_true_eq_false,
+      ↓reduceIte] using DataBufferWrite.dataBufferRelation cb capacity rel2
+
+
+theorem zeroFFI {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (index : Basis.Pure.MlString.MlString)
+    (ptr1 len1 ptr2 len2 : Nat) (names : WordLangCutsetsHOL)
+    (source : WordSemStateFiniteExact width (Nat × C) F) :
+    ZeroSimulation ac (.ffi index ptr1 len1 ptr2 len2 names) source := by
+  intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises
+  obtain ⟨execution, notError, related, conventions, -, compilation, -, -, -, -, -⟩ := premises
+  obtain ⟨rfl, rfl, rfl, rfl, hc1, hc2⟩ :=
+    FFI.ffiConventions k index ptr1 len1 ptr2 len2 names conventions
+  simp only [compNative, Prod.mk.injEq] at compilation
+  obtain ⟨rfl, -⟩ := compilation
+  have related' := related
+  unfold stateRel at related'
+  obtain ⟨r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18,
+    r19, r20, r21, r22, r23, r24, r25, r26, r27, r28, r29, r30, r31, r32, r33, r34, r35, r36,
+    r37, r38, rloc⟩ := related'
+  have hvar : ∀ m v, WordSemStateFiniteExact.getVar (2 * m) source = some v → m < k →
+      StackSemStateOps.getVar m target = some v := by
+    intro m v hm hlt
+    have := StateRelGetVar.stateRelGetVarImp' ac k f frame source target lens 0 (2 * m) v
+      ⟨related, hm, by omega, by omega⟩
+    rwa [show 2 * m / 2 = m by omega] at this
+  rw [WordSemStateFiniteExact.evaluate] at execution
+  rw [StackSemEvaluate.evaluate_ffi]
+  simp only [show (2 : Nat) / 2 = 1 by rfl, show (4 : Nat) / 2 = 2 by rfl,
+    show (6 : Nat) / 2 = 3 by rfl, show (8 : Nat) / 2 = 4 by rfl]
+  rcases h4 : WordSemStateFiniteExact.getVar 4 source with _ | (w | ⟨_, _⟩) <;>
+    rcases h2 : WordSemStateFiniteExact.getVar 2 source with _ | (w2 | ⟨_, _⟩) <;>
+    rcases h8 : WordSemStateFiniteExact.getVar 8 source with _ | (w3 | ⟨_, _⟩) <;>
+    rcases h6 : WordSemStateFiniteExact.getVar 6 source with _ | (w4 | ⟨_, _⟩) <;>
+    simp only [h4, h2, h8, h6, Prod.mk.injEq] at execution <;>
+    try exact absurd execution.1.symm notError
+  rw [hvar 2 _ h4 (by omega), hvar 1 _ h2 (by omega), hvar 4 _ h8 (by omega),
+    hvar 3 _ h6 (by omega)]
+  simp only [r8, r9, r15, r4]
+  rcases hce : wordSemCutEnv names source.locals with _ | env
+  · simp only [hce, Prod.mk.injEq] at execution
+    exact absurd execution.1.symm notError
+  simp only [hce] at execution
+  rcases hr1 : readBytearrayWordHOL w2 w.toNat
+      (memLoadByteAuxExact source.memory source.mdomain source.be) with _ | bytes <;>
+    rcases hr2 : readBytearrayWordHOL w4 w3.toNat
+      (memLoadByteAuxExact source.memory source.mdomain source.be) with _ | bytes2 <;>
+    simp only [hr1, hr2, Prod.mk.injEq] at execution ⊢ <;>
+    try exact absurd execution.1.symm notError
+  rcases hcall : callFFIHOL source.ffi (.extCall index) bytes bytes2 with ⟨newFfi, newBytes⟩ | outcome <;>
+    simp only [hcall, Prod.mk.injEq] at execution ⊢ <;> obtain ⟨rfl, rfl⟩ := execution
+  · refine ⟨_, _, ⟨rfl, rfl⟩, ?_⟩
+    unfold compCorrectResult
+    simp only [Option.map_none, ne_eq, not_true_eq_false, if_false]
+    have henv : env = sptUnion (sptInter source.locals names.2) (sptInter source.locals names.1) := by
+      unfold wordSemCutEnv at hce
+      rcases hcs : wordSemCutEnvs names source.locals with _ | ⟨e1, e2⟩
+      · rw [hcs] at hce; cases hce
+      rw [hcs] at hce
+      obtain ⟨he1, he2⟩ := AllocStateRel.cutEnvs_eq hcs
+      simp only [Option.some.injEq] at hce he1 he2
+      rw [← hce, ← he1, ← he2]
+    unfold stateRel
+    refine ⟨r1, r2, r3, rfl, r5, r6, r7, rfl, rfl, r10, r11, r12, r13, r14, rfl, rfl, r17, rfl,
+      r19, r20, r21, r22, r23, r24, r25, r26, r27, r28, r29, r30, r31, r32, r33, r34, r35,
+      ?_, r37, r38, ?_⟩
+    · show sptWf env = true
+      rw [henv]
+      exact sptWfUnion _ _ ⟨sptWfInter _ _, sptWfInter _ _⟩
+    · intro m v hm
+      change sptLookup m env = some v at hm
+      rw [henv, sptLookup_sptUnion, sptLookup_sptInterCases, sptLookup_sptInterCases] at hm
+      have hlook : sptLookup m source.locals = some v ∧
+          (sptDomain names.1 m ∨ sptDomain names.2 m) := by
+        unfold sptDomain
+        revert hm
+        cases sptLookup m source.locals <;> cases sptLookup m names.2 <;>
+          cases sptLookup m names.1 <;> simp
+      obtain ⟨hl, hd⟩ := hlook
+      have hev : m % 2 = 0 ∧ 2 * k ≤ m := hd.elim (hc1 m) (hc2 m)
+      obtain ⟨he, hif⟩ := rloc m v hl
+      refine ⟨he, ?_⟩
+      rw [if_neg (by omega)] at hif ⊢
+      exact hif
+  · refine ⟨_, _, ⟨rfl, rfl⟩, ?_⟩
+    unfold compCorrectResult
+    simp only [Option.map_some, compileResult, ne_eq, not_true_eq_false, if_false]
+    exact ⟨r4.symm, r1⟩
+
+private theorem heapSourceSuccess {width : Nat} [NeZero width] {C F : Type}
+    (source post : WordSemStateFiniteExact width (Nat × C) F)
+    (operator : HolBinop) (dst src : Nat) (result : Option (WordSemResult width))
+    (execution : WordSemStateFiniteExact.evaluate (.opCurrHeap operator dst src) source = (result,post))
+    (notError : result ≠ some .error) :
+    ∃ operand heap value : BitVec width,
+      WordSemStateFiniteExact.getVar src source = some (.word operand) ∧
+      source.store.lookup .currHeap = some (.word heap) ∧
+      wordOpHOL operator [operand,heap] = some value ∧
+      result = none ∧ post = WordSemStateFiniteExact.setVar dst (.word value) source := by
+  cases read : WordSemStateFiniteExact.getVar src source with
+  | none =>
+    simp [WordSemStateFiniteExact.evaluate,WordSemStateFiniteExact.wordExp,
+      read,theWords] at execution
+    obtain ⟨rfl,rfl⟩ := execution
+    contradiction
+  | some operandValue =>
+    cases operandValue with
+    | loc l n =>
+      simp [WordSemStateFiniteExact.evaluate,WordSemStateFiniteExact.wordExp,
+        read,theWords] at execution
+      obtain ⟨rfl,rfl⟩ := execution
+      contradiction
+    | word operand =>
+      cases heapRead : source.store.lookup .currHeap with
+      | none =>
+        simp [WordSemStateFiniteExact.evaluate,WordSemStateFiniteExact.wordExp,
+          WordSemStateFiniteExact.getStore,read,heapRead,theWords] at execution
+        obtain ⟨rfl,rfl⟩ := execution
+        contradiction
+      | some heapValue =>
+        cases heapValue with
+        | loc l n =>
+          simp [WordSemStateFiniteExact.evaluate,WordSemStateFiniteExact.wordExp,
+            WordSemStateFiniteExact.getStore,read,heapRead,theWords] at execution
+          obtain ⟨rfl,rfl⟩ := execution
+          contradiction
+        | word heap =>
+          cases operation : wordOpHOL operator [operand,heap] with
+          | none =>
+            simp [WordSemStateFiniteExact.evaluate,WordSemStateFiniteExact.wordExp,
+              WordSemStateFiniteExact.getStore,read,heapRead,theWords,operation] at execution
+            obtain ⟨rfl,rfl⟩ := execution
+            contradiction
+          | some value =>
+            simp [WordSemStateFiniteExact.evaluate,WordSemStateFiniteExact.wordExp,
+              WordSemStateFiniteExact.getStore,read,heapRead,theWords,operation] at execution
+            obtain ⟨rfl,rfl⟩ := execution
+            exact ⟨operand,heap,value,rfl,rfl,operation,rfl,rfl⟩
+
+theorem zeroOpCurrHeap {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (operator : HolBinop) (dst src : Nat)
+    (source : WordSemStateFiniteExact width (Nat × C) F) :
+    ZeroSimulation ac (.opCurrHeap operator dst src) source := by
+  intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises
+  rcases premises with ⟨execution,notError,related,conventions,flat,compilation,
+    lengthBound,bitmapBound,bitmapPrefix,labels,maxBound⟩
+  obtain ⟨operand,heap,value,read,heapRead,operation,rfl,rfl⟩ :=
+    heapSourceSuccess source sourcePost operator dst src result execution notError
+  have evens : dst % 2 = 0 ∧ src % 2 = 0 := by
+    simpa [postAllocConventionsHOL,everyVarHOL,everyStackVarHOL,
+      callArgConventionHOL,isPhyVar] using conventions
+  have dstEq : dst = 2*(dst/2) := by omega
+  have bound : dst/2 < frame+k := by
+    simp only [maxVarHOL] at maxBound
+    omega
+  rcases format : Compiler.Backend.WordToStackRegFormat.wReg1 src (k,f,frame) with ⟨loads,reg⟩
+  obtain ⟨loaded,loadRun,clockEq,loadRel,_,_,_,_,_,loadedRead⟩ :=
+    LoadRegister.evaluateWStackLoadWReg1 ac k f frame src reg loads
+      source target lens (.word operand) format evens.2 read related
+  have storeEq : source.store = loaded.store.eraseEq .handler :=
+    loadRel.2.2.2.2.2.2.2.2.2.2.2.1
+  have targetHeap : loaded.store.lookup .currHeap = some (.word heap) := by
+    rw [storeEq] at heapRead
+    simpa [HolFiniteMapExact.eraseEq,FDOMSUB_HOL] using heapRead
+  have useStore : loaded.useStore = true := loadRel.2.2.2.2.2.1
+  have callback : ∀ d, d ≤ k →
+      StackSemEvaluate.evaluate (.opCurrHeap operator d reg,loaded) =
+        (none,StackSemStateOps.setVar d (.word value) loaded) := by
+    intro d _
+    change loaded.regs.lookup reg = some (.word operand) at loadedRead
+    simp [StackSemEvaluate.evaluate_opCurrHeap,useStore,StackSemExpressions.wordExp,
+      loadedRead,targetHeap,operation]
+  obtain ⟨post,actual,postRel,_,_⟩ := RegisterWrite.wRegWrite1Thm1 ac k f frame
+    (dst/2) source loaded lens (.word value) (fun d => .opCurrHeap operator d reg)
+    loadRel bound callback
+  have programEq := congrArg Prod.fst compilation
+  simp only [compNative,format] at programEq
+  subst compiled
+  refine ⟨post,none,?_,?_⟩
+  · simp only [LoadRegister.evaluateWStackLoadSeq,
+      StackSemEvaluate.evaluate_seq,loadRun]
+    have fix : StackSemControl.fixClock target ((none : Option (StackSemResult width)),loaded) = (none,loaded) := by
+      have le : loaded.clock ≤ target.clock := by omega
+      simp only [StackSemControl.fixClock,Nat.min_eq_right le]
+    simp only [fix]
+    simpa only [← dstEq] using actual
+  · simpa only [compCorrectResult,Option.map_none,ne_eq,not_true_eq_false,
+      ↓reduceIte,← dstEq] using postRel
+
 /-- Programs built from instructions, sequences, conditionals and loops. -/
 inductive LoopBlock {width : Nat} [NeZero width] : WordLangProgHOL (BitVec width) → Prop
   | inst (i) : LoopBlock (.inst i)
+  | opCurrHeap (op dst src) : LoopBlock (.opCurrHeap op dst src)
+  | ffi (index ptr1 len1 ptr2 len2 names) : LoopBlock (.ffi index ptr1 len1 ptr2 len2 names)
+  | set (name expression) : LoopBlock (.set name expression)
+  | codeBufferWrite (r1 r2) : LoopBlock (.codeBufferWrite r1 r2)
+  | dataBufferWrite (r1 r2) : LoopBlock (.dataBufferWrite r1 r2)
+  | get (register name) : LoopBlock (.get register name)
+  | locValue (register location) : LoopBlock (.locValue register location)
   | skip : LoopBlock .skip
   | tick : LoopBlock .tick
   | break (label) : LoopBlock (.break label)
@@ -335,6 +770,13 @@ theorem loopBlock_zero {width : Nat} [NeZero width] {C F : Type}
     (fun p source => LoopBlock p → ZeroSimulation ac p source)
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   all_goals try { intros; rename_i h; cases h <;> done }
+  case refine_24 => intro index ptr1 len1 ptr2 len2 names source _; exact zeroFFI ac index ptr1 len1 ptr2 len2 names source
+  case refine_9 => intro op dst src source _; exact zeroOpCurrHeap ac op dst src source
+  case refine_8 => intro name expression source _; exact zeroSet ac name expression source
+  case refine_22 => intro r1 r2 source _; exact zeroCodeBufferWrite ac r1 r2 source
+  case refine_23 => intro r1 r2 source _; exact zeroDataBufferWrite ac r1 r2 source
+  case refine_7 => intro register name source _; exact zeroGet ac register name source
+  case refine_20 => intro register location source _; exact zeroLocValue ac register location source
   case refine_1 => intro source _; exact zeroSkip ac source
   case refine_11 => intro source _; exact zeroTick ac source
   case refine_16 => intro label source _; exact zeroBreak ac label source
@@ -377,6 +819,13 @@ theorem loopBlock_loop {width : Nat} [NeZero width]
     {p : WordLangProgHOL (BitVec width)} (block : LoopBlock p) : loopWord p = true := by
   induction block with
   | inst i => rfl
+  | opCurrHeap op dst src => rfl
+  | ffi index ptr1 len1 ptr2 len2 names => rfl
+  | set name expression => rfl
+  | codeBufferWrite r1 r2 => rfl
+  | dataBufferWrite r1 r2 => rfl
+  | get register name => rfl
+  | locValue register location => rfl
   | skip => rfl
   | tick => rfl
   | «break» label => rfl
