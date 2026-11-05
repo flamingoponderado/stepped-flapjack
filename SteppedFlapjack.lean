@@ -1,3 +1,116 @@
+import SteppedFlapjack.LoopToWordSteps.Outcome
+import SteppedFlapjack.LoopToWordSteps.LoopCost
+import SteppedFlapjack.LoopToWordSteps.ConditionalRiscV
+import SteppedFlapjack.LoopToWordSteps.ConditionalStack
+import SteppedFlapjack.LoopToWordSteps.Conditional
+import SteppedFlapjack.LoopToWordSteps.RiscVComposition
+import SteppedFlapjack.LoopToWordSteps.StackReady
+import SteppedFlapjack.LoopToWordSteps.Sequence
+import SteppedFlapjack.LoopSteps.DirectLeaf
+import SteppedFlapjack.LoopSteps.Defs
+import SteppedFlapjack.WordToStackSteps.EntryComposition
+import SteppedFlapjack.WordToStackSteps.CallSequenceCost
+import SteppedFlapjack.WordToStackSteps.CodeCostStable
+import SteppedFlapjack.WordToStackSteps.CallSequence
+import SteppedFlapjack.WordToStackSteps.ReturningHandlerComplete
+import SteppedFlapjack.WordToStackSteps.ReturningHandlerZeroClock
+import SteppedFlapjack.WordToStackSteps.ReturningNoneComplete
+import SteppedFlapjack.WordToStackSteps.ReturningNoneSteps
+import SteppedFlapjack.WordToStackSteps.ReturningZeroClock
+import SteppedFlapjack.WordToStackSteps.ReturningNormalized
+import SteppedFlapjack.WordToStackSteps.ReturningPrefixSteps
+import SteppedFlapjack.WordToStackSteps.ReturningTargetSteps
+import SteppedFlapjack.WordSteps.ReturningClock
+import SteppedFlapjack.WordToStackSteps.TailCallSteps
+import SteppedFlapjack.WordToStackSteps.TailCallZeroClock
+import SteppedFlapjack.WordToStackSteps.LoopZeroClock
+import SteppedFlapjack.WordToStackSteps.IfZeroClock
+import SteppedFlapjack.WordToStackSteps.SequenceZeroClock
+import SteppedFlapjack.WordToStackSteps.InstructionZeroClock
+import SteppedFlapjack.WordToStackSteps.NormalizedClock
+import SteppedFlapjack.WordSteps.ClockConsumption
+import SteppedFlapjack.WordToStackSteps.Loops
+import SteppedFlapjack.WordSteps.CallSteps
+import SteppedFlapjack.StackToLabSteps.GeneratedHaltSteps
+import SteppedFlapjack.StackToLabSteps.NamesComposition
+import SteppedFlapjack.StackToLabSteps.FullInitLabSteps
+import SteppedFlapjack.StackToLabSteps.FullInitRemoveLabSteps
+import SteppedFlapjack.StackToLabSteps.FullInitAllocSteps
+import SteppedFlapjack.StackToLabSteps.FullInitStackLabSteps
+import SteppedFlapjack.StackToLabSteps.FullInitRiscVSteps
+import SteppedFlapjack.StackToLabSteps.PipelineComposition
+import SteppedFlapjack.StackToLabSteps.RiscVPipeline
+import SteppedFlapjack.LabToTargetSteps.LabRiscVComposition
+import SteppedFlapjack.StackRawCallSteps.LeafSteps
+import SteppedFlapjack.StackRawCallSteps.IfSteps
+import SteppedFlapjack.StackRawCallSteps.LoopSteps
+import SteppedFlapjack.StackRawCallSteps.SeqStandardSteps
+import SteppedFlapjack.StackRawCallSteps.SeqOptimizedCost
+import SteppedFlapjack.StackRawCallSteps.SeqOptimizedSteps
+import SteppedFlapjack.StackRawCallSteps.SeqSteps
+import SteppedFlapjack.StackRawCallSteps.RawCallSteps
+import SteppedFlapjack.StackRawCallSteps.JumpSteps
+import SteppedFlapjack.StackRawCallSteps.CallTailSteps
+import SteppedFlapjack.StackRawCallSteps.CallReturnSupport
+import SteppedFlapjack.StackRawCallSteps.CallReturnSteps
+import SteppedFlapjack.StackRawCallSteps.CompCorrect
+import SteppedFlapjack.StackRawCallSteps.EntrySteps
+import SteppedFlapjack.StackAllocSteps.AllocGenPartialSteps
+import SteppedFlapjack.StackAllocSteps.AllocCorrectSteps
+import SteppedFlapjack.StackAllocSteps.AllocCallSteps
+import SteppedFlapjack.StackAllocSteps.AllocPassSteps
+import SteppedFlapjack.StackAllocSteps.StoreConstsSteps
+import SteppedFlapjack.StackAllocSteps.LeafSteps
+import SteppedFlapjack.StackAllocSteps.ControlSteps
+import SteppedFlapjack.StackAllocSteps.JumpSteps
+import SteppedFlapjack.StackAllocSteps.CallSteps
+import SteppedFlapjack.StackAllocSteps.CallReturnSteps
+import SteppedFlapjack.StackAllocSteps.CompCorrect
+import SteppedFlapjack.StackAllocSteps.EntrySteps
+import SteppedFlapjack.StackAllocSteps.MakeInitEntrySteps
+import SteppedFlapjack.StackAllocSteps.RawCallComposition
+import SteppedFlapjack.StackAllocSteps.ThreePassComposition
+import SteppedFlapjack.StackRemoveSteps.EntrySteps
+import SteppedFlapjack.StackRemoveSteps.InitSteps
+import SteppedFlapjack.StackRemoveSteps.InitEntrySteps
+import SteppedFlapjack.StackRemoveSteps.InitHypSteps
+import SteppedFlapjack.StackAllocSteps.UniformLeaf
+import SteppedFlapjack.StackAllocSteps.AllocGenFullSteps
+import SteppedFlapjack.StackAllocSteps.GenMoveLoopSteps
+import SteppedFlapjack.StackAllocSteps.GenMoveDataSteps
+import SteppedFlapjack.StackAllocSteps.GenMoveRootsSteps
+import SteppedFlapjack.StackAllocSteps.GenMoveBitmapsSteps
+import SteppedFlapjack.StackAllocSteps.GenMoveBitmapSteps
+import SteppedFlapjack.StackAllocSteps.GenMoveBitmapCorrect
+import SteppedFlapjack.StackAllocSteps.GenMoveListSteps
+import SteppedFlapjack.StackAllocSteps.GenMoveListCorrect
+import SteppedFlapjack.StackAllocSteps.GenMoveSteps
+import SteppedFlapjack.StackAllocSteps.CollectorStructural
+import SteppedFlapjack.StackAllocSteps.AllocNoneSteps
+import SteppedFlapjack.StackAllocSteps.AllocSimpleSteps
+import SteppedFlapjack.StackAllocSteps.AllocSimpleClock
+import SteppedFlapjack.StackAllocSteps.AllocSimpleCorrect
+import SteppedFlapjack.StackAllocSteps.GcMoveRootsSteps
+import SteppedFlapjack.StackAllocSteps.GcMoveRootsClock
+import SteppedFlapjack.StackAllocSteps.GcMoveRootsCorrect
+import SteppedFlapjack.StackAllocSteps.GcMoveBitmapsSteps
+import SteppedFlapjack.StackAllocSteps.GcMoveBitmapsClock
+import SteppedFlapjack.StackAllocSteps.GcMoveBitmapsCorrect
+import SteppedFlapjack.StackAllocSteps.GcMoveBitmapSteps
+import SteppedFlapjack.StackAllocSteps.GcMoveBitmapClock
+import SteppedFlapjack.StackAllocSteps.GcMoveBitmapCorrect
+import SteppedFlapjack.StackAllocSteps.GcMoveLoopSteps
+import SteppedFlapjack.StackAllocSteps.GcMoveLoopCorrect
+import SteppedFlapjack.StackAllocSteps.GcMoveLoopClock
+import SteppedFlapjack.StackAllocSteps.GcMoveListSteps
+import SteppedFlapjack.StackAllocSteps.GcMoveSteps
+import SteppedFlapjack.StackAllocSteps.GcMoveListCorrect
+import SteppedFlapjack.StackAllocSteps.GcMoveClock
+import SteppedFlapjack.StackAllocSteps.GcMoveCorrect
+import SteppedFlapjack.StackAllocSteps.MemcpyCount
+import SteppedFlapjack.StackAllocSteps.Memcpy
+import SteppedFlapjack.StackAllocSteps.GcNone
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.FiniteAssembly
 import SteppedFlapjack.PanValueExpCounted
 import SteppedFlapjack.PanExpressionEvaluator
 import SteppedFlapjack.PanSteppedSemantics
@@ -15,8 +128,40 @@ import SteppedFlapjack.StepPreservation.Basic
 import SteppedFlapjack.RiscVSteps
 import SteppedFlapjack.LabToTargetSteps
 import SteppedFlapjack.StackSteps.Defs
+import SteppedFlapjack.StackSteps.AddClock
 import SteppedFlapjack.StackNamesSteps
 import SteppedFlapjack.StackToLabSteps
+import SteppedFlapjack.StackRemoveSteps.Defs
+import SteppedFlapjack.StackRemoveSteps.CopyEachSteps
+import SteppedFlapjack.StackRemoveSteps.CopyLoopSteps
+import SteppedFlapjack.StackRemoveSteps.StoreConstsSteps
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.StoreConsts
+import SteppedFlapjack.StackRemoveSteps.LeafCostBounds
+import SteppedFlapjack.StackRemoveSteps.LeafSteps
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.Statement
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.Seq
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.Ite
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.Loop
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.JumpLower
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.RawCall
+import SteppedFlapjack.StackRemoveSteps.CallCostBounds
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.Call
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallTail
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnNone
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnHandler
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.LeafStepsAll
+import SteppedFlapjack.StackRemoveSteps.CodeBounds
+import SteppedFlapjack.StackRemoveSteps.OraclePrefix
+import SteppedFlapjack.StackRemoveSteps.InstallEffect
+import SteppedFlapjack.StackRemoveSteps.OracleRunEffect
+import SteppedFlapjack.StackRemoveSteps.OracleRunControl
+import SteppedFlapjack.StackRemoveSteps.OracleRunLeaf
+import SteppedFlapjack.StackRemoveSteps.OracleRunEvaluate
+import SteppedFlapjack.StackRemoveSteps.CodeOrigin
+import SteppedFlapjack.StackRemoveSteps.LeafCode
+import SteppedFlapjack.StackRemoveSteps.CodeOriginEvaluate
+import SteppedFlapjack.StackRemoveSteps.RunBudget
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.Leaf
 
 /-!
 # stepped-flapjack
@@ -52,10 +197,229 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.StackSteps.Defs`: `steps`, a fine-grained step count of a
   StackSem run, counting every `evaluate` invocation (stepped-flapjack#2,
   phase C);
+- `SteppedFlapjack.StackSteps.AddClock`: `steps_addClock`, clock monotonicity
+  of the step count — a run that does not time out takes the same number of
+  steps at any larger clock, which is what lets a run-clock bound be reused
+  when the compiler correctness induction raises a `Seq`'s second clock
+  (stepped-flapjack#2, phase C3, in progress);
 - `SteppedFlapjack.StackToLabSteps`: adapted copies of Flapjack's `stack_to_lab`
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackAllocSteps.UniformLeaf`: a uniform leaf factor for
+  word widths of at least eight bits, independent of runtime stack length.
+- `SteppedFlapjack.StackAllocSteps.MakeInitEntrySteps`: bounded entry
+  simulation for the actual allocation make-init state.
+- `SteppedFlapjack.WordToStackSteps.Basic`, `Instructions`: exact basic-case
+  and structural machine-instruction runtime bounds for Word-to-Stack compilation.
+- `SteppedFlapjack.WordToStackSteps.StraightLine`: a proved bound for nested
+  sequences and branches in a loop-free, call-free WordSem fragment.
+- `SteppedFlapjack.WordToStackSteps.ReturningNoneComplete`: source-step-based
+  no-handler bound for all non-error, non-timeout outcomes.
+- `SteppedFlapjack.WordToStackSteps.ReturningNoneSteps`: complete no-handler
+  zero-clock simulation and a source-step-based matching-return bound.
+- `SteppedFlapjack.LoopToWordSteps.Outcome`: source-to-machine outcome and trace correspondence.
+- `SteppedFlapjack.LoopToWordSteps.LoopCost`: cost of the compiled loop wrapper and continuing iterations.
+- `SteppedFlapjack.LoopToWordSteps.Conditional`: Loop-to-Word step preservation with conditional branches.
+- `SteppedFlapjack.LoopToWordSteps.ConditionalStack`: conditional source programs in the proved Word-to-Stack fragment.
+- `SteppedFlapjack.LoopToWordSteps.ConditionalRiscV`: conditional Loop programs composed through the RISC-V backend.
+- `SteppedFlapjack.LoopToWordSteps.Sequence`: Loop-to-Word step preservation for direct statements, sequences, and marks.
+- `SteppedFlapjack.LoopToWordSteps.StackReady`: common Loop-to-Stack fragment and composed bounded simulation.
+- `SteppedFlapjack.LoopToWordSteps.RiscVComposition`: bounded Loop execution composed through the RISC-V backend.
+- `SteppedFlapjack.LoopSteps.Defs`: exact-evaluator LoopSem statement counts and control-flow equations.
+- `SteppedFlapjack.LoopSteps.DirectLeaf`: direct Loop-to-Word semantic correctness with exact step counts.
+- `SteppedFlapjack.WordToStackSteps.EntryComposition`: bounded Word call sequences composed through the RISC-V backend.
+- `SteppedFlapjack.WordToStackSteps.CallSequenceCost`: computable target-step bounds for sequences containing calls.
+- `SteppedFlapjack.WordToStackSteps.CodeCostStable`: stability and clock monotonicity of computable call costs.
+- `SteppedFlapjack.WordToStackSteps.CallSequence`: source-clock accounting and zero-clock simulation for sequences containing calls.
+- `SteppedFlapjack.WordToStackSteps.ReturningHandlerComplete`: source-step bounds and compiled execution for returning handler calls over loop blocks.
+- `SteppedFlapjack.WordToStackSteps.ReturningHandlerZeroClock`: zero-clock handler callee and continuation proofs for loop blocks.
+- `SteppedFlapjack.WordToStackSteps.ReturningZeroClock`: zero-clock callee and
+  matching normal-return continuation composition from the actual call history.
+- `SteppedFlapjack.WordToStackSteps.ReturningNormalized`: source-step clock
+  normalization and target bounds for matching return and exception paths.
+- `SteppedFlapjack.WordToStackSteps.ReturningPrefixSteps`: structural bounds
+  for complete compiled returning-call setup and continuations.
+- `SteppedFlapjack.WordToStackSteps.ReturningTargetSteps`: target returning-call
+  bounds and call-free setup/continuation shape proofs.
+- `SteppedFlapjack.WordToStackSteps.TailCallSteps`: source-step-based target
+  bounds for tail calls into loop-block source code.
+- `SteppedFlapjack.WordToStackSteps.TailCallZeroClock`: zero-clock tail-call
+  simulation with the callee case discharged for loop-block code.
+- `SteppedFlapjack.WordToStackSteps.LoopZeroClock`: zero-clock loop simulation
+  and a source-step-based target bound for nested loop blocks.
+- `SteppedFlapjack.WordToStackSteps.IfZeroClock`: zero-clock branch simulation
+  and a target-step bound for nested branching instruction blocks.
+- `SteppedFlapjack.WordToStackSteps.SequenceZeroClock`: compositional zero-clock
+  simulation and target-step bound for instruction blocks.
+- `SteppedFlapjack.WordToStackSteps.InstructionZeroClock`: outcome-preserving
+  machine-instruction simulation with no additional target clock.
+- `SteppedFlapjack.WordToStackSteps.NormalizedClock`: source replay at a
+  supplied step bound and a corresponding target structural bound.
+- `SteppedFlapjack.WordToStackSteps.Loops`: structural target-step bounds for
+  compiled call-free loops, in terms of the actual initial clock.
+- `SteppedFlapjack.WordSteps.Defs`: a WordSem evaluator-invocation counter
+  with checked leaf, sequence, conditional, loop, and tail-call equations.
+- `SteppedFlapjack.WordSteps.ReturningClock`: clock-consumption bounds for
+  matching normal and exception returning-call continuations.
+- `SteppedFlapjack.WordSteps.ClockConsumption`: actual clock consumed by
+  call-free loop-fragment runs is bounded by their evaluator step count.
+- `SteppedFlapjack.WordSteps.CallSteps`: returning-call equations covering all
+  callee results after successful call setup.
+- `SteppedFlapjack.StackToLabSteps.FullInitAllocSteps`, `FullInitStackLabSteps`,
+  `FullInitRiscVSteps`: actual initialized stack execution through RISC-V.
+- `SteppedFlapjack.StackToLabSteps.FullInitRemoveLabSteps`: bounded actual
+  stack-removal initialization composed through LabSem.
+- `SteppedFlapjack.StackRemoveSteps.InitEntrySteps`, `InitHypSteps`: initialized
+  entry bounds and their derivation from compiler initialization bundles.
+- `SteppedFlapjack.StackRemoveSteps.InitSteps`: a clock-independent bound
+  for generated initialization and its entry overhead.
+- `SteppedFlapjack.StackToLabSteps.FullInitLabSteps`: the bounded Lab stage
+  with state relations derived from full compiler initialization.
+- `SteppedFlapjack.StackToLabSteps.RiscVPipeline`: the bounded stack backend
+  composed through LabSem to a RISC-V target run.
+- `SteppedFlapjack.StackToLabSteps.NamesComposition`, `PipelineComposition`:
+  bounded composition of the completed stack passes through LabSem.
+- `SteppedFlapjack.StackToLabSteps.GeneratedHaltSteps`: a four-step bound
+  for the generated halt procedure and bounded flattening without a cost assumption.
+- `SteppedFlapjack.StackAllocSteps.ThreePassComposition`: an entry-step
+  bound composing raw-call optimization, allocation, and stack removal.
+- `SteppedFlapjack.StackRawCallSteps.EntrySteps` and
+  `StackAllocSteps.RawCallComposition`: entry simulations and their composition.
+- `SteppedFlapjack.StackRawCallSteps.CallReturnSupport`, `CallReturnSteps`,
+  `CompCorrect`: returning-call bounds and the complete raw-call pass theorem.
+- `SteppedFlapjack.StackRawCallSteps.CallTailSteps`: a nonincreasing bound
+  for ordinary tail calls.
+- `SteppedFlapjack.StackRawCallSteps.RawCallSteps`, `JumpSteps`: nonincreasing
+  bounds for code-lookup control transfers.
+- `SteppedFlapjack.StackRawCallSteps.SeqOptimizedSteps`, `SeqSteps`: the
+  optimized and complete sequence step-preservation cases.
+- `SteppedFlapjack.StackRawCallSteps.SeqOptimizedCost`: bounds for successful,
+  timed-out, and allocation-failing frame transfers.
+- `SteppedFlapjack.StackRawCallSteps.SeqStandardSteps`: the ordinary sequence
+  case for raw-call step preservation.
+- `SteppedFlapjack.StackRawCallSteps.LoopSteps`: a nonincreasing step bound
+  for raw-call loop iterations, exits, and timeouts.
+- `SteppedFlapjack.StackRawCallSteps.IfSteps`: a nonincreasing step bound for
+  raw-call conditional branches.
+- `SteppedFlapjack.StackRawCallSteps.LeafSteps`: exact one-step bounds for
+  nonrecursive raw-call optimization cases.
+- `SteppedFlapjack.StackAllocSteps.EntrySteps`: the bounded entry-call
+  simulation for stack allocation.
+- `SteppedFlapjack.StackAllocSteps.CompCorrect`: uniform step-preservation
+  for stack allocation on words of at least eight bits.
+- `SteppedFlapjack.StackAllocSteps.CallReturnSteps`: returning calls with
+  normal and exception continuations.
+- `SteppedFlapjack.StackAllocSteps.CallSteps`: the bounded tail-call case.
+- `SteppedFlapjack.StackAllocSteps.JumpSteps`: step bounds for indirect
+  jumps and raw calls through compiled code.
+- `SteppedFlapjack.StackAllocSteps.ControlSteps`: step-counted sequence,
+  conditional, and loop cases for the stack-allocation simulation.
+- `SteppedFlapjack.StackAllocSteps.LeafSteps`: a combined bound for every
+  nonrecursive source statement in stack allocation.
+- `SteppedFlapjack.StackAllocSteps.StoreConstsSteps`: the store-constants pass
+  case and generated stub use at most five target steps.
+- `SteppedFlapjack.StackAllocSteps.AllocCorrectSteps`, `AllocCallSteps`,
+  `AllocPassSteps`: collector-independent allocation bounds, including the
+  generated call and the stack-allocation pass case.
+- `SteppedFlapjack.StackAllocSteps.AllocGenPartialCorrect`, `AllocGenPartialSteps`:
+  partial generational allocation correctness with a target-step bound;
+- `SteppedFlapjack.StackAllocSteps.AllocGenFullCorrect`, `AllocGenFullSteps`:
+  full generational allocation correctness with a target-step bound;
+- `SteppedFlapjack.StackAllocSteps.GenMoveLoopCorrect`, `GenMoveLoopSteps`:
+  clock and fuel-based bounds for the full generational collector loop;
+- `SteppedFlapjack.StackAllocSteps.GenMoveDataCorrect`, `GenMoveDataSteps`:
+  clock and fuel-based bounds for generational data and references;
+- `SteppedFlapjack.StackAllocSteps.GenMoveRootsCorrect`, `GenMoveRootsSteps`:
+  clock and stack-length bounds for generational root traversal;
+- `SteppedFlapjack.StackAllocSteps.GenMoveBitmapsCorrect`, `GenMoveBitmapsSteps`:
+  clock and count-based bounds for generational bitmap lists;
+- `SteppedFlapjack.StackAllocSteps.GenMoveBitmapCorrect`, `GenMoveBitmapSteps`:
+  clock and value-based step bounds for generational bitmap traversal;
+- `SteppedFlapjack.StackAllocSteps.GenMoveListCorrect`, `GenMoveListSteps`:
+  clock and length-based step bounds for generational object lists;
+- `SteppedFlapjack.StackAllocSteps.GenMoveCorrect`, `GenMoveSteps`:
+  clock and step bounds for full and partial generational object movement;
+- `SteppedFlapjack.StackAllocSteps.BoundedNormal`: clock-independent bounds
+  from a bounded normal run;
+- `SteppedFlapjack.StackAllocSteps.CollectorStructural`: a structural step
+  bound for every configured collector, indexed by its available clock;
+- `SteppedFlapjack.StackAllocSteps.AllocNoneSteps`: no-collector allocation
+  correctness with a 15-step bound;
+- `SteppedFlapjack.StackAllocSteps.AllocSimpleCorrect`, `AllocSimpleClock`,
+  `AllocSimpleSteps`: simple allocation correctness with a target-step bound;
+- `SteppedFlapjack.StackAllocSteps.GcMoveRootsClock`, `GcMoveRootsCorrect`,
+  `GcMoveRootsSteps`: clock and stack-length bounds for root traversal;
+- `SteppedFlapjack.StackAllocSteps.GcMoveBitmapsClock`, `GcMoveBitmapsCorrect`,
+  `GcMoveBitmapsSteps`: clock and count-based bounds for bitmap-list traversal;
+- `SteppedFlapjack.StackAllocSteps.GcMoveBitmapClock`, `GcMoveBitmapCorrect`,
+  `GcMoveBitmapSteps`: clock and value-based step bounds for bitmap traversal;
+- `SteppedFlapjack.StackAllocSteps.GcMoveLoopCorrect`, `GcMoveLoopClock`,
+  `GcMoveLoopSteps`: clock and fuel-based step bounds for heap traversal;
+- `SteppedFlapjack.StackAllocSteps.GcMoveClock`, `GcMoveCorrect`, `GcMoveSteps`,
+  `GcMoveListCorrect`, `GcMoveListSteps`: bounds and correctness for object movement and lists;
+- `SteppedFlapjack.StackAllocSteps.Memcpy`, `SteppedFlapjack.StackAllocSteps.MemcpyCount`:
+  memory-copy body, loop and word-count step bounds;
+- `SteppedFlapjack.StackAllocSteps.GcNone`: a 15-step bound for allocation
+  code when no garbage collector is selected;
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.FiniteAssembly`: a stack-removal
+  run bound with finite code, oracle and bitmap budgets computed from the initial
+  state and source-step bound;
+- `SteppedFlapjack.StackRemoveSteps.Defs`: program-dependent expansion costs for
+  the `stack_remove` pass, including `leafCost` and the step-count bounds for
+  the `upshift`, `downshift` and `stackFree` expansions
+  (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CopyEachSteps`: the per-bitmap-word copy
+  loop's fine-grained step bound `15 * (pattern.toNat + 1) + 3`, carried by an
+  adapted `copyEachThmWithin` (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.LeafCostBounds`: `leafCost` is at least one
+  and dominates every subprogram's factor, which is what lets the `stack_remove`
+  correctness induction thread one program-dependent factor down the tree
+  (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.LeafSteps`: for every leaf with a nontrivial
+  expansion, the compiled form takes at most `leafCost B bounds` steps from any
+  state — the leaf half of the top-level step bound (stepped-flapjack#2, phase
+  C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CopyLoopSteps`: the outer bitmap-list copy
+  loop's bound `copyLoopSteps width (bitmaps.length - index)`, carried by an
+  adapted `copyLoopThmWithin` (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.Statement`: the step-counted
+  `stack_remove` statement shape and the `bitmapBound B` hypothesis that
+  discharges the `storeConsts` bitmap-length bound at the top theorem
+  (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.Seq`: the `Seq` induction case of
+  the step-counted correctness theorem, adding `steps <= leafCost * steps` to
+  Flapjack's `compCorrectSeq` (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.Ite`: the `ite` case, adding the
+  step bound to `compCorrectIf` (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.Loop`: the `loop` case, adding
+  the step bound to `compCorrectLoop` along both the exit and the reentry
+  branches (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.JumpLower`: the `jumpLower`
+  case. It runs a program from the code, so it takes the code-bound hypothesis
+  `codeBound` and concludes against the program-dependent factor `K`
+  (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.RawCall`: the `rawCall` case,
+  likewise concluding against `K` from the code bound (stepped-flapjack#2,
+  phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CallCostBounds`: `leafCost` dominates the
+  `call` constructor's return and handler bodies (stepped-flapjack#2, phase C3,
+  in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.CallTail`: the `ret = none`
+  `call` case, taking the code bound for the callee (stepped-flapjack#2,
+  phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnNone`: the returning
+  `call` with no handler, threading both the callee's code bound and the return
+  continuation's structural bound (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnHandler`: the returning
+  `call` with an exception handler, adding the successful-exception branch
+  (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.Call`: the `call` assembly,
+  dispatching on the `ret`/`handler` shapes (stepped-flapjack#2, phase C3,
+  in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.LeafStepsAll`: one step bound
+  covering all 28 non-recursive constructors, so the top-level induction needs a
+  single leaf case (stepped-flapjack#2, phase C3, in progress).
 - `SteppedFlapjack.StackNamesSteps`: adapted copies of Flapjack's `stack_names`
   `comp_correct` proof with the step count preserved exactly, assembled as
   `steps_progCompHOL` and `compCorrectWithin`, and lifted to the entry run from

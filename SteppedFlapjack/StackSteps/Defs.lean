@@ -1,4 +1,5 @@
 import Flapjack.Compiler.Backend.Semantics.StackSem.EvaluateDef
+import Flapjack.Compiler.Backend.Semantics.StackSem.EvaluateClock
 
 /-! A fine-grained step count for StackSem (stepped-flapjack#2, phase C).
 
@@ -282,5 +283,56 @@ theorem steps_call_some {width : Nat} [NeZero width] {C F : Type}
       congr 1
       rcases res with _ | ⟨x⟩ | ⟨x⟩ | _ | _ | _ | _ | _ | _ <;>
         (try rcases handler with _ | ⟨h, hl1, hl2⟩) <;> simp [dif_pos (hk _)]
+
+/-! ### Step equations on runs that succeed
+
+These rewrite the `match`es in the clause equations once the run is known. -/
+
+theorem steps_seq_run {width : Nat} [NeZero width] {C F : Type}
+    (a b : HolProg width) (s s1 : StackSemStateFiniteExact width C F)
+    (h : StackSemEvaluate.evaluate (a, s) = (none, s1)) :
+    steps ((.seq a b : HolProg width), s) = 1 + steps (a, s) + steps (b, s1) := by
+  rw [steps_seq, StackSemEvaluateClock.fixClockEvaluate, h]
+
+theorem steps_loop_run {width : Nat} [NeZero width] {C F : Type}
+    (body : HolProg width) (s s1 : StackSemStateFiniteExact width C F)
+    (res : Option (StackSemResult width))
+    (h : StackSemEvaluate.evaluate (body, s) = (res, s1))
+    (cont : StackSemControl.contLoop res = true) (clock : s1.clock ≠ 0) :
+    steps ((.loop body : HolProg width), s) =
+      1 + steps (body, s) + steps (.loop body, StackSemStateOps.decClock s1) := by
+  rw [steps_loop, StackSemEvaluateClock.fixClockEvaluate, h]
+  simp only [cont, true_and]
+  rw [if_pos clock]
+
+theorem steps_loop_exit {width : Nat} [NeZero width] {C F : Type}
+    (body : HolProg width) (s s1 : StackSemStateFiniteExact width C F)
+    (res : Option (StackSemResult width))
+    (h : StackSemEvaluate.evaluate (body, s) = (res, s1))
+    (stop : ¬ (StackSemControl.contLoop res ∧ s1.clock ≠ 0)) :
+    steps ((.loop body : HolProg width), s) = 1 + steps (body, s) := by
+  rw [steps_loop, StackSemEvaluateClock.fixClockEvaluate, h]
+  simp only [stop, if_false, Nat.add_zero]
+
+theorem steps_ite_true {width : Nat} [NeZero width] {C F : Type}
+    (cmp : Cmp) (r : Nat) (ri : HolRegImm width) (a b : HolProg width)
+    (s : StackSemStateFiniteExact width C F) (x y : WordLocW width)
+    (hx : StackSemStateOps.getVar r s = some x)
+    (hy : StackSemStateOps.getVarImm (HolRegImm.toWordRegImm ri) s = some y)
+    (hw : wordSemWordCmp cmp x y = some true) :
+    steps ((.ite cmp r ri a b : HolProg width), s) = 1 + steps (a, s) := by
+  rw [steps_ite]
+  simp only [hx, hy, hw]
+
+theorem steps_ite_false {width : Nat} [NeZero width] {C F : Type}
+    (cmp : Cmp) (r : Nat) (ri : HolRegImm width) (a b : HolProg width)
+    (s : StackSemStateFiniteExact width C F) (x y : WordLocW width)
+    (hx : StackSemStateOps.getVar r s = some x)
+    (hy : StackSemStateOps.getVarImm (HolRegImm.toWordRegImm ri) s = some y)
+    (hw : wordSemWordCmp cmp x y = some false) :
+    steps ((.ite cmp r ri a b : HolProg width), s) = 1 + steps (b, s) := by
+  rw [steps_ite]
+  simp only [hx, hy, hw]
+
 
 end SteppedFlapjack.StackSteps
