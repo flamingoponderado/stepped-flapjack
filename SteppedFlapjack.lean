@@ -1,6 +1,7 @@
 import SteppedFlapjack.StackAllocSteps.AllocGenPartialSteps
 import SteppedFlapjack.StackAllocSteps.AllocCorrectSteps
 import SteppedFlapjack.StackAllocSteps.AllocCallSteps
+import SteppedFlapjack.StackAllocSteps.AllocPassSteps
 import SteppedFlapjack.StackAllocSteps.AllocGenFullSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveLoopSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveDataSteps
@@ -131,6 +132,9 @@ phase 4 of flapjack#1251:
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackAllocSteps.AllocCorrectSteps`, `AllocCallSteps`,
+  `AllocPassSteps`: collector-independent allocation bounds, including the
+  generated call and the stack-allocation pass case.
 - `SteppedFlapjack.StackAllocSteps.AllocGenPartialCorrect`, `AllocGenPartialSteps`:
   partial generational allocation correctness with a target-step bound;
 - `SteppedFlapjack.StackAllocSteps.AllocGenFullCorrect`, `AllocGenFullSteps`:
