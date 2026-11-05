@@ -31,6 +31,7 @@ import SteppedFlapjack.StackAllocSteps.CallSteps
 import SteppedFlapjack.StackAllocSteps.CallReturnSteps
 import SteppedFlapjack.StackAllocSteps.CompCorrect
 import SteppedFlapjack.StackAllocSteps.EntrySteps
+import SteppedFlapjack.StackAllocSteps.MakeInitEntrySteps
 import SteppedFlapjack.StackAllocSteps.RawCallComposition
 import SteppedFlapjack.StackAllocSteps.ThreePassComposition
 import SteppedFlapjack.StackRemoveSteps.EntrySteps
@@ -171,6 +172,8 @@ phase 4 of flapjack#1251:
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
 - `SteppedFlapjack.StackAllocSteps.UniformLeaf`: a uniform leaf factor for
   word widths of at least eight bits, independent of runtime stack length.
+- `SteppedFlapjack.StackAllocSteps.MakeInitEntrySteps`: bounded entry
+  simulation for the actual allocation make-init state.
 - `SteppedFlapjack.StackToLabSteps.FullInitRemoveLabSteps`: bounded actual
   stack-removal initialization composed through LabSem.
 - `SteppedFlapjack.StackRemoveSteps.InitEntrySteps`, `InitHypSteps`: initialized
