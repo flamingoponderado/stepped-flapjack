@@ -250,6 +250,7 @@ theorem allocatedWordSequenceRiscVWithin {F : Type}
           (uniformFactor (width := 64) c * (3 + callSequenceCost ac limit entry.code program (bs,n) (k,frameSize,frame))) + 4)) ∧
       evaluateTargetHOL mc lab.ffi ticks machine = (.halt outcome,finalMachine,finalFfi) ∧
       finalFfi.ioEvents = stackPost.ffi.ioEvents ∧
+      stackEntryClass stackResult = .CompleteResult outcome ∧
       compCorrectResult ac k frameSize frame {word with clock := limit}
         {wordPost with clock := limit - (word.clock - wordPost.clock)} stackPost wordResult stackResult lens := by
   obtain ⟨stackPost,stackResult,bodyRun,bodyRelation,bodyBound⟩ :=
@@ -266,7 +267,7 @@ theorem allocatedWordSequenceRiscVWithin {F : Type}
     stackPipelineRiscVWithin inputCode entry start (limit+1) (3 + callSequenceCost ac limit entry.code program (bs,n) (k,frameSize,frame))
       stackResult stackPost anything cr c jump bounds pointer f gen maxHeap a b removeInput oracle renamed lab outcome
       pc mc labCode labs asm machine distinct sourceCode entryRun entryNonError entryBound pre relation ha hs hk hf hcode hor rel hpc classification hmc tie machineRel
-  exact ⟨outcome,ticks,finalMachine,finalFfi,stackPost,stackResult,tickBound,machineRun,events,bodyRelation⟩
+  exact ⟨outcome,ticks,finalMachine,finalFfi,stackPost,stackResult,tickBound,machineRun,events,classification,bodyRelation⟩
 
 
 

@@ -1,3 +1,4 @@
+import SteppedFlapjack.LoopToWordSteps.Outcome
 import SteppedFlapjack.LoopToWordSteps.LoopCost
 import SteppedFlapjack.LoopToWordSteps.ConditionalRiscV
 import SteppedFlapjack.LoopToWordSteps.ConditionalStack
@@ -217,6 +218,7 @@ phase 4 of flapjack#1251:
   no-handler bound for all non-error, non-timeout outcomes.
 - `SteppedFlapjack.WordToStackSteps.ReturningNoneSteps`: complete no-handler
   zero-clock simulation and a source-step-based matching-return bound.
+- `SteppedFlapjack.LoopToWordSteps.Outcome`: source-to-machine outcome and trace correspondence.
 - `SteppedFlapjack.LoopToWordSteps.LoopCost`: cost of the compiled loop wrapper and continuing iterations.
 - `SteppedFlapjack.LoopToWordSteps.Conditional`: Loop-to-Word step preservation with conditional branches.
 - `SteppedFlapjack.LoopToWordSteps.ConditionalStack`: conditional source programs in the proved Word-to-Stack fragment.

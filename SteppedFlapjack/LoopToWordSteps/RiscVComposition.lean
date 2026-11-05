@@ -1,3 +1,4 @@
+import SteppedFlapjack.LoopToWordSteps.Outcome
 import SteppedFlapjack.LoopToWordSteps.StackReady
 
 /-! Compose the proved Loop-to-Word fragment through the RISC-V backend. -/
@@ -14,7 +15,9 @@ open SteppedFlapjack.StackToLabSteps SteppedFlapjack.LabToTargetSteps
 
 /-- A complete Loop run in the shared fragment produces a bounded RISC-V
 run through the actual compiled entry; the intermediate Word run and its
-step bound are proved rather than supplied. -/
+step bound are proved rather than supplied. The computed bound uses a finite
+oracle prefix selected by the supplied limit; it is not generally linear with
+constants determined only by the source program. -/
 theorem stackReady_riscvWithin {F : Type}
     (ac : AsmConfigExact 64) (p : HolLoopProg 64) (shape : StackReady p)
     (source sourcePost : LoopSemStateFiniteExact 64 F) (result : Option (LoopResultExact 64))
@@ -75,13 +78,17 @@ theorem stackReady_riscvWithin {F : Type}
           (uniformFactor (width := 64) c * (3 + callSequenceCost ac limit entry.code (LoopToWord.compHOL ctxt p labels).1 (bs,n) (k,frameSize,frame))) + 4)) ∧
       evaluateTargetHOL mc lab.ffi ticks machine = (.halt outcome,finalMachine,finalFfi) ∧
       finalFfi.ioEvents = stackPost.ffi.ioEvents ∧
+      stackEntryClass stackResult = .CompleteResult outcome ∧
       ∃ (wordPost : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
         (wordResult : Option (WordSemResult 64)),
         WordSemStateFiniteExact.evaluate (LoopToWord.compHOL ctxt p labels).1 word = (wordResult,wordPost) ∧
         wordPost.ffi = sourcePost.ffi ∧
         LoopToWord.CompileCorrect.resultCase ctxt (.loc 1 0) word result sourcePost wordResult wordPost ∧
         compCorrectResult ac k frameSize frame {word with clock := limit}
-          {wordPost with clock := limit - (word.clock - wordPost.clock)} stackPost wordResult stackResult lens := by
+          {wordPost with clock := limit - (word.clock - wordPost.clock)} stackPost wordResult stackResult lens ∧
+        ((LoopMachineOutcome result outcome ∧ finalFfi.ioEvents = sourcePost.ffi.ioEvents) ∨
+          (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: sourcePost.ffi.ioEvents ∧
+            wordPost.stackMax.getD (wordPost.stackLimit + 1) > wordPost.stackLimit)) := by
   have loopCorrect := directProgram_correct_with_steps (C := Nat × LabToTarget.Config)
     (stackReady_directProgram shape) source
   obtain ⟨wordPost,wordResult,wordRun,wordFfi,wordRelation,wordBound⟩ :=
@@ -90,12 +97,17 @@ theorem stackReady_riscvWithin {F : Type}
     completeLoop_resultCase ctxt word wordPost sourcePost result wordResult complete wordRelation
   have wordShape : CallSequence (LoopToWord.compHOL ctxt p labels).1 := .block (stackReady_wordBlock shape ctxt labels)
   have noInstall := stackReady_noInstall shape ctxt labels
-  obtain ⟨outcome,ticks,finalMachine,finalFfi,stackPost,stackResult,tickBound,machineRun,events,stackRelation⟩ :=
+  obtain ⟨outcome,ticks,finalMachine,finalFfi,stackPost,stackResult,tickBound,machineRun,events,classification,stackRelation⟩ :=
     allocatedWordSequenceRiscVWithin ac _ wordShape word wordPost wordResult entry k frameSize frame limit lens bs bsPost n nPost
       compiled start argumentCount noInstall noInstallCode wordCode wordComplete wordNotTimeout (wordBound.trans stepBound)
       ⟨wordRun,wordNotError,wordPremises⟩ frameDef frameSizeDef space found inputCode anything cr c jump bounds pointer f gen
       maxHeap a b removeInput oracle renamed lab pc mc labCode labs asm machine distinct sourceCode pre relation ha hs hk hf hcode hor rel hpc hmc tie machineRel
-  exact ⟨outcome,ticks,finalMachine,finalFfi,stackPost,stackResult,tickBound,machineRun,events,
-    wordPost,wordResult,wordRun,wordFfi,wordRelation,stackRelation⟩
+  have wordOutcome := loopWordOutcome_of_resultCase ctxt word wordPost sourcePost result wordResult complete wordRelation
+  have correspondence := loopMachine_correspondence ac k frameSize frame lens
+    {word with clock := limit} {wordPost with clock := limit - (word.clock - wordPost.clock)}
+    sourcePost stackPost result wordResult stackResult outcome finalFfi wordFfi wordOutcome
+    stackRelation classification events
+  exact ⟨outcome,ticks,finalMachine,finalFfi,stackPost,stackResult,tickBound,machineRun,events,classification,
+    wordPost,wordResult,wordRun,wordFfi,wordRelation,stackRelation,correspondence⟩
 
 end SteppedFlapjack.LoopToWordSteps
