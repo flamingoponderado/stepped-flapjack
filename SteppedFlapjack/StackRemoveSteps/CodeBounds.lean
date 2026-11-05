@@ -84,4 +84,49 @@ theorem alloc_code (v : BitVec width) (s : StackSemStateFiniteExact width C F)
           obtain ⟨-, rfl⟩ := run
           exact hg
 
+/-- Register writes keep `code` and `compileOracle`. -/
+theorem setVar_code (v : Nat) (x : WordLocW width) (s : StackSemStateFiniteExact width C F) :
+    (setVar v x s).code = s.code ∧ (setVar v x s).compileOracle = s.compileOracle :=
+  ⟨rfl, rfl⟩
+
+/-- Store writes keep `code` and `compileOracle`. -/
+theorem setStore_code (v : WordStoreHOL) (x : WordLocW width)
+    (s : StackSemStateFiniteExact width C F) :
+    (setStore v x s).code = s.code ∧ (setStore v x s).compileOracle = s.compileOracle :=
+  ⟨rfl, rfl⟩
+
+/-- FP register writes keep `code` and `compileOracle`. -/
+theorem setFpVar_code (v : Nat) (x : BitVec 64) (s : StackSemStateFiniteExact width C F) :
+    (setFpVar v x s).code = s.code ∧ (setFpVar v x s).compileOracle = s.compileOracle :=
+  ⟨rfl, rfl⟩
+
+/-- `emptyEnv` keeps `code` and `compileOracle`. -/
+theorem emptyEnv_code (s : StackSemStateFiniteExact width C F) :
+    (emptyEnv s).code = s.code ∧ (emptyEnv s).compileOracle = s.compileOracle :=
+  ⟨rfl, rfl⟩
+
+/-- `decClock` keeps `code` and `compileOracle`. -/
+theorem decClock_code (s : StackSemStateFiniteExact width C F) :
+    (decClock s).code = s.code ∧ (decClock s).compileOracle = s.compileOracle :=
+  ⟨rfl, rfl⟩
+
+/-- Memory writes keep `code` and `compileOracle`. -/
+theorem memStore_code (a : BitVec width) (w : WordLocW width)
+    (s t : StackSemStateFiniteExact width C F) (h : memStore a w s = some t) :
+    t.code = s.code ∧ t.compileOracle = s.compileOracle := by
+  simp only [StackSemStateOps.memStore] at h
+  split at h
+  · obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+  · simp at h
+
+/-- Expression assignment keeps `code` and `compileOracle`. -/
+theorem assign_code (reg : Nat) (exp : WordLangExpHOL (BitVec width))
+    (s t : StackSemStateFiniteExact width C F)
+    (h : StackSemExpressions.assign reg exp s = some t) :
+    t.code = s.code ∧ t.compileOracle = s.compileOracle := by
+  simp only [StackSemExpressions.assign] at h
+  split at h
+  · simp at h
+  · obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
