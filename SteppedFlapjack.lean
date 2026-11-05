@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordToStackSteps.ReturningNoneSteps
 import SteppedFlapjack.WordToStackSteps.ReturningZeroClock
 import SteppedFlapjack.WordToStackSteps.ReturningNormalized
 import SteppedFlapjack.WordToStackSteps.ReturningPrefixSteps
@@ -196,6 +197,8 @@ phase 4 of flapjack#1251:
   and structural machine-instruction runtime bounds for Word-to-Stack compilation.
 - `SteppedFlapjack.WordToStackSteps.StraightLine`: a proved bound for nested
   sequences and branches in a loop-free, call-free WordSem fragment.
+- `SteppedFlapjack.WordToStackSteps.ReturningNoneSteps`: complete no-handler
+  zero-clock simulation and a source-step-based matching-return bound.
 - `SteppedFlapjack.WordToStackSteps.ReturningZeroClock`: zero-clock callee and
   matching normal-return continuation composition from the actual call history.
 - `SteppedFlapjack.WordToStackSteps.ReturningNormalized`: source-step clock
