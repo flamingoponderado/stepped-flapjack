@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordToStackSteps.LoopZeroClock
 import SteppedFlapjack.WordToStackSteps.IfZeroClock
 import SteppedFlapjack.WordToStackSteps.SequenceZeroClock
 import SteppedFlapjack.WordToStackSteps.InstructionZeroClock
@@ -188,6 +189,8 @@ phase 4 of flapjack#1251:
   and structural machine-instruction runtime bounds for Word-to-Stack compilation.
 - `SteppedFlapjack.WordToStackSteps.StraightLine`: a proved bound for nested
   sequences and branches in a loop-free, call-free WordSem fragment.
+- `SteppedFlapjack.WordToStackSteps.LoopZeroClock`: zero-clock loop simulation
+  and a source-step-based target bound for nested loop blocks.
 - `SteppedFlapjack.WordToStackSteps.IfZeroClock`: zero-clock branch simulation
   and a target-step bound for nested branching instruction blocks.
 - `SteppedFlapjack.WordToStackSteps.SequenceZeroClock`: compositional zero-clock
