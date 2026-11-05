@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordSteps.Defs
 import SteppedFlapjack.StackToLabSteps.GeneratedHaltSteps
 import SteppedFlapjack.StackToLabSteps.NamesComposition
 import SteppedFlapjack.StackToLabSteps.FullInitLabSteps
@@ -177,6 +178,8 @@ phase 4 of flapjack#1251:
   word widths of at least eight bits, independent of runtime stack length.
 - `SteppedFlapjack.StackAllocSteps.MakeInitEntrySteps`: bounded entry
   simulation for the actual allocation make-init state.
+- `SteppedFlapjack.WordSteps.Defs`: a WordSem evaluator-invocation counter
+  with checked leaf, sequence, conditional, loop, and tail-call equations.
 - `SteppedFlapjack.StackToLabSteps.FullInitAllocSteps`, `FullInitStackLabSteps`,
   `FullInitRiscVSteps`: actual initialized stack execution through RISC-V.
 - `SteppedFlapjack.StackToLabSteps.FullInitRemoveLabSteps`: bounded actual
