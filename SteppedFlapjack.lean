@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.DirectLeaf
 import SteppedFlapjack.CrepSteps.Defs
 import SteppedFlapjack.LoopToWordSteps.LoopRiscV
 import SteppedFlapjack.LoopToWordSteps.LoopProgram
@@ -239,6 +240,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.LoopToWordSteps.Sequence`: Loop-to-Word step preservation for direct statements, sequences, and marks.
 - `SteppedFlapjack.LoopToWordSteps.StackReady`: common Loop-to-Stack fragment and composed bounded simulation.
 - `SteppedFlapjack.LoopToWordSteps.RiscVComposition`: bounded Loop execution composed through the RISC-V backend.
+- `SteppedFlapjack.CrepToLoopSteps.DirectLeaf`: semantic and exact step preservation for direct Crep leaves.
 - `SteppedFlapjack.CrepSteps.Defs`: exact Crep statement counts and basic control-flow equations.
 - `SteppedFlapjack.LoopSteps.Defs`: exact-evaluator LoopSem statement counts and control-flow equations.
 - `SteppedFlapjack.LoopSteps.DirectLeaf`: direct Loop-to-Word semantic correctness with exact step counts.
