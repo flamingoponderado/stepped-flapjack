@@ -20,6 +20,10 @@ open Flapjack.Compiler.Encoders.Asm
 open SteppedFlapjack.StackSteps
 open Flapjack.StackSemControl
 open Flapjack.StackSemEvaluate
+open Flapjack.StackSemInst
+open Flapjack.StackSemExpressions
+open Flapjack.StackSemStateOps
+open Flapjack.StackSemIntegerInstructions
 
 variable {width : Nat} [NeZero width]
 
@@ -357,5 +361,140 @@ theorem steps_stackStoreAny_le (register index pointer : Nat)
     intro s'; exact steps_seq_le hstore hsub
   have houter := steps_seq_le (s := s) hadd hinner
   omega
+
+theorem steps_halt (n : Nat) (s : StackSemStateFiniteExact width C F) :
+    steps (.halt n, s) = 1 :=
+  steps_leaf _ _ (by simp [isRecursive])
+
+/-- The `sub` instruction used by `singleStackAlloc` preserves the code map. -/
+theorem instHOL_sub_code (pointer n : Nat) {s t : StackSemStateFiniteExact width C F}
+    (h : instHOL (.arith (.binop .sub pointer pointer (.imm (wordOffset n)))) s = some t) :
+    t.code = s.code := by
+  have cov := instHOL_coverage (.arith (.binop .sub pointer pointer (.imm (wordOffset n)))) s
+  rw [h] at cov
+  simp only [instInteger] at cov
+  simp only [Option.some.injEq] at cov
+  split at cov
+  · simp_all
+  · simp only [assign] at cov
+    split at cov
+    · simp at cov
+    · simp only [Option.some.injEq] at cov
+      subst cov
+      simp [setVar]
+
+theorem steps_haltInst_le (value : BitVec width) (s : StackSemStateFiniteExact width C F) :
+    steps (haltInst value, s) ≤ 3 := by
+  rw [haltInst, steps_seq, steps_inst]
+  rcases hfx : fixClock s (evaluate ((.inst (.const 1 value) : HolProg width), s)) with ⟨res, s1⟩
+  cases res with
+  | none =>
+    dsimp only
+    have h := steps_halt 1 s1
+    omega
+  | some r =>
+    dsimp only
+    omega
+
+theorem steps_jumpLower_stackErrLab_le (r1 r2 : Nat) (s : StackSemStateFiniteExact width C F)
+    (halt : sptLookup stackErrLab s.code = some (haltInst (BitVec.ofNat width 2))) :
+    steps ((.jumpLower r1 r2 stackErrLab : HolProg width), s) ≤ 4 := by
+  rw [steps_jumpLower]
+  have h : (match getVar r1 s, getVar r2 s with
+      | some (.word x), some (.word y) =>
+          if wordCmpHOL .lower x y then
+            match findCode (.inl stackErrLab) s.regs s.code with
+            | some prog => if s.clock = 0 then 0 else steps (prog, decClock s)
+            | none => 0
+          else 0
+      | _, _ => 0) ≤ 3 := by
+    rcases hx : getVar r1 s with _ | x
+    · simp
+    · rcases hy : getVar r2 s with _ | y
+      · simp
+      · rcases x with xw | _
+        · rcases y with yw | _
+          · rw [findCode, halt]
+            dsimp only
+            by_cases hc : wordCmpHOL .lower xw yw
+            · rw [if_pos hc]
+              by_cases h0 : s.clock = 0
+              · simp [h0]
+              · rw [if_neg h0]
+                exact steps_haltInst_le _ _
+            · rw [if_neg hc]
+              simp
+          · simp
+        · simp
+  exact Nat.add_le_add_left h 1
+
+theorem steps_ite_halt_le (r : Nat) (ri : HolRegImm width)
+    (s : StackSemStateFiniteExact width C F) :
+    steps (.ite .lower r ri (haltInst (2 : BitVec width)) .skip, s) ≤ 4 := by
+  rw [steps_ite]
+  have h : (match getVar r s, StackSemStateOps.getVarImm (HolRegImm.toWordRegImm ri) s with
+      | some x, some y =>
+          match wordSemWordCmp .lower x y with
+          | some true => steps (haltInst (2 : BitVec width), s)
+          | some false => steps (.skip, s)
+          | none => 0
+      | _, _ => 0) ≤ 3 := by
+    split
+    · split
+      · have := steps_haltInst_le (2 : BitVec width) s
+        omega
+      · have := steps_skip s
+        omega
+      · omega
+    · omega
+  exact Nat.add_le_add_left h 1
+
+theorem steps_singleStackAlloc_le (jump : Bool) (pointer n : Nat)
+    (s : StackSemStateFiniteExact width C F)
+    (halt : sptLookup stackErrLab s.code = some (haltInst (BitVec.ofNat width 2))) :
+    steps (singleStackAlloc jump pointer n, s) ≤ 6 := by
+  rw [singleStackAlloc]
+  split
+  · rename_i hj
+    rw [steps_seq, steps_inst]
+    rcases hfx : fixClock s (evaluate ((.inst (.arith (.binop .sub pointer pointer (.imm (wordOffset n)))) : HolProg width), s)) with ⟨res, s1⟩
+    cases res with
+    | none =>
+      dsimp only
+      have hs1 : s1.code = s.code := by
+        rcases hev : evaluate ((.inst (.arith (.binop .sub pointer pointer (.imm (wordOffset n)))) : HolProg width), s) with ⟨r, s'⟩
+        rw [hev] at hfx
+        simp only [fixClock, Prod.mk.injEq] at hfx
+        obtain ⟨hr, hs⟩ := hfx
+        subst r
+        have hinst : instHOL (.arith (.binop .sub pointer pointer (.imm (wordOffset n)))) s = some s' := by
+          rw [evaluate_inst] at hev
+          split at hev
+          · rename_i s'' hinst'
+            simp only [Prod.mk.injEq] at hev
+            obtain ⟨-, hs'⟩ := hev
+            rw [hs'] at hinst'
+            exact hinst'
+          · simp at hev
+        rw [← hs]
+        simp [instHOL_sub_code pointer n hinst]
+      have halt' : sptLookup stackErrLab s1.code = some (haltInst (BitVec.ofNat width 2)) := by
+        rw [hs1]; exact halt
+      have hjump := steps_jumpLower_stackErrLab_le pointer (pointer + 1) s1 halt'
+      omega
+    | some r =>
+      dsimp only
+      omega
+  · rename_i hj
+    rw [steps_seq, steps_inst]
+    rcases hfx : fixClock s (evaluate ((.inst (.arith (.binop .sub pointer pointer (.imm (wordOffset n)))) : HolProg width), s)) with ⟨res, s1⟩
+    cases res with
+    | none =>
+      dsimp only
+      have hite := steps_ite_halt_le pointer (.reg (pointer + 1)) s1
+      omega
+    | some r =>
+      dsimp only
+      omega
 
 end SteppedFlapjack.StackRemoveSteps
