@@ -22,6 +22,7 @@ namespace SteppedFlapjack.StackRemoveSteps.CompCorrect
 open Flapjack Flapjack.Compiler.Backend.StackLang Flapjack.Compiler.Backend.StackRemove
 open Flapjack.StackSemStateOps Flapjack.StackSemControl Flapjack.StackSemEvaluate
 open Flapjack.Compiler.Encoders.Asm
+open Flapjack.Compiler.Encoders.Asm
 
 variable {width : Nat} [NeZero width] {C F : Type}
 
@@ -128,5 +129,35 @@ theorem assign_code (reg : Nat) (exp : WordLangExpHOL (BitVec width))
   split at h
   · simp at h
   · obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+
+/-- Int-to-FP conversions keep `code` and `compileOracle`. -/
+theorem fpToInt_code (d1 d2 : Nat) (s t : StackSemStateFiniteExact width C F)
+    (h : StackSemFpRegisterInstructions.instFpToInt d1 d2 s = some t) :
+    t.code = s.code ∧ t.compileOracle = s.compileOracle := by
+  simp only [StackSemFpRegisterInstructions.instFpToInt] at h
+  cases hg : getFpVar d2 s with
+  | none => simp [hg] at h
+  | some f =>
+    cases hi : holFp64ToInt .roundTiesToEven f with
+    | none => simp [hg, hi] at h
+    | some i =>
+      simp only [hg, hi] at h
+      split_ifs at h
+      all_goals try (obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩)
+      all_goals try (cases hf : getFpVar (d1 / 2) s)
+      all_goals try (simp [hf] at h)
+      all_goals try (obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩)
+
+/-- FP-to-int conversions keep `code` and `compileOracle`. -/
+theorem fpFromInt_code (d1 d2 : Nat) (s t : StackSemStateFiniteExact width C F)
+    (h : StackSemFpRegisterInstructions.instFpFromInt d1 d2 s = some t) :
+    t.code = s.code ∧ t.compileOracle = s.compileOracle := by
+  simp only [StackSemFpRegisterInstructions.instFpFromInt] at h
+  split_ifs at h
+  all_goals try (cases hg : getFpVar d2 s)
+  all_goals try (cases hk : getFpVar (d2 / 2) s)
+  all_goals try (simp [hg] at h)
+  all_goals try (simp [hk] at h)
+  all_goals try (obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩)
 
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
