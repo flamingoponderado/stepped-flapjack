@@ -78,4 +78,89 @@ theorem tickLoopTick_continue_bound {width : Nat} [NeZero width] {C F : Type}
   simp only [continues, true_and, if_pos nonzero] at first
   omega
 
+
+/-- The same continuing-iteration bound also covers a target timeout before
+re-entry; no extra clock assumption is needed. -/
+theorem tickLoopTick_continue_bound_any {width : Nat} [NeZero width] {C F : Type}
+    (live exit : Spt Unit) (body : WordLangProgHOL (BitVec width))
+    (s entered post : WordSemStateFiniteExact width C F) (out : Option (WordSemResult width))
+    (cut : cutState (live,.ln) (decClock s) = some entered)
+    (bodyRun : evaluate body entered = (out,post))
+    (continues : wordSemContLoop out = true) :
+    WordSteps.steps (.seq .tick (.seq (.loop live body exit) .tick)) s ≤
+      5 + WordSteps.steps body entered +
+        WordSteps.steps (.seq .tick (.seq (.loop live body exit) .tick)) post := by
+  by_cases nz : post.clock ≠ 0
+  · exact tickLoopTick_continue_bound live exit body s entered post out cut bodyRun continues nz
+  · have first := tickLoopTick_iteration_bound live exit body s entered post out cut bodyRun
+    have zero : post.clock = 0 := by omega
+    simp [continues,zero] at first
+    omega
+
+/-- When source and target both continue, the two actual body/re-entry step
+bounds compose into a sixfold bound for the full iteration. The only
+quantitative inputs are the body and recursive results used by induction. -/
+theorem loop_continue_sixfold {width : Nat} [NeZero width] {C F : Type}
+    (live liveOut : NumSet) (sourceBody : HolLoopProg width)
+    (source sourceCut sourcePost : LoopSemStateFiniteExact width F)
+    (sourceOut : Option (LoopSemStateFiniteExact.LoopResultExact width))
+    (targetLive targetExit : Spt Unit) (targetBody : WordLangProgHOL (BitVec width))
+    (target targetCut targetPost : WordSemStateFiniteExact width C F)
+    (targetOut : Option (WordSemResult width))
+    (sourceCutRun : LoopSemStateFiniteExact.cutRes live (none,source) = (none,sourceCut))
+    (sourceBodyRun : LoopSemStateFiniteExact.evaluate sourceBody sourceCut = (sourceOut,sourcePost))
+    (sourceContinues : sourceOut = none ∨ sourceOut = some (.continue 0))
+    (targetCutRun : cutState (targetLive,.ln) (decClock target) = some targetCut)
+    (targetBodyRun : evaluate targetBody targetCut = (targetOut,targetPost))
+    (targetContinues : wordSemContLoop targetOut = true)
+    (bodyBound : WordSteps.steps targetBody targetCut ≤ 6 * LoopSteps.steps sourceBody sourceCut)
+    (reentryBound : WordSteps.steps (.seq .tick (.seq (.loop targetLive targetBody targetExit) .tick)) targetPost ≤
+      6 * LoopSteps.steps (.loop live sourceBody liveOut) sourcePost) :
+    WordSteps.steps (.seq .tick (.seq (.loop targetLive targetBody targetExit) .tick)) target ≤
+      6 * LoopSteps.steps (.loop live sourceBody liveOut) source := by
+  have targetBound := tickLoopTick_continue_bound_any targetLive targetExit targetBody target targetCut targetPost
+    targetOut targetCutRun targetBodyRun targetContinues
+  have sourceCount := LoopSteps.steps_loop live liveOut sourceBody source
+  rw [sourceCutRun] at sourceCount
+  simp only at sourceCount
+  rw [sourceBodyRun] at sourceCount
+  rcases sourceContinues with h | h <;> rw [h] at sourceCount <;> simp only at sourceCount <;> omega
+
+
+/-- When both loop bodies leave the loop, the body induction bound suffices
+for the entire iteration. -/
+theorem loop_exit_sixfold {width : Nat} [NeZero width] {C F : Type}
+    (live liveOut : NumSet) (sourceBody : HolLoopProg width)
+    (source sourceCut sourcePost : LoopSemStateFiniteExact width F)
+    (sourceOut : Option (LoopSemStateFiniteExact.LoopResultExact width))
+    (targetLive targetExit : Spt Unit) (targetBody : WordLangProgHOL (BitVec width))
+    (target targetCut targetPost : WordSemStateFiniteExact width C F)
+    (targetOut : Option (WordSemResult width))
+    (sourceCutRun : LoopSemStateFiniteExact.cutRes live (none,source) = (none,sourceCut))
+    (sourceBodyRun : LoopSemStateFiniteExact.evaluate sourceBody sourceCut = (sourceOut,sourcePost))
+    (sourceStops : sourceOut ≠ none ∧ sourceOut ≠ some (.continue 0))
+    (targetCutRun : cutState (targetLive,.ln) (decClock target) = some targetCut)
+    (targetBodyRun : evaluate targetBody targetCut = (targetOut,targetPost))
+    (targetStops : wordSemContLoop targetOut = false ∨ targetPost.clock = 0)
+    (bodyBound : WordSteps.steps targetBody targetCut ≤ 6 * LoopSteps.steps sourceBody sourceCut) :
+    WordSteps.steps (.seq .tick (.seq (.loop targetLive targetBody targetExit) .tick)) target ≤
+      6 * LoopSteps.steps (.loop live sourceBody liveOut) source := by
+  have targetBound := tickLoopTick_iteration_bound targetLive targetExit targetBody target targetCut targetPost
+    targetOut targetCutRun targetBodyRun
+  have sourceCount := LoopSteps.steps_loop live liveOut sourceBody source
+  rw [sourceCutRun] at sourceCount
+  simp only at sourceCount
+  rw [sourceBodyRun] at sourceCount
+  have targetSimple : WordSteps.steps (.seq .tick (.seq (.loop targetLive targetBody targetExit) .tick)) target ≤
+      5 + WordSteps.steps targetBody targetCut := by
+    rcases targetStops with h | h <;> simpa [h] using targetBound
+  cases sourceOut with
+  | none => exact False.elim (sourceStops.1 rfl)
+  | some result =>
+    cases result <;> try (simp only at sourceCount; omega)
+    case «continue» n =>
+      cases n with
+      | zero => exact False.elim (sourceStops.2 rfl)
+      | succ n => simp only at sourceCount; omega
+
 end SteppedFlapjack.LoopToWordSteps
