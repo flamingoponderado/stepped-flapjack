@@ -643,4 +643,61 @@ theorem steps_stackAlloc_le (jump : Bool) (pointer n : Nat) :
       dsimp only
       omega
 
+theorem steps_ite_skip_add_le (r : Nat) (ri : HolRegImm width) (temporary : Nat)
+    (s : StackSemStateFiniteExact width C F) :
+    steps (.ite .test r ri .skip (addInst temporary 3), s) ≤ 2 := by
+  rw [steps_ite]
+  have h : (match getVar r s, StackSemStateOps.getVarImm (HolRegImm.toWordRegImm ri) s with
+      | some x, some y =>
+          match wordSemWordCmp .test x y with
+          | some true => steps (.skip, s)
+          | some false => steps (addInst temporary 3, s)
+          | none => 0
+      | _, _ => 0) ≤ 1 := by
+    split
+    · split
+      · have := steps_skip s; omega
+      · have := steps_inst (.arith (.binop .add temporary temporary (.reg 3))) s
+        simp only [addInst] at this ⊢
+        omega
+      · omega
+    · omega
+  exact Nat.add_le_add_left h 1
+
+theorem steps_innerBody_le (temporary bitmap : Nat) (s : StackSemStateFiniteExact width C F) :
+    steps (listSeqHOL [loadInst temporary bitmap, addBytesInWordInst bitmap,
+      .ite .test 1 (.imm 1) .skip (addInst temporary 3), rightShiftInst 1 1,
+      storeInst temporary 2, addBytesInWordInst 2], s) ≤ 12 := by
+  have h1 : ∀ s' : StackSemStateFiniteExact width C F, steps (loadInst temporary bitmap, s') ≤ 1 := by
+    intro s'; simp only [loadInst]; exact le_of_eq (steps_inst _ s')
+  have h2 : ∀ s' : StackSemStateFiniteExact width C F, steps (addBytesInWordInst bitmap, s') ≤ 1 := by
+    intro s'; simp only [addBytesInWordInst]; exact le_of_eq (steps_inst _ s')
+  have h3 : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.ite .test 1 (.imm 1) .skip (addInst temporary 3), s') ≤ 2 :=
+    fun s' => steps_ite_skip_add_le 1 (.imm 1) temporary s'
+  have h4 : ∀ s' : StackSemStateFiniteExact width C F, steps (rightShiftInst 1 1, s') ≤ 1 := by
+    intro s'; simp only [rightShiftInst]; exact le_of_eq (steps_inst _ s')
+  have h5 : ∀ s' : StackSemStateFiniteExact width C F, steps (storeInst temporary 2, s') ≤ 1 := by
+    intro s'; simp only [storeInst]; exact le_of_eq (steps_inst _ s')
+  have h6 : ∀ s' : StackSemStateFiniteExact width C F, steps (addBytesInWordInst 2, s') ≤ 1 := by
+    intro s'; simp only [addBytesInWordInst]; exact le_of_eq (steps_inst _ s')
+  have h56 : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.seq (storeInst temporary 2) (addBytesInWordInst 2), s') ≤ 3 := by
+    intro s'; exact steps_seq_le h5 h6
+  have h456 : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.seq (rightShiftInst 1 1) (.seq (storeInst temporary 2) (addBytesInWordInst 2)), s') ≤ 5 := by
+    intro s'; exact steps_seq_le h4 h56
+  have h3456 : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.seq (.ite .test 1 (.imm 1) .skip (addInst temporary 3))
+        (.seq (rightShiftInst 1 1) (.seq (storeInst temporary 2) (addBytesInWordInst 2))), s') ≤ 8 := by
+    intro s'; exact steps_seq_le h3 h456
+  have h23456 : ∀ s' : StackSemStateFiniteExact width C F,
+      steps (.seq (addBytesInWordInst bitmap)
+        (.seq (.ite .test 1 (.imm 1) .skip (addInst temporary 3))
+          (.seq (rightShiftInst 1 1) (.seq (storeInst temporary 2) (addBytesInWordInst 2)))), s') ≤ 10 := by
+    intro s'; exact steps_seq_le h2 h3456
+  have h123456 := steps_seq_le (s := s) h1 h23456
+  simpa only [listSeqHOL] using h123456
+
+
 end SteppedFlapjack.StackRemoveSteps
