@@ -1,3 +1,6 @@
+import SteppedFlapjack.StackAllocSteps.GcMoveBitmapSteps
+import SteppedFlapjack.StackAllocSteps.GcMoveBitmapClock
+import SteppedFlapjack.StackAllocSteps.GcMoveBitmapCorrect
 import SteppedFlapjack.StackAllocSteps.GcMoveLoopSteps
 import SteppedFlapjack.StackAllocSteps.GcMoveLoopCorrect
 import SteppedFlapjack.StackAllocSteps.GcMoveLoopClock
@@ -104,6 +107,8 @@ phase 4 of flapjack#1251:
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackAllocSteps.GcMoveBitmapClock`, `GcMoveBitmapCorrect`,
+  `GcMoveBitmapSteps`: clock and value-based step bounds for bitmap traversal;
 - `SteppedFlapjack.StackAllocSteps.GcMoveLoopCorrect`, `GcMoveLoopClock`,
   `GcMoveLoopSteps`: clock and fuel-based step bounds for heap traversal;
 - `SteppedFlapjack.StackAllocSteps.GcMoveClock`, `GcMoveCorrect`, `GcMoveSteps`,
