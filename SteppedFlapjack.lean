@@ -1,5 +1,6 @@
 import SteppedFlapjack.StackToLabSteps.GeneratedHaltSteps
 import SteppedFlapjack.StackToLabSteps.NamesComposition
+import SteppedFlapjack.StackToLabSteps.FullInitLabSteps
 import SteppedFlapjack.StackToLabSteps.PipelineComposition
 import SteppedFlapjack.StackToLabSteps.RiscVPipeline
 import SteppedFlapjack.LabToTargetSteps.LabRiscVComposition
@@ -166,6 +167,8 @@ phase 4 of flapjack#1251:
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
 - `SteppedFlapjack.StackAllocSteps.UniformLeaf`: a uniform leaf factor for
   word widths of at least eight bits, independent of runtime stack length.
+- `SteppedFlapjack.StackToLabSteps.FullInitLabSteps`: the bounded Lab stage
+  with state relations derived from full compiler initialization.
 - `SteppedFlapjack.StackToLabSteps.RiscVPipeline`: the bounded stack backend
   composed through LabSem to a RISC-V target run.
 - `SteppedFlapjack.StackToLabSteps.NamesComposition`, `PipelineComposition`:
