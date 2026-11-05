@@ -160,4 +160,138 @@ theorem fpFromInt_code (d1 d2 : Nat) (s t : StackSemStateFiniteExact width C F)
   all_goals try (simp [hk] at h)
   all_goals try (obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩)
 
+theorem mem_code (op : HolMemop) (r a : Nat) (w : BitVec width)
+    (s t : StackSemStateFiniteExact width C F)
+    (h : StackSemIntegerInstructions.instInteger (.mem op r (.addr a w)) s = some (some t)) :
+    t.code = s.code ∧ t.compileOracle = s.compileOracle := by
+  cases op
+  case load =>
+    simp only [StackSemIntegerInstructions.instInteger] at h
+    cases ha : StackSemExpressions.wordExp s (.op .add [.var a, .const w]) with
+    | none => simp [ha] at h
+    | some av =>
+      cases hm : memLoad av s with
+      | none => simp [ha, hm] at h
+      | some wv =>
+        simp [ha, hm] at h
+        subst t
+        exact setVar_code _ _ _
+  case load8 =>
+    simp only [StackSemIntegerInstructions.instInteger] at h
+    cases ha : StackSemExpressions.wordExp s (.op .add [.var a, .const w]) with
+    | none => simp [ha] at h
+    | some av =>
+      cases hm : memLoadByteAuxExact s.memory s.mdomain s.be av with
+      | none => simp [ha, hm] at h
+      | some wv =>
+        simp [ha, hm] at h
+        subst t
+        exact setVar_code _ _ _
+  case load16 =>
+    simp only [StackSemIntegerInstructions.instInteger] at h
+    simp at h
+  case load32 =>
+    simp only [StackSemIntegerInstructions.instInteger] at h
+    cases ha : StackSemExpressions.wordExp s (.op .add [.var a, .const w]) with
+    | none => simp [ha] at h
+    | some av =>
+      cases hm : memLoad32Exact s.memory s.mdomain s.be av with
+      | none => simp [ha, hm] at h
+      | some wv =>
+        simp [ha, hm] at h
+        subst t
+        exact setVar_code _ _ _
+  case store =>
+    simp only [StackSemIntegerInstructions.instInteger] at h
+    cases ha : StackSemExpressions.wordExp s (.op .add [.var a, .const w]) with
+    | none => simp [ha] at h
+    | some av =>
+      cases hr : getVar r s with
+      | none => simp [ha, hr] at h
+      | some wv =>
+        cases hm : memStore av wv s with
+        | none => simp [ha, hr, hm] at h
+        | some s1 =>
+          simp [ha, hr, hm] at h
+          subst t
+          exact memStore_code _ _ _ _ hm
+  case store8 =>
+    simp only [StackSemIntegerInstructions.instInteger] at h
+    cases ha : StackSemExpressions.wordExp s (.op .add [.var a, .const w]) with
+    | none => simp [ha] at h
+    | some av =>
+      cases hr : getVar r s with
+      | none => simp [ha, hr] at h
+      | some wv =>
+        cases wv with
+        | word ww =>
+          cases hm : memStoreByteAuxExact s.memory s.mdomain s.be av (ww.setWidth 8) with
+          | none => simp [ha, hr, hm] at h
+          | some newM =>
+            simp [ha, hr, hm] at h
+            subst t
+            exact ⟨rfl, rfl⟩
+        | loc l => simp [ha, hr] at h
+  case store16 =>
+    simp only [StackSemIntegerInstructions.instInteger] at h
+    simp at h
+  case store32 =>
+    simp only [StackSemIntegerInstructions.instInteger] at h
+    cases ha : StackSemExpressions.wordExp s (.op .add [.var a, .const w]) with
+    | none => simp [ha] at h
+    | some av =>
+      cases hr : getVar r s with
+      | none => simp [ha, hr] at h
+      | some wv =>
+        cases wv with
+        | word ww =>
+          cases hm : memStore32Exact s.memory s.mdomain s.be av (ww.setWidth 32) with
+          | none => simp [ha, hr, hm] at h
+          | some newM =>
+            simp [ha, hr, hm] at h
+            subst t
+            exact ⟨rfl, rfl⟩
+        | loc l => simp [ha, hr] at h
+theorem instHOL_code (i : HolInst width) (s t : StackSemStateFiniteExact width C F)
+    (h : StackSemInst.instHOL i s = some t) :
+    t.code = s.code ∧ t.compileOracle = s.compileOracle := by
+  cases i
+  case skip =>
+    simp [StackSemInst.instHOL, StackSemIntegerInstructions.instInteger] at h ⊢
+    rw [← h]; exact ⟨rfl, rfl⟩
+  case const dest w =>
+    simp [StackSemInst.instHOL, StackSemIntegerInstructions.instInteger] at h
+    exact assign_code _ _ _ _ h
+  case arith operation =>
+    cases operation <;> simp [StackSemInst.instHOL, StackSemIntegerInstructions.instInteger] at h ⊢
+    all_goals try (split_ifs at h)
+    all_goals try (split at h)
+    all_goals try (simp at h)
+    all_goals try (exact assign_code _ _ _ _ h)
+    all_goals try (obtain ⟨-, h⟩ := h)
+    all_goals try (exact setVar_code _ _ _)
+    all_goals try (rw [← h]; exact ⟨rfl, rfl⟩)
+  case mem op dest addr =>
+    simp only [StackSemInst.instHOL] at h
+    cases addr with
+    | addr a w =>
+      cases hi : StackSemIntegerInstructions.instInteger (.mem op dest (.addr a w)) s with
+      | none => simp [hi] at h
+      | some o =>
+        cases o with
+        | none => simp [hi] at h
+        | some t' =>
+          simp [hi] at h
+          subst t
+          exact mem_code op dest a w s t' hi
+  case fp op =>
+    cases op <;> simp [StackSemInst.instHOL, StackSemFpInstructions.instFp,
+      StackSemFpRegisterInstructions.instFpRegister,
+      StackSemFpRegisterInstructions.instFpSqrt] at h ⊢
+    all_goals try (split_ifs at h)
+    all_goals try (split at h)
+    all_goals try (simp at h)
+    all_goals try (rw [← h]; exact ⟨rfl, rfl⟩)
+    all_goals try (exact fpToInt_code _ _ _ _ h)
+    all_goals try (exact fpFromInt_code _ _ _ _ h)
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
