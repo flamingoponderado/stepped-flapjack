@@ -13,9 +13,9 @@ variable {width : Nat} [NeZero width] {C F : Type}
 
 /-- A bounded simulation for one program, with a common factor for its subruns. -/
 def BoundedGoal (anything : WordSemGcFun width) (cr : CompileFn width C)
-    (K : Nat) (p : HolProg width) (s : StackSemStateFiniteExact width C F) : Prop :=
+    (K : Nat) (c : DataToWord.Config) (p : HolProg width) (s : StackSemStateFiniteExact width C F) : Prop :=
   ∀ (r : Option (StackSemResult width)) (t : StackSemStateFiniteExact width C F)
-    (m n : Nat) (c : DataToWord.Config) (regs : HolFiniteMapExact Nat (WordLocW width)),
+    (m n : Nat) (regs : HolFiniteMapExact Nat (WordLocW width)),
     evaluate (p, s) = (r, t) → r ≠ some .error → StackProps.allocArg p → Pre cr c s regs →
     ∃ ck regs1, evaluate ((comp n m p).1, Tgt anything cr c s ck regs) =
         (r, Res anything cr c t regs1) ∧ Post r t regs1 ∧
@@ -23,11 +23,11 @@ def BoundedGoal (anything : WordSemGcFun width) (cr : CompileFn width C)
 
 /-- Sequence preserves a common factor supplied by its two recursive subruns. -/
 theorem boundedSeq (anything : WordSemGcFun width) (cr : CompileFn width C)
-    (K : Nat) (hK : 1 ≤ K) (s : StackSemStateFiniteExact width C F) (c1 c2 : HolProg width)
+    (K : Nat) (hK : 1 ≤ K) (c : DataToWord.Config) (s : StackSemStateFiniteExact width C F) (c1 c2 : HolProg width)
     (ih : ∀ (q : HolProg width) (u : StackSemStateFiniteExact width C F),
-      LexNat (stackSemMeasure q u) (stackSemMeasure (.seq c1 c2) s) → BoundedGoal anything cr K q u) :
-    BoundedGoal anything cr K (.seq c1 c2) s := by
-  intro r t m n c regs h hr ha hpre
+      LexNat (stackSemMeasure q u) (stackSemMeasure (.seq c1 c2) s) → BoundedGoal anything cr K c q u) :
+    BoundedGoal anything cr K c (.seq c1 c2) s := by
+  intro r t m n regs h hr ha hpre
   obtain ⟨ha1, ha2⟩ := ha
   rw [evaluate_seq, StackSemEvaluateClock.fixClockEvaluate] at h
   rcases h1 : evaluate (c1, s) with ⟨r1, t1⟩
@@ -35,7 +35,7 @@ theorem boundedSeq (anything : WordSemGcFun width) (cr : CompileFn width C)
   have hr1 : r1 ≠ some .error := by
     rintro rfl; simp only [Prod.mk.injEq] at h; exact hr h.1.symm
   obtain ⟨ck1, regs1, he1, hpost1, hs1⟩ :=
-    ih c1 s (seq_first_measure_lt c1 c2 s) r1 t1 m n c regs h1 hr1 ha1 hpre
+    ih c1 s (seq_first_measure_lt c1 c2 s) r1 t1 m n regs h1 hr1 ha1 hpre
   obtain ⟨hsub1, hbuf1, hst1⟩ := hpost1
   cases r1 with
   | some x =>
@@ -54,7 +54,7 @@ theorem boundedSeq (anything : WordSemGcFun width) (cr : CompileFn width C)
       rw [StackSemEvaluateClock.fixClockEvaluate, h1] at hm
       have hpre1 := Pre.of_evaluate h1 hpre hsub1 hbuf1 (hst1 (by simp))
       obtain ⟨ck2, regs2, he2, hpost2, hs2⟩ :=
-        ih c2 t1 hm r t (comp n m c1).2 n c regs1 h hr ha2 hpre1
+        ih c2 t1 hm r t (comp n m c1).2 n regs1 h hr ha2 hpre1
       have hboost := target_add_clock anything cr he1 (by simp) ck2
       have hsteps := steps_addClock ck2 _ _ _ rfl none _ he1 (by simp)
       have heq : steps ((comp n m c1).1, Tgt anything cr c s (ck1 + ck2) regs) =
@@ -72,13 +72,13 @@ theorem boundedSeq (anything : WordSemGcFun width) (cr : CompileFn width C)
 
 /-- A conditional preserves a common bound of its chosen branch. -/
 theorem boundedIte (anything : WordSemGcFun width) (cr : CompileFn width C)
-    (K : Nat) (hK : 1 ≤ K) (s : StackSemStateFiniteExact width C F)
+    (K : Nat) (hK : 1 ≤ K) (c : DataToWord.Config) (s : StackSemStateFiniteExact width C F)
     (cmp : Compiler.Encoders.Asm.HolCmp) (r1 : Nat) (ri : Compiler.Encoders.Asm.HolRegImm width)
     (c1 c2 : HolProg width)
     (ih : ∀ (q : HolProg width) (u : StackSemStateFiniteExact width C F),
-      LexNat (stackSemMeasure q u) (stackSemMeasure (.ite cmp r1 ri c1 c2) s) → BoundedGoal anything cr K q u) :
-    BoundedGoal anything cr K (.ite cmp r1 ri c1 c2) s := by
-  intro r t m n c regs h hr ha hpre
+      LexNat (stackSemMeasure q u) (stackSemMeasure (.ite cmp r1 ri c1 c2) s) → BoundedGoal anything cr K c q u) :
+    BoundedGoal anything cr K c (.ite cmp r1 ri c1 c2) s := by
+  intro r t m n regs h hr ha hpre
   obtain ⟨ha1, ha2⟩ := ha
   rw [evaluate_ite] at h
   split at h
@@ -86,7 +86,7 @@ theorem boundedIte (anything : WordSemGcFun width) (cr : CompileFn width C)
     split at h
     · rename_i hc
       obtain ⟨ck, regs1, he, hpost, hs⟩ :=
-        ih c1 s (if_first_measure_lt cmp r1 ri c1 c2 s) r t m n c regs h hr ha1 hpre
+        ih c1 s (if_first_measure_lt cmp r1 ri c1 c2 s) r t m n regs h hr ha1 hpre
       refine ⟨ck, regs1, ?_, hpost, ?_⟩
       · change evaluate (.ite cmp r1 ri (comp n m c1).1 (comp n (comp n m c1).2 c2).1, _) = _
         rw [evaluate_ite, tgt_eq]
@@ -105,7 +105,7 @@ theorem boundedIte (anything : WordSemGcFun width) (cr : CompileFn width C)
         omega
     · rename_i hc
       obtain ⟨ck, regs1, he, hpost, hs⟩ :=
-        ih c2 s (if_second_measure_lt cmp r1 ri c1 c2 s) r t (comp n m c1).2 n c regs h hr ha2 hpre
+        ih c2 s (if_second_measure_lt cmp r1 ri c1 c2 s) r t (comp n m c1).2 n regs h hr ha2 hpre
       refine ⟨ck, regs1, ?_, hpost, ?_⟩
       · change evaluate (.ite cmp r1 ri (comp n m c1).1 (comp n (comp n m c1).2 c2).1, _) = _
         rw [evaluate_ite, tgt_eq]
@@ -130,11 +130,11 @@ theorem boundedIte (anything : WordSemGcFun width) (cr : CompileFn width C)
 
 /-- Loop iterations preserve a common factor supplied by their recursive subruns. -/
 theorem boundedLoop (anything : WordSemGcFun width) (cr : CompileFn width C)
-    (K : Nat) (hK : 1 ≤ K) (s : StackSemStateFiniteExact width C F) (c1 : HolProg width)
+    (K : Nat) (hK : 1 ≤ K) (c : DataToWord.Config) (s : StackSemStateFiniteExact width C F) (c1 : HolProg width)
     (ih : ∀ (q : HolProg width) (u : StackSemStateFiniteExact width C F),
-      LexNat (stackSemMeasure q u) (stackSemMeasure (.loop c1) s) → BoundedGoal anything cr K q u) :
-    BoundedGoal anything cr K (.loop c1) s := by
-  intro r t m n c regs h hr ha hpre
+      LexNat (stackSemMeasure q u) (stackSemMeasure (.loop c1) s) → BoundedGoal anything cr K c q u) :
+    BoundedGoal anything cr K c (.loop c1) s := by
+  intro r t m n regs h hr ha hpre
   rw [evaluate_loop, StackSemEvaluateClock.fixClockEvaluate] at h
   rcases h1 : evaluate (c1, s) with ⟨r1, t1⟩
   rw [h1] at h
@@ -144,7 +144,7 @@ theorem boundedLoop (anything : WordSemGcFun width) (cr : CompileFn width C)
     simp [StackSemControl.contLoop, StackSemControl.exitLoop] at h
     exact hr h.1.symm
   obtain ⟨ck1, regs1, he1, ⟨hsub1, hbuf1, hst1⟩, hs1⟩ :=
-    ih c1 s (loop_body_measure_lt c1 s) r1 t1 m n c regs h1 hr1 ha hpre
+    ih c1 s (loop_body_measure_lt c1 s) r1 t1 m n regs h1 hr1 ha hpre
   by_cases hl : StackSemControl.contLoop r1 = true
   · have hnh : ∀ w, r1 ≠ some (.halt w) := by
       rcases contLoopImp r1 hl with rfl | rfl <;> simp
@@ -174,7 +174,7 @@ theorem boundedLoop (anything : WordSemGcFun width) (cr : CompileFn width C)
       rw [StackSemEvaluateClock.fixClockEvaluate, h1] at hm
       have hpre1 := (Pre.of_evaluate h1 hpre hsub1 hbuf1 (hst1 hnh)).decClock
       obtain ⟨ck2, regs2, he2, hpost2, hs2⟩ :=
-        ih (.loop c1) (decClock t1) (hm h0) r t m n c regs1 h hr ha hpre1
+        ih (.loop c1) (decClock t1) (hm h0) r t m n regs1 h hr ha hpre1
       have hboost := target_add_clock anything cr he1 hnt ck2
       have hsteps := steps_addClock ck2 _ _ _ rfl r1 _ he1 hnt
       have heq : steps ((comp n m c1).1, Tgt anything cr c s (ck1 + ck2) regs) =

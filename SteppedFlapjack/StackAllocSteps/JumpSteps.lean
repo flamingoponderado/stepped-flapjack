@@ -10,11 +10,11 @@ variable {width : Nat} [NeZero width] {C F : Type}
 
 /-- An indirect jump adds one step to the executed code's bound. -/
 theorem boundedJumpLower (anything : WordSemGcFun width) (cr : CompileFn width C)
-    (K : Nat) (hK : 1 ≤ K) (s : StackSemStateFiniteExact width C F) (r1 r2 dest : Nat)
+    (K : Nat) (hK : 1 ≤ K) (c : DataToWord.Config) (s : StackSemStateFiniteExact width C F) (r1 r2 dest : Nat)
     (ih : ∀ (q : HolProg width) (u : StackSemStateFiniteExact width C F),
-      LexNat (stackSemMeasure q u) (stackSemMeasure (.jumpLower r1 r2 dest) s) → BoundedGoal anything cr K q u) :
-    BoundedGoal anything cr K (.jumpLower r1 r2 dest) s := by
-  intro r t m n c regs h hr _ hpre
+      LexNat (stackSemMeasure q u) (stackSemMeasure (.jumpLower r1 r2 dest) s) → BoundedGoal anything cr K c q u) :
+    BoundedGoal anything cr K c (.jumpLower r1 r2 dest) s := by
+  intro r t m n regs h hr _ hpre
   rw [evaluate_jumpLower] at h
   split at h
   · rename_i x y hx hy
@@ -62,7 +62,7 @@ theorem boundedJumpLower (anything : WordSemGcFun width) (cr : CompileFn width C
           simp [badFunReturn] at h
           exact hr h.1.symm
         obtain ⟨ck, regs1, he, hpost, hs⟩ :=
-          ih prog (decClock s) (callee_measure_lt prog _ s h0) res s2 n1 m1 c regs h1 hres hap
+          ih prog (decClock s) (callee_measure_lt prog _ s h0) res s2 n1 m1 regs h1 hres hap
             hpre.decClock
         refine ⟨ck, regs1, ?_, ?_, ?_⟩
         · change evaluate (.jumpLower r1 r2 dest, _) = _
@@ -112,11 +112,11 @@ theorem boundedJumpLower (anything : WordSemGcFun width) (cr : CompileFn width C
     exact absurd h.1.symm hr
 /-- A raw call adds one step to the executed code's bound. -/
 theorem boundedRawCall (anything : WordSemGcFun width) (cr : CompileFn width C)
-    (K : Nat) (hK : 1 ≤ K) (s : StackSemStateFiniteExact width C F) (dest : Nat)
+    (K : Nat) (hK : 1 ≤ K) (c : DataToWord.Config) (s : StackSemStateFiniteExact width C F) (dest : Nat)
     (ih : ∀ (q : HolProg width) (u : StackSemStateFiniteExact width C F),
-      LexNat (stackSemMeasure q u) (stackSemMeasure (.rawCall dest) s) → BoundedGoal anything cr K q u) :
-    BoundedGoal anything cr K (.rawCall dest) s := by
-  intro r t m n c regs h hr _ hpre
+      LexNat (stackSemMeasure q u) (stackSemMeasure (.rawCall dest) s) → BoundedGoal anything cr K c q u) :
+    BoundedGoal anything cr K c (.rawCall dest) s := by
+  intro r t m n regs h hr _ hpre
   rw [evaluate_rawCall] at h
   split at h
   · simp only [Prod.mk.injEq] at h
@@ -156,7 +156,7 @@ theorem boundedRawCall (anything : WordSemGcFun width) (cr : CompileFn width C)
           simp [StackSemControl.badFunReturn] at h
           exact hr h.1.symm
         obtain ⟨ck, regs1, he, hpost, hs⟩ :=
-          ih b (decClock s) (callee_measure_lt b _ s h0) res s2 (comp m1 n1 a).2 m1 c regs
+          ih b (decClock s) (callee_measure_lt b _ s h0) res s2 (comp m1 n1 a).2 m1 regs
             h1 hres hap2 hpre.decClock
         refine ⟨ck, regs1, ?_, ?_, ?_⟩
         · change evaluate (.rawCall dest, _) = _

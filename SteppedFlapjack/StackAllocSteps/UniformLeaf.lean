@@ -60,4 +60,21 @@ theorem boundedLeafUniform {C F : Type} (anything : WordSemGcFun width)
   rw [steps_leaf p s hleaf, Nat.mul_one]
   exact hs.trans (max_le_max (Nat.le_refl _) (Nat.add_le_add_left hm 4))
 
+/-- A collector-specific factor uniform across all reachable states. -/
+def uniformFactor (c : Config) : Nat :=
+  max 5 (4 + allocGcStepCost (width := width) c (2 ^ width))
+
+/-- The uniform leaf bound has the same form as the recursive simulation. -/
+theorem boundedLeafUniformGoal {C F : Type} (anything : WordSemGcFun width)
+    (cr : CompileFn width C) (c : Config) (hwidth : 8 ≤ width)
+    (p : HolProg width) (s : StackSemStateFiniteExact width C F)
+    (hleaf : isRecursive p = false) :
+    BoundedGoal anything cr (uniformFactor (width := width) c) c p s := by
+  intro r t m n regs h hr ha hpre
+  exact boundedLeafUniform anything cr c hwidth p s hleaf r t m n regs h hr ha hpre
+
+theorem uniformFactorPositive (c : Config) : 1 ≤ uniformFactor (width := width) c := by
+  unfold uniformFactor
+  exact Nat.le_trans (by decide : 1 ≤ 5) (Nat.le_max_left _ _)
+
 end SteppedFlapjack.StackAllocSteps

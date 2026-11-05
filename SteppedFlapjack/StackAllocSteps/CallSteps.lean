@@ -9,12 +9,12 @@ variable {width : Nat} [NeZero width] {C F : Type}
 
 /-- Tail calls preserve a common subrun step factor. -/
 theorem boundedCallNone (anything : WordSemGcFun width) (cr : CompileFn width C)
-    (K : Nat) (hK : 1 ≤ K) (s : StackSemStateFiniteExact width C F) (dest : Sum Nat Nat)
+    (K : Nat) (hK : 1 ≤ K) (c : DataToWord.Config) (s : StackSemStateFiniteExact width C F) (dest : Sum Nat Nat)
     (handler : Option (HolProg width × Nat × Nat))
     (ih : ∀ (q : HolProg width) (u : StackSemStateFiniteExact width C F),
-      LexNat (stackSemMeasure q u) (stackSemMeasure (.call none dest handler) s) → BoundedGoal anything cr K q u) :
-    BoundedGoal anything cr K (.call none dest handler) s := by
-  intro r t m n c regs h hr _ hpre
+      LexNat (stackSemMeasure q u) (stackSemMeasure (.call none dest handler) s) → BoundedGoal anything cr K c q u) :
+    BoundedGoal anything cr K c (.call none dest handler) s := by
+  intro r t m n regs h hr _ hpre
   rw [evaluate_call] at h
   dsimp only at h
   split at h
@@ -55,7 +55,7 @@ theorem boundedCallNone (anything : WordSemGcFun width) (cr : CompileFn width C)
       simp [StackSemControl.badFunReturn] at h
       exact hr h.1.symm
     obtain ⟨ck, regs1, he, hpost, hs⟩ :=
-      ih prog (decClock s) (callee_measure_lt prog _ s h0) res s2 n1 m1 c regs h1 hres hap
+      ih prog (decClock s) (callee_measure_lt prog _ s h0) res s2 n1 m1 regs h1 hres hap
         hpre.decClock
     refine ⟨ck, regs1, ?_, ?_, ?_⟩
     · change evaluate (.call none dest none, _) = _
