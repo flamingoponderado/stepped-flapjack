@@ -1,4 +1,4 @@
-import SteppedFlapjack.WordSteps.Defs
+import SteppedFlapjack.WordSteps.CallSteps
 import SteppedFlapjack.StackToLabSteps.GeneratedHaltSteps
 import SteppedFlapjack.StackToLabSteps.NamesComposition
 import SteppedFlapjack.StackToLabSteps.FullInitLabSteps
@@ -180,6 +180,8 @@ phase 4 of flapjack#1251:
   simulation for the actual allocation make-init state.
 - `SteppedFlapjack.WordSteps.Defs`: a WordSem evaluator-invocation counter
   with checked leaf, sequence, conditional, loop, and tail-call equations.
+- `SteppedFlapjack.WordSteps.CallSteps`: returning-call equations covering all
+  callee results after successful call setup.
 - `SteppedFlapjack.StackToLabSteps.FullInitAllocSteps`, `FullInitStackLabSteps`,
   `FullInitRiscVSteps`: actual initialized stack execution through RISC-V.
 - `SteppedFlapjack.StackToLabSteps.FullInitRemoveLabSteps`: bounded actual

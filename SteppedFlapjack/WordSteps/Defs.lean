@@ -1,7 +1,6 @@
 import Flapjack.Compiler.Backend.Semantics.WordSem.EvaluateInd
 
-/-! Counts of WordSem evaluator invocations. Clause equations for returning
-calls remain to be established before using this counter in pass composition. -/
+/-! Counts of WordSem evaluator invocations. Returning-call equations after successful setup are in `CallSteps`. -/
 namespace SteppedFlapjack.WordSteps
 open Flapjack Flapjack.WordSemStateFiniteExact
 
