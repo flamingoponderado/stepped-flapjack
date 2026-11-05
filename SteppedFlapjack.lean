@@ -1,6 +1,7 @@
 import SteppedFlapjack.StackToLabSteps.GeneratedHaltSteps
 import SteppedFlapjack.StackToLabSteps.NamesComposition
 import SteppedFlapjack.StackToLabSteps.FullInitLabSteps
+import SteppedFlapjack.StackToLabSteps.FullInitRemoveLabSteps
 import SteppedFlapjack.StackToLabSteps.PipelineComposition
 import SteppedFlapjack.StackToLabSteps.RiscVPipeline
 import SteppedFlapjack.LabToTargetSteps.LabRiscVComposition
@@ -34,6 +35,8 @@ import SteppedFlapjack.StackAllocSteps.RawCallComposition
 import SteppedFlapjack.StackAllocSteps.ThreePassComposition
 import SteppedFlapjack.StackRemoveSteps.EntrySteps
 import SteppedFlapjack.StackRemoveSteps.InitSteps
+import SteppedFlapjack.StackRemoveSteps.InitEntrySteps
+import SteppedFlapjack.StackRemoveSteps.InitHypSteps
 import SteppedFlapjack.StackAllocSteps.UniformLeaf
 import SteppedFlapjack.StackAllocSteps.AllocGenFullSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveLoopSteps
@@ -168,6 +171,10 @@ phase 4 of flapjack#1251:
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
 - `SteppedFlapjack.StackAllocSteps.UniformLeaf`: a uniform leaf factor for
   word widths of at least eight bits, independent of runtime stack length.
+- `SteppedFlapjack.StackToLabSteps.FullInitRemoveLabSteps`: bounded actual
+  stack-removal initialization composed through LabSem.
+- `SteppedFlapjack.StackRemoveSteps.InitEntrySteps`, `InitHypSteps`: initialized
+  entry bounds and their derivation from compiler initialization bundles.
 - `SteppedFlapjack.StackRemoveSteps.InitSteps`: a clock-independent bound
   for generated initialization and its entry overhead.
 - `SteppedFlapjack.StackToLabSteps.FullInitLabSteps`: the bounded Lab stage
