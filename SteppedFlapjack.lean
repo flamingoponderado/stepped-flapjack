@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordToStackSteps.ReturningPrefixSteps
 import SteppedFlapjack.WordToStackSteps.ReturningTargetSteps
 import SteppedFlapjack.WordSteps.ReturningClock
 import SteppedFlapjack.WordToStackSteps.TailCallSteps
@@ -193,6 +194,8 @@ phase 4 of flapjack#1251:
   and structural machine-instruction runtime bounds for Word-to-Stack compilation.
 - `SteppedFlapjack.WordToStackSteps.StraightLine`: a proved bound for nested
   sequences and branches in a loop-free, call-free WordSem fragment.
+- `SteppedFlapjack.WordToStackSteps.ReturningPrefixSteps`: structural bounds
+  for complete compiled returning-call setup and continuations.
 - `SteppedFlapjack.WordToStackSteps.ReturningTargetSteps`: target returning-call
   bounds and call-free setup/continuation shape proofs.
 - `SteppedFlapjack.WordToStackSteps.TailCallSteps`: source-step-based target
