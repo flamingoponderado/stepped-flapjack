@@ -1,3 +1,6 @@
+import SteppedFlapjack.StackAllocSteps.GcMoveRootsSteps
+import SteppedFlapjack.StackAllocSteps.GcMoveRootsClock
+import SteppedFlapjack.StackAllocSteps.GcMoveRootsCorrect
 import SteppedFlapjack.StackAllocSteps.GcMoveBitmapsSteps
 import SteppedFlapjack.StackAllocSteps.GcMoveBitmapsClock
 import SteppedFlapjack.StackAllocSteps.GcMoveBitmapsCorrect
@@ -110,6 +113,8 @@ phase 4 of flapjack#1251:
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackAllocSteps.GcMoveRootsClock`, `GcMoveRootsCorrect`,
+  `GcMoveRootsSteps`: clock and stack-length bounds for root traversal;
 - `SteppedFlapjack.StackAllocSteps.GcMoveBitmapsClock`, `GcMoveBitmapsCorrect`,
   `GcMoveBitmapsSteps`: clock and count-based bounds for bitmap-list traversal;
 - `SteppedFlapjack.StackAllocSteps.GcMoveBitmapClock`, `GcMoveBitmapCorrect`,
