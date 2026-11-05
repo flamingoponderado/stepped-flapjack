@@ -9,6 +9,7 @@ import SteppedFlapjack.StackAllocSteps.JumpSteps
 import SteppedFlapjack.StackAllocSteps.CallSteps
 import SteppedFlapjack.StackAllocSteps.CallReturnSteps
 import SteppedFlapjack.StackAllocSteps.CompCorrect
+import SteppedFlapjack.StackAllocSteps.EntrySteps
 import SteppedFlapjack.StackAllocSteps.UniformLeaf
 import SteppedFlapjack.StackAllocSteps.AllocGenFullSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveLoopSteps
@@ -142,6 +143,8 @@ phase 4 of flapjack#1251:
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
 - `SteppedFlapjack.StackAllocSteps.UniformLeaf`: a uniform leaf factor for
   word widths of at least eight bits, independent of runtime stack length.
+- `SteppedFlapjack.StackAllocSteps.EntrySteps`: the bounded entry-call
+  simulation for stack allocation.
 - `SteppedFlapjack.StackAllocSteps.CompCorrect`: uniform step-preservation
   for stack allocation on words of at least eight bits.
 - `SteppedFlapjack.StackAllocSteps.CallReturnSteps`: returning calls with
