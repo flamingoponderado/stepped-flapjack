@@ -42,6 +42,11 @@ import SteppedFlapjack.StackRemoveSteps.InstallEffect
 import SteppedFlapjack.StackRemoveSteps.OracleRunEffect
 import SteppedFlapjack.StackRemoveSteps.OracleRunControl
 import SteppedFlapjack.StackRemoveSteps.OracleRunLeaf
+import SteppedFlapjack.StackRemoveSteps.OracleRunEvaluate
+import SteppedFlapjack.StackRemoveSteps.CodeOrigin
+import SteppedFlapjack.StackRemoveSteps.LeafCode
+import SteppedFlapjack.StackRemoveSteps.CodeOriginEvaluate
+import SteppedFlapjack.StackRemoveSteps.RunBudget
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.Leaf
 
 /-!
