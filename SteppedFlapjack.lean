@@ -14,6 +14,7 @@ import SteppedFlapjack.LabToTargetSteps
 import SteppedFlapjack.StackSteps.Defs
 import SteppedFlapjack.StackToLabSteps
 import SteppedFlapjack.StackRemoveSteps.Defs
+import SteppedFlapjack.StackRemoveSteps.CopyEachSteps
 
 /-!
 # stepped-flapjack
@@ -53,7 +54,10 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.StackRemoveSteps.Defs`: program-dependent expansion costs for
   the `stack_remove` pass, including `leafCost` and the step-count bounds for
   the `upshift`, `downshift` and `stackFree` expansions
-  (stepped-flapjack#2, phase C3, in progress).
+  (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CopyEachSteps`: the per-bitmap-word copy
+  loop's fine-grained step bound `15 * (pattern.toNat + 1) + 3`, carried by an
+  adapted `copyEachThmWithin` (stepped-flapjack#2, phase C3, in progress).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
