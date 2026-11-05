@@ -497,4 +497,150 @@ theorem steps_singleStackAlloc_le (jump : Bool) (pointer n : Nat)
       dsimp only
       omega
 
+theorem evaluate_haltInst_some (value : BitVec width) (s : StackSemStateFiniteExact width C F) :
+    ∃ (r : StackSemResult width) (t : StackSemStateFiniteExact width C F),
+      evaluate (haltInst value, s) = (some r, t) := by
+  rw [haltInst, evaluate_seq]
+  split
+  · rw [evaluate_halt]
+    split <;> exact ⟨_, _, rfl⟩
+  · rename_i x res' s1' hne heq
+    cases res' with
+    | none => exact absurd rfl hne
+    | some r => exact ⟨r, s1', rfl⟩
+
+theorem evaluate_jumpLower_stackErrLab_none {r1 r2 : Nat}
+    {s t : StackSemStateFiniteExact width C F}
+    (halt : sptLookup stackErrLab s.code = some (haltInst (2 : BitVec width)))
+    (h : evaluate ((.jumpLower r1 r2 stackErrLab : HolProg width), s) = (none, t)) : t = s := by
+  rw [evaluate_jumpLower] at h
+  split at h
+  · split at h
+    · rw [findCode, halt] at h
+      split at h
+      · simp at h
+      · rename_i x prog heq
+        split at h
+        · simp at h
+        · rename_i hclock
+          obtain ⟨r, t', hev⟩ := evaluate_haltInst_some (2 : BitVec width) (decClock s)
+          have hprog : prog = haltInst (2 : BitVec width) := by
+            simpa using heq.symm
+          rw [hprog] at h
+          rw [hev] at h
+          dsimp only at h
+          split at h <;> simp_all
+    · simpa using h.symm
+  · simp at h
+
+theorem evaluate_inst_sub_code (pointer n : Nat)
+    {s t : StackSemStateFiniteExact width C F}
+    (h : evaluate ((.inst (.arith (.binop .sub pointer pointer (.imm (wordOffset n)))) : HolProg width), s) =
+      (none, t)) : t.code = s.code := by
+  rw [evaluate_inst] at h
+  split at h
+  · rename_i s' hinst
+    simp only [Prod.mk.injEq] at h
+    obtain ⟨-, rfl⟩ := h
+    exact instHOL_sub_code pointer n hinst
+  · simp at h
+
+theorem evaluate_ite_halt_skip_none {r : Nat} {ri : HolRegImm width}
+    {s t : StackSemStateFiniteExact width C F}
+    (h : evaluate ((.ite .lower r ri (haltInst (2 : BitVec width)) .skip : HolProg width), s) =
+      (none, t)) : t = s := by
+  rw [evaluate_ite] at h
+  split at h
+  · split at h
+    · obtain ⟨r', t', hev⟩ := evaluate_haltInst_some (2 : BitVec width) s
+      rw [hev] at h
+      simp at h
+    · simp [evaluate_skip] at h
+      exact h.symm
+    · simp at h
+  · simp at h
+
+theorem fixClock_inst_sub_code (pointer n : Nat) {s s1 : StackSemStateFiniteExact width C F}
+    (hfx : fixClock s (evaluate ((.inst (.arith (.binop .sub pointer pointer (.imm (wordOffset n)))) : HolProg width), s)) =
+      (none, s1)) : s1.code = s.code := by
+  rcases hev : evaluate ((.inst (.arith (.binop .sub pointer pointer (.imm (wordOffset n)))) : HolProg width), s) with ⟨r, s'⟩
+  rw [hev] at hfx
+  simp only [fixClock, Prod.mk.injEq] at hfx
+  obtain ⟨hr, hs⟩ := hfx
+  subst r
+  have hinst : instHOL (.arith (.binop .sub pointer pointer (.imm (wordOffset n)))) s = some s' := by
+    rw [evaluate_inst] at hev
+    split at hev
+    · rename_i s'' hinst'
+      simp only [Prod.mk.injEq] at hev
+      obtain ⟨-, hs'⟩ := hev
+      rw [hs'] at hinst'
+      exact hinst'
+    · simp at hev
+  rw [← hs]
+  simp [instHOL_sub_code pointer n hinst]
+
+theorem evaluate_singleStackAlloc_none_code (jump : Bool) (pointer n : Nat)
+    {s t : StackSemStateFiniteExact width C F}
+    (halt : sptLookup stackErrLab s.code = some (haltInst (2 : BitVec width)))
+    (h : evaluate (singleStackAlloc jump pointer n, s) = (none, t)) : t.code = s.code := by
+  rw [singleStackAlloc] at h
+  split at h
+  · rw [evaluate_seq] at h
+    split at h
+    · rename_i s1 hfx
+      have hs1 : s1.code = s.code := fixClock_inst_sub_code pointer n hfx
+      have halt' : sptLookup stackErrLab s1.code = some (haltInst (2 : BitVec width)) := by
+        rw [hs1]; exact halt
+      have ht : t = s1 := evaluate_jumpLower_stackErrLab_none halt' h
+      rw [ht]; exact hs1
+    · simp_all
+  · rw [evaluate_seq] at h
+    split at h
+    · rename_i s1 hfx
+      have hs1 : s1.code = s.code := fixClock_inst_sub_code pointer n hfx
+      have ht : t = s1 := evaluate_ite_halt_skip_none h
+      rw [ht]; exact hs1
+    · simp_all
+
+theorem steps_stackAlloc_le (jump : Bool) (pointer n : Nat) :
+    ∀ s : StackSemStateFiniteExact width C F,
+      sptLookup stackErrLab s.code = some (haltInst (2 : BitVec width)) →
+      steps (stackAlloc jump pointer n, s) ≤ stackAllocSteps n := by
+  induction n using stackAlloc.induct with
+  | case1 =>
+    intro s halt
+    rw [stackAlloc.eq_1, if_pos rfl, stackAllocSteps.eq_1, if_pos rfl]
+    rw [steps_skip (width := width) s]
+  | case2 n h0 h =>
+    intro s halt
+    rw [stackAlloc.eq_1, if_neg h0, if_pos h, stackAllocSteps.eq_1, if_neg h0, if_pos h]
+    exact steps_singleStackAlloc_le jump pointer n s halt
+  | case3 n h0 h ih =>
+    intro s halt
+    rw [stackAlloc.eq_1, if_neg h0, if_neg h, stackAllocSteps.eq_1, if_neg h0, if_neg h]
+    rw [steps_seq]
+    have hsingle := steps_singleStackAlloc_le jump pointer maxStackAlloc s halt
+    rcases hfx : fixClock s (evaluate (singleStackAlloc jump pointer maxStackAlloc, s)) with ⟨res, s1⟩
+    cases res with
+    | none =>
+      dsimp only
+      have hs1code : s1.code = s.code := by
+        rcases hev : evaluate (singleStackAlloc jump pointer maxStackAlloc, s) with ⟨r, s'⟩
+        rw [hev] at hfx
+        simp only [fixClock, Prod.mk.injEq] at hfx
+        obtain ⟨hr, hs⟩ := hfx
+        subst r
+        have hcode : s'.code = s.code :=
+          evaluate_singleStackAlloc_none_code jump pointer maxStackAlloc halt hev
+        rw [← hs]
+        simp [hcode]
+      have halt' : sptLookup stackErrLab s1.code = some (haltInst (2 : BitVec width)) := by
+        rw [hs1code]; exact halt
+      have hrec := ih s1 halt'
+      omega
+    | some r =>
+      dsimp only
+      omega
+
 end SteppedFlapjack.StackRemoveSteps
