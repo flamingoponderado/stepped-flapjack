@@ -28,6 +28,8 @@ import SteppedFlapjack.StackRemoveSteps.CompCorrect.RawCall
 import SteppedFlapjack.StackRemoveSteps.CallCostBounds
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallTail
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnNone
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnHandler
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.Call
 
 /-!
 # stepped-flapjack
@@ -114,7 +116,13 @@ phase 4 of flapjack#1251:
   phase C3, in progress);
 - `SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnNone`: the returning
   `call` with no handler, threading both the callee's code bound and the return
-  continuation's structural bound (stepped-flapjack#2, phase C3, in progress).
+  continuation's structural bound (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnHandler`: the returning
+  `call` with an exception handler, adding the successful-exception branch
+  (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.Call`: the `call` assembly,
+  dispatching on the `ret`/`handler` shapes (stepped-flapjack#2, phase C3,
+  in progress).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
