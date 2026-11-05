@@ -39,6 +39,9 @@ import SteppedFlapjack.StackRemoveSteps.CompCorrect.LeafStepsAll
 import SteppedFlapjack.StackRemoveSteps.CodeBounds
 import SteppedFlapjack.StackRemoveSteps.OraclePrefix
 import SteppedFlapjack.StackRemoveSteps.InstallEffect
+import SteppedFlapjack.StackRemoveSteps.OracleRunEffect
+import SteppedFlapjack.StackRemoveSteps.OracleRunControl
+import SteppedFlapjack.StackRemoveSteps.OracleRunLeaf
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.Leaf
 
 /-!

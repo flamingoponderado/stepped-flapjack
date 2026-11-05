@@ -184,4 +184,24 @@ theorem oraclePrefixBound_take {B K n m : Nat} {bounds : BitVec width × BitVec 
   intro index hi name program hmem
   exact h index (by omega) name program hmem
 
+theorem oraclePrefixBound_drop {B K n used : Nat} {bounds : BitVec width × BitVec width}
+    (s t : StackSemStateFiniteExact width C F) (h : oraclePrefixBound B bounds K n s)
+    (hused : used ≤ n) (horacle : t.compileOracle = holShiftSeq used s.compileOracle) :
+    oraclePrefixBound B bounds K (n - used) t := by
+  intro index hi name program hm
+  rw [horacle] at hm
+  exact h (index + used) (by omega) name program hm
+
+theorem oracleBitmapBudget_drop {n used cap : Nat}
+    (s t : StackSemStateFiniteExact width C F)
+    (hused : used ≤ n) (horacle : t.compileOracle = holShiftSeq used s.compileOracle)
+    (hbitmap : t.bitmaps.length ≤ s.bitmaps.length + oracleBitmapBudget used s.compileOracle)
+    (hcap : s.bitmaps.length + oracleBitmapBudget n s.compileOracle ≤ cap) :
+    t.bitmaps.length + oracleBitmapBudget (n - used) t.compileOracle ≤ cap := by
+  have hn : used + (n - used) = n := by omega
+  have hs := oracleBitmapBudget_add used (n - used) s.compileOracle
+  rw [hn] at hs
+  rw [horacle]
+  omega
+
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
