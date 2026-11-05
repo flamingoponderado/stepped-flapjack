@@ -414,4 +414,16 @@ theorem shMemOp_code (op : WordMemOp) (r : Nat) (ad : BitVec width)
     t.code = s.code := by
   rw [← h]
   cases op <;> simp [LoopSemStateFiniteExact.shMemOp, shMemLoad_code, shMemStore_code]
+theorem codeBound_congr {B K : Nat} {bounds : BitVec width × BitVec width}
+    {s t : StackSemStateFiniteExact width C F}
+    (hc : t.code = s.code) (h : codeBound B bounds K s) : codeBound B bounds K t := by
+  intro label program hl
+  exact h label program (by rw [← hc]; exact hl)
+
+theorem oracleBound_congr {B K : Nat} {bounds : BitVec width × BitVec width}
+    {s t : StackSemStateFiniteExact width C F}
+    (ho : t.compileOracle = s.compileOracle) (h : oracleBound B bounds K s) :
+    oracleBound B bounds K t := by
+  intro index name program hl
+  exact h index name program (by rw [← ho]; exact hl)
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
