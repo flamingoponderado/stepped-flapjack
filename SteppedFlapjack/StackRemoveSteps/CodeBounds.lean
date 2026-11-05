@@ -914,4 +914,34 @@ theorem codeBounds_stackSetSize {B K : Nat} {bounds : BitVec width × BitVec wid
           exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
         · obtain ⟨-, rfl⟩ := h
           exact codeBounds_transfer (setVar_code _ _ _).1 (setVar_code _ _ _).2 hcode horacle
+theorem codeBounds_seq {B K : Nat} {bounds : BitVec width × BitVec width}
+    (a b : HolProg width) (s t : StackSemStateFiniteExact width C F)
+    (r : Option (StackSemResult width))
+    (h : evaluate ((.seq a b : HolProg width), s) = (r, t))
+    (ihA : ∀ (r : Option (StackSemResult width)) (post : StackSemStateFiniteExact width C F),
+      evaluate (a, s) = (r, post) → codeBound B bounds K s → oracleBound B bounds K s →
+      codeBound B bounds K post ∧ oracleBound B bounds K post)
+    (ihB : ∀ (middle : StackSemStateFiniteExact width C F),
+      evaluate (a, s) = (none, middle) →
+      ∀ (r : Option (StackSemResult width)) (post : StackSemStateFiniteExact width C F),
+      evaluate (b, middle) = (r, post) → codeBound B bounds K middle → oracleBound B bounds K middle →
+      codeBound B bounds K post ∧ oracleBound B bounds K post)
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  rcases hfxA : evaluate (a, s) with ⟨ra, s1⟩
+  have hA := ihA ra s1 hfxA hcode horacle
+  cases ra with
+  | none =>
+    have hrunB : evaluate (b, s1) = (r, t) := by
+      have h' := h
+      rw [evaluate_seq, StackSemEvaluateClock.fixClockEvaluate, hfxA] at h'
+      dsimp only at h'
+      exact h'
+    exact ihB s1 hfxA r t hrunB hA.1 hA.2
+  | some rr =>
+    have h' := h
+    rw [evaluate_seq, StackSemEvaluateClock.fixClockEvaluate, hfxA] at h'
+    dsimp only at h'
+    obtain ⟨-, rfl⟩ := h'
+    exact hA
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
