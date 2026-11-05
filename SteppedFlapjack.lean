@@ -19,6 +19,8 @@ import SteppedFlapjack.StackRemoveSteps.CopyEachSteps
 import SteppedFlapjack.StackRemoveSteps.CopyLoopSteps
 import SteppedFlapjack.StackRemoveSteps.LeafCostBounds
 import SteppedFlapjack.StackRemoveSteps.LeafSteps
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.Statement
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.Seq
 
 /-!
 # stepped-flapjack
@@ -77,7 +79,14 @@ phase 4 of flapjack#1251:
   C3, in progress);
 - `SteppedFlapjack.StackRemoveSteps.CopyLoopSteps`: the outer bitmap-list copy
   loop's bound `copyLoopSteps width (bitmaps.length - index)`, carried by an
-  adapted `copyLoopThmWithin` (stepped-flapjack#2, phase C3, in progress).
+  adapted `copyLoopThmWithin` (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.Statement`: the step-counted
+  `stack_remove` statement shape and the `bitmapBound B` hypothesis that
+  discharges the `storeConsts` bitmap-length bound at the top theorem
+  (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.Seq`: the `Seq` induction case of
+  the step-counted correctness theorem, adding `steps <= leafCost * steps` to
+  Flapjack's `compCorrectSeq` (stepped-flapjack#2, phase C3, in progress).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
