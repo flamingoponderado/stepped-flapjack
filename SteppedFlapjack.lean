@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordToStackSteps.ReturningHandlerZeroClock
 import SteppedFlapjack.WordToStackSteps.ReturningNoneComplete
 import SteppedFlapjack.WordToStackSteps.ReturningNoneSteps
 import SteppedFlapjack.WordToStackSteps.ReturningZeroClock
@@ -202,6 +203,7 @@ phase 4 of flapjack#1251:
   no-handler bound for all non-error, non-timeout outcomes.
 - `SteppedFlapjack.WordToStackSteps.ReturningNoneSteps`: complete no-handler
   zero-clock simulation and a source-step-based matching-return bound.
+- `SteppedFlapjack.WordToStackSteps.ReturningHandlerZeroClock`: zero-clock handler callee and continuation proofs for loop blocks.
 - `SteppedFlapjack.WordToStackSteps.ReturningZeroClock`: zero-clock callee and
   matching normal-return continuation composition from the actual call history.
 - `SteppedFlapjack.WordToStackSteps.ReturningNormalized`: source-step clock
