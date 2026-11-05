@@ -333,4 +333,36 @@ theorem install_oracleBound {B K : Nat} {bounds : BitVec width × BitVec width}
     leafCost B bounds program ≤ K := by
   simp only [holShiftSeq] at hmem
   exact h (index + 1) name program hmem
+theorem storeConstSem_code {resultWidth : Nat} [NeZero resultWidth]
+    (t1 t2 : Nat) (s t : StackSemStateFiniteExact width C F)
+    (h : (StackSemStoreConsts.storeConstSem (resultWidth := resultWidth) t1 t2 s).2 = t) :
+    t.code = s.code ∧ t.compileOracle = s.compileOracle := by
+  rw [← h]
+  by_cases hnodup : ¬ [0, 1, 2, 3, t1, t2].Nodup
+  · simp [StackSemStoreConsts.storeConstSem, if_pos hnodup]
+  · simp only [StackSemStoreConsts.storeConstSem, if_neg hnodup]
+    cases h1 : getVar 1 s with
+    | none => simp
+    | some v1 =>
+      cases h2 : getVar 2 s with
+      | none => simp
+      | some v2 =>
+        cases h3 : getVar 3 s with
+        | none => simp
+        | some v3 =>
+          cases v1 with
+          | word i =>
+            cases v2 with
+            | word a =>
+              cases v3 with
+              | word off =>
+                cases hc : StackSemStoreConsts.copyWordsExact i.toNat a off s.bitmaps (fun x => s.mdomain x = true) s.memory with
+                | none => simp [hc]
+                | some p =>
+                  obtain ⟨a', m⟩ := p
+                  simp [hc]
+                  split <;> exact ⟨rfl, rfl⟩
+              | loc l => simp
+            | loc l => simp
+          | loc l => simp
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
