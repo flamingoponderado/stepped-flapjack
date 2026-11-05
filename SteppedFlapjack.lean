@@ -1,3 +1,5 @@
+import SteppedFlapjack.StackAllocSteps.GenMoveListSteps
+import SteppedFlapjack.StackAllocSteps.GenMoveListCorrect
 import SteppedFlapjack.StackAllocSteps.GenMoveSteps
 import SteppedFlapjack.StackAllocSteps.CollectorStructural
 import SteppedFlapjack.StackAllocSteps.AllocNoneSteps
@@ -119,6 +121,8 @@ phase 4 of flapjack#1251:
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackAllocSteps.GenMoveListCorrect`, `GenMoveListSteps`:
+  clock and length-based step bounds for generational object lists;
 - `SteppedFlapjack.StackAllocSteps.GenMoveCorrect`, `GenMoveSteps`:
   clock and step bounds for full and partial generational object movement;
 - `SteppedFlapjack.StackAllocSteps.BoundedNormal`: clock-independent bounds
