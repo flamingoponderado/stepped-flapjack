@@ -28,7 +28,7 @@ theorem compCorrectLoopWithinSteps (body : HolProg width)
     (source : StackSemStateFiniteExact width C F) (result : Option (StackSemResult width))
     (postSource target : StackSemStateFiniteExact width C F)
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
-    (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
+    (_B : Nat)
     (K : Nat) (Kpos : 1 ≤ K)
     (bodyIH : ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
       evaluate (body, source) = (r, post) ∧ r ≠ some .error ∧

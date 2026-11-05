@@ -22,7 +22,7 @@ theorem compCorrectCallWithinSteps
     (source : StackSemStateFiniteExact width C F) (result : Option (StackSemResult width))
     (postSource target : StackSemStateFiniteExact width C F)
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
-    (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
+    (B : Nat)
     (K : Nat) (Kpos : 1 ≤ K)
     (caseBound : leafCost B bounds (.call ret dest handler) ≤ K)
     (calleeIH : match ret with
@@ -108,7 +108,7 @@ theorem compCorrectCallWithinSteps
   | none =>
     obtain ⟨clock, postTarget, run, relation, stepsBound⟩ :=
       compCorrectCallTailWithinSteps dest handler source result postSource target
-        pointer bounds jump B _bitmap K Kpos calleeIH hypothesis
+        pointer bounds jump B K Kpos calleeIH hypothesis
     refine ⟨clock, postTarget, run, ?_, stepsBound⟩
     cases result with
     | none => exact relation
@@ -119,7 +119,7 @@ theorem compCorrectCallWithinSteps
     | none =>
       obtain ⟨clock, postTarget, run, relation, stepsBound⟩ :=
         compCorrectCallReturnNoneWithinSteps body link l1 l2 dest source result
-          postSource target pointer bounds jump B _bitmap K Kpos caseBound
+          postSource target pointer bounds jump B K Kpos caseBound
           calleeIH returnIH hypothesis
       refine ⟨clock, postTarget, run, ?_, stepsBound⟩
       cases result with
@@ -129,7 +129,7 @@ theorem compCorrectCallWithinSteps
       rcases exceptional with ⟨handlerBody, hl1, hl2⟩
       obtain ⟨clock, postTarget, run, relation, stepsBound⟩ :=
         compCorrectCallReturnHandlerWithinSteps body handlerBody link l1 l2 hl1 hl2
-          dest source result postSource target pointer bounds jump B _bitmap K Kpos
+          dest source result postSource target pointer bounds jump B K Kpos
           caseBound calleeIH returnIH handlerIH hypothesis
       refine ⟨clock, postTarget, run, ?_, stepsBound⟩
       cases result with

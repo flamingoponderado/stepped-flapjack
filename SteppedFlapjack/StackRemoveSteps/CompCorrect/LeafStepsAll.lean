@@ -21,7 +21,6 @@ variable {width : Nat} [NeZero width] {C F : Type}
 
 theorem steps_comp_leaf_le (jump : Bool) (bounds : BitVec width × BitVec width)
     (pointer B : Nat) (program : HolProg width) (t : StackSemStateFiniteExact width C F)
-    (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
     (storeConstsBound : ∀ (temporary bitmap : Nat) (stub : Option Nat)
       (source target : StackSemStateFiniteExact width C F),
       stateRelHOL jump bounds pointer source target →

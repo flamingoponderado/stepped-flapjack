@@ -14,9 +14,10 @@ carried through the evaluation. This file states them and proves that
 `evaluate` preserves them.
 
 `codeBound s` bounds `leafCost` of every program reachable through `s.code`;
-`oracleBound s` bounds every program the oracle can hand to `install`. For a
-concrete Pancake source both are finite, calculable facts, discharged when the
-theorem is instantiated. -/
+`oracleBound s` bounds every program the oracle can hand to `install`. This is
+a uniform assumption on the entire oracle: a concrete source program alone
+does not imply it, since the oracle may supply programs of unbounded cost. A
+use site must establish it or use a run-specific bound. -/
 
 namespace SteppedFlapjack.StackRemoveSteps.CompCorrect
 

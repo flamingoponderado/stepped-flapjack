@@ -22,7 +22,7 @@ theorem compCorrectRawCallWithinSteps (label : Nat)
     (source : StackSemStateFiniteExact width C F) (result : Option (StackSemResult width))
     (postSource target : StackSemStateFiniteExact width C F)
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
-    (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
+    (_B : Nat)
     (K : Nat) (Kpos : 1 ≤ K)
     (calleeIH : ∀ (frame body : HolProg width),
       sptLookup label source.code = some (.seq frame body) → source.clock ≠ 0 →

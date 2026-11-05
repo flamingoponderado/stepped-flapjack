@@ -6,17 +6,13 @@ import Flapjack.Compiler.Backend.StackRemove.Proofs.CompCorrect
 step-counted `stack_remove` correctness theorem.
 
 `compCorrectWithinSteps` will conclude, in addition to Flapjack's `compCorrect`,
-that the compiled run takes at most `leafCost B bounds program * steps
-(program, source)` steps, where `leafCost` is the program-dependent factor of
-`SteppedFlapjack/StackRemoveSteps/Defs.lean`.
+that the compiled run takes at most `K * steps (program, source)` steps.
+The factor `K` must bound `leafCost B bounds` for the current program and
+for programs reachable through the code and compile oracle.
 
-The `.storeConsts` expansion's cost is `storeConstsSteps width B`, and `B` must
-bound the bitmap length at the node's run-time state. `install` appends to
-`source.bitmaps`, so the initial length does not bound later states; instead the
-theorem carries `bitmapBound B`, a hypothesis over every pair of states related
-by `stateRelHOL`. That hypothesis is carried up to the top theorem and
-discharged there for the concrete program, which is where the memory layout is
-known. -/
+The `.storeConsts` expansion depends on the bitmap data accessible at its
+run-time state. A bound must apply to the source states actually reached by a
+run; `stateRelHOL` does not constrain the target state's `bitmaps` field. -/
 
 namespace SteppedFlapjack.StackRemoveSteps.CompCorrect
 
@@ -24,16 +20,6 @@ open Flapjack Flapjack.Compiler.Backend.StackLang Flapjack.Compiler.Backend.Stac
 open SteppedFlapjack.StackSteps
 
 variable {width : Nat} [NeZero width] {C F : Type}
-
-/-- Every target state related to a source by `stateRelHOL` has at most `B`
-bitmap words. The compiled `storeConsts` expansion runs `copyLoop` over the
-*target* state's bitmap list, so this is the side the bound must cover. The
-`stack_remove` correctness induction carries the hypothesis unchanged; it is
-discharged once, at the top, for the concrete program. -/
-def bitmapBound (B : Nat) : Prop :=
-  ∀ (jump : Bool) (bounds : BitVec width × BitVec width) (pointer : Nat)
-    (source target : StackSemStateFiniteExact width C F),
-    stateRelHOL jump bounds pointer source target → target.bitmaps.length ≤ B
 
 /-- Every program reached through `findCode` is reached through a `sptLookup` of
 the same code: `findCode` either looks the label up directly (`inl`) or reads a

@@ -27,7 +27,7 @@ theorem compCorrectIteWithinSteps (comparison : Cmp) (register : Nat) (operand :
     (source : StackSemStateFiniteExact width C F) (result : Option (StackSemResult width))
     (postSource target : StackSemStateFiniteExact width C F)
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
-    (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
+    (_B : Nat)
     (K : Nat) (Kpos : 1 ≤ K)
     (firstIH : ∀ (left right : WordLocW width),
       StackSemStateOps.getVar register source = some left →

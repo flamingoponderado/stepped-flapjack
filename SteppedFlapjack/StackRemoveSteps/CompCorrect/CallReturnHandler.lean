@@ -21,7 +21,7 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
     (source : StackSemStateFiniteExact width C F) (result : Option (StackSemResult width))
     (postSource target : StackSemStateFiniteExact width C F)
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
-    (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
+    (B : Nat)
     (K : Nat) (Kpos : 1 ≤ K)
     (caseBound : leafCost B bounds
       (.call (some (body, link, l1, l2)) dest (some (handler, hl1, hl2))) ≤ K)

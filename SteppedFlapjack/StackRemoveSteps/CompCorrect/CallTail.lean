@@ -21,7 +21,7 @@ theorem compCorrectCallTailWithinSteps (dest : Sum Nat Nat) (handler : Option (H
     (source : StackSemStateFiniteExact width C F) (result : Option (StackSemResult width))
     (postSource target : StackSemStateFiniteExact width C F)
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
-    (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
+    (_B : Nat)
     (K : Nat) (Kpos : 1 ≤ K)
     (calleeIH : ∀ (program : HolProg width),
       StackSemControl.findCode dest source.regs source.code = some program →

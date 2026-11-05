@@ -23,7 +23,7 @@ theorem compCorrectCallReturnNoneWithinSteps (body : HolProg width) (link l1 l2 
     (source : StackSemStateFiniteExact width C F) (result : Option (StackSemResult width))
     (postSource target : StackSemStateFiniteExact width C F)
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
-    (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
+    (B : Nat)
     (K : Nat) (Kpos : 1 ≤ K)
     (caseBound : leafCost B bounds (.call (some (body, link, l1, l2)) dest none) ≤ K)
     (calleeIH : ∀ (program : HolProg width),

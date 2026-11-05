@@ -27,7 +27,7 @@ theorem compCorrectJumpLowerWithinSteps (first second label : Nat)
     (source : StackSemStateFiniteExact width C F) (result : Option (StackSemResult width))
     (postSource target : StackSemStateFiniteExact width C F)
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
-    (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
+    (_B : Nat)
     (K : Nat) (Kpos : 1 ≤ K)
     (calleeIH : ∀ (left right : BitVec width) (program : HolProg width),
       getVar first source = some (.word left) → getVar second source = some (.word right) →
