@@ -1,5 +1,7 @@
 import SteppedFlapjack.StackRawCallSteps.LeafSteps
 import SteppedFlapjack.StackRawCallSteps.IfSteps
+import SteppedFlapjack.StackRawCallSteps.LoopSteps
+import SteppedFlapjack.StackRawCallSteps.SeqStandardSteps
 import SteppedFlapjack.StackAllocSteps.AllocGenPartialSteps
 import SteppedFlapjack.StackAllocSteps.AllocCorrectSteps
 import SteppedFlapjack.StackAllocSteps.AllocCallSteps
@@ -145,6 +147,10 @@ phase 4 of flapjack#1251:
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
 - `SteppedFlapjack.StackAllocSteps.UniformLeaf`: a uniform leaf factor for
   word widths of at least eight bits, independent of runtime stack length.
+- `SteppedFlapjack.StackRawCallSteps.SeqStandardSteps`: the ordinary sequence
+  case for raw-call step preservation.
+- `SteppedFlapjack.StackRawCallSteps.LoopSteps`: a nonincreasing step bound
+  for raw-call loop iterations, exits, and timeouts.
 - `SteppedFlapjack.StackRawCallSteps.IfSteps`: a nonincreasing step bound for
   raw-call conditional branches.
 - `SteppedFlapjack.StackRawCallSteps.LeafSteps`: exact one-step bounds for
