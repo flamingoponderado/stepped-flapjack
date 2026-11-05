@@ -23,6 +23,8 @@ import SteppedFlapjack.StackRemoveSteps.CompCorrect.Statement
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.Seq
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.Ite
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.Loop
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.JumpLower
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.RawCall
 
 /-!
 # stepped-flapjack
@@ -93,7 +95,14 @@ phase 4 of flapjack#1251:
   step bound to `compCorrectIf` (stepped-flapjack#2, phase C3, in progress);
 - `SteppedFlapjack.StackRemoveSteps.CompCorrect.Loop`: the `loop` case, adding
   the step bound to `compCorrectLoop` along both the exit and the reentry
-  branches (stepped-flapjack#2, phase C3, in progress).
+  branches (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.JumpLower`: the `jumpLower`
+  case. It runs a program from the code, so it takes the code-bound hypothesis
+  `codeBound` and concludes against the program-dependent factor `K`
+  (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.RawCall`: the `rawCall` case,
+  likewise concluding against `K` from the code bound (stepped-flapjack#2,
+  phase C3, in progress).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
