@@ -32,32 +32,30 @@ theorem compCorrectIteWithinSteps (comparison : Cmp) (register : Nat) (operand :
       StackSemStateOps.getVar register source = some left →
       StackSemStateOps.getVarImm (HolRegImm.toWordRegImm operand) source = some right →
       wordSemWordCmp comparison left right = some true →
-      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F)
-        (k : Nat) (off : BitVec width × BitVec width) (j : Bool),
-      evaluate (first, source) = (r, post) ∧ r ≠ some .error ∧
-        stateRelHOL j off k source t ∧ Flapjack.Compiler.Backend.StackProps.regBound first k →
+      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
+        evaluate (first, source) = (r, post) ∧ r ≠ some .error ∧
+        stateRelHOL jump bounds pointer source t ∧ Flapjack.Compiler.Backend.StackProps.regBound first pointer →
       ∃ clock postTarget,
-        evaluate (comp j off k first, {t with clock := clock + t.clock}) = (r, postTarget) ∧
+        evaluate (comp jump bounds pointer first, {t with clock := clock + t.clock}) = (r, postTarget) ∧
         (match r with
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
-         | _ => stateRelHOL j off k post postTarget) ∧
-        steps (comp j off k first, {t with clock := clock + t.clock}) ≤
-          leafCost B off first * steps (first, source))
+         | _ => stateRelHOL jump bounds pointer post postTarget) ∧
+        steps (comp jump bounds pointer first, {t with clock := clock + t.clock}) ≤
+          leafCost B bounds first * steps (first, source))
     (secondIH : ∀ (left right : WordLocW width),
       StackSemStateOps.getVar register source = some left →
       StackSemStateOps.getVarImm (HolRegImm.toWordRegImm operand) source = some right →
       wordSemWordCmp comparison left right = some false →
-      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F)
-        (k : Nat) (off : BitVec width × BitVec width) (j : Bool),
-      evaluate (second, source) = (r, post) ∧ r ≠ some .error ∧
-        stateRelHOL j off k source t ∧ Flapjack.Compiler.Backend.StackProps.regBound second k →
+      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
+        evaluate (second, source) = (r, post) ∧ r ≠ some .error ∧
+        stateRelHOL jump bounds pointer source t ∧ Flapjack.Compiler.Backend.StackProps.regBound second pointer →
       ∃ clock postTarget,
-        evaluate (comp j off k second, {t with clock := clock + t.clock}) = (r, postTarget) ∧
+        evaluate (comp jump bounds pointer second, {t with clock := clock + t.clock}) = (r, postTarget) ∧
         (match r with
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
-         | _ => stateRelHOL j off k post postTarget) ∧
-        steps (comp j off k second, {t with clock := clock + t.clock}) ≤
-          leafCost B off second * steps (second, source))
+         | _ => stateRelHOL jump bounds pointer post postTarget) ∧
+        steps (comp jump bounds pointer second, {t with clock := clock + t.clock}) ≤
+          leafCost B bounds second * steps (second, source))
     (hypothesis : evaluate (.ite comparison register operand first second, source) = (result, postSource) ∧
       result ≠ some .error ∧ stateRelHOL jump bounds pointer source target ∧
       Flapjack.Compiler.Backend.StackProps.regBound (.ite comparison register operand first second) pointer) :
@@ -99,8 +97,7 @@ theorem compCorrectIteWithinSteps (comparison : Cmp) (register : Nat) (operand :
         | false =>
           rw [compared] at sourceRun
           obtain ⟨clock, postTarget, targetRun, postRelation, targetSteps⟩ :=
-            secondIH left right leftLookup rightLookup compared result postSource target pointer bounds jump
-              ⟨sourceRun, notError, relation, lower.2.2.2⟩
+            secondIH left right leftLookup rightLookup compared result postSource target ⟨sourceRun, notError, relation, lower.2.2.2⟩
           have targetLeft : getVar register {target with clock := clock + target.clock} = some left :=
             leftEq.symm.trans leftLookup
           have targetRight : StackSemStateOps.getVarImm (HolRegImm.toWordRegImm operand)
@@ -143,8 +140,7 @@ theorem compCorrectIteWithinSteps (comparison : Cmp) (register : Nat) (operand :
         | true =>
           rw [compared] at sourceRun
           obtain ⟨clock, postTarget, targetRun, postRelation, targetSteps⟩ :=
-            firstIH left right leftLookup rightLookup compared result postSource target pointer bounds jump
-              ⟨sourceRun, notError, relation, lower.2.2.1⟩
+            firstIH left right leftLookup rightLookup compared result postSource target ⟨sourceRun, notError, relation, lower.2.2.1⟩
           have targetLeft : getVar register {target with clock := clock + target.clock} = some left :=
             leftEq.symm.trans leftLookup
           have targetRight : StackSemStateOps.getVarImm (HolRegImm.toWordRegImm operand)

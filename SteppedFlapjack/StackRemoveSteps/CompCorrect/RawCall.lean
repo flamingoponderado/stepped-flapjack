@@ -28,17 +28,16 @@ theorem compCorrectRawCallWithinSteps (label : Nat)
       sptLookup label source.code = some program → leafCost B bounds program ≤ K)
     (calleeIH : ∀ (frame body : HolProg width),
       sptLookup label source.code = some (.seq frame body) → source.clock ≠ 0 →
-      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F)
-        (k : Nat) (off : BitVec width × BitVec width) (j : Bool),
-      evaluate (body, decClock source) = (r, post) ∧ r ≠ some .error ∧
-        stateRelHOL j off k (decClock source) t ∧ Flapjack.Compiler.Backend.StackProps.regBound body k →
+      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
+        evaluate (body, decClock source) = (r, post) ∧ r ≠ some .error ∧
+        stateRelHOL jump bounds pointer (decClock source) t ∧ Flapjack.Compiler.Backend.StackProps.regBound body pointer →
       ∃ clock postTarget,
-        evaluate (comp j off k body, {t with clock := clock + t.clock}) = (r, postTarget) ∧
+        evaluate (comp jump bounds pointer body, {t with clock := clock + t.clock}) = (r, postTarget) ∧
         (match r with
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
-         | _ => stateRelHOL j off k post postTarget) ∧
-        steps (comp j off k body, {t with clock := clock + t.clock}) ≤
-          leafCost B off body * steps (body, decClock source))
+         | _ => stateRelHOL jump bounds pointer post postTarget) ∧
+        steps (comp jump bounds pointer body, {t with clock := clock + t.clock}) ≤
+          leafCost B bounds body * steps (body, decClock source))
     (hypothesis : evaluate (.rawCall label, source) = (result, postSource) ∧
       result ≠ some .error ∧ stateRelHOL jump bounds pointer source target ∧
       Flapjack.Compiler.Backend.StackProps.regBound (.rawCall label : HolProg width) pointer) :
@@ -112,8 +111,7 @@ theorem compCorrectRawCallWithinSteps (label : Nat)
           subst result
           subst postSource
           obtain ⟨clock, postTarget, targetRun, postRelation, calleeSteps⟩ :=
-            calleeIH frame body lookup zero bodyResult middle (decClock target) pointer bounds jump
-              ⟨bodyRun, notError, RelationLaws.stateRelDecClock jump bounds pointer source target relation, programBound.2⟩
+            calleeIH frame body lookup zero bodyResult middle (decClock target) ⟨bodyRun, notError, RelationLaws.stateRelDecClock jump bounds pointer source target relation, programBound.2⟩
           refine ⟨clock, postTarget, ?_, ?_, ?_⟩
           swap
           · cases bodyResult with

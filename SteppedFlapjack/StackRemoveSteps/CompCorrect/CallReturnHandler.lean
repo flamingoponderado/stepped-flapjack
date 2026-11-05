@@ -30,50 +30,47 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
     (calleeIH : ∀ (program : HolProg width),
       StackSemControl.findCode dest (source.regs.eraseEq link) source.code = some program →
       source.clock ≠ 0 →
-      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F)
-        (k : Nat) (off : BitVec width × BitVec width) (j : Bool),
-      evaluate (program, decClock (setVar link (.loc l1 l2) source)) = (r, post) ∧ r ≠ some .error ∧
-        stateRelHOL j off k (decClock (setVar link (.loc l1 l2) source)) t ∧
-        Flapjack.Compiler.Backend.StackProps.regBound program k →
+      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
+        evaluate (program, decClock (setVar link (.loc l1 l2) source)) = (r, post) ∧ r ≠ some .error ∧
+        stateRelHOL jump bounds pointer (decClock (setVar link (.loc l1 l2) source)) t ∧
+        Flapjack.Compiler.Backend.StackProps.regBound program pointer →
       ∃ clock postTarget,
-        evaluate (comp j off k program, {t with clock := clock + t.clock}) = (r, postTarget) ∧
+        evaluate (comp jump bounds pointer program, {t with clock := clock + t.clock}) = (r, postTarget) ∧
         (match r with
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
-         | _ => stateRelHOL j off k post postTarget) ∧
-        steps (comp j off k program, {t with clock := clock + t.clock}) ≤
-          leafCost B off program * steps (program, decClock (setVar link (.loc l1 l2) source)))
+         | _ => stateRelHOL jump bounds pointer post postTarget) ∧
+        steps (comp jump bounds pointer program, {t with clock := clock + t.clock}) ≤
+          leafCost B bounds program * steps (program, decClock (setVar link (.loc l1 l2) source)))
     (returnIH : ∀ (program : HolProg width) (middle : StackSemStateFiniteExact width C F),
       StackSemControl.findCode dest (source.regs.eraseEq link) source.code = some program →
       source.clock ≠ 0 →
       evaluate (program, decClock (setVar link (.loc l1 l2) source)) =
         (some (.result (.loc l1 l2)), middle) →
-      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F)
-        (k : Nat) (off : BitVec width × BitVec width) (j : Bool),
-      evaluate (body, middle) = (r, post) ∧ r ≠ some .error ∧
-        stateRelHOL j off k (middle) t ∧ Flapjack.Compiler.Backend.StackProps.regBound body k →
+      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
+        evaluate (body, middle) = (r, post) ∧ r ≠ some .error ∧
+        stateRelHOL jump bounds pointer (middle) t ∧ Flapjack.Compiler.Backend.StackProps.regBound body pointer →
       ∃ clock postTarget,
-        evaluate (comp j off k body, {t with clock := clock + t.clock}) = (r, postTarget) ∧
+        evaluate (comp jump bounds pointer body, {t with clock := clock + t.clock}) = (r, postTarget) ∧
         (match r with
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
-         | _ => stateRelHOL j off k post postTarget) ∧
-        steps (comp j off k body, {t with clock := clock + t.clock}) ≤
-          leafCost B off body * steps (body, middle))
+         | _ => stateRelHOL jump bounds pointer post postTarget) ∧
+        steps (comp jump bounds pointer body, {t with clock := clock + t.clock}) ≤
+          leafCost B bounds body * steps (body, middle))
     (handlerIH : ∀ (program : HolProg width) (middle : StackSemStateFiniteExact width C F),
       StackSemControl.findCode dest (source.regs.eraseEq link) source.code = some program →
       source.clock ≠ 0 →
       evaluate (program, decClock (setVar link (.loc l1 l2) source)) =
         (some (.exception (.loc hl1 hl2)), middle) →
-      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F)
-        (k : Nat) (off : BitVec width × BitVec width) (j : Bool),
-      evaluate (handler, middle) = (r, post) ∧ r ≠ some .error ∧
-        stateRelHOL j off k (middle) t ∧ Flapjack.Compiler.Backend.StackProps.regBound handler k →
+      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
+        evaluate (handler, middle) = (r, post) ∧ r ≠ some .error ∧
+        stateRelHOL jump bounds pointer (middle) t ∧ Flapjack.Compiler.Backend.StackProps.regBound handler pointer →
       ∃ clock postTarget,
-        evaluate (comp j off k handler, {t with clock := clock + t.clock}) = (r, postTarget) ∧
+        evaluate (comp jump bounds pointer handler, {t with clock := clock + t.clock}) = (r, postTarget) ∧
         (match r with
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
-         | _ => stateRelHOL j off k post postTarget) ∧
-        steps (comp j off k handler, {t with clock := clock + t.clock}) ≤
-          leafCost B off handler * steps (handler, middle))
+         | _ => stateRelHOL jump bounds pointer post postTarget) ∧
+        steps (comp jump bounds pointer handler, {t with clock := clock + t.clock}) ≤
+          leafCost B bounds handler * steps (handler, middle))
     (hypothesis : evaluate (.call (some (body, link, l1, l2)) dest (some (handler, hl1, hl2)), source) =
         (result, postSource) ∧ result ≠ some .error ∧
       stateRelHOL jump bounds pointer source target ∧
@@ -168,11 +165,9 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
             subst value
             obtain ⟨first, middleTarget, calleeRun, middleRelation, calleeSteps⟩ :=
               calleeIH program lookup zero (some (.result (.loc l1 l2))) middle
-                (decClock (setVar link (.loc l1 l2) target)) pointer bounds jump
-                ⟨bodyRun, by simp, entry, programRegBound⟩
+                (decClock (setVar link (.loc l1 l2) target)) ⟨bodyRun, by simp, entry, programRegBound⟩
             obtain ⟨second, postTarget, returnRun, postRelation, returnSteps⟩ :=
-              returnIH program middle lookup zero bodyRun result postSource middleTarget pointer bounds jump
-                ⟨sourceRun, notError, middleRelation, bodyBound⟩
+              returnIH program middle lookup zero bodyRun result postSource middleTarget ⟨sourceRun, notError, middleRelation, bodyBound⟩
             have boosted := Flapjack.Compiler.Backend.StackRemove.CompCorrect.CallReturnNone.calleeAllowance
               (comp jump bounds pointer program) target middleTarget
               link l1 l2 first second targetNonzero calleeRun
@@ -265,8 +260,7 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
           subst postSource
           obtain ⟨clock, postTarget, targetRun, postRelation, calleeSteps⟩ :=
             calleeIH program lookup zero (some (.halt n)) middle
-              (decClock (setVar link (.loc l1 l2) target)) pointer bounds jump
-              ⟨bodyRun, by simp, entry, programRegBound⟩
+              (decClock (setVar link (.loc l1 l2) target)) ⟨bodyRun, by simp, entry, programRegBound⟩
           refine ⟨clock, postTarget, ?_, postRelation, ?_⟩
           · have nonzero : clock + target.clock ≠ 0 := by omega
             simp only [comp]
@@ -314,8 +308,7 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
           subst postSource
           obtain ⟨clock, postTarget, targetRun, postRelation, calleeSteps⟩ :=
             calleeIH program lookup zero (some (.timeOut)) middle
-              (decClock (setVar link (.loc l1 l2) target)) pointer bounds jump
-              ⟨bodyRun, by simp, entry, programRegBound⟩
+              (decClock (setVar link (.loc l1 l2) target)) ⟨bodyRun, by simp, entry, programRegBound⟩
           refine ⟨clock, postTarget, ?_, postRelation, ?_⟩
           · have nonzero : clock + target.clock ≠ 0 := by omega
             simp only [comp]
@@ -363,8 +356,7 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
           subst postSource
           obtain ⟨clock, postTarget, targetRun, postRelation, calleeSteps⟩ :=
             calleeIH program lookup zero (some (.finalFFI event)) middle
-              (decClock (setVar link (.loc l1 l2) target)) pointer bounds jump
-              ⟨bodyRun, by simp, entry, programRegBound⟩
+              (decClock (setVar link (.loc l1 l2) target)) ⟨bodyRun, by simp, entry, programRegBound⟩
           refine ⟨clock, postTarget, ?_, postRelation, ?_⟩
           · have nonzero : clock + target.clock ≠ 0 := by omega
             simp only [comp]
@@ -416,11 +408,9 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
             subst value
             obtain ⟨first, middleTarget, calleeRun, middleRelation, calleeSteps⟩ :=
               calleeIH program lookup zero (some (.exception (.loc hl1 hl2))) middle
-                (decClock (setVar link (.loc l1 l2) target)) pointer bounds jump
-                ⟨bodyRun, by simp, entry, programRegBound⟩
+                (decClock (setVar link (.loc l1 l2) target)) ⟨bodyRun, by simp, entry, programRegBound⟩
             obtain ⟨second, postTarget, returnRun, postRelation, handlerSteps⟩ :=
-              handlerIH program middle lookup zero bodyRun result postSource middleTarget pointer bounds jump
-                ⟨sourceRun, notError, middleRelation, handlerBound⟩
+              handlerIH program middle lookup zero bodyRun result postSource middleTarget ⟨sourceRun, notError, middleRelation, handlerBound⟩
             have boosted := Flapjack.Compiler.Backend.StackRemove.CompCorrect.CallReturnHandler.exceptionAllowance
               (comp jump bounds pointer program) target middleTarget
               link l1 l2 hl1 hl2 first second targetNonzero calleeRun

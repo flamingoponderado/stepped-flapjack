@@ -29,32 +29,30 @@ theorem compCorrectLoopWithinSteps (body : HolProg width)
     (postSource target : StackSemStateFiniteExact width C F)
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
     (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
-    (bodyIH : ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F)
-      (k : Nat) (off : BitVec width × BitVec width) (j : Bool),
+    (bodyIH : ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
       evaluate (body, source) = (r, post) ∧ r ≠ some .error ∧
-        stateRelHOL j off k source t ∧ Flapjack.Compiler.Backend.StackProps.regBound body k →
+        stateRelHOL jump bounds pointer source t ∧ Flapjack.Compiler.Backend.StackProps.regBound body pointer →
       ∃ clock postTarget,
-        evaluate (comp j off k body, {t with clock := clock + t.clock}) = (r, postTarget) ∧
+        evaluate (comp jump bounds pointer body, {t with clock := clock + t.clock}) = (r, postTarget) ∧
         (match r with
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
-         | _ => stateRelHOL j off k post postTarget) ∧
-        steps (comp j off k body, {t with clock := clock + t.clock}) ≤
-          leafCost B off body * steps (body, source))
+         | _ => stateRelHOL jump bounds pointer post postTarget) ∧
+        steps (comp jump bounds pointer body, {t with clock := clock + t.clock}) ≤
+          leafCost B bounds body * steps (body, source))
     (reentryIH : ∀ (bodyResult : Option (StackSemResult width)) (middle : StackSemStateFiniteExact width C F),
       evaluate (body, source) = (bodyResult, middle) →
       StackSemControl.contLoop bodyResult = true → middle.clock ≠ 0 →
-      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F)
-        (k : Nat) (off : BitVec width × BitVec width) (j : Bool),
-      evaluate (.loop body, decClock middle) = (r, post) ∧ r ≠ some .error ∧
-        stateRelHOL j off k (decClock middle) t ∧
-        Flapjack.Compiler.Backend.StackProps.regBound (.loop body) k →
+      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
+        evaluate (.loop body, decClock middle) = (r, post) ∧ r ≠ some .error ∧
+        stateRelHOL jump bounds pointer (decClock middle) t ∧
+        Flapjack.Compiler.Backend.StackProps.regBound (.loop body) pointer →
       ∃ clock postTarget,
-        evaluate (comp j off k (.loop body), {t with clock := clock + t.clock}) = (r, postTarget) ∧
+        evaluate (comp jump bounds pointer (.loop body), {t with clock := clock + t.clock}) = (r, postTarget) ∧
         (match r with
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
-         | _ => stateRelHOL j off k post postTarget) ∧
-        steps (comp j off k (.loop body), {t with clock := clock + t.clock}) ≤
-          leafCost B off (.loop body) * steps (.loop body, decClock middle))
+         | _ => stateRelHOL jump bounds pointer post postTarget) ∧
+        steps (comp jump bounds pointer (.loop body), {t with clock := clock + t.clock}) ≤
+          leafCost B bounds (.loop body) * steps (.loop body, decClock middle))
     (hypothesis : evaluate (.loop body, source) = (result, postSource) ∧
       result ≠ some .error ∧ stateRelHOL jump bounds pointer source target ∧
       Flapjack.Compiler.Backend.StackProps.regBound (.loop body) pointer) :
@@ -72,8 +70,7 @@ theorem compCorrectLoopWithinSteps (body : HolProg width)
   have bodyNotError := Flapjack.Compiler.Backend.StackRemove.CompCorrect.Loop.loopBodyNotError
     body source middle postSource bodyResult result bodyRun sourceRun notError
   obtain ⟨firstClock, middleTarget, firstTargetRun, bodyPost, bodySteps⟩ :=
-    bodyIH bodyResult middle target pointer bounds jump
-      ⟨bodyRun, bodyNotError, relation, by simpa only [Flapjack.Compiler.Backend.StackProps.regBound] using lower⟩
+    bodyIH bodyResult middle target ⟨bodyRun, bodyNotError, relation, by simpa only [Flapjack.Compiler.Backend.StackProps.regBound] using lower⟩
   by_cases continues : StackSemControl.contLoop bodyResult = true
   · have middleRelation : stateRelHOL jump bounds pointer middle middleTarget := by
       rcases Flapjack.Compiler.Backend.StackProps.contLoopImp bodyResult continues with same | same
@@ -119,7 +116,7 @@ theorem compCorrectLoopWithinSteps (body : HolProg width)
       have decRelation := RelationLaws.stateRelDecClock jump bounds pointer middle middleTarget middleRelation
       obtain ⟨secondClock, postTarget, secondTargetRun, postRelation, reentrySteps⟩ :=
         reentryIH bodyResult middle bodyRun continues zero result postSource
-          (decClock middleTarget) pointer bounds jump ⟨sourceRun, notError, decRelation, lower⟩
+          (decClock middleTarget) ⟨sourceRun, notError, decRelation, lower⟩
       have notTimeout : bodyResult ≠ some .timeOut := by
         rcases Flapjack.Compiler.Backend.StackProps.contLoopImp bodyResult continues with same | same <;> simp [same]
       have extraRun := Flapjack.Compiler.Backend.StackProps.evaluateAddClock secondClock

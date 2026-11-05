@@ -28,17 +28,16 @@ theorem compCorrectCallTailWithinSteps (dest : Sum Nat Nat) (handler : Option (H
     (calleeIH : ∀ (program : HolProg width),
       StackSemControl.findCode dest source.regs source.code = some program →
       handler = none → source.clock ≠ 0 →
-      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F)
-        (k : Nat) (off : BitVec width × BitVec width) (j : Bool),
-      evaluate (program, decClock source) = (r, post) ∧ r ≠ some .error ∧
-        stateRelHOL j off k (decClock source) t ∧ Flapjack.Compiler.Backend.StackProps.regBound program k →
+      ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
+        evaluate (program, decClock source) = (r, post) ∧ r ≠ some .error ∧
+        stateRelHOL jump bounds pointer (decClock source) t ∧ Flapjack.Compiler.Backend.StackProps.regBound program pointer →
       ∃ clock postTarget,
-        evaluate (comp j off k program, {t with clock := clock + t.clock}) = (r, postTarget) ∧
+        evaluate (comp jump bounds pointer program, {t with clock := clock + t.clock}) = (r, postTarget) ∧
         (match r with
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
-         | _ => stateRelHOL j off k post postTarget) ∧
-        steps (comp j off k program, {t with clock := clock + t.clock}) ≤
-          leafCost B off program * steps (program, decClock source))
+         | _ => stateRelHOL jump bounds pointer post postTarget) ∧
+        steps (comp jump bounds pointer program, {t with clock := clock + t.clock}) ≤
+          leafCost B bounds program * steps (program, decClock source))
     (hypothesis : evaluate (.call none dest handler, source) = (result, postSource) ∧
       result ≠ some .error ∧ stateRelHOL jump bounds pointer source target ∧
       Flapjack.Compiler.Backend.StackProps.regBound (.call none dest handler : HolProg width) pointer) :
@@ -103,8 +102,7 @@ theorem compCorrectCallTailWithinSteps (dest : Sum Nat Nat) (handler : Option (H
           subst result
           subst postSource
           obtain ⟨clock, postTarget, targetRun, postRelation, calleeSteps⟩ :=
-            calleeIH program lookup rfl zero bodyResult middle (decClock target) pointer bounds jump
-              ⟨bodyRun, notError, RelationLaws.stateRelDecClock jump bounds pointer source target relation, bodyBound⟩
+            calleeIH program lookup rfl zero bodyResult middle (decClock target) ⟨bodyRun, notError, RelationLaws.stateRelDecClock jump bounds pointer source target relation, bodyBound⟩
           refine ⟨clock, postTarget, ?_, ?_, ?_⟩
           swap
           · cases bodyResult with
