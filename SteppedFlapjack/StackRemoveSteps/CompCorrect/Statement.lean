@@ -25,13 +25,15 @@ open SteppedFlapjack.StackSteps
 
 variable {width : Nat} [NeZero width] {C F : Type}
 
-/-- Every source state related to a target by `stateRelHOL` has at most `B`
-bitmap words. The `stack_remove` correctness induction carries this hypothesis
-unchanged; it is discharged once, at the top, for the concrete program. -/
+/-- Every target state related to a source by `stateRelHOL` has at most `B`
+bitmap words. The compiled `storeConsts` expansion runs `copyLoop` over the
+*target* state's bitmap list, so this is the side the bound must cover. The
+`stack_remove` correctness induction carries the hypothesis unchanged; it is
+discharged once, at the top, for the concrete program. -/
 def bitmapBound (B : Nat) : Prop :=
   ∀ (jump : Bool) (bounds : BitVec width × BitVec width) (pointer : Nat)
     (source target : StackSemStateFiniteExact width C F),
-    stateRelHOL jump bounds pointer source target → source.bitmaps.length ≤ B
+    stateRelHOL jump bounds pointer source target → target.bitmaps.length ≤ B
 
 /-- Every program reached through `findCode` is reached through a `sptLookup` of
 the same code: `findCode` either looks the label up directly (`inl`) or reads a
