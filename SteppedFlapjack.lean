@@ -21,6 +21,8 @@ import SteppedFlapjack.StackRemoveSteps.LeafCostBounds
 import SteppedFlapjack.StackRemoveSteps.LeafSteps
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.Statement
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.Seq
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.Ite
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.Loop
 
 /-!
 # stepped-flapjack
@@ -86,7 +88,12 @@ phase 4 of flapjack#1251:
   (stepped-flapjack#2, phase C3, in progress);
 - `SteppedFlapjack.StackRemoveSteps.CompCorrect.Seq`: the `Seq` induction case of
   the step-counted correctness theorem, adding `steps <= leafCost * steps` to
-  Flapjack's `compCorrectSeq` (stepped-flapjack#2, phase C3, in progress).
+  Flapjack's `compCorrectSeq` (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.Ite`: the `ite` case, adding the
+  step bound to `compCorrectIf` (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.Loop`: the `loop` case, adding
+  the step bound to `compCorrectLoop` along both the exit and the reentry
+  branches (stepped-flapjack#2, phase C3, in progress).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
