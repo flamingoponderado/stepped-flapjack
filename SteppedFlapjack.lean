@@ -25,6 +25,9 @@ import SteppedFlapjack.StackRemoveSteps.CompCorrect.Ite
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.Loop
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.JumpLower
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.RawCall
+import SteppedFlapjack.StackRemoveSteps.CallCostBounds
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallTail
+import SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnNone
 
 /-!
 # stepped-flapjack
@@ -102,7 +105,16 @@ phase 4 of flapjack#1251:
   (stepped-flapjack#2, phase C3, in progress);
 - `SteppedFlapjack.StackRemoveSteps.CompCorrect.RawCall`: the `rawCall` case,
   likewise concluding against `K` from the code bound (stepped-flapjack#2,
-  phase C3, in progress).
+  phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CallCostBounds`: `leafCost` dominates the
+  `call` constructor's return and handler bodies (stepped-flapjack#2, phase C3,
+  in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.CallTail`: the `ret = none`
+  `call` case, taking the code bound for the callee (stepped-flapjack#2,
+  phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CompCorrect.CallReturnNone`: the returning
+  `call` with no handler, threading both the callee's code bound and the return
+  continuation's structural bound (stepped-flapjack#2, phase C3, in progress).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate

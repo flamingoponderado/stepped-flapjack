@@ -103,8 +103,4 @@ theorem leafCost_loop (B : Nat) (bounds : BitVec width × BitVec width)
   simp only [leafCost, rawLeafCost]
   omega
 
-/-! The `.call` case needs `rawLeafCost` unfolded at a `match` on `ret`/`handler`,
-which the equation compiler does not expose as a rewrite lemma; it is left to the
-adapted `call` case file, which has the concrete `ret`/`handler` shapes. -/
-
 end SteppedFlapjack.StackRemoveSteps
