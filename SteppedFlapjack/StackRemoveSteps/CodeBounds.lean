@@ -294,4 +294,43 @@ theorem instHOL_code (i : HolInst width) (s t : StackSemStateFiniteExact width C
     all_goals try (rw [← h]; exact ⟨rfl, rfl⟩)
     all_goals try (exact fpToInt_code _ _ _ _ h)
     all_goals try (exact fpFromInt_code _ _ _ _ h)
+theorem sptAListLookup_mem {α : Type} (key : Nat) (entries : List (Nat × α)) (value : α)
+    (h : sptAListLookup key entries = some value) : (key, value) ∈ entries := by
+  induction entries with
+  | nil => simp [sptAListLookup] at h
+  | cons entry entries ih =>
+    obtain ⟨other, value'⟩ := entry
+    by_cases hk : key = other
+    · subst hk
+      simp [sptAListLookup] at h
+      simp [h]
+    · simp [sptAListLookup, hk] at h
+      exact List.mem_cons_of_mem _ (ih h)
+
+theorem install_codeBound {B K : Nat} {bounds : BitVec width × BitVec width}
+    (s : StackSemStateFiniteExact width C F)
+    (progs : List (Nat × HolProg width))
+    (hcode : codeBound B bounds K s)
+    (horacle : ∀ name prog, (name, prog) ∈ progs → leafCost B bounds prog ≤ K)
+    (label : Nat) (program : HolProg width)
+    (h : sptLookup label (sptUnion s.code (sptFromAList progs)) = some program) :
+    leafCost B bounds program ≤ K := by
+  rw [sptLookup_sptUnion] at h
+  cases hl : sptLookup label s.code with
+  | some v =>
+    simp only [hl] at h
+    simp only [Option.some.injEq] at h
+    exact hcode label program (h ▸ hl)
+  | none =>
+    simp only [hl] at h
+    rw [sptLookup_sptFromAList] at h
+    exact horacle label program (sptAListLookup_mem label progs program h)
+theorem install_oracleBound {B K : Nat} {bounds : BitVec width × BitVec width}
+    (s : StackSemStateFiniteExact width C F)
+    (h : oracleBound B bounds K s)
+    (index name : Nat) (program : HolProg width)
+    (hmem : (name, program) ∈ ((holShiftSeq 1 s.compileOracle) index).2.1) :
+    leafCost B bounds program ≤ K := by
+  simp only [holShiftSeq] at hmem
+  exact h (index + 1) name program hmem
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
