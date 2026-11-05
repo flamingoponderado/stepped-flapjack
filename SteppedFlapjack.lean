@@ -4,6 +4,7 @@ import SteppedFlapjack.StackAllocSteps.AllocCallSteps
 import SteppedFlapjack.StackAllocSteps.AllocPassSteps
 import SteppedFlapjack.StackAllocSteps.StoreConstsSteps
 import SteppedFlapjack.StackAllocSteps.LeafSteps
+import SteppedFlapjack.StackAllocSteps.ControlSteps
 import SteppedFlapjack.StackAllocSteps.AllocGenFullSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveLoopSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveDataSteps
@@ -134,6 +135,8 @@ phase 4 of flapjack#1251:
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackAllocSteps.ControlSteps`: step-counted sequence,
+  conditional, and loop cases for the stack-allocation simulation.
 - `SteppedFlapjack.StackAllocSteps.LeafSteps`: a combined bound for every
   nonrecursive source statement in stack allocation.
 - `SteppedFlapjack.StackAllocSteps.StoreConstsSteps`: the store-constants pass
