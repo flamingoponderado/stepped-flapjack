@@ -944,4 +944,259 @@ theorem codeBounds_seq {B K : Nat} {bounds : BitVec width × BitVec width}
     dsimp only at h'
     obtain ⟨-, rfl⟩ := h'
     exact hA
+theorem codeBounds_codeBufferWrite {B K : Nat} {bounds : BitVec width × BitVec width}
+    (r1 r2 : Nat) (s t : StackSemStateFiniteExact width C F)
+    (r : Option (StackSemResult width))
+    (h : evaluate ((.codeBufferWrite r1 r2 : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  have hp : t.code = s.code ∧ t.compileOracle = s.compileOracle := by
+    cases h1 : getVar r1 s with
+    | none =>
+      rw [evaluate_codeBufferWrite] at h
+      simp only [h1] at h
+      obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+    | some v1 =>
+      cases v1 with
+      | loc l o =>
+        rw [evaluate_codeBufferWrite] at h
+        simp only [h1] at h
+        obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+      | word w1 =>
+        cases h2 : getVar r2 s with
+        | none =>
+          rw [evaluate_codeBufferWrite] at h
+          simp only [h1, h2] at h
+          obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+        | some v2 =>
+          cases v2 with
+          | loc l o =>
+            rw [evaluate_codeBufferWrite] at h
+            simp only [h1, h2] at h
+            obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+          | word w2 =>
+            rw [evaluate_codeBufferWrite] at h
+            simp only [h1, h2] at h
+            cases hw : wordSemBufferWrite s.codeBuffer w1 (BitVec.setWidth 8 w2) with
+            | some newCb =>
+              simp only [hw] at h
+              obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+            | none =>
+              simp only [hw] at h
+              obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+  exact codeBounds_transfer hp.1 hp.2 hcode horacle
+theorem codeBounds_dataBufferWrite {B K : Nat} {bounds : BitVec width × BitVec width}
+    (r1 r2 : Nat) (s t : StackSemStateFiniteExact width C F)
+    (r : Option (StackSemResult width))
+    (h : evaluate ((.dataBufferWrite r1 r2 : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  by_cases hs : ¬ s.useStack
+  · rw [evaluate_dataBufferWrite] at h
+    simp only [if_pos hs] at h
+    obtain ⟨-, rfl⟩ := h
+    exact ⟨hcode, horacle⟩
+  · have hp : t.code = s.code ∧ t.compileOracle = s.compileOracle := by
+      cases h1 : getVar r1 s with
+      | none =>
+        rw [evaluate_dataBufferWrite] at h
+        simp only [if_neg hs, h1] at h
+        obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+      | some v1 =>
+        cases v1 with
+        | loc l o =>
+          rw [evaluate_dataBufferWrite] at h
+          simp only [if_neg hs, h1] at h
+          obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+        | word w1 =>
+          cases h2 : getVar r2 s with
+          | none =>
+            rw [evaluate_dataBufferWrite] at h
+            simp only [if_neg hs, h1, h2] at h
+            obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+          | some v2 =>
+            cases v2 with
+            | loc l o =>
+              rw [evaluate_dataBufferWrite] at h
+              simp only [if_neg hs, h1, h2] at h
+              obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+            | word w2 =>
+              rw [evaluate_dataBufferWrite] at h
+              simp only [if_neg hs, h1, h2] at h
+              cases hw : wordSemBufferWrite s.dataBuffer w1 w2 with
+              | some newCb =>
+                simp only [hw] at h
+                obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+              | none =>
+                simp only [hw] at h
+                obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
+    exact codeBounds_transfer hp.1 hp.2 hcode horacle
+theorem codeBounds_alloc {B K : Nat} {bounds : BitVec width × BitVec width}
+    (n : Nat) (s t : StackSemStateFiniteExact width C F)
+    (r : Option (StackSemResult width))
+    (h : evaluate ((.alloc n : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  cases hv : getVar n s with
+  | none =>
+    rw [evaluate_alloc] at h
+    simp only [hv] at h
+    split_ifs at h <;> obtain ⟨-, rfl⟩ := h <;> exact ⟨hcode, horacle⟩
+  | some v =>
+    cases v with
+    | loc l o =>
+      rw [evaluate_alloc] at h
+      simp only [hv] at h
+      split_ifs at h <;> obtain ⟨-, rfl⟩ := h <;> exact ⟨hcode, horacle⟩
+    | word w =>
+      rw [evaluate_alloc] at h
+      simp only [hv] at h
+      split_ifs at h
+      · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+      · have hp := alloc_code w s r t h
+        exact codeBounds_transfer hp.1 hp.2 hcode horacle
+
+theorem codeBounds_storeConsts {B K : Nat} {bounds : BitVec width × BitVec width}
+    (t1 t2 : Nat) (stubOpt : Option Nat) (s t : StackSemStateFiniteExact width C F)
+    (r : Option (StackSemResult width))
+    (h : evaluate ((.storeConsts t1 t2 stubOpt : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  rw [evaluate_storeConsts] at h
+  split_ifs at h
+  all_goals try (obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩)
+  have hp := storeConstSem_code (resultWidth := width) t1 t2 s t (congrArg Prod.snd h)
+  exact codeBounds_transfer hp.1 hp.2 hcode horacle
+
+theorem codeBounds_ite {B K : Nat} {bounds : BitVec width × BitVec width}
+    (cmp : Cmp) (r1 : Nat) (ri : HolRegImm width) (c1 c2 : HolProg width)
+    (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.ite cmp r1 ri c1 c2 : HolProg width), s) = (r, t))
+    (ih1 : ∀ r t, evaluate (c1, s) = (r, t) → codeBound B bounds K t ∧ oracleBound B bounds K t)
+    (ih2 : ∀ r t, evaluate (c2, s) = (r, t) → codeBound B bounds K t ∧ oracleBound B bounds K t)
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  cases h1 : getVar r1 s with
+  | none =>
+    rw [evaluate_ite] at h; simp only [h1] at h
+    obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+  | some x =>
+    cases h2 : StackSemStateOps.getVarImm (HolRegImm.toWordRegImm ri) s with
+    | none =>
+      rw [evaluate_ite] at h; simp only [h1, h2] at h
+      obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+    | some y =>
+      cases hc : wordSemWordCmp cmp x y with
+      | none =>
+        rw [evaluate_ite] at h; simp only [h1, h2, hc] at h
+        obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+      | some b =>
+        cases b <;> rw [evaluate_ite] at h <;> simp only [h1, h2, hc] at h
+        · exact ih2 r t h
+        · exact ih1 r t h
+
+theorem codeBounds_stackLoadAny {B K : Nat} {bounds : BitVec width × BitVec width}
+    (r0 rn : Nat) (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.stackLoadAny r0 rn : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  cases hv : getVar rn s with
+  | none =>
+    rw [evaluate_stackLoadAny] at h; simp only [hv] at h
+    split_ifs at h
+    · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+    · obtain ⟨-, rfl⟩ := h
+      exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+  | some v =>
+    cases v with
+    | loc l o =>
+      rw [evaluate_stackLoadAny] at h; simp only [hv] at h
+      split_ifs at h
+      · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+      · obtain ⟨-, rfl⟩ := h
+        exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+    | word w =>
+      rw [evaluate_stackLoadAny] at h; simp only [hv] at h
+      split_ifs at h
+      · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+      · obtain ⟨-, rfl⟩ := h
+        exact codeBounds_transfer (setVar_code _ _ _).1 (setVar_code _ _ _).2 hcode horacle
+      · obtain ⟨-, rfl⟩ := h
+        exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+
+theorem codeBounds_stackStoreAny {B K : Nat} {bounds : BitVec width × BitVec width}
+    (r0 rn : Nat) (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.stackStoreAny r0 rn : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  cases h1 : getVar r0 s with
+  | none =>
+    rw [evaluate_stackStoreAny] at h; simp only [h1] at h
+    split_ifs at h
+    · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+    · obtain ⟨-, rfl⟩ := h
+      exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+  | some value =>
+    cases h2 : getVar rn s with
+    | none =>
+      rw [evaluate_stackStoreAny] at h; simp only [h1, h2] at h
+      split_ifs at h
+      · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+      · obtain ⟨-, rfl⟩ := h
+        exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+    | some v =>
+      cases v with
+      | loc l o =>
+        rw [evaluate_stackStoreAny] at h; simp only [h1, h2] at h
+        split_ifs at h
+        · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+        · obtain ⟨-, rfl⟩ := h
+          exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+      | word w =>
+        rw [evaluate_stackStoreAny] at h; simp only [h1, h2] at h
+        split_ifs at h
+        · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+        · obtain ⟨-, rfl⟩ := h; exact codeBounds_transfer rfl rfl hcode horacle
+        · obtain ⟨-, rfl⟩ := h
+          exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+
+theorem codeBounds_shMemOp {B K : Nat} {bounds : BitVec width × BitVec width}
+    (op : HolMemop) (r0 a : Nat) (w : BitVec width)
+    (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.shMemOp op r0 (.addr a w) : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  cases ha : StackSemExpressions.wordExp s (.op .add [.var a, .const w]) with
+  | none =>
+    rw [evaluate_shMemOp] at h; simp only [ha] at h
+    obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+  | some address =>
+    rw [evaluate_shMemOp] at h; simp only [ha] at h
+    split_ifs at h
+    · obtain ⟨-, rfl⟩ := h
+      exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+    · have hh := congrArg Prod.snd h
+      have hc := stackShMemOp_code _ _ _ _ _ hh
+      have ho := stackShMemOp_oracle _ _ _ _ _ hh
+      exact codeBounds_transfer (hc.trans (decClock_code s).1) (ho.trans (decClock_code s).2) hcode horacle
+
+theorem codeBounds_loop {B K : Nat} {bounds : BitVec width × BitVec width}
+    (body : HolProg width) (s t : StackSemStateFiniteExact width C F)
+    (r : Option (StackSemResult width))
+    (h : evaluate ((.loop body : HolProg width), s) = (r, t))
+    (ihBody : ∀ r t, evaluate (body, s) = (r, t) → codeBound B bounds K t ∧ oracleBound B bounds K t)
+    (ihLoop : ∀ (middle : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width)) (t : StackSemStateFiniteExact width C F), evaluate ((.loop body : HolProg width), decClock middle) = (r, t) →
+      codeBound B bounds K middle → oracleBound B bounds K middle →
+      codeBound B bounds K t ∧ oracleBound B bounds K t)
+    : codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  rcases he : evaluate (body, s) with ⟨res, post⟩
+  have hp := ihBody res post he
+  rw [evaluate_loop, StackSemEvaluateClock.fixClockEvaluate, he] at h
+  dsimp only at h
+  split_ifs at h
+  · obtain ⟨-, rfl⟩ := h
+    exact codeBounds_transfer (emptyEnv_code post).1 (emptyEnv_code post).2 hp.1 hp.2
+  · exact ihLoop post r t h hp.1 hp.2
+  · obtain ⟨-, rfl⟩ := h; exact hp
+
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
