@@ -11,6 +11,7 @@ import SteppedFlapjack.StackRawCallSteps.CallTailSteps
 import SteppedFlapjack.StackRawCallSteps.CallReturnSupport
 import SteppedFlapjack.StackRawCallSteps.CallReturnSteps
 import SteppedFlapjack.StackRawCallSteps.CompCorrect
+import SteppedFlapjack.StackRawCallSteps.EntrySteps
 import SteppedFlapjack.StackAllocSteps.AllocGenPartialSteps
 import SteppedFlapjack.StackAllocSteps.AllocCorrectSteps
 import SteppedFlapjack.StackAllocSteps.AllocCallSteps
@@ -23,6 +24,7 @@ import SteppedFlapjack.StackAllocSteps.CallSteps
 import SteppedFlapjack.StackAllocSteps.CallReturnSteps
 import SteppedFlapjack.StackAllocSteps.CompCorrect
 import SteppedFlapjack.StackAllocSteps.EntrySteps
+import SteppedFlapjack.StackAllocSteps.RawCallComposition
 import SteppedFlapjack.StackAllocSteps.UniformLeaf
 import SteppedFlapjack.StackAllocSteps.AllocGenFullSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveLoopSteps
@@ -156,6 +158,8 @@ phase 4 of flapjack#1251:
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
 - `SteppedFlapjack.StackAllocSteps.UniformLeaf`: a uniform leaf factor for
   word widths of at least eight bits, independent of runtime stack length.
+- `SteppedFlapjack.StackRawCallSteps.EntrySteps` and
+  `StackAllocSteps.RawCallComposition`: entry simulations and their composition.
 - `SteppedFlapjack.StackRawCallSteps.CallReturnSupport`, `CallReturnSteps`,
   `CompCorrect`: returning-call bounds and the complete raw-call pass theorem.
 - `SteppedFlapjack.StackRawCallSteps.CallTailSteps`: a nonincreasing bound
