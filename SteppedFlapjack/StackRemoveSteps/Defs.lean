@@ -66,9 +66,10 @@ def stackStoreSteps (n : Nat) : Nat :=
   3 + upshiftSteps n + downshiftSteps n
 
 /-- Upper bound on the number of `evaluate` invocations of the `stackLoad`
-branch that `comp` emits when the offset is not a small immediate. -/
+branch that `comp` emits when the offset is not a small immediate: the `Seq`
+node, the `moveInst`, and `stackLoad` itself. -/
 def stackLoadSteps (n : Nat) : Nat :=
-  4 + upshiftSteps n
+  6 + upshiftSteps n
 
 /-- Upper bound on the number of `evaluate` invocations of `copyLoop` when at
 most `B` bitmap words remain to be copied. One outer iteration costs the loop
