@@ -1,5 +1,6 @@
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.LeafStepsAll
 import Flapjack.Misc.Sptree
+import Flapjack.Pancake.Semantics.LoopSemStateExact.ShMem
 
 /-! Code and compile-oracle bounds, and their preservation by `evaluate`
 (stepped-flapjack#2, phase C3).
@@ -365,4 +366,52 @@ theorem storeConstSem_code {resultWidth : Nat} [NeZero resultWidth]
               | loc l => simp
             | loc l => simp
           | loc l => simp
+theorem shMemLoad_code (v : Nat) (addr : BitVec width) (nb : Nat)
+    (s : LoopSemStateFiniteExact width F) :
+    (LoopSemStateFiniteExact.shMemLoad v addr nb s).2.code = s.code := by
+  simp only [LoopSemStateFiniteExact.shMemLoad]
+  by_cases hnb : nb = 0
+  · simp only [if_pos hnb]
+    split_ifs with hd
+    · cases hc : callFFIHOL s.ffi (.sharedMem .mappedRead) [BitVec.ofNat 8 nb] (panWordToBytesHOL addr false) with
+      | final outcome => simp [LoopSemStateFiniteExact.callEnv]
+      | ret newFfi newBytes => simp [LoopSemStateFiniteExact.setVar]
+    · rfl
+  · simp only [if_neg hnb]
+    split_ifs with hd
+    · cases hc : callFFIHOL s.ffi (.sharedMem .mappedRead) [BitVec.ofNat 8 nb] (panWordToBytesHOL addr false) with
+      | final outcome => simp [LoopSemStateFiniteExact.callEnv]
+      | ret newFfi newBytes => simp [LoopSemStateFiniteExact.setVar]
+    · rfl
+
+theorem shMemStore_code (v : Nat) (addr : BitVec width) (nb : Nat)
+    (s : LoopSemStateFiniteExact width F) :
+    (LoopSemStateFiniteExact.shMemStore v addr nb s).2.code = s.code := by
+  simp only [LoopSemStateFiniteExact.shMemStore]
+  cases hs : sptLookup v s.locals with
+  | none => simp
+  | some val =>
+    cases val with
+    | word w =>
+      by_cases hnb : nb = 0
+      · simp only [if_pos hnb]
+        split_ifs with hd
+        · cases hc : callFFIHOL s.ffi (.sharedMem .mappedWrite) [BitVec.ofNat 8 nb] (panWordToBytesHOL w false ++ panWordToBytesHOL addr false) with
+          | final outcome => simp [LoopSemStateFiniteExact.callEnv]
+          | ret newFfi _ => simp
+        · rfl
+      · simp only [if_neg hnb]
+        split_ifs with hd
+        · cases hc : callFFIHOL s.ffi (.sharedMem .mappedWrite) [BitVec.ofNat 8 nb] ((panWordToBytesHOL w false).take nb ++ panWordToBytesHOL addr false) with
+          | final outcome => simp [LoopSemStateFiniteExact.callEnv]
+          | ret newFfi _ => simp
+        · rfl
+    | loc l => simp
+
+theorem shMemOp_code (op : WordMemOp) (r : Nat) (ad : BitVec width)
+    (s t : LoopSemStateFiniteExact width F)
+    (h : (LoopSemStateFiniteExact.shMemOp op r ad s).2 = t) :
+    t.code = s.code := by
+  rw [← h]
+  cases op <;> simp [LoopSemStateFiniteExact.shMemOp, shMemLoad_code, shMemStore_code]
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
