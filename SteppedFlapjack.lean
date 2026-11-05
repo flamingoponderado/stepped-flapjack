@@ -12,6 +12,7 @@ import SteppedFlapjack.StepPreservation.Basic
 import SteppedFlapjack.RiscVSteps
 import SteppedFlapjack.LabToTargetSteps
 import SteppedFlapjack.StackSteps.Defs
+import SteppedFlapjack.StackSteps.AddClock
 import SteppedFlapjack.StackToLabSteps
 import SteppedFlapjack.StackRemoveSteps.Defs
 import SteppedFlapjack.StackRemoveSteps.CopyEachSteps
@@ -48,6 +49,11 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.StackSteps.Defs`: `steps`, a fine-grained step count of a
   StackSem run, counting every `evaluate` invocation (stepped-flapjack#2,
   phase C);
+- `SteppedFlapjack.StackSteps.AddClock`: `steps_addClock`, clock monotonicity
+  of the step count — a run that does not time out takes the same number of
+  steps at any larger clock, which is what lets a run-clock bound be reused
+  when the compiler correctness induction raises a `Seq`'s second clock
+  (stepped-flapjack#2, phase C3, in progress);
 - `SteppedFlapjack.StackToLabSteps`: adapted copies of Flapjack's `stack_to_lab`
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
