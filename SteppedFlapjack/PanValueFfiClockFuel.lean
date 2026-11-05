@@ -1,4 +1,8 @@
-import Flapjack.PanValueFfiClockSemantics
+module
+
+public import Flapjack.PanValueFfiClockSemantics
+
+@[expose] public section
 
 /-!
 # Fuel monotonicity for the clocked stateful-FFI evaluators
