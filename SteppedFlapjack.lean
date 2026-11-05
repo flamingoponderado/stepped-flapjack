@@ -83,6 +83,7 @@ import SteppedFlapjack.RiscVSteps
 import SteppedFlapjack.LabToTargetSteps
 import SteppedFlapjack.StackSteps.Defs
 import SteppedFlapjack.StackSteps.AddClock
+import SteppedFlapjack.StackNamesSteps
 import SteppedFlapjack.StackToLabSteps
 import SteppedFlapjack.StackRemoveSteps.Defs
 import SteppedFlapjack.StackRemoveSteps.CopyEachSteps
@@ -301,6 +302,10 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.StackRemoveSteps.CompCorrect.LeafStepsAll`: one step bound
   covering all 28 non-recursive constructors, so the top-level induction needs a
   single leaf case (stepped-flapjack#2, phase C3, in progress).
+- `SteppedFlapjack.StackNamesSteps`: adapted copies of Flapjack's `stack_names`
+  `comp_correct` proof with the step count preserved exactly, assembled as
+  `steps_progCompHOL` and `compCorrectWithin`, and lifted to the entry run from
+  `make_init` as `stackNamesSemanticsWithin` (stepped-flapjack#2, phase C2).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
