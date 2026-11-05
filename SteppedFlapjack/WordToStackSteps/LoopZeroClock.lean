@@ -743,9 +743,184 @@ theorem zeroOpCurrHeap {width : Nat} [NeZero width] {C F : Type}
   · simpa only [compCorrectResult,Option.map_none,ne_eq,not_true_eq_false,
       ↓reduceIte,← dstEq] using postRel
 
+theorem zeroMove {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (priority : Nat) (moves : List (Nat × Nat))
+    (source : WordSemStateFiniteExact width (Nat × C) F) :
+    ZeroSimulation ac (.move priority moves) source := by
+  intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises
+  rcases premises with ⟨execution,notError,related,conventions,flat,compilation,
+    lengthBound,bitmapBound,bitmapPrefix,labels,maxBound⟩
+  obtain ⟨values,distinct,reads,rfl,rfl⟩ :=
+    Move.sourceSuccess priority moves source sourcePost result execution notError
+  have evens : (∀ n ∈ moves.map Prod.fst, n % 2=0) ∧
+      (∀ n ∈ moves.map Prod.snd, n % 2=0) := by
+    have raw : (∀ a b, (a,b) ∈ moves → a % 2=0) ∧
+        (∀ a b, (a,b) ∈ moves → b % 2=0) := by
+      simpa [postAllocConventionsHOL,everyVarHOL,everyStackVarHOL,
+        callArgConventionHOL,isPhyVar,List.all_eq_true] using conventions
+    constructor
+    · intro n member
+      obtain ⟨⟨a,b⟩,input,rfl⟩ := List.mem_map.mp member
+      exact raw.1 a b input
+    · intro n member
+      obtain ⟨⟨a,b⟩,input,rfl⟩ := List.mem_map.mp member
+      exact raw.2 a b input
+  have wf : sptWf source.locals=true := by
+    unfold stateRel at related
+    tauto
+  obtain ⟨post,run,relation,_,_⟩ := Move.actualScheduledRun ac k f frame lens moves source target
+    related distinct evens.1 evens.2 (by simp [reads]) (by simpa [maxVarHOL] using maxBound)
+  rw [Move.scheduledSourceStateReconstruction moves source target k values distinct
+    evens.1 evens.2 reads wf] at relation
+  have program := congrArg Prod.fst compilation
+  simp only [compNative] at program
+  subst compiled
+  refine ⟨post,none,?_,?_⟩
+  · exact run
+  · simpa only [compCorrectResult,Option.map_none,ne_eq,not_true_eq_false,↓reduceIte] using relation
+
+theorem zeroInstall {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (ptr len dptr dlen : Nat) (names : WordLangCutsetsHOL)
+    (source : WordSemStateFiniteExact width (Nat × C) F) :
+    ZeroSimulation ac (.install ptr len dptr dlen names) source := by
+  intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises
+  obtain ⟨execution, notError, related, conventions, -, compilation, -, -, -, -, -⟩ := premises
+  obtain ⟨rfl, rfl, hd3, hd4, hc1, hc2⟩ :=
+    Install.installConventions k ptr len dptr dlen names conventions
+  rcases fmt1 : Compiler.Backend.WordToStackRegFormat.wReg1 dptr (k, f, frame) with ⟨xs, reg3⟩
+  rcases fmt2 : Compiler.Backend.WordToStackRegFormat.wReg2 dlen (k, f, frame) with ⟨ys, reg4⟩
+  have programEq := congrArg Prod.fst compilation
+  simp only [compNative, fmt1, fmt2] at programEq
+  subst compiled
+  -- The source run.
+  rw [WordSemStateFiniteExact.evaluate] at execution
+  rcases hce : wordSemCutEnv names source.locals with _ | env
+  · simp only [hce, Prod.mk.injEq] at execution
+    exact absurd execution.1.symm notError
+  simp only [hce] at execution
+  rcases h2 : WordSemStateFiniteExact.getVar 2 source with _ | (w1 | ⟨_, _⟩) <;>
+    rcases h4 : WordSemStateFiniteExact.getVar 4 source with _ | (w2 | ⟨_, _⟩) <;>
+    rcases h3 : WordSemStateFiniteExact.getVar dptr source with _ | (w3 | ⟨_, _⟩) <;>
+    rcases h5 : WordSemStateFiniteExact.getVar dlen source with _ | (w4 | ⟨_, _⟩) <;>
+    simp only [h2, h4, h3, h5, Prod.mk.injEq] at execution <;>
+    try exact absurd execution.1.symm notError
+  rcases hor : source.compileOracle 0 with ⟨⟨bm0, cfg⟩, progs⟩
+  simp only [hor] at execution
+  rcases hcf : wordSemBufferFlush source.codeBuffer w1 w2 with _ | ⟨bytes, cb⟩ <;>
+    rcases hdf : wordSemBufferFlush source.dataBuffer w3 w4 with _ | ⟨data, db⟩ <;>
+    simp only [hcf, hdf, Prod.mk.injEq] at execution <;>
+    try exact absurd execution.1.symm notError
+  rcases hsc : source.compile (bm0, cfg) progs with _ | ⟨bytes', data', cfg'⟩ <;>
+    rcases progs with _ | ⟨⟨kk, argc, prog⟩, rest⟩ <;>
+    simp only [hsc, Prod.mk.injEq] at execution <;>
+    try first
+      | exact absurd execution.1.symm notError
+      | exact absurd (congrArg Prod.fst execution).symm notError
+  by_cases hcond : bytes = bytes' ∧ data = data' ∧
+      (holShiftSeq 1 source.compileOracle 0).1 = cfg'
+  swap
+  · rw [if_neg hcond] at execution
+    exact absurd (congrArg Prod.fst execution).symm notError
+  rw [if_pos hcond] at execution
+  simp only [Prod.mk.injEq] at execution
+  obtain ⟨rfl, rfl⟩ := execution
+  -- The target loads of the data pointer and length.
+  obtain ⟨t1, run1, clock1, rel1, -, -, -, -, regNe, loaded1⟩ :=
+    LoadRegister.evaluateWStackLoadWReg1 ac k f frame dptr reg3 xs source target lens
+      (.word w3) fmt1 hd3 h3 related
+  obtain ⟨t2, run2, clock2, -, rel2, -, -, otherReads, -, loaded2⟩ :=
+    LoadRegisterTwo.evaluateWStackLoadWReg2 ac k f frame dlen reg4 ys source t1 lens
+      (.word w4) fmt2 hd4 h5 rel1
+  have r10 : 4 < k := rel2.2.2.2.2.2.2.2.2.2.1
+  have read1 : StackSemStateOps.getVar 1 t2 = some (.word w1) := by
+    have := StateRelGetVar.stateRelGetVarImp' ac k f frame source t2 lens 0 2 _
+      ⟨rel2, h2, rfl, by omega⟩
+    simpa using this
+  have read2 : StackSemStateOps.getVar 2 t2 = some (.word w2) := by
+    have := StateRelGetVar.stateRelGetVarImp' ac k f frame source t2 lens 0 4 _
+      ⟨rel2, h4, rfl, by omega⟩
+    simpa using this
+  have read3 : StackSemStateOps.getVar reg3 t2 = some (.word w3) := by
+    rw [otherReads reg3 regNe]; exact loaded1
+  -- The target compiler and oracle on the installed programs.
+  have rel2' := rel2
+  unfold stateRel at rel2'
+  obtain ⟨-, -, -, -, r5, -, -, -, -, -, -, -, -, -, -, -, -, -, r19, r20, r21, r22, -⟩ := rel2'
+  rcases hcw : compileWordToStackNative ac false k ((kk, argc, prog) :: rest) (.nil, bm0) with
+    ⟨progs2, fs, bm⟩
+  have hsc' := hsc
+  rw [r21] at hsc'
+  simp only [hcw] at hsc'
+  rcases htc : t2.compile cfg progs2 with _ | ⟨bytes2, cfg2⟩
+  · simp [htc] at hsc'
+  simp only [htc, Option.map_some, Option.some.injEq, Prod.mk.injEq] at hsc'
+  obtain ⟨rfl, rfl, rfl⟩ := hsc'
+  have hor2 : t2.compileOracle 0 = (cfg, progs2, appListAppend bm.1) := by
+    rw [r22]; simp only [hor, hcw]
+  have hmap := mapFstCompileWordToStack ac false k _ _ _ _ hcw
+  rcases progs2 with _ | ⟨⟨kk2, prog2⟩, rest2⟩
+  · simp at hmap
+  simp only [List.map_cons, List.cons.injEq] at hmap
+  obtain ⟨rfl, -⟩ := hmap
+  have hflush : wordSemBufferFlush source.dataBuffer w3 w4 = some (data, db) := hdf
+  have hdata : source.dataBuffer.buffer = appListAppend bm.1 := by
+    unfold wordSemBufferFlush at hflush
+    split at hflush
+    · simp only [Option.some.injEq, Prod.mk.injEq] at hflush
+      rw [hflush.1, hcond.2.1]
+    · cases hflush
+  have hdb : db.buffer = [] ∧ db.spaceLeft = source.dataBuffer.spaceLeft := by
+    unfold wordSemBufferFlush at hflush
+    split at hflush
+    · simp only [Option.some.injEq, Prod.mk.injEq] at hflush
+      rw [← hflush.2]; exact ⟨rfl, rfl⟩
+    · cases hflush
+  have hcfg : (source.compileOracle 1).1 = (bm.2, cfg2) := hcond.2.2
+  have hnew : (holShiftSeq 1 t2.compileOracle 0).1 = cfg2 := by
+    show (t2.compileOracle 1).1 = cfg2
+    rcases hso : source.compileOracle 1 with ⟨⟨b1, c1⟩, ps⟩
+    rw [r22]
+    simp only [hso]
+    rw [hso] at hcfg
+    simp only [Prod.mk.injEq] at hcfg
+    rcases compileWordToStackNative ac false k ps (.nil, b1) with ⟨a, b, c⟩
+    exact hcfg.2
+  -- The target run and the related post-states.
+  refine ⟨{ t2 with
+      bitmaps := t2.bitmaps ++ appListAppend bm.1
+      codeBuffer := cb
+      dataBuffer := db
+      code := sptUnion t2.code (sptFromAList ((kk2, prog2) :: rest2))
+      regs := (StackSemStateOps.restrictIn t2.regs t2.ffiSaveRegs).updateEq (1, .loc kk2 0)
+      fpRegs := HolFiniteMapExact.empty
+      compileOracle := holShiftSeq 1 t2.compileOracle }, none, ?_, ?_⟩
+  · simp only [wStackLoadAppend, Function.comp_apply,
+      show (2 : Nat) / 2 = 1 by rfl, show (4 : Nat) / 2 = 2 by rfl]
+    rw [LoadRegister.evaluateWStackLoadSeq, StackSemEvaluate.evaluate_seq, run1]
+    have fix1 : StackSemControl.fixClock target ((none : Option (StackSemResult width)), t1) =
+        (none, t1) := by
+      have le : t1.clock ≤ target.clock := by omega
+      simp only [StackSemControl.fixClock, Nat.min_eq_right le]
+    simp only [fix1]
+    rw [LoadRegister.evaluateWStackLoadSeq, StackSemEvaluate.evaluate_seq, run2]
+    have fix2 : StackSemControl.fixClock t1 ((none : Option (StackSemResult width)), t2) =
+        (none, t2) := by
+      have le : t2.clock ≤ t1.clock := by omega
+      simp only [StackSemControl.fixClock, Nat.min_eq_right le]
+    simp only [fix2]
+    rw [StackSemEvaluate.evaluate_install]
+    simp only [read1, read2, read3, loaded2, hor2, r20, r19, r5, hcf, hflush, if_true, htc]
+    rw [if_pos ⟨hcond.1, hcond.2.1.trans (congrArg (fun x => x.2.2) hor2).symm, hnew⟩]
+  · simp only [compCorrectResult, Option.map_none, ne_eq, not_true_eq_false, ↓reduceIte]
+    exact Install.installRelation ac k f frame source t2 lens rel2 names hc1 hc2 env hce bm0 cfg kk2 argc
+      prog rest hor (_ :: rest2) fs bm hcw cfg2 hcfg cb db hdata hdb
+
+
 /-- Programs built from instructions, sequences, conditionals and loops. -/
 inductive LoopBlock {width : Nat} [NeZero width] : WordLangProgHOL (BitVec width) → Prop
   | inst (i) : LoopBlock (.inst i)
+  | install (ptr len dptr dlen names) : LoopBlock (.install ptr len dptr dlen names)
+  | move (priority moves) : LoopBlock (.move priority moves)
   | opCurrHeap (op dst src) : LoopBlock (.opCurrHeap op dst src)
   | ffi (index ptr1 len1 ptr2 len2 names) : LoopBlock (.ffi index ptr1 len1 ptr2 len2 names)
   | set (name expression) : LoopBlock (.set name expression)
@@ -770,6 +945,8 @@ theorem loopBlock_zero {width : Nat} [NeZero width] {C F : Type}
     (fun p source => LoopBlock p → ZeroSimulation ac p source)
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   all_goals try { intros; rename_i h; cases h <;> done }
+  case refine_21 => intro ptr len dptr dlen names source _; exact zeroInstall ac ptr len dptr dlen names source
+  case refine_4 => intro priority moves source _; exact zeroMove ac priority moves source
   case refine_24 => intro index ptr1 len1 ptr2 len2 names source _; exact zeroFFI ac index ptr1 len1 ptr2 len2 names source
   case refine_9 => intro op dst src source _; exact zeroOpCurrHeap ac op dst src source
   case refine_8 => intro name expression source _; exact zeroSet ac name expression source
@@ -819,6 +996,8 @@ theorem loopBlock_loop {width : Nat} [NeZero width]
     {p : WordLangProgHOL (BitVec width)} (block : LoopBlock p) : loopWord p = true := by
   induction block with
   | inst i => rfl
+  | install ptr len dptr dlen names => rfl
+  | move priority moves => rfl
   | opCurrHeap op dst src => rfl
   | ffi index ptr1 len1 ptr2 len2 names => rfl
   | set name expression => rfl

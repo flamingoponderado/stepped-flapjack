@@ -54,6 +54,25 @@ theorem straightLine_inst (i : HolInst width) (kf : Nat × Nat × Nat) :
   | skip => rfl
   | const n c => simp only [wInstNative]; apply straightLine_regWrite1; intro; rfl
 
+/-- Scheduled register moves contain only straight-line stack operations. -/
+theorem straightLine_moveSingle (xy : Sum Nat Nat × Sum Nat Nat) (kf : Nat × Nat × Nat) :
+    straightLine (wMoveSingleNative (width := width) xy kf) = true := by
+  rcases xy with ⟨x, y⟩
+  cases x <;> cases y <;> rfl
+
+theorem straightLine_moveAux (moves : List (Sum Nat Nat × Sum Nat Nat)) (kf : Nat × Nat × Nat) :
+    straightLine (wMoveAuxNative (width := width) moves kf) = true := by
+  induction moves with
+  | nil => rfl
+  | cons xy rest ih =>
+    cases rest with
+    | nil => exact straightLine_moveSingle xy kf
+    | cons a as => simp only [wMoveAuxNative, straightLine, Bool.and_eq_true]; exact ⟨straightLine_moveSingle xy kf, ih⟩
+
+theorem straightLine_move (moves : List (Nat × Nat)) (kf : Nat × Nat × Nat) :
+    straightLine (wMoveNative (width := width) moves kf) = true := by
+  exact straightLine_moveAux _ kf
+
 /-- Compiling any WordSem machine instruction produces straight-line StackSem code. -/
 theorem straightLine_compileInst (ac : AsmConfigExact width) (i : WordLangInst (BitVec width))
     (bs : AppList (BitVec width) × Nat) (kf : Nat × Nat × Nat) :
