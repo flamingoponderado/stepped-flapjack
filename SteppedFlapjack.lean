@@ -7,6 +7,7 @@ import SteppedFlapjack.StackRawCallSteps.SeqOptimizedSteps
 import SteppedFlapjack.StackRawCallSteps.SeqSteps
 import SteppedFlapjack.StackRawCallSteps.RawCallSteps
 import SteppedFlapjack.StackRawCallSteps.JumpSteps
+import SteppedFlapjack.StackRawCallSteps.CallTailSteps
 import SteppedFlapjack.StackAllocSteps.AllocGenPartialSteps
 import SteppedFlapjack.StackAllocSteps.AllocCorrectSteps
 import SteppedFlapjack.StackAllocSteps.AllocCallSteps
@@ -152,6 +153,8 @@ phase 4 of flapjack#1251:
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
 - `SteppedFlapjack.StackAllocSteps.UniformLeaf`: a uniform leaf factor for
   word widths of at least eight bits, independent of runtime stack length.
+- `SteppedFlapjack.StackRawCallSteps.CallTailSteps`: a nonincreasing bound
+  for ordinary tail calls.
 - `SteppedFlapjack.StackRawCallSteps.RawCallSteps`, `JumpSteps`: nonincreasing
   bounds for code-lookup control transfers.
 - `SteppedFlapjack.StackRawCallSteps.SeqOptimizedSteps`, `SeqSteps`: the
