@@ -1,3 +1,6 @@
+import SteppedFlapjack.StackAllocSteps.AllocGenPartialSteps
+import SteppedFlapjack.StackAllocSteps.AllocCorrectSteps
+import SteppedFlapjack.StackAllocSteps.AllocGenFullSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveLoopSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveDataSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveRootsSteps
@@ -127,6 +130,10 @@ phase 4 of flapjack#1251:
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackAllocSteps.AllocGenPartialCorrect`, `AllocGenPartialSteps`:
+  partial generational allocation correctness with a target-step bound;
+- `SteppedFlapjack.StackAllocSteps.AllocGenFullCorrect`, `AllocGenFullSteps`:
+  full generational allocation correctness with a target-step bound;
 - `SteppedFlapjack.StackAllocSteps.GenMoveLoopCorrect`, `GenMoveLoopSteps`:
   clock and fuel-based bounds for the full generational collector loop;
 - `SteppedFlapjack.StackAllocSteps.GenMoveDataCorrect`, `GenMoveDataSteps`:
