@@ -1199,4 +1199,228 @@ theorem codeBounds_loop {B K : Nat} {bounds : BitVec width × BitVec width}
   · exact ihLoop post r t h hp.1 hp.2
   · obtain ⟨-, rfl⟩ := h; exact hp
 
+theorem codeBounds_rawCall {B K : Nat} {bounds : BitVec width × BitVec width}
+    (dest : Nat) (s t : StackSemStateFiniteExact width C F)
+    (r : Option (StackSemResult width))
+    (h : evaluate ((.rawCall dest : HolProg width), s) = (r, t))
+    (ih : ∀ (prog body : HolProg width) (first : HolProg width),
+      sptLookup dest s.code = some prog → destSeq prog = some (first, body) →
+      ∀ (res : Option (StackSemResult width)) (post : StackSemStateFiniteExact width C F),
+      evaluate (body, decClock s) = (res, post) →
+      codeBound B bounds K post ∧ oracleBound B bounds K post)
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  cases hc : sptLookup dest s.code with
+  | none =>
+    rw [evaluate_rawCall] at h; simp only [hc] at h
+    obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+  | some prog =>
+    cases hd : destSeq prog with
+    | none =>
+      rw [evaluate_rawCall] at h; simp only [hc, hd] at h
+      obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+    | some pair =>
+      rcases pair with ⟨first, body⟩
+      rw [evaluate_rawCall] at h; simp only [hc, hd] at h
+      rcases he : evaluate (body, decClock s) with ⟨res, post⟩
+      rw [he] at h
+      split_ifs at h
+      · obtain ⟨-, rfl⟩ := h
+        exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+      · obtain ⟨-, rfl⟩ := h; exact ih prog body first hc hd res post he
+      · obtain ⟨-, rfl⟩ := h; exact ih prog body first hc hd res post he
+
+theorem codeBounds_jumpLower {B K : Nat} {bounds : BitVec width × BitVec width}
+    (r1 r2 dest : Nat) (s t : StackSemStateFiniteExact width C F)
+    (r : Option (StackSemResult width))
+    (h : evaluate ((.jumpLower r1 r2 dest : HolProg width), s) = (r, t))
+    (ih : ∀ (prog : HolProg width), findCode (.inl dest) s.regs s.code = some prog →
+      ∀ (res : Option (StackSemResult width)) (post : StackSemStateFiniteExact width C F),
+      evaluate (prog, decClock s) = (res, post) →
+      codeBound B bounds K post ∧ oracleBound B bounds K post)
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  cases h1 : getVar r1 s with
+  | none =>
+    rw [evaluate_jumpLower] at h; simp only [h1] at h
+    obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+  | some v1 =>
+    cases v1 with
+    | loc l o =>
+      rw [evaluate_jumpLower] at h; simp only [h1] at h
+      obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+    | word x =>
+      cases h2 : getVar r2 s with
+      | none =>
+        rw [evaluate_jumpLower] at h; simp only [h1, h2] at h
+        obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+      | some v2 =>
+        cases v2 with
+        | loc l o =>
+          rw [evaluate_jumpLower] at h; simp only [h1, h2] at h
+          obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+        | word y =>
+          cases hc : findCode (.inl dest) s.regs s.code with
+          | none =>
+            rw [evaluate_jumpLower] at h; simp only [h1, h2, hc] at h
+            split_ifs at h <;> obtain ⟨-, rfl⟩ := h <;> exact ⟨hcode, horacle⟩
+          | some prog =>
+            rcases he : evaluate (prog, decClock s) with ⟨res, post⟩
+            rw [evaluate_jumpLower] at h; simp only [h1, h2, hc, he] at h
+            split_ifs at h
+            · obtain ⟨-, rfl⟩ := h
+              exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+            · obtain ⟨-, rfl⟩ := h; exact ih prog hc _ _ he
+            · obtain ⟨-, rfl⟩ := h; exact ih prog hc _ _ he
+            · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+
+theorem codeBounds_ffi {B K : Nat} {bounds : BitVec width × BitVec width}
+    (ffiIndex : Basis.Pure.MlString.MlString) (ptr len ptr2 len2 ret : Nat)
+    (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.ffi ffiIndex ptr len ptr2 len2 ret : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  cases h1 : getVar len s with
+  | none =>
+    rw [evaluate_ffi] at h; simp only [h1] at h
+    obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+  | some v1 =>
+    cases v1 with
+    | loc l o =>
+      rw [evaluate_ffi] at h; simp only [h1] at h
+      obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+    | word w1 =>
+      cases h2 : getVar ptr s with
+      | none =>
+        rw [evaluate_ffi] at h; simp only [h1, h2] at h
+        obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+      | some v2 =>
+        cases v2 with
+        | loc l o =>
+          rw [evaluate_ffi] at h; simp only [h1, h2] at h
+          obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+        | word w2 =>
+          cases h3 : getVar len2 s with
+          | none =>
+            rw [evaluate_ffi] at h; simp only [h1, h2, h3] at h
+            obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+          | some v3 =>
+            cases v3 with
+            | loc l o =>
+              rw [evaluate_ffi] at h; simp only [h1, h2, h3] at h
+              obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+            | word w3 =>
+              cases h4 : getVar ptr2 s with
+              | none =>
+                rw [evaluate_ffi] at h; simp only [h1, h2, h3, h4] at h
+                obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+              | some v4 =>
+                cases v4 with
+                | loc l o =>
+                  rw [evaluate_ffi] at h; simp only [h1, h2, h3, h4] at h
+                  obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+                | word w4 =>
+                  rw [evaluate_ffi] at h; simp only [h1, h2, h3, h4] at h
+                  cases hb1 : readBytearrayWordHOL w2 w1.toNat (memLoadByteAuxExact s.memory s.mdomain s.be) with
+                  | none =>
+                    simp only [hb1] at h; obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+                  | some bytes =>
+                    cases hb2 : readBytearrayWordHOL w4 w3.toNat (memLoadByteAuxExact s.memory s.mdomain s.be) with
+                    | none =>
+                      simp only [hb1, hb2] at h; obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+                    | some bytes2 =>
+                      cases hf : callFFIHOL s.ffi (.extCall ffiIndex) bytes bytes2 with
+                      | final outcome =>
+                        simp only [hb1, hb2, hf] at h; obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+                      | ret newFfi newBytes =>
+                        simp only [hb1, hb2, hf] at h; obtain ⟨-, rfl⟩ := h
+                        exact codeBounds_transfer rfl rfl hcode horacle
+
+theorem codeBounds_install {B K : Nat} {bounds : BitVec width × BitVec width}
+    (ptr len dptr dlen ret : Nat) (s t : StackSemStateFiniteExact width C F)
+    (r : Option (StackSemResult width))
+    (h : evaluate ((.install ptr len dptr dlen ret : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  classical
+  cases h1 : getVar ptr s with
+  | none =>
+    rw [evaluate_install] at h; simp only [h1] at h
+    obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+  | some v1 =>
+    cases v1 with
+    | loc l o =>
+      rw [evaluate_install] at h; simp only [h1] at h
+      obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+    | word w1 =>
+      cases h2 : getVar len s with
+      | none =>
+        rw [evaluate_install] at h; simp only [h1, h2] at h
+        obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+      | some v2 =>
+        cases v2 with
+        | loc l o =>
+          rw [evaluate_install] at h; simp only [h1, h2] at h
+          obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+        | word w2 =>
+          cases h3 : getVar dptr s with
+          | none =>
+            rw [evaluate_install] at h; simp only [h1, h2, h3] at h
+            obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+          | some v3 =>
+            cases v3 with
+            | loc l o =>
+              rw [evaluate_install] at h; simp only [h1, h2, h3] at h
+              obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+            | word w3 =>
+              cases h4 : getVar dlen s with
+              | none =>
+                rw [evaluate_install] at h; simp only [h1, h2, h3, h4] at h
+                obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+              | some v4 =>
+                cases v4 with
+                | loc l o =>
+                  rw [evaluate_install] at h; simp only [h1, h2, h3, h4] at h
+                  obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+                | word w4 =>
+                  rcases hcfg : s.compileOracle 0 with ⟨cfg, progs, bm⟩
+                  cases hb1 : wordSemBufferFlush s.codeBuffer w1 w2 with
+                  | none =>
+                    rw [evaluate_install] at h; simp only [h1, h2, h3, h4, hcfg, hb1] at h
+                    obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+                  | some p1 =>
+                    rcases p1 with ⟨bytes, cb⟩
+                    cases hb2 : (if s.useStack then wordSemBufferFlush s.dataBuffer w3 w4 else some (bm, s.dataBuffer)) with
+                    | none =>
+                      rw [evaluate_install] at h; simp only [h1, h2, h3, h4, hcfg, hb1, hb2] at h
+                      obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+                    | some p2 =>
+                      rcases p2 with ⟨data, db⟩
+                      cases hcomp : s.compile cfg progs with
+                      | none =>
+                        rw [evaluate_install] at h; simp only [h1, h2, h3, h4, hcfg, hb1, hb2, hcomp] at h
+                        obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+                      | some cp =>
+                        rcases cp with ⟨bytes', cfg'⟩
+                        cases hp : progs with
+                        | nil =>
+                          rw [hp] at hcomp
+                          rw [evaluate_install] at h; simp only [h1, h2, h3, h4, hcfg, hb1, hb2, hp, hcomp] at h
+                          obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+                        | cons entry rest =>
+                          rcases entry with ⟨k, prog⟩
+                          rw [hp] at hcomp
+                          rw [evaluate_install] at h; simp only [h1, h2, h3, h4, hcfg, hb1, hb2, hp, hcomp] at h
+                          split_ifs at h
+                          · obtain ⟨-, rfl⟩ := h
+                            constructor
+                            · intro label program hl
+                              apply install_codeBound s ((k, prog) :: rest) hcode _ label program hl
+                              intro name program hm
+                              apply horacle 0 name program
+                              simpa only [hcfg, hp] using hm
+                            · intro index name program hm
+                              exact install_oracleBound s horacle index name program hm
+                          · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
