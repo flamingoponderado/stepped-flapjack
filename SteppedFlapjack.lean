@@ -15,6 +15,7 @@ import SteppedFlapjack.StackSteps.Defs
 import SteppedFlapjack.StackToLabSteps
 import SteppedFlapjack.StackRemoveSteps.Defs
 import SteppedFlapjack.StackRemoveSteps.CopyEachSteps
+import SteppedFlapjack.StackRemoveSteps.CopyLoopSteps
 
 /-!
 # stepped-flapjack
@@ -57,7 +58,10 @@ phase 4 of flapjack#1251:
   (stepped-flapjack#2, phase C3, in progress);
 - `SteppedFlapjack.StackRemoveSteps.CopyEachSteps`: the per-bitmap-word copy
   loop's fine-grained step bound `15 * (pattern.toNat + 1) + 3`, carried by an
-  adapted `copyEachThmWithin` (stepped-flapjack#2, phase C3, in progress).
+  adapted `copyEachThmWithin` (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.CopyLoopSteps`: the outer bitmap-list copy
+  loop's bound `copyLoopSteps width (bitmaps.length - index)`, carried by an
+  adapted `copyLoopThmWithin` (stepped-flapjack#2, phase C3, in progress).
 
 Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate

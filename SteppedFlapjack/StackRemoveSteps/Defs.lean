@@ -70,12 +70,14 @@ branch that `comp` emits when the offset is not a small immediate. -/
 def stackLoadSteps (n : Nat) : Nat :=
   4 + upshiftSteps n
 
-/-- Upper bound on the number of `evaluate` invocations of `copyLoop` when the
-runtime bitmap word count is at most `B`. The loop copies one bitmap word per
-outer iteration and one bit per inner iteration, so the bound is quadratic in
-the word width. -/
+/-- Upper bound on the number of `evaluate` invocations of `copyLoop` when at
+most `B` bitmap words remain to be copied. One outer iteration costs the loop
+and `If` nodes plus the `copyEach` body and the reload (five nodes), while
+`copyEach` itself is bounded by `15 * (pattern.toNat + 1) + 3` with
+`pattern.toNat < 2 ^ width`; the final exit check and trailing `copyEach`
+contribute the constant. -/
 def copyLoopSteps (width B : Nat) : Nat :=
-  14 * B * (width + 1) + 28
+  15 * B * 2 ^ width + 9 * B + 15 * 2 ^ width + 11
 
 /-- Upper bound on the number of `evaluate` invocations of the `storeConsts`
 expansion, whose prefix is five instructions and whose body is `copyLoop`. -/
