@@ -15,6 +15,7 @@ import SteppedFlapjack.Test.PanSemStoreErrorExactParity
 import SteppedFlapjack.Test.PanSteppedSemantics
 import SteppedFlapjack.Test.PanValueAcceleratorFfi
 import SteppedFlapjack.Test.PanValueFfiClockSemantics
+import SteppedFlapjack.Test.PanValueFfiClockFuel
 import SteppedFlapjack.Test.PanValueFfiFuel
 import SteppedFlapjack.Test.PanValueFfiSemantics
 import SteppedFlapjack.Test.PanValueMemoryFfi

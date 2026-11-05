@@ -4,6 +4,9 @@ import SteppedFlapjack.PanSteppedSemantics
 import SteppedFlapjack.PanValueFfiSemantics
 import SteppedFlapjack.PanValueFfiFuel
 import SteppedFlapjack.PanValueFfiEventMonotonicity
+import SteppedFlapjack.PanValueFfiClockFuel
+import SteppedFlapjack.PanValueFfiClockCorrectness
+import SteppedFlapjack.PanValueFfiClockShift
 import SteppedFlapjack.PanValueFfiClockProjection
 import SteppedFlapjack.PanValueFfiClockStepsBridge
 import SteppedFlapjack.PanCost
@@ -26,6 +29,9 @@ phase 4 of flapjack#1251:
   the stepped statement evaluators, including `evalPanValueFfiProgSteps`;
 - `SteppedFlapjack.PanValueFfiFuel`, `SteppedFlapjack.PanValueFfiEventMonotonicity`:
   fuel and I/O-event monotonicity of the stepped evaluator;
+- `SteppedFlapjack.PanValueFfiClockFuel`, `SteppedFlapjack.PanValueFfiClockCorrectness`,
+  `SteppedFlapjack.PanValueFfiClockShift`: fuel and clock properties of the
+  Flapjack-specific clocked evaluator;
 - `SteppedFlapjack.PanValueFfiClockProjection`,
   `SteppedFlapjack.PanValueFfiClockStepsBridge`: the bridge from Flapjack's
   clocked evaluator to stepped results, which cannot cover timed-out runs;

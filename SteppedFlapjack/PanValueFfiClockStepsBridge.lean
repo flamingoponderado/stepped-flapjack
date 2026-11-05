@@ -1,4 +1,4 @@
-import Flapjack.PanValueFfiClockShift
+import SteppedFlapjack.PanValueFfiClockShift
 import SteppedFlapjack.PanValueFfiSemantics
 
 /-!
