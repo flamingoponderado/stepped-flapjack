@@ -652,4 +652,63 @@ theorem stackShMemOp_oracle (op : WordMemOp) (r : Nat) (address : BitVec width)
   case store8 => exact stackShMemStoreByte_oracle r address s
   case store16 => exact stackShMemStore16_oracle r address s
   case store32 => exact stackShMemStore32_oracle r address s
+
+/-- Transfer both bounds from a state to another with the same code map and
+compile oracle. -/
+theorem codeBounds_transfer {B K : Nat} {bounds : BitVec width × BitVec width}
+    {s t : StackSemStateFiniteExact width C F}
+    (hc : t.code = s.code) (ho : t.compileOracle = s.compileOracle)
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t :=
+  ⟨codeBound_congr hc hcode, oracleBound_congr ho horacle⟩
+
+theorem codeBounds_skip {B K : Nat} {bounds : BitVec width × BitVec width}
+    (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.skip : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  rw [evaluate_skip] at h
+  obtain ⟨-, rfl⟩ := h
+  exact ⟨hcode, horacle⟩
+
+theorem codeBounds_break {B K : Nat} {bounds : BitVec width × BitVec width}
+    (n : Nat) (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.break n : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  rw [evaluate_break] at h
+  obtain ⟨-, rfl⟩ := h
+  exact ⟨hcode, horacle⟩
+
+theorem codeBounds_continue {B K : Nat} {bounds : BitVec width × BitVec width}
+    (n : Nat) (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.continue n : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  rw [evaluate_continue] at h
+  obtain ⟨-, rfl⟩ := h
+  exact ⟨hcode, horacle⟩
+
+theorem codeBounds_halt {B K : Nat} {bounds : BitVec width × BitVec width}
+    (v : Nat) (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.halt v : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  cases hv : getVar v s with
+  | none => rw [evaluate_halt, hv] at h; obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+  | some w =>
+    rw [evaluate_halt, hv] at h; obtain ⟨-, rfl⟩ := h
+    exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+
+theorem codeBounds_tick {B K : Nat} {bounds : BitVec width × BitVec width}
+    (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.tick : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  rw [evaluate_tick] at h
+  split_ifs at h with hc
+  · obtain ⟨-, rfl⟩ := h
+    exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+  · obtain ⟨-, rfl⟩ := h
+    exact codeBounds_transfer (decClock_code s).1 (decClock_code s).2 hcode horacle
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
