@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordToStackSteps.CodeCostStable
 import SteppedFlapjack.WordToStackSteps.CallSequence
 import SteppedFlapjack.WordToStackSteps.ReturningHandlerComplete
 import SteppedFlapjack.WordToStackSteps.ReturningHandlerZeroClock
@@ -205,6 +206,7 @@ phase 4 of flapjack#1251:
   no-handler bound for all non-error, non-timeout outcomes.
 - `SteppedFlapjack.WordToStackSteps.ReturningNoneSteps`: complete no-handler
   zero-clock simulation and a source-step-based matching-return bound.
+- `SteppedFlapjack.WordToStackSteps.CodeCostStable`: stability and clock monotonicity of computable call costs.
 - `SteppedFlapjack.WordToStackSteps.CallSequence`: source-clock accounting and zero-clock simulation for sequences containing calls.
 - `SteppedFlapjack.WordToStackSteps.ReturningHandlerComplete`: source-step bounds and compiled execution for returning handler calls over loop blocks.
 - `SteppedFlapjack.WordToStackSteps.ReturningHandlerZeroClock`: zero-clock handler callee and continuation proofs for loop blocks.
