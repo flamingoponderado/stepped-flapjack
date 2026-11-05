@@ -1,3 +1,8 @@
+import SteppedFlapjack.StackAllocSteps.CollectorStructural
+import SteppedFlapjack.StackAllocSteps.AllocNoneSteps
+import SteppedFlapjack.StackAllocSteps.AllocSimpleSteps
+import SteppedFlapjack.StackAllocSteps.AllocSimpleClock
+import SteppedFlapjack.StackAllocSteps.AllocSimpleCorrect
 import SteppedFlapjack.StackAllocSteps.GcMoveRootsSteps
 import SteppedFlapjack.StackAllocSteps.GcMoveRootsClock
 import SteppedFlapjack.StackAllocSteps.GcMoveRootsCorrect
@@ -113,6 +118,12 @@ phase 4 of flapjack#1251:
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackAllocSteps.CollectorStructural`: a structural step
+  bound for every configured collector, indexed by its available clock;
+- `SteppedFlapjack.StackAllocSteps.AllocNoneSteps`: no-collector allocation
+  correctness with a 15-step bound;
+- `SteppedFlapjack.StackAllocSteps.AllocSimpleCorrect`, `AllocSimpleClock`,
+  `AllocSimpleSteps`: simple allocation correctness with a target-step bound;
 - `SteppedFlapjack.StackAllocSteps.GcMoveRootsClock`, `GcMoveRootsCorrect`,
   `GcMoveRootsSteps`: clock and stack-length bounds for root traversal;
 - `SteppedFlapjack.StackAllocSteps.GcMoveBitmapsClock`, `GcMoveBitmapsCorrect`,
