@@ -1,5 +1,6 @@
 import SteppedFlapjack.StackAllocSteps.AllocGenPartialSteps
 import SteppedFlapjack.StackAllocSteps.AllocCorrectSteps
+import SteppedFlapjack.StackAllocSteps.AllocCallSteps
 import SteppedFlapjack.StackAllocSteps.AllocGenFullSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveLoopSteps
 import SteppedFlapjack.StackAllocSteps.GenMoveDataSteps
