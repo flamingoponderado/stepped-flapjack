@@ -11,7 +11,7 @@ variable {width : Nat} [NeZero width]
 /-- A recursively closed fragment with statically bounded compiled executions. -/
 def straightWord : WordLangProgHOL (BitVec width) → Bool
   | .skip | .tick | .break _ | .continue _ | .ffi _ _ _ _ _ _ | .inst _ | .move _ _
-  | .get _ _ | .set _ _ | .storeConsts _ _ _ _ _ | .locValue _ _ | .opCurrHeap _ _ _
+  | .return _ _ | .get _ _ | .set _ _ | .storeConsts _ _ _ _ _ | .locValue _ _ | .opCurrHeap _ _ _
   | .install _ _ _ _ _ | .codeBufferWrite _ _ | .dataBufferWrite _ _ => true
   | .seq a b | .ite _ _ _ a b => straightWord a && straightWord b
   | .mustTerminate p => straightWord p
@@ -29,6 +29,11 @@ theorem straightWord_compiled (ac : AsmConfigExact width) (p : WordLangProgHOL (
   case ffi => simp [compNative, straightLine]
   case inst i => exact straightLine_compileInst ac i bs kf
   case move priority moves => simp only [compNative]; exact straightLine_move moves kf
+  case «return» register names =>
+    simp only [compNative]
+    apply straightLine_stackLoad
+    simp only [seqStackFreeNative]
+    split <;> rfl
   case get => simp only [compNative]; apply straightLine_regWrite1; intro; rfl
   case set name exp =>
     cases name <;> cases exp <;> simp only [compNative]

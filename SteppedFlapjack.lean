@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordSteps.ReturningClock
 import SteppedFlapjack.WordToStackSteps.TailCallSteps
 import SteppedFlapjack.WordToStackSteps.TailCallZeroClock
 import SteppedFlapjack.WordToStackSteps.LoopZeroClock
@@ -209,6 +210,8 @@ phase 4 of flapjack#1251:
   compiled call-free loops, in terms of the actual initial clock.
 - `SteppedFlapjack.WordSteps.Defs`: a WordSem evaluator-invocation counter
   with checked leaf, sequence, conditional, loop, and tail-call equations.
+- `SteppedFlapjack.WordSteps.ReturningClock`: clock-consumption bounds for
+  matching normal and exception returning-call continuations.
 - `SteppedFlapjack.WordSteps.ClockConsumption`: actual clock consumed by
   call-free loop-fragment runs is bounded by their evaluator step count.
 - `SteppedFlapjack.WordSteps.CallSteps`: returning-call equations covering all
