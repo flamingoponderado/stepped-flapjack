@@ -1,3 +1,4 @@
+import SteppedFlapjack.StackAllocSteps.GcNone
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.FiniteAssembly
 import SteppedFlapjack.PanValueExpCounted
 import SteppedFlapjack.PanExpressionEvaluator
@@ -93,6 +94,8 @@ phase 4 of flapjack#1251:
   `flatten_correct` proof with the LabSem run bounded by `flattenStepFactor`
   ticks per StackSem step, assembled as `flattenCorrectWithin` and lifted to
   the start call as `flattenSemanticsWithin` (stepped-flapjack#2, phase C1);
+- `SteppedFlapjack.StackAllocSteps.GcNone`: a 15-step bound for allocation
+  code when no garbage collector is selected;
 - `SteppedFlapjack.StackRemoveSteps.CompCorrect.FiniteAssembly`: a stack-removal
   run bound with finite code, oracle and bitmap budgets computed from the initial
   state and source-step bound;
