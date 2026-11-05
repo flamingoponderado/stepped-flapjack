@@ -875,4 +875,43 @@ theorem codeBounds_bitmapLoad {B K : Nat} {bounds : BitVec width × BitVec width
         · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
         · obtain ⟨-, rfl⟩ := h
           exact codeBounds_transfer (setVar_code _ _ _).1 (setVar_code _ _ _).2 hcode horacle
+theorem codeBounds_stackStore {B K : Nat} {bounds : BitVec width × BitVec width}
+    (r0 n : Nat) (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.stackStore r0 n : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  rw [evaluate_stackStore] at h
+  split_ifs at h with hc
+  · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+  · obtain ⟨-, rfl⟩ := h
+    exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+  · cases hv : getVar r0 s
+    case none =>
+      simp only [hv] at h; obtain ⟨-, rfl⟩ := h
+      exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+    case some val =>
+      simp only [hv] at h; obtain ⟨-, rfl⟩ := h
+      exact codeBounds_transfer rfl rfl hcode horacle
+
+theorem codeBounds_stackSetSize {B K : Nat} {bounds : BitVec width × BitVec width}
+    (r0 : Nat) (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))
+    (h : evaluate ((.stackSetSize r0 : HolProg width), s) = (r, t))
+    (hcode : codeBound B bounds K s) (horacle : oracleBound B bounds K s) :
+    codeBound B bounds K t ∧ oracleBound B bounds K t := by
+  rw [evaluate_stackSetSize] at h
+  split_ifs at h with hc
+  · obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+  · cases hv : getVar r0 s
+    case none =>
+      simp only [hv] at h; obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+    case some val =>
+      cases val
+      case loc l1 l2 => simp only [hv] at h; obtain ⟨-, rfl⟩ := h; exact ⟨hcode, horacle⟩
+      case word wd =>
+        simp only [hv] at h
+        split_ifs at h with hc
+        · obtain ⟨-, rfl⟩ := h
+          exact codeBounds_transfer (emptyEnv_code s).1 (emptyEnv_code s).2 hcode horacle
+        · obtain ⟨-, rfl⟩ := h
+          exact codeBounds_transfer (setVar_code _ _ _).1 (setVar_code _ _ _).2 hcode horacle
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
