@@ -17,6 +17,7 @@ import SteppedFlapjack.StackToLabSteps
 import SteppedFlapjack.StackRemoveSteps.Defs
 import SteppedFlapjack.StackRemoveSteps.CopyEachSteps
 import SteppedFlapjack.StackRemoveSteps.CopyLoopSteps
+import SteppedFlapjack.StackRemoveSteps.LeafCostBounds
 
 /-!
 # stepped-flapjack
@@ -65,6 +66,10 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.StackRemoveSteps.CopyEachSteps`: the per-bitmap-word copy
   loop's fine-grained step bound `15 * (pattern.toNat + 1) + 3`, carried by an
   adapted `copyEachThmWithin` (stepped-flapjack#2, phase C3, in progress);
+- `SteppedFlapjack.StackRemoveSteps.LeafCostBounds`: `leafCost` is at least one
+  and dominates every subprogram's factor, which is what lets the `stack_remove`
+  correctness induction thread one program-dependent factor down the tree
+  (stepped-flapjack#2, phase C3, in progress);
 - `SteppedFlapjack.StackRemoveSteps.CopyLoopSteps`: the outer bitmap-list copy
   loop's bound `copyLoopSteps width (bitmaps.length - index)`, carried by an
   adapted `copyLoopThmWithin` (stepped-flapjack#2, phase C3, in progress).

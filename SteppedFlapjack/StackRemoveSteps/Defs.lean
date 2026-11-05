@@ -84,21 +84,21 @@ expansion, whose prefix is five instructions and whose body is `copyLoop`. -/
 def storeConstsSteps (width B : Nat) : Nat :=
   10 + copyLoopSteps width B
 
-/-- Program-dependent factor: the maximum compiled-expansion step count over
-the program's leaves. Callees resolved from the code map are not counted here;
-they are covered by the phase C3 statement's code-map hypothesis. -/
-def leafCost (B : Nat) (bounds : BitVec width × BitVec width) : HolProg width → Nat
-  | .seq a b => max (leafCost B bounds a) (leafCost B bounds b)
-  | .ite _ _ _ a b => max (leafCost B bounds a) (leafCost B bounds b)
-  | .loop body => leafCost B bounds body
+/-- Maximum compiled-expansion step count over the program's leaves. Callees
+resolved from the code map are not counted here; they are covered by the phase
+C3 statement's code-map hypothesis. -/
+def rawLeafCost (B : Nat) (bounds : BitVec width × BitVec width) : HolProg width → Nat
+  | .seq a b => max (rawLeafCost B bounds a) (rawLeafCost B bounds b)
+  | .ite _ _ _ a b => max (rawLeafCost B bounds a) (rawLeafCost B bounds b)
+  | .loop body => rawLeafCost B bounds body
   | .call ret _ handler =>
       max 1
         (max (match ret with
               | none => 0
-              | some (body, _, _, _) => leafCost B bounds body)
+              | some (body, _, _, _) => rawLeafCost B bounds body)
           (match handler with
            | none => 0
-           | some (body, _, _) => leafCost B bounds body))
+           | some (body, _, _) => rawLeafCost B bounds body))
   | .stackAlloc n => stackAllocSteps n
   | .stackFree n => stackFreeSteps n
   | .stackStore _ n =>
@@ -111,9 +111,34 @@ def leafCost (B : Nat) (bounds : BitVec width × BitVec width) : HolProg width �
   | .stackSetSize _ => 6
   | .stackLoadAny _ _ => 6
   | .stackStoreAny _ _ => 6
-  | _ => 1
+  | .skip => 1
+  | .inst _ => 1
+  | .get _ _ => 1
+  | .set _ _ => 1
+  | .opCurrHeap _ _ _ => 1
+  | .jumpLower _ _ _ => 1
+  | .alloc _ => 1
+  | .raise _ => 1
+  | .ret _ => 1
+  | .break _ => 1
+  | .continue _ => 1
+  | .ffi _ _ _ _ _ _ => 1
+  | .tick => 1
+  | .locValue _ _ _ => 1
+  | .install _ _ _ _ _ => 1
+  | .shMemOp _ _ _ => 1
+  | .codeBufferWrite _ _ => 1
+  | .dataBufferWrite _ _ => 1
+  | .rawCall _ => 1
+  | .halt _ => 1
 
-
+/-- Program-dependent factor bounding the `stack_remove` target steps per source
+step. Every program takes at least one step, so the factor is at least one; the
+`seq`, `ite`, `loop` and `call` cases take the maximum over their subprograms,
+which is what lets the correctness induction thread a single factor down the
+tree. -/
+def leafCost (B : Nat) (bounds : BitVec width × BitVec width) (program : HolProg width) : Nat :=
+  max 1 (rawLeafCost B bounds program)
 
 /-! ## Expansion step bounds -/
 
