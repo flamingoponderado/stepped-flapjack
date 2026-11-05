@@ -5,14 +5,14 @@ import Flapjack.Compiler.Backend.StackRemove.Proofs.CompCorrect.JumpLower
 (stepped-flapjack#2, phase C3).
 
 `jumpLower` compiles to itself and runs a program taken from the *code*, not a
-structural subterm. Its step bound therefore needs a bound on the code's leaf
-costs, which is the program-dependent factor's other half:
+structural subterm. Its step bound therefore takes the callee's bound as an
+induction hypothesis with the same program-dependent factor `K`:
 
-`codeBound : forall label program, sptLookup label source.code = some program ->
-  leafCost B bounds program <= K`
+`steps (comp ... program, ...) <= K * steps (program, decClock source)`
 
 `K` is chosen per program and discharged when the theorem is applied to a
-concrete Pancake source, where the code is known. -/
+concrete Pancake source, where the code is known and the callee bound follows
+from the code bound. -/
 
 namespace SteppedFlapjack.StackRemoveSteps.CompCorrect
 
@@ -29,8 +29,6 @@ theorem compCorrectJumpLowerWithinSteps (first second label : Nat)
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
     (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
     (K : Nat) (Kpos : 1 ≤ K)
-    (codeBound : ∀ (label : Nat) (program : HolProg width),
-      sptLookup label source.code = some program → leafCost B bounds program ≤ K)
     (calleeIH : ∀ (left right : BitVec width) (program : HolProg width),
       getVar first source = some (.word left) → getVar second source = some (.word right) →
       wordCmpHOL .lower left right = true → sptLookup label source.code = some program →
@@ -44,7 +42,7 @@ theorem compCorrectJumpLowerWithinSteps (first second label : Nat)
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
          | _ => stateRelHOL jump bounds pointer post postTarget) ∧
         steps (comp jump bounds pointer program, {t with clock := clock + t.clock}) ≤
-          leafCost B bounds program * steps (program, decClock source))
+          K * steps (program, decClock source))
     (hypothesis : evaluate (.jumpLower first second label, source) = (result, postSource) ∧
       result ≠ some .error ∧ stateRelHOL jump bounds pointer source target ∧
       Flapjack.Compiler.Backend.StackProps.regBound (.jumpLower first second label : HolProg width) pointer) :
@@ -97,7 +95,6 @@ theorem compCorrectJumpLowerWithinSteps (first second label : Nat)
             | some program =>
               simp only [lookup] at sourceRun
               obtain ⟨targetLookup, bodyBound⟩ := FindCode.codeLookup jump bounds pointer label source target program relation lookup
-              have programBound : leafCost B bounds program ≤ K := codeBound label program lookup
               by_cases zero : source.clock = 0
               · simp only [zero, if_true] at sourceRun
                 rcases Prod.mk.inj sourceRun with ⟨resultEq, postEq⟩
@@ -180,12 +177,11 @@ theorem compCorrectJumpLowerWithinSteps (first second label : Nat)
                     rw [tgt, src]
                     calc 1 + steps (comp jump bounds pointer program,
                           {decClock target with clock := clock + (decClock target).clock})
-                        ≤ 1 + leafCost B bounds program * steps (program, decClock source) :=
-                          Nat.add_le_add_left calleeSteps 1
-                      _ ≤ 1 + K * steps (program, decClock source) :=
-                          Nat.add_le_add_left (Nat.mul_le_mul_right _ programBound) 1
-                      _ ≤ K + K * steps (program, decClock source) :=
+                        ≤ K + steps (comp jump bounds pointer program,
+                            {decClock target with clock := clock + (decClock target).clock}) :=
                           Nat.add_le_add_right Kpos _
+                      _ ≤ K + K * steps (program, decClock source) :=
+                          Nat.add_le_add_left calleeSteps K
                       _ = K * (1 + steps (program, decClock source)) := by
                           rw [Nat.mul_add, Nat.mul_one]
           · simp [lower] at sourceRun

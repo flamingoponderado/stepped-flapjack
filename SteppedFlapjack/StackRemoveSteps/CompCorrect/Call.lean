@@ -25,8 +25,6 @@ theorem compCorrectCallWithinSteps
     (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
     (K : Nat) (Kpos : 1 ≤ K)
     (caseBound : leafCost B bounds (.call ret dest handler) ≤ K)
-    (codeBound : ∀ (label : Nat) (program : HolProg width),
-      sptLookup label source.code = some program → leafCost B bounds program ≤ K)
     (calleeIH : match ret with
       | none =>
           ∀ (program : HolProg width),
@@ -42,7 +40,7 @@ theorem compCorrectCallWithinSteps
                | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
                | _ => stateRelHOL jump bounds pointer post postTarget) ∧
               steps (comp jump bounds pointer program, {t with clock := clock + t.clock}) ≤
-                leafCost B bounds program * steps (program, decClock source)
+                K * steps (program, decClock source)
       | some (_body, link, l1, l2) =>
           ∀ (program : HolProg width),
             StackSemControl.findCode dest (source.regs.eraseEq link) source.code = some program →
@@ -57,8 +55,7 @@ theorem compCorrectCallWithinSteps
                | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
                | _ => stateRelHOL jump bounds pointer post postTarget) ∧
               steps (comp jump bounds pointer program, {t with clock := clock + t.clock}) ≤
-                leafCost B bounds program *
-                  steps (program, decClock (setVar link (.loc l1 l2) source)))
+                K * steps (program, decClock (setVar link (.loc l1 l2) source)))
     (returnIH : match ret with
       | none => True
       | some (body, link, l1, l2) =>
@@ -76,7 +73,7 @@ theorem compCorrectCallWithinSteps
                | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
                | _ => stateRelHOL jump bounds pointer post postTarget) ∧
               steps (comp jump bounds pointer body, {t with clock := clock + t.clock}) ≤
-                leafCost B bounds body * steps (body, middle))
+                K * steps (body, middle))
     (handlerIH : match ret, handler with
       | some (_body, link, l1, l2), some (handler, hl1, hl2) =>
           ∀ (program : HolProg width) (middle : StackSemStateFiniteExact width C F),
@@ -93,7 +90,7 @@ theorem compCorrectCallWithinSteps
                | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
                | _ => stateRelHOL jump bounds pointer post postTarget) ∧
               steps (comp jump bounds pointer handler, {t with clock := clock + t.clock}) ≤
-                leafCost B bounds handler * steps (handler, middle)
+                K * steps (handler, middle)
       | _, _ => True)
     (hypothesis : evaluate (.call ret dest handler, source) = (result, postSource) ∧
       result ≠ some .error ∧ stateRelHOL jump bounds pointer source target ∧
@@ -111,7 +108,7 @@ theorem compCorrectCallWithinSteps
   | none =>
     obtain ⟨clock, postTarget, run, relation, stepsBound⟩ :=
       compCorrectCallTailWithinSteps dest handler source result postSource target
-        pointer bounds jump B _bitmap K Kpos codeBound calleeIH hypothesis
+        pointer bounds jump B _bitmap K Kpos calleeIH hypothesis
     refine ⟨clock, postTarget, run, ?_, stepsBound⟩
     cases result with
     | none => exact relation
@@ -122,7 +119,7 @@ theorem compCorrectCallWithinSteps
     | none =>
       obtain ⟨clock, postTarget, run, relation, stepsBound⟩ :=
         compCorrectCallReturnNoneWithinSteps body link l1 l2 dest source result
-          postSource target pointer bounds jump B _bitmap K Kpos caseBound codeBound
+          postSource target pointer bounds jump B _bitmap K Kpos caseBound
           calleeIH returnIH hypothesis
       refine ⟨clock, postTarget, run, ?_, stepsBound⟩
       cases result with
@@ -133,7 +130,7 @@ theorem compCorrectCallWithinSteps
       obtain ⟨clock, postTarget, run, relation, stepsBound⟩ :=
         compCorrectCallReturnHandlerWithinSteps body handlerBody link l1 l2 hl1 hl2
           dest source result postSource target pointer bounds jump B _bitmap K Kpos
-          caseBound codeBound calleeIH returnIH handlerIH hypothesis
+          caseBound calleeIH returnIH handlerIH hypothesis
       refine ⟨clock, postTarget, run, ?_, stepsBound⟩
       cases result with
       | none => exact relation

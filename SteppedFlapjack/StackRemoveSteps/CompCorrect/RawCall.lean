@@ -5,9 +5,9 @@ import Flapjack.Compiler.Backend.StackRemove.Proofs.CompCorrect.RawCall
 (stepped-flapjack#2, phase C3).
 
 `rawCall` compiles to itself and runs the body of a `seq` taken from the code,
-so like `jumpLower` its step bound needs `codeBound`, the bound on the leaf
-costs of every program in the source code. `K` is program-dependent and is
-discharged for the concrete Pancake source at use time. -/
+so like `jumpLower` its step bound takes the callee's bound as an induction
+hypothesis with the program-dependent factor `K`, discharged for the concrete
+Pancake source at use time. -/
 
 namespace SteppedFlapjack.StackRemoveSteps.CompCorrect
 
@@ -24,8 +24,6 @@ theorem compCorrectRawCallWithinSteps (label : Nat)
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
     (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
     (K : Nat) (Kpos : 1 ≤ K)
-    (codeBound : ∀ (label : Nat) (program : HolProg width),
-      sptLookup label source.code = some program → leafCost B bounds program ≤ K)
     (calleeIH : ∀ (frame body : HolProg width),
       sptLookup label source.code = some (.seq frame body) → source.clock ≠ 0 →
       ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
@@ -37,7 +35,7 @@ theorem compCorrectRawCallWithinSteps (label : Nat)
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
          | _ => stateRelHOL jump bounds pointer post postTarget) ∧
         steps (comp jump bounds pointer body, {t with clock := clock + t.clock}) ≤
-          leafCost B bounds body * steps (body, decClock source))
+          K * steps (body, decClock source))
     (hypothesis : evaluate (.rawCall label, source) = (result, postSource) ∧
       result ≠ some .error ∧ stateRelHOL jump bounds pointer source target ∧
       Flapjack.Compiler.Backend.StackProps.regBound (.rawCall label : HolProg width) pointer) :
@@ -76,8 +74,6 @@ theorem compCorrectRawCallWithinSteps (label : Nat)
       simp only [comp] at targetLookup
       change Flapjack.Compiler.Backend.StackProps.regBound frame pointer ∧
         Flapjack.Compiler.Backend.StackProps.regBound body pointer at programBound
-      have bodyBound : leafCost B bounds body ≤ K :=
-        le_trans (leafCost_seq_right B bounds frame body) (codeBound label (.seq frame body) lookup)
       by_cases zero : source.clock = 0
       · simp only [zero, if_true] at sourceRun
         rcases Prod.mk.inj sourceRun with ⟨resultEq, postEq⟩
@@ -149,12 +145,11 @@ theorem compCorrectRawCallWithinSteps (label : Nat)
             rw [tgt, src]
             calc 1 + steps (comp jump bounds pointer body,
                   {decClock target with clock := clock + (decClock target).clock})
-                ≤ 1 + leafCost B bounds body * steps (body, decClock source) :=
-                  Nat.add_le_add_left calleeSteps 1
-              _ ≤ 1 + K * steps (body, decClock source) :=
-                  Nat.add_le_add_left (Nat.mul_le_mul_right _ bodyBound) 1
-              _ ≤ K + K * steps (body, decClock source) :=
+                ≤ K + steps (comp jump bounds pointer body,
+                    {decClock target with clock := clock + (decClock target).clock}) :=
                   Nat.add_le_add_right Kpos _
+              _ ≤ K + K * steps (body, decClock source) :=
+                  Nat.add_le_add_left calleeSteps K
               _ = K * (1 + steps (body, decClock source)) := by
                   rw [Nat.mul_add, Nat.mul_one]
 

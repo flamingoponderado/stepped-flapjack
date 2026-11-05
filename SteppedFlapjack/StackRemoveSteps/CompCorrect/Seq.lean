@@ -28,7 +28,8 @@ theorem compCorrectSeqWithinSteps
     (first second : HolProg width) (source : StackSemStateFiniteExact width C F)
     (result : Option (StackSemResult width))
     (postSource target : StackSemStateFiniteExact width C F)
-    (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool) (B : Nat)
+    (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool) (_B : Nat)
+    (K : Nat) (Kpos : 1 ≤ K)
     (firstIH : ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
       evaluate (first, source) = (r, post) ∧ r ≠ some .error ∧
         stateRelHOL jump bounds pointer source t ∧ Flapjack.Compiler.Backend.StackProps.regBound first pointer →
@@ -38,7 +39,7 @@ theorem compCorrectSeqWithinSteps
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
          | _ => stateRelHOL jump bounds pointer post postTarget) ∧
         steps (comp jump bounds pointer first, {t with clock := clock + t.clock})
-          ≤ leafCost B bounds first * steps (first, source))
+          ≤ K * steps (first, source))
     (secondIH : ∀ (middle : StackSemStateFiniteExact width C F),
       evaluate (first, source) = (none, middle) →
       ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
@@ -50,7 +51,7 @@ theorem compCorrectSeqWithinSteps
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
          | _ => stateRelHOL jump bounds pointer post postTarget) ∧
         steps (comp jump bounds pointer second, {t with clock := clock + t.clock})
-          ≤ leafCost B bounds second * steps (second, middle))
+          ≤ K * steps (second, middle))
     (hypothesis : evaluate (.seq first second, source) = (result, postSource) ∧
       result ≠ some .error ∧ stateRelHOL jump bounds pointer source target ∧
       Flapjack.Compiler.Backend.StackProps.regBound (.seq first second) pointer) :
@@ -62,7 +63,7 @@ theorem compCorrectSeqWithinSteps
        | _ => stateRelHOL jump bounds pointer postSource postTarget) ∧
       steps (comp jump bounds pointer (.seq first second),
         {target with clock := clock + target.clock})
-        ≤ leafCost B bounds (.seq first second) * steps (.seq first second, source) := by
+        ≤ K * steps (.seq first second, source) := by
   rcases hypothesis with ⟨sourceRun, notError, relation, lower⟩
   change Flapjack.Compiler.Backend.StackProps.regBound first pointer ∧ Flapjack.Compiler.Backend.StackProps.regBound second pointer at lower
   rcases firstRun : evaluate (first, source) with ⟨firstResult, middle⟩
@@ -101,10 +102,17 @@ theorem compCorrectSeqWithinSteps
         steps_seq_run first second source middle firstRun
       simp only [comp]
       rw [steps_seq_run _ _ _ _ combinedRun, clockExt, seqSteps]
-      have hK1 := leafCost_seq_left B bounds first second
-      have hK2 := leafCost_seq_right B bounds first second
-      have hKpos := one_le_leafCost B bounds (.seq first second)
-      nlinarith [firstSteps, secondSteps, steps_pos first source, steps_pos second middle]
+      calc 1 + steps (comp jump bounds pointer first, {target with clock := firstClock + target.clock}) +
+            steps (comp jump bounds pointer second,
+              {middleTarget with clock := secondClock + middleTarget.clock})
+          = 1 + (steps (comp jump bounds pointer first, {target with clock := firstClock + target.clock}) +
+              steps (comp jump bounds pointer second,
+                {middleTarget with clock := secondClock + middleTarget.clock})) := by ring
+        _ ≤ 1 + (K * steps (first, source) + K * steps (second, middle)) :=
+            Nat.add_le_add_left (Nat.add_le_add firstSteps secondSteps) 1
+        _ ≤ K + (K * steps (first, source) + K * steps (second, middle)) :=
+            Nat.add_le_add_right Kpos _
+        _ = K * (1 + steps (first, source) + steps (second, middle)) := by ring
   | some firstResult =>
     rw [Compiler.Backend.StackRemove.CompCorrect.Seq.evaluateSeqSome first second source
       middle firstResult firstRun] at sourceRun
@@ -126,15 +134,13 @@ theorem compCorrectSeqWithinSteps
       rw [steps_seq, targetRun]
       try dsimp only
       rw [seqSteps]
-      have hK1 := leafCost_seq_left B bounds first second
-      have hKpos := one_le_leafCost B bounds (.seq first second)
       have hX : steps (comp jump bounds pointer first, {target with clock := clock + target.clock})
-          ≤ leafCost B bounds (.seq first second) * steps (first, source) :=
-        le_trans targetSteps (Nat.mul_le_mul_right _ hK1)
+          ≤ K * steps (first, source) := targetSteps
       calc 1 + steps (comp jump bounds pointer first, {target with clock := clock + target.clock})
-          ≤ leafCost B bounds (.seq first second) + leafCost B bounds (.seq first second) * steps (first, source) := by
-            omega
-        _ = leafCost B bounds (.seq first second) * (1 + steps (first, source)) := by
+          ≤ K + steps (comp jump bounds pointer first, {target with clock := clock + target.clock}) :=
+            Nat.add_le_add_right Kpos _
+        _ ≤ K + K * steps (first, source) := Nat.add_le_add_left hX K
+        _ = K * (1 + steps (first, source)) := by
             rw [Nat.mul_add, Nat.mul_one]
 
 end SteppedFlapjack.StackRemoveSteps.CompCorrect

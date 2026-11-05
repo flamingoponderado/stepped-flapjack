@@ -29,6 +29,7 @@ theorem compCorrectLoopWithinSteps (body : HolProg width)
     (postSource target : StackSemStateFiniteExact width C F)
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
     (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
+    (K : Nat) (Kpos : 1 ≤ K)
     (bodyIH : ∀ (r : Option (StackSemResult width)) (post t : StackSemStateFiniteExact width C F),
       evaluate (body, source) = (r, post) ∧ r ≠ some .error ∧
         stateRelHOL jump bounds pointer source t ∧ Flapjack.Compiler.Backend.StackProps.regBound body pointer →
@@ -38,7 +39,7 @@ theorem compCorrectLoopWithinSteps (body : HolProg width)
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
          | _ => stateRelHOL jump bounds pointer post postTarget) ∧
         steps (comp jump bounds pointer body, {t with clock := clock + t.clock}) ≤
-          leafCost B bounds body * steps (body, source))
+          K * steps (body, source))
     (reentryIH : ∀ (bodyResult : Option (StackSemResult width)) (middle : StackSemStateFiniteExact width C F),
       evaluate (body, source) = (bodyResult, middle) →
       StackSemControl.contLoop bodyResult = true → middle.clock ≠ 0 →
@@ -52,7 +53,7 @@ theorem compCorrectLoopWithinSteps (body : HolProg width)
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
          | _ => stateRelHOL jump bounds pointer post postTarget) ∧
         steps (comp jump bounds pointer (.loop body), {t with clock := clock + t.clock}) ≤
-          leafCost B bounds (.loop body) * steps (.loop body, decClock middle))
+          K * steps (.loop body, decClock middle))
     (hypothesis : evaluate (.loop body, source) = (result, postSource) ∧
       result ≠ some .error ∧ stateRelHOL jump bounds pointer source target ∧
       Flapjack.Compiler.Backend.StackProps.regBound (.loop body) pointer) :
@@ -64,7 +65,7 @@ theorem compCorrectLoopWithinSteps (body : HolProg width)
        | _ => stateRelHOL jump bounds pointer postSource postTarget) ∧
       steps (comp jump bounds pointer (.loop body),
         {target with clock := clock + target.clock}) ≤
-        leafCost B bounds (.loop body) * steps (.loop body, source) := by
+        K * steps (.loop body, source) := by
   rcases hypothesis with ⟨sourceRun, notError, relation, lower⟩
   rcases bodyRun : evaluate (body, source) with ⟨bodyResult, middle⟩
   have bodyNotError := Flapjack.Compiler.Backend.StackRemove.CompCorrect.Loop.loopBodyNotError
@@ -101,15 +102,14 @@ theorem compCorrectLoopWithinSteps (body : HolProg width)
           steps_loop_exit body source middle bodyResult bodyRun (by simp [continues, zero])
         simp only [comp]
         rw [targetLoop, sourceLoop]
-        have hK := leafCost_loop B bounds body
-        have hKpos := one_le_leafCost B bounds (.loop body)
+        have hKpos := Kpos
         have hX : steps (comp jump bounds pointer body, {target with clock := firstClock + target.clock})
-            ≤ leafCost B bounds (.loop body) * steps (body, source) :=
-          le_trans bodySteps (Nat.mul_le_mul_right _ hK)
+            ≤ K * steps (body, source) := bodySteps
         calc 1 + steps (comp jump bounds pointer body, {target with clock := firstClock + target.clock})
-            ≤ leafCost B bounds (.loop body) + leafCost B bounds (.loop body) * steps (body, source) := by
-              omega
-          _ = leafCost B bounds (.loop body) * (1 + steps (body, source)) := by
+            ≤ K + steps (comp jump bounds pointer body, {target with clock := firstClock + target.clock}) :=
+              Nat.add_le_add_right hKpos _
+          _ ≤ K + K * steps (body, source) := Nat.add_le_add_left hX K
+          _ = K * (1 + steps (body, source)) := by
               rw [Nat.mul_add, Nat.mul_one]
     · rw [Flapjack.Compiler.Backend.StackRemove.CompCorrect.Loop.evaluateLoopReentry
         body source middle bodyResult bodyRun continues zero] at sourceRun
@@ -166,23 +166,23 @@ theorem compCorrectLoopWithinSteps (body : HolProg width)
           rw [decState]
         simp only [comp]
         rw [targetLoop, sourceLoop, reentryAt, clockExt]
-        have hK := leafCost_loop B bounds body
-        have hKpos := one_le_leafCost B bounds (.loop body)
+        have hKpos := Kpos
         have hX : steps (comp jump bounds pointer body, {target with clock := firstClock + target.clock})
-            ≤ leafCost B bounds (.loop body) * steps (body, source) :=
-          le_trans bodySteps (Nat.mul_le_mul_right _ hK)
+            ≤ K * steps (body, source) := bodySteps
         have hY : steps (.loop (comp jump bounds pointer body),
             {decClock middleTarget with clock := secondClock + (decClock middleTarget).clock}) ≤
-            leafCost B bounds (.loop body) * steps (.loop body, decClock middle) := by
+            K * steps (.loop body, decClock middle) := by
           simpa only [comp] using reentrySteps
         calc 1 + steps (comp jump bounds pointer body, {target with clock := firstClock + target.clock}) +
               steps (.loop (comp jump bounds pointer body),
                 {decClock middleTarget with clock := secondClock + (decClock middleTarget).clock})
-            ≤ leafCost B bounds (.loop body) + leafCost B bounds (.loop body) * steps (body, source) +
-                leafCost B bounds (.loop body) * steps (.loop body, decClock middle) := by
+            ≤ K + steps (comp jump bounds pointer body, {target with clock := firstClock + target.clock}) +
+                steps (.loop (comp jump bounds pointer body),
+                  {decClock middleTarget with clock := secondClock + (decClock middleTarget).clock}) := by
               omega
-          _ = leafCost B bounds (.loop body) *
-                (1 + steps (body, source) + steps (.loop body, decClock middle)) := by
+          _ ≤ K + K * steps (body, source) + K * steps (.loop body, decClock middle) := by
+              omega
+          _ = K * (1 + steps (body, source) + steps (.loop body, decClock middle)) := by
               ring
   · have exits : StackSemControl.contLoop bodyResult = false := by
       cases equality : StackSemControl.contLoop bodyResult <;> simp_all
@@ -212,15 +212,14 @@ theorem compCorrectLoopWithinSteps (body : HolProg width)
         steps_loop_exit body source middle bodyResult bodyRun (by simp [exits])
       simp only [comp]
       rw [targetLoop, sourceLoop]
-      have hK := leafCost_loop B bounds body
-      have hKpos := one_le_leafCost B bounds (.loop body)
+      have hKpos := Kpos
       have hX : steps (comp jump bounds pointer body, {target with clock := firstClock + target.clock})
-          ≤ leafCost B bounds (.loop body) * steps (body, source) :=
-        le_trans bodySteps (Nat.mul_le_mul_right _ hK)
+          ≤ K * steps (body, source) := bodySteps
       calc 1 + steps (comp jump bounds pointer body, {target with clock := firstClock + target.clock})
-          ≤ leafCost B bounds (.loop body) + leafCost B bounds (.loop body) * steps (body, source) := by
-            omega
-        _ = leafCost B bounds (.loop body) * (1 + steps (body, source)) := by
+          ≤ K + steps (comp jump bounds pointer body, {target with clock := firstClock + target.clock}) :=
+            Nat.add_le_add_right hKpos _
+        _ ≤ K + K * steps (body, source) := Nat.add_le_add_left hX K
+        _ = K * (1 + steps (body, source)) := by
             rw [Nat.mul_add, Nat.mul_one]
 
 end SteppedFlapjack.StackRemoveSteps.CompCorrect

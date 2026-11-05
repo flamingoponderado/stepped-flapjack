@@ -25,8 +25,6 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
     (K : Nat) (Kpos : 1 ≤ K)
     (caseBound : leafCost B bounds
       (.call (some (body, link, l1, l2)) dest (some (handler, hl1, hl2))) ≤ K)
-    (codeBound : ∀ (label : Nat) (program : HolProg width),
-      sptLookup label source.code = some program → leafCost B bounds program ≤ K)
     (calleeIH : ∀ (program : HolProg width),
       StackSemControl.findCode dest (source.regs.eraseEq link) source.code = some program →
       source.clock ≠ 0 →
@@ -40,7 +38,7 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
          | _ => stateRelHOL jump bounds pointer post postTarget) ∧
         steps (comp jump bounds pointer program, {t with clock := clock + t.clock}) ≤
-          leafCost B bounds program * steps (program, decClock (setVar link (.loc l1 l2) source)))
+          K * steps (program, decClock (setVar link (.loc l1 l2) source)))
     (returnIH : ∀ (program : HolProg width) (middle : StackSemStateFiniteExact width C F),
       StackSemControl.findCode dest (source.regs.eraseEq link) source.code = some program →
       source.clock ≠ 0 →
@@ -55,7 +53,7 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
          | _ => stateRelHOL jump bounds pointer post postTarget) ∧
         steps (comp jump bounds pointer body, {t with clock := clock + t.clock}) ≤
-          leafCost B bounds body * steps (body, middle))
+          K * steps (body, middle))
     (handlerIH : ∀ (program : HolProg width) (middle : StackSemStateFiniteExact width C F),
       StackSemControl.findCode dest (source.regs.eraseEq link) source.code = some program →
       source.clock ≠ 0 →
@@ -70,7 +68,7 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
          | _ => stateRelHOL jump bounds pointer post postTarget) ∧
         steps (comp jump bounds pointer handler, {t with clock := clock + t.clock}) ≤
-          leafCost B bounds handler * steps (handler, middle))
+          K * steps (handler, middle))
     (hypothesis : evaluate (.call (some (body, link, l1, l2)) dest (some (handler, hl1, hl2)), source) =
         (result, postSource) ∧ result ≠ some .error ∧
       stateRelHOL jump bounds pointer source target ∧
@@ -94,8 +92,6 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
     exact False.elim (notError (Prod.mk.inj sourceRun).1.symm)
   | some program =>
     simp only [lookup] at sourceRun
-    obtain ⟨label, spt⟩ := findCode_sptLookup lookup
-    have programCostBound : leafCost B bounds program ≤ K := codeBound label program spt
     obtain ⟨targetLookup, programRegBound⟩ := FindCode.findCodeLemmaErased jump bounds pointer
       source target dest program link ⟨relation, by
         simp only [Flapjack.Compiler.Backend.StackProps.regBound] at bound
@@ -109,10 +105,6 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
     have handlerBound : Flapjack.Compiler.Backend.StackProps.regBound handler pointer := by
       simp only [Flapjack.Compiler.Backend.StackProps.regBound] at bound
       exact bound.2.2.2
-    have bodyCostBound : leafCost B bounds body ≤ K :=
-      le_trans (callLeafCostReturn B bounds body link l1 l2 dest (some (handler, hl1, hl2))) caseBound
-    have handlerCostBound : leafCost B bounds handler ≤ K :=
-      le_trans (callLeafCostHandler B bounds (some (body, link, l1, l2)) dest handler hl1 hl2) caseBound
     by_cases zero : source.clock = 0
     · simp only [zero, if_true] at sourceRun
       rcases Prod.mk.inj sourceRun with ⟨resultEq, postEq⟩
@@ -240,15 +232,9 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
                         clock := first + (decClock (setVar link (.loc l1 l2) target)).clock}) +
                       steps (comp jump bounds pointer body,
                         {middleTarget with clock := second + middleTarget.clock})) := by ring
-                _ ≤ 1 + (leafCost B bounds program * steps (program, decClock (setVar link (.loc l1 l2) source)) +
-                      leafCost B bounds body * steps (body, middle)) :=
-                    Nat.add_le_add_left (Nat.add_le_add calleeSteps returnSteps) 1
                 _ ≤ 1 + (K * steps (program, decClock (setVar link (.loc l1 l2) source)) +
-                      K * steps (body, middle)) := by
-                    have h1 := Nat.mul_le_mul_right
-                      (steps (program, decClock (setVar link (.loc l1 l2) source))) programCostBound
-                    have h2 := Nat.mul_le_mul_right (steps (body, middle)) bodyCostBound
-                    omega
+                      K * steps (body, middle)) :=
+                    Nat.add_le_add_left (Nat.add_le_add calleeSteps returnSteps) 1
                 _ ≤ K + (K * steps (program, decClock (setVar link (.loc l1 l2) source)) +
                       K * steps (body, middle)) := by
                     omega
@@ -294,10 +280,8 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
             calc 1 + steps (comp jump bounds pointer program,
                   {decClock (setVar link (.loc l1 l2) target) with
                     clock := clock + (decClock (setVar link (.loc l1 l2) target)).clock})
-                ≤ 1 + leafCost B bounds program * steps (program, decClock (setVar link (.loc l1 l2) source)) :=
+                ≤ 1 + K * steps (program, decClock (setVar link (.loc l1 l2) source)) :=
                   Nat.add_le_add_left calleeSteps 1
-              _ ≤ 1 + K * steps (program, decClock (setVar link (.loc l1 l2) source)) :=
-                  Nat.add_le_add_left (Nat.mul_le_mul_right _ programCostBound) 1
               _ ≤ K + K * steps (program, decClock (setVar link (.loc l1 l2) source)) :=
                   Nat.add_le_add_right Kpos _
               _ = K * (1 + steps (program, decClock (setVar link (.loc l1 l2) source))) := by
@@ -342,10 +326,8 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
             calc 1 + steps (comp jump bounds pointer program,
                   {decClock (setVar link (.loc l1 l2) target) with
                     clock := clock + (decClock (setVar link (.loc l1 l2) target)).clock})
-                ≤ 1 + leafCost B bounds program * steps (program, decClock (setVar link (.loc l1 l2) source)) :=
+                ≤ 1 + K * steps (program, decClock (setVar link (.loc l1 l2) source)) :=
                   Nat.add_le_add_left calleeSteps 1
-              _ ≤ 1 + K * steps (program, decClock (setVar link (.loc l1 l2) source)) :=
-                  Nat.add_le_add_left (Nat.mul_le_mul_right _ programCostBound) 1
               _ ≤ K + K * steps (program, decClock (setVar link (.loc l1 l2) source)) :=
                   Nat.add_le_add_right Kpos _
               _ = K * (1 + steps (program, decClock (setVar link (.loc l1 l2) source))) := by
@@ -390,10 +372,8 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
             calc 1 + steps (comp jump bounds pointer program,
                   {decClock (setVar link (.loc l1 l2) target) with
                     clock := clock + (decClock (setVar link (.loc l1 l2) target)).clock})
-                ≤ 1 + leafCost B bounds program * steps (program, decClock (setVar link (.loc l1 l2) source)) :=
+                ≤ 1 + K * steps (program, decClock (setVar link (.loc l1 l2) source)) :=
                   Nat.add_le_add_left calleeSteps 1
-              _ ≤ 1 + K * steps (program, decClock (setVar link (.loc l1 l2) source)) :=
-                  Nat.add_le_add_left (Nat.mul_le_mul_right _ programCostBound) 1
               _ ≤ K + K * steps (program, decClock (setVar link (.loc l1 l2) source)) :=
                   Nat.add_le_add_right Kpos _
               _ = K * (1 + steps (program, decClock (setVar link (.loc l1 l2) source))) := by
@@ -483,15 +463,9 @@ theorem compCorrectCallReturnHandlerWithinSteps (body handler : HolProg width)
                         clock := first + (decClock (setVar link (.loc l1 l2) target)).clock}) +
                       steps (comp jump bounds pointer handler,
                         {middleTarget with clock := second + middleTarget.clock})) := by ring
-                _ ≤ 1 + (leafCost B bounds program * steps (program, decClock (setVar link (.loc l1 l2) source)) +
-                      leafCost B bounds handler * steps (handler, middle)) :=
-                    Nat.add_le_add_left (Nat.add_le_add calleeSteps handlerSteps) 1
                 _ ≤ 1 + (K * steps (program, decClock (setVar link (.loc l1 l2) source)) +
-                      K * steps (handler, middle)) := by
-                    have h1 := Nat.mul_le_mul_right
-                      (steps (program, decClock (setVar link (.loc l1 l2) source))) programCostBound
-                    have h2 := Nat.mul_le_mul_right (steps (handler, middle)) handlerCostBound
-                    omega
+                      K * steps (handler, middle)) :=
+                    Nat.add_le_add_left (Nat.add_le_add calleeSteps handlerSteps) 1
                 _ ≤ K + (K * steps (program, decClock (setVar link (.loc l1 l2) source)) +
                       K * steps (handler, middle)) := by
                     omega

@@ -4,9 +4,9 @@ import Flapjack.Compiler.Backend.StackRemove.Proofs.CompCorrect.CallTail
 /-! The `ret = none` `call` case of the step-counted `stack_remove` correctness
 theorem (stepped-flapjack#2, phase C3).
 
-The callee is taken from the code through `findCode`, so the step bound needs
-`codeBound`; `findCode_sptLookup` turns the lookup into a `sptLookup` of the
-same code so the bound applies. The factor is the program-dependent `K`. -/
+The callee is taken from the code through `findCode`; the step bound takes the
+callee's bound as an induction hypothesis with the program-dependent factor
+`K`. -/
 
 namespace SteppedFlapjack.StackRemoveSteps.CompCorrect
 
@@ -23,8 +23,6 @@ theorem compCorrectCallTailWithinSteps (dest : Sum Nat Nat) (handler : Option (H
     (pointer : Nat) (bounds : BitVec width × BitVec width) (jump : Bool)
     (B : Nat) (_bitmap : bitmapBound (width := width) (C := C) (F := F) B)
     (K : Nat) (Kpos : 1 ≤ K)
-    (codeBound : ∀ (label : Nat) (program : HolProg width),
-      sptLookup label source.code = some program → leafCost B bounds program ≤ K)
     (calleeIH : ∀ (program : HolProg width),
       StackSemControl.findCode dest source.regs source.code = some program →
       handler = none → source.clock ≠ 0 →
@@ -37,7 +35,7 @@ theorem compCorrectCallTailWithinSteps (dest : Sum Nat Nat) (handler : Option (H
          | some (.halt _) | some .timeOut | some (.finalFFI _) => postTarget.ffi = post.ffi
          | _ => stateRelHOL jump bounds pointer post postTarget) ∧
         steps (comp jump bounds pointer program, {t with clock := clock + t.clock}) ≤
-          leafCost B bounds program * steps (program, decClock source))
+          K * steps (program, decClock source))
     (hypothesis : evaluate (.call none dest handler, source) = (result, postSource) ∧
       result ≠ some .error ∧ stateRelHOL jump bounds pointer source target ∧
       Flapjack.Compiler.Backend.StackProps.regBound (.call none dest handler : HolProg width) pointer) :
@@ -63,8 +61,6 @@ theorem compCorrectCallTailWithinSteps (dest : Sum Nat Nat) (handler : Option (H
     | some h =>
       exact False.elim (notError (Prod.mk.inj sourceRun).1.symm)
     | none =>
-      obtain ⟨label, spt⟩ := findCode_sptLookup lookup
-      have programBound : leafCost B bounds program ≤ K := codeBound label program spt
       obtain ⟨targetLookup, bodyBound⟩ := FindCode.findCodeLemma jump bounds pointer
         source target dest program ⟨relation, by
           simp only [Flapjack.Compiler.Backend.StackProps.regBound] at bound
@@ -140,12 +136,11 @@ theorem compCorrectCallTailWithinSteps (dest : Sum Nat Nat) (handler : Option (H
             rw [tgt, src]
             calc 1 + steps (comp jump bounds pointer program,
                   {decClock target with clock := clock + (decClock target).clock})
-                ≤ 1 + leafCost B bounds program * steps (program, decClock source) :=
-                  Nat.add_le_add_left calleeSteps 1
-              _ ≤ 1 + K * steps (program, decClock source) :=
-                  Nat.add_le_add_left (Nat.mul_le_mul_right _ programBound) 1
-              _ ≤ K + K * steps (program, decClock source) :=
+                ≤ K + steps (comp jump bounds pointer program,
+                    {decClock target with clock := clock + (decClock target).clock}) :=
                   Nat.add_le_add_right Kpos _
+              _ ≤ K + K * steps (program, decClock source) :=
+                  Nat.add_le_add_left calleeSteps K
               _ = K * (1 + steps (program, decClock source)) := by
                   rw [Nat.mul_add, Nat.mul_one]
 
