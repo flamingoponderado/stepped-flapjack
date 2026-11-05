@@ -159,4 +159,29 @@ theorem oracleBitmapBudget_install {n limit : Nat}
   simp only [oracleBitmapBudget] at h
   omega
 
+theorem oracleBitmapBudget_add (n m : Nat)
+    (oracle : Nat → C × List (Nat × HolProg width) × List (BitVec width)) :
+    oracleBitmapBudget (n + m) oracle =
+      oracleBitmapBudget n oracle + oracleBitmapBudget m (holShiftSeq n oracle) := by
+  induction n generalizing oracle with
+  | zero =>
+    have hzero : holShiftSeq 0 oracle = oracle := by
+      funext i
+      simp [holShiftSeq]
+    simp [oracleBitmapBudget, hzero]
+  | succ n ih =>
+    simp only [Nat.succ_add, oracleBitmapBudget, ih]
+    have shift : holShiftSeq n (holShiftSeq 1 oracle) = holShiftSeq (n + 1) oracle := by
+      funext i
+      simp only [holShiftSeq]
+      congr 1
+    rw [shift]
+    omega
+
+theorem oraclePrefixBound_take {B K n m : Nat} {bounds : BitVec width × BitVec width}
+    (s : StackSemStateFiniteExact width C F) (h : oraclePrefixBound B bounds K n s)
+    (hm : m ≤ n) : oraclePrefixBound B bounds K m s := by
+  intro index hi name program hmem
+  exact h index (by omega) name program hmem
+
 end SteppedFlapjack.StackRemoveSteps.CompCorrect
