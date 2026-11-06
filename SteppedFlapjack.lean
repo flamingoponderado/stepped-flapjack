@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.GlobalInitializers
 import SteppedFlapjack.PanToCrepSteps.OriginalEntryRiscV
 import SteppedFlapjack.PanToCrepSteps.GlobalSourceEntry
 import SteppedFlapjack.PanToCrepSteps.GlobalWhile
@@ -444,6 +445,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.OriginalEntryRiscV`: Original initialized-loop visits through the global entry to RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.GlobalSourceEntry`: Original loop execution and bounds at the generated global entry.
 - `SteppedFlapjack.PanToCrepSteps.GlobalWhile`: Global lowering and Crep visit bounds for initialized loops.
+- `SteppedFlapjack.PanToCrepSteps.GlobalInitializers`: Supported scalar global declarations and generated initializer stores.
 - `SteppedFlapjack.PanToCrepSteps.GlobalShapes`: Supported global-lowering shapes and branch bounds.
 - `SteppedFlapjack.PanToCrepSteps.ControlSteps`: exact-state source control visits and compiled branch bounds.
 - `SteppedFlapjack.PanToCrepSteps.Shape`: source fragments lowered to supported Crep.

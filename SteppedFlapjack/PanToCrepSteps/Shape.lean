@@ -36,7 +36,7 @@ theorem scalar_compile {width : Nat} [NeZero width] {context : PanToCrepContextE
     obtain ⟨b,cb,db⟩ := ihb
     exact ⟨_,by simp [compileExpExactHOLW,compileExpExactHOLWList,ca,cb,cexpHeads],.op operator da db⟩
 
-/-- A loop-free source fragment with scalar expressions and local assignments. -/
+/-- A loop-free source fragment with scalar expressions, local assignments, and word stores. -/
 inductive BranchProgram {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) : ProgHOL width → Prop
   | skip : BranchProgram context .skip
@@ -46,6 +46,8 @@ inductive BranchProgram {width : Nat} [NeZero width]
   | return {e} : ScalarExpression context e → BranchProgram context (.return e)
   | assign (name n) {e} : context.vars.lookup name = some (.one,[n]) →
       ScalarExpression context e → BranchProgram context (.assign .local name e)
+  | store {address value} : ScalarExpression context address → ScalarExpression context value →
+      BranchProgram context (.store address value)
   | seq {a b} : BranchProgram context a → BranchProgram context b → BranchProgram context (.seq a b)
   | ite {e a b} : ScalarExpression context e → BranchProgram context a → BranchProgram context b →
       BranchProgram context (.ite e a b)
@@ -72,6 +74,12 @@ theorem branch_compile {width : Nat} [NeZero width] {context : PanToCrepContextE
         cases h : distinctListsHol [n] (crepExpVarsW (crepExpOfHOL value)) <;> simp_all
       simp [compileProgExactHOLW,compileLocalAssignExactHOLW,compiled,found,overlap,nestedDecsHOL,crepNestedSeqHOL]
       exact .dec direct (.seq (.expr (.assign n (.var _))) (.expr (.leaf .skip)))
+  | store ha hv =>
+    obtain ⟨address,ca,da⟩ := scalar_compile ha
+    obtain ⟨value,cv,dv⟩ := scalar_compile hv
+    simp only [compileProgExactHOLW,compileStoreExactHOLW,ca,cv,sizeOfShapeHOL,
+      List.length_cons,List.length_nil,List.range_succ,List.range_zero,nestedDecsHOL]
+    exact .dec da (.dec dv (.seq (.expr (.store (.var _) (.var _))) (.expr (.leaf .skip))))
   | seq ha hb iha ihb => simpa only [compileProgExactHOLW] using CrepToLoopSteps.BranchProgram.seq iha ihb
   | ite he ha hb iha ihb =>
     obtain ⟨value,compiled,direct⟩ := scalar_compile he

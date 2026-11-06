@@ -33,6 +33,8 @@ theorem globalCompile_branch_shape {width : Nat} [NeZero width]
   | tick => simpa only [compileProgExactHOL] using (BranchProgram.tick (context := ctxt))
   | «return» he => simpa only [compileProgExactHOL] using (BranchProgram.return (globalCompile_scalar_shape globals he))
   | assign name n found he => simpa only [compileProgExactHOL] using (BranchProgram.assign name n found (globalCompile_scalar_shape globals he))
+  | store ha hv => simpa only [compileProgExactHOL] using
+      (BranchProgram.store (globalCompile_scalar_shape globals ha) (globalCompile_scalar_shape globals hv))
   | seq ha hb iha ihb => simpa only [compileProgExactHOL] using (BranchProgram.seq iha ihb)
   | ite he ha hb iha ihb => simpa only [compileProgExactHOL] using (BranchProgram.ite (globalCompile_scalar_shape globals he) iha ihb)
 
@@ -49,6 +51,7 @@ theorem branch_control_static {width : Nat} [NeZero width] {F : Type}
   | tick => rw [controlSteps.eq_def]; simp_wf
   | «return» he => rw [controlSteps.eq_def]; simp_wf
   | assign name n found he => rw [controlSteps.eq_def]; simp_wf; omega
+  | store ha hv => rw [controlSteps.eq_def]; simp_wf; omega
   | @seq a b ha hb iha ihb =>
     rw [controlSteps_seq]
     have first := iha state

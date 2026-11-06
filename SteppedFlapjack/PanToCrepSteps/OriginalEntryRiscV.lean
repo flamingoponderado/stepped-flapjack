@@ -1,5 +1,6 @@
 import SteppedFlapjack.PanToCrepSteps.TailEntrySupportedGlobalRiscV
 import SteppedFlapjack.PanToCrepSteps.GlobalSourceEntry
+import SteppedFlapjack.PanToCrepSteps.GlobalInitializers
 
 /-! Original Pancake loop visits through the actual global entry to RISC-V. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -45,7 +46,6 @@ theorem panOriginalEntry_riscvWithin {F : Type}
     (originalInit : ProgHOL 64) (originalCondition : ExpHOL 64) (originalBody originalTail : ProgHOL 64)
     (originalState originalFinal : PanSemStateFiniteExact 64 F) (sourceLimit : Nat)
     (sourceBound : controlSteps (.seq originalInit (.seq (.while originalCondition originalBody) originalTail)) originalState ≤ sourceLimit)
-    (sourceInitShape : PanToCrepSteps.BranchProgram callerContext panInit)
     (originalInitShape : BranchProgram (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) originalInit)
     (originalConditionShape : ScalarExpression (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) originalCondition)
     (originalBodyShape : BranchProgram (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) originalBody)
@@ -80,6 +80,10 @@ theorem panOriginalEntry_riscvWithin {F : Type}
         { globals := HolFiniteMapExact.empty, globalsSize := 0,
           maxGlobalsSize := cakeBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL renamed).map sizeOfShapeHOL).sum }
       compileDecsExactHOL initial renamed = (initializers,funs,exns,globalContext))
+    (initSupported : BranchProgram callerContext panInit ∨ ∀ shape globalName value,
+      DeclHOL.decl shape globalName value ∈
+        fpermDecsHOL startName (newMainNameHOL declarations) (resortDeclsHOL declarations) →
+      ScalarExpression callerContext value)
     (notInline : newMainNameHOL declarations ∉
       (functionsHOL ((compileTopExactHOL declarations startName).filter inlinableHOL)).map Prod.fst)
     (programsDef : crepPrograms = compileProgDeclsHOLW (compileTopExactHOL declarations startName))
@@ -202,6 +206,17 @@ theorem panOriginalEntry_riscvWithin {F : Type}
         ((LoopMachineOutcome (resultToLoop result) outcome ∧ finalFfi.ioEvents = originalFinal.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: originalFinal.ffi.ioEvents ∧
             targetPost.stackMax.getD (targetPost.stackLimit+1) > targetPost.stackLimit)) := by
+  have sourceInitShape : BranchProgram callerContext panInit := by
+    rcases initSupported with direct | scalarGlobals
+    · exact direct
+    · rw [initDef]
+      let renamed := fpermDecsHOL startName (newMainNameHOL declarations) (resortDeclsHOL declarations)
+      let initial : PanGlobalsContextExact 64 :=
+        { globals := HolFiniteMapExact.empty, globalsSize := 0,
+          maxGlobalsSize := cakeBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL renamed).map sizeOfShapeHOL).sum }
+      have h := globalCompile_scalar_initializer_sequence callerContext renamed scalarGlobals initial
+      rw [show compileDecsExactHOL initial renamed = (initializers,funs,exns,globalContext) from globalCompiled] at h
+      exact h
   have nonerror : panResult ≠ some .error := by cases panComplete <;> simp
   have initRun : pan.evaluateHOLFiniteState (nestedSeqHOL initializers) = (none,panMiddle) := by
     simpa only [← initDef] using panInitRun
