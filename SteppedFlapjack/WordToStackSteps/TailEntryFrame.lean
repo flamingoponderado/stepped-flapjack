@@ -111,4 +111,28 @@ theorem nativeTailEntry_loopLocals {C F : Type} (p : HolLoopProg 64)
   have h := LoopToWord.CompileCorrect.compFunc_ctxt [] p [] (.loc 1 0 : WordLocW 64) (by simp) (by simp)
   simpa [WordSemStateFiniteExact.callEnv,sptFromAList] using h
 
+
+/-- The native entry frame formula bounds every source variable, and the
+actual entry lookup validates every label occurring in its compiled body. -/
+theorem nativeEntry_frame_and_labels {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (k frame frameSize count start : Nat)
+    (program : WordLangProgHOL (BitVec width)) (entry : StackSemStateFiniteExact width C F)
+    (bs bsPost : AppList (BitVec width)) (n nPost : Nat) (body : HolProg width)
+    (frameDef : frame = max (maxVarHOL program / 2 + 1 - k) (count-k))
+    (frameSizeDef : frameSize = if frame = 0 then 0 else frame+1)
+    (compiles : compNative ac false program (bs,n) (k,frameSize,frame) = (body,(bsPost,nPost)))
+    (found : sptLookup start entry.code = some (compileProgNative ac false program count k (bs,n)).1) :
+    maxVarHOL program < 2*frame+2*k ∧
+      ∀ loc, StackSem.getLabelsExact body loc → StackSem.locCheckExact entry.code loc := by
+  constructor
+  · rw [frameDef]
+    have lower := Nat.le_max_left (maxVarHOL program / 2 + 1 - k) (count-k)
+    omega
+  · have foundBody : sptLookup start entry.code = some (.seq (.stackAlloc (frameSize-(count-k))) body) := by
+      simpa only [compileProgNative, ← frameDef, ← frameSizeDef, compiles] using found
+    intro loc label
+    refine Or.inr ⟨start,_,foundBody,?_⟩
+    simp only [StackSem.getLabelsExact]
+    exact Or.inr label
+
 end SteppedFlapjack.WordToStackSteps

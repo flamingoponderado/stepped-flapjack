@@ -401,6 +401,8 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
       sptLookup firstLoopName stack.code = some (Compiler.Backend.WordToStack.Native.compileProgNative ac false out 1 (ac.regCount-(5+ac.avoidRegs.length)) (bs,n)).1 ∧
       (appListAppend bs).length ≤ n ∧ n-(appListAppend bs).length ≤ stack.bitmaps.length ∧
       (appListAppend bsPost).IsPrefix (stack.bitmaps.drop (n-(appListAppend bs).length)) ∧
+      maxVarHOL out < 2*frame+2*(ac.regCount-(5+ac.avoidRegs.length)) ∧
+      (∀ loc, StackSem.getLabelsExact body loc → StackSem.locCheckExact stack.code loc) ∧
       (Flapjack.WordToStackProofs.stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
         (WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
           (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2) coracle))
@@ -434,8 +436,11 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
     lengthBound,gapBound,bitmapPrefix,caseResult⟩ :=
     globalEntry_nonInline_frame_or_resource arch declarations start initializers returnShape original found
       funs exns context compiled initShape notInline state wc ac stack coracle codeEq bitmapsPrefix ok limit
+  have entryFacts := SteppedFlapjack.WordToStackSteps.nativeEntry_frame_and_labels ac
+    (ac.regCount-(5+ac.avoidRegs.length)) frame frameSize 1 firstLoopName _ stack bs bsPost n nPost body
+    frameDef sizeDef compilation foundEntry
   refine ⟨bs,n,bsPost,nPost,body,frame,frameSize,frameDef,sizeDef,compilation,foundEntry,
-    lengthBound,gapBound,bitmapPrefix,?_⟩
+    lengthBound,gapBound,bitmapPrefix,entryFacts.1,entryFacts.2,?_⟩
   rcases caseResult with success | ⟨post,run,ffi,stepBound⟩
   · left
     refine ⟨success.1,success.2,?_⟩
