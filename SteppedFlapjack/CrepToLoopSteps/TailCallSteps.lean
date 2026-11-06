@@ -162,4 +162,35 @@ theorem compile_tailCall_nil_crep_bound {F : Type}
     (branchConditionWhileBranch_wordSimpShape init initShape condition conditionShape body tail bodyShape tailShape c .ln)
     extendedRun (completeCrep_loop complete) extendedBound
 
+/-- The ordinary caller state/code/locals relations derive all callee-entry
+relations for an empty-argument call, including the actual compiler context. -/
+theorem tailCall_nil_entry_relations {width : Nat} [NeZero width] {F : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (source : CrepSemHOLState width F)
+    (target : LoopSemStateFiniteExact width F) (name : MlString) (body : CrepProgHOL width)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
+    (found : source.code.lookup name = some ([],body)) :
+    let sourceEntry := decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList []}
+    let targetEntry : LoopSemStateFiniteExact width F := {decClock target with locals := .ln}
+    let calleeCtxt := ctxtFcExact ctxt.target ctxt.funcs [] []
+    crepToLoopStateRelExact sourceEntry targetEntry ∧
+    crepToLoopMemRelHOLExact sourceEntry.memory targetEntry.memory sourceEntry.memaddrs ∧
+    crepToLoopGlobalsRelHOLExact sourceEntry.globals targetEntry.globals ∧
+    crepToLoopCodeRelExact calleeCtxt sourceEntry.code targetEntry.code ∧
+    crepToLoopLocalsRelExact calleeCtxt .ln sourceEntry.locals targetEntry.locals := by
+  obtain ⟨loc,len,hlab,hlen,_⟩ := codeRel.2 name [] body found
+  have lenZero : len = 0 := by simpa using hlen.symm
+  subst len
+  have preserved := crepToLoopCallPreserveStateCodeLocalsRelExact [] [] [] source target ctxt live name [] body loc
+    (by simp) (by simp) (by simp) (by simp) stateRel memRel globalsRel codeRel localsRel found (by simpa using hlab) (by simp)
+  refine ⟨?_,?_,?_,?_,?_⟩
+  · simpa [decClockCrepSemHOL,decClock,sptFromAList] using preserved.1
+  · simpa [decClockCrepSemHOL,decClock] using memRel
+  · simpa [decClockCrepSemHOL,decClock] using globalsRel
+  · simpa [decClockCrepSemHOL,decClock] using preserved.2.1
+  · simpa [decClockCrepSemHOL,decClock,sptFromAList] using preserved.2.2
+
 end SteppedFlapjack.CrepToLoopSteps
