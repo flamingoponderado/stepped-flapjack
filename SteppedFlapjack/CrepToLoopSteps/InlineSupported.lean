@@ -19,6 +19,8 @@ theorem supportedCodeBody_inline_fixed {width : Nat} [NeZero width]
   | branch h => exact branchProgram_inline_fixed inl keys support h
   | tail h name => exact inline_tailEntry_fixed inl keys support _ h name [] (noTail _ name rfl)
   | loop hi _ hb ht => exact branchConditionWhileBranch_inline_fixed inl keys support _ hi _ _ _ hb ht
+  | declLoop _ hi _ hb ht =>
+    simp [inlineProgHOLCoreExact,branchConditionWhileBranch_inline_fixed inl keys support _ hi _ _ _ hb ht]
 
 /-- The real top-level inliner preserves a supported program list when no
 supported direct tail call targets a name selected for inlining. -/
