@@ -42,6 +42,33 @@ theorem controlSteps_pos {width : Nat} [NeZero width] {σ : Type}
   rw [controlSteps.eq_def]
   exact Nat.le_add_right _ _
 
+/-- A source sequence counts its second statement exactly when it is reached. -/
+theorem controlSteps_seq {width : Nat} [NeZero width] {σ : Type}
+    (a b : ProgHOL width) (s : PanSemStateFiniteExact width σ) :
+    controlSteps (.seq a b) s = 1 + controlSteps a s + match s.evaluateHOLFiniteState a with
+      | (none,t) => controlSteps b t
+      | _ => 0 := by
+  rw [controlSteps.eq_def]
+  have first : Prod.Lex (fun x y : Nat => x < y) (fun x y : Nat => x < y)
+      (s.clock,sizeOf a) (s.clock,sizeOf (.seq a b : ProgHOL width)) := by
+    apply Prod.Lex.right
+    simp_wf
+    omega
+  simp only [dif_pos first]
+  rcases run : s.evaluateHOLFiniteState a with ⟨res,t⟩
+  cases res with
+  | none =>
+    have hc := evaluateHOLFiniteState_clock_le s a
+    rw [run] at hc
+    have second : Prod.Lex (fun x y : Nat => x < y) (fun x y : Nat => x < y)
+        (t.clock,sizeOf b) (s.clock,sizeOf (.seq a b : ProgHOL width)) := by
+      by_cases same : t.clock = s.clock
+      · rw [same]; apply Prod.Lex.right; simp_wf
+      · apply Prod.Lex.left; simp only at hc; omega
+    simp only [dif_pos second]
+    omega
+  | some r => simp only; omega
+
 /-- A source while counts the body and each reached recursive iteration. -/
 theorem controlSteps_while {width : Nat} [NeZero width] {σ : Type}
     (condition : ExpHOL width) (body : ProgHOL width) (source : PanSemStateFiniteExact width σ) :
