@@ -19,6 +19,9 @@ theorem supportedCodeBody_inline_fixed {width : Nat} [NeZero width]
   | branch h => exact branchProgram_inline_fixed inl keys support h
   | tail h name => exact inline_tailEntry_fixed inl keys support _ h name [] (noTail _ name rfl)
   | loop hi _ hb ht => exact branchConditionWhileBranch_inline_fixed inl keys support _ hi _ _ _ hb ht
+  | declWhile _ _ hb ht =>
+    simp [inlineProgHOLCoreExact,branchProgram_inline_fixed inl keys support hb,
+      branchProgram_inline_fixed inl keys support ht]
   | declLoop _ hi _ hb ht =>
     simp [inlineProgHOLCoreExact,branchConditionWhileBranch_inline_fixed inl keys support _ hi _ _ _ hb ht]
 

@@ -26,6 +26,18 @@ theorem supportedBody_optimised_loop {width : Nat} [NeZero width]
   | loop hi hc hb ht =>
     left
     exact optimise_sequence (branchConditionWhileBranch_wordSimpShape _ hi _ hc _ _ hb ht _ _)
+  | @declWhile name value condition body tail hv hc hb ht =>
+    left
+    apply optimise_sequence
+    have suffix (bc : CrepToLoopContextExact) (bl : NumSet) :
+        LoopSequenceSource (compileHOLExact bc bl (.seq (.while condition body) tail)) := by
+      obtain ⟨code,conditionValue,next,outLive,condCompiled,loopCompiled,loopBody⟩ :=
+        branchConditionWhile_loopBranch condition hc body hb bc bl
+      simp only [compileHOLExact,loopCompiled]
+      exact .seq (.loop bl bl loopBody) (.branch (compile_branchProgram_loopBranch ht bc bl))
+    obtain ⟨value',compiled⟩ := directExpression_noCode hv _ _ _
+    rw [compileHOLExact,compiled]
+    exact .seq (.branch .skip) (.seq (.branch (.assign _ _)) (suffix _ _))
   | declLoop hv hi hc hb ht =>
     left
     apply optimise_sequence
