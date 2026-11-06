@@ -1,3 +1,4 @@
+import SteppedFlapjack.LoopToWordSteps.FixedEntryRiscV
 import SteppedFlapjack.WordToStackSteps.FixedEntryFrame
 import SteppedFlapjack.WordToStackSteps.WholeEntryRiscV
 import SteppedFlapjack.WordToStackSteps.WholeEntryFrame
