@@ -6,6 +6,7 @@ import SteppedFlapjack.PanToCrepSteps.TailEntryCompiledRiscV
 import SteppedFlapjack.CrepToLoopSteps.WholeInitialRelations
 import SteppedFlapjack.PanToCrepSteps.TailEntryFrontendTablesRiscV
 import SteppedFlapjack.PanToCrepSteps.GlobalCodeRelations
+import SteppedFlapjack.StackAllocSteps.NamedPipelineClock
 import Flapjack.Pancake.LoopToWord.Proofs.ProgramNames
 import Flapjack.Pancake.CrepToLoop.Proofs.MakeFuncsLemmas
 
@@ -147,11 +148,11 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
     (oracle : Nat → LabToTarget.Config × List (Nat × HolProg 64) × List (BitVec 64))
     (renamed : StackSemStateFiniteExact 64 LabToTarget.Config F) (lab : LabSem.State 64 LabToTarget.Config F)
     (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
-    (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
+    (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state) (initialClock : Nat)
     (_distinct : (inputCode.map Prod.fst).Nodup) (_sourceCode : entry.code = sptFromAList inputCode)
-    (_pre : Pre cr c {entry with code := sptFromAList (StackRawCall.compile inputCode),clock := tailStackReplayLimit ac count entryName alg regCount col loopEntry wordCtxt labels compiledCode loopLimit+1} entry.regs)
+    (_pre : Pre cr c {entry with code := sptFromAList (StackRawCall.compile inputCode),clock := initialClock} entry.regs)
     (_relation : stateRelHOL jump bounds pointer
-      (Tgt anything cr c {entry with code := sptFromAList (StackRawCall.compile inputCode),clock := tailStackReplayLimit ac count entryName alg regCount col loopEntry wordCtxt labels compiledCode loopLimit+1} 0 entry.regs)
+      (Tgt anything cr c {entry with code := sptFromAList (StackRawCall.compile inputCode),clock := initialClock} 0 entry.regs)
       (makeInit f (sptFromAList (StackRemove.compileHOL jump bounds gen maxHeap a b removeInput)) oracle renamed))
     (_ha : ¬renamed.useAlloc) (_hs : ¬renamed.useStore) (_hk : ¬renamed.useStack)
     (_hf : Function.Bijective (findNameSpt f))
@@ -212,7 +213,7 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
   intro ac wc wordLocals retLookup gc
     localsRelWord domain stackEntry frameSize frame bs bsPost n nPost compiled stackRel native lengthBound
     bitmapBound bitmapPrefix labelCheck maxBound frameDef frameSizeDef space foundEntry inputCode anything cr c jump bounds pointer f
-    gen maxHeap a b removeInput oracle renamed lab pc mc labCode labs asm machine distinct sourceCode pre relation ha hs hk hf
+    gen maxHeap a b removeInput oracle renamed lab pc mc labCode labs asm machine initialClock distinct sourceCode pre relation ha hs hk hf
     hcode hor labRel hpc hmc tie machineRel
   let loopEntry := optimiseHOL (compileHOLExact ctxt live (.seq (compileProgExactHOLW callerContext panInit) (.call none name [])))
   let wordCtxt := makeCtxtHOL 2 (LoopToWord.fromNumSetHOL
@@ -235,11 +236,26 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
     exact (SteppedFlapjack.WordToStackSteps.nativeTailEntry_loopLocals _ word 0).2
   have wordCode : ({word with clock := word.clock + extra} : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F).code = sptFromAList programs := by
     exact wordCodeEq
+  let panContext := ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []
+  let init := compileProgExactHOLW callerContext panInit
+  let calleeInit := compileProgExactHOLW panContext panCalleeInit
+  let body := compileProgExactHOLW panContext panBody
+  let tail := compileProgExactHOLW panContext panTail
+  let loopLimit := branchTailLoopLimit ctxt live name init calleeInit condition body tail
+    (sizeOf init + 2 + (3 + sizeOf calleeInit + sizeOf body + sizeOf tail) * limit)
+  let replayClock := tailStackReplayLimit ac 1 firstLoopName alg regCount col loopEntry wordCtxt labels compiledCode loopLimit + 1
+  obtain ⟨newPre,newRel,newLabRel,newTie,newMachineRel⟩ :=
+    SteppedFlapjack.StackAllocSteps.namedPipelineInitial_setClock
+      {stackEntry with code := sptFromAList (StackRawCall.compile inputCode)} renamed lab
+      anything cr c stackEntry.regs jump bounds pointer initialClock replayClock f
+      (sptFromAList (StackRemove.compileHOL jump bounds gen maxHeap a b removeInput)) oracle
+      mc machine labCode labs pc asm pre relation labRel tie machineRel
   exact backend ac 1 firstLoopName alg regCount col wordCtxt labels compiledCode locals wordLocals retLookup dim retLabel vars gc
     wc programs rfl member rfl rfl rfl wordCode rfl localsRelWord domain
     stackEntry frameSize frame [] bs bsPost n nPost compiled firstLoopName 1 stackRel native lengthBound bitmapBound
     bitmapPrefix labelCheck maxBound frameDef frameSizeDef space foundEntry inputCode anything cr c jump bounds pointer f gen
-    maxHeap a b removeInput oracle renamed lab pc mc labCode labs asm machine distinct sourceCode pre relation ha hs hk hf
-    hcode hor labRel hpc hmc tie machineRel
+    maxHeap a b removeInput oracle {renamed with clock := replayClock} {lab with clock := replayClock}
+    pc mc labCode labs asm machine distinct sourceCode newPre newRel ha hs hk hf
+    hcode hor newLabRel hpc hmc newTie newMachineRel
 
 end SteppedFlapjack.PanToCrepSteps
