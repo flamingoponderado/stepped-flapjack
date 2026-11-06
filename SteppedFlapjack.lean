@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.TailEntrySteps
 import SteppedFlapjack.PanToCrepSteps.WholeWordRiscV
 import SteppedFlapjack.PanToCrepSteps.ActualDeclsRiscV
 import SteppedFlapjack.PanToCrepSteps.ActualWordRiscV
