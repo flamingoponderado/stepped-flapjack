@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.GlobalCrepEntry
 import SteppedFlapjack.CrepToLoopSteps.InlineEntry
 import SteppedFlapjack.PanToCrepSteps.GlobalEntry
 import SteppedFlapjack.PanToCrepSteps.TailEntrySteps
