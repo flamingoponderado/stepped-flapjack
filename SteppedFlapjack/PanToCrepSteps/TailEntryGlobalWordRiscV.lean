@@ -91,6 +91,7 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
     (liveDef : live = .ln) :
     TailProgramShapes (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)) ∧
     ∃ (condition : CrepExpHOL 64),
+    compileExpExactHOLW (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) panCondition = ([condition],.one) ∧
     let panContext := ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []
     let init := compileProgExactHOLW callerContext panInit
     let calleeInit := compileProgExactHOLW panContext panCalleeInit
@@ -201,14 +202,14 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
     funs exns globalContext globalCompiled globalInitShape notInline source
   have normalized := emptyLive_initial_relations ctxt source target word crepRel memRel globalsRel
     (by simpa only [liveDef] using localsRel) wordData
-  obtain ⟨wordShapes,condition,post,result,postRel,resultRel,extra,loopPost,loopRel,backend⟩ :=
+  obtain ⟨wordShapes,condition,conditionCompiled,post,result,postRel,resultRel,extra,loopPost,loopRel,backend⟩ :=
     panTailEntry_frontendTables_riscvWithin ctxt live name source {target with locals := .ln} word limit
       normalized.1 normalized.2.1 normalized.2.2.1 (by simpa only [liveDef] using normalized.2.2.2.1)
       arch crepPrograms entryName entryBody unique entryLookup programShapes ctxtEq sourceCodeEq loopCodeEq wordCodeEq normalized.2.2.2.2
       panInit panCalleeInit panCondition panBody panTail callerContext sourceInitShape panInitShape panConditionShape panBodyShape
       panTailShape pan panMiddle panPost panResult panLocals panReturnShape panInitRun panLookup panClock panRun panComplete
       initLocalised initialPanRel initialCodeRel initialExcpRel initialLocalsRel panBound
-  refine ⟨wordShapes,condition,post,result,postRel,resultRel,extra,loopPost,loopRel,?_⟩
+  refine ⟨wordShapes,condition,conditionCompiled,post,result,postRel,resultRel,extra,loopPost,loopRel,?_⟩
   dsimp only
   intro ac wc wordLocals retLookup gc
     localsRelWord domain stackEntry frameSize frame bs bsPost n nPost compiled stackRel native lengthBound

@@ -56,6 +56,7 @@ theorem panTailEntry_compiled_riscvWithin {F : Type}
     (initialLocalsRel : panToCrepLocalsRelFiniteExact callerContext pan.locals source.locals)
     (panBound : globalEntrySteps panInit name [] pan ≤ limit) :
     ∃ (condition : CrepExpHOL 64),
+    compileExpExactHOLW (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) panCondition = ([condition],.one) ∧
     let panContext := ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []
     let init := compileProgExactHOLW callerContext panInit
     let calleeInit := compileProgExactHOLW panContext panCalleeInit
@@ -150,10 +151,10 @@ theorem panTailEntry_compiled_riscvWithin {F : Type}
         ((LoopMachineOutcome (resultToLoop result) outcome ∧ finalFfi.ioEvents = panPost.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: panPost.ffi.ioEvents ∧
             targetPost.stackMax.getD (targetPost.stackLimit+1) > targetPost.stackLimit)) := by
-  obtain ⟨condition,_,conditionShape,initShape,calleeInitShape,bodyShape,tailShape,calleeEq⟩ :=
+  obtain ⟨condition,conditionCompiled,conditionShape,initShape,calleeInitShape,bodyShape,tailShape,calleeEq⟩ :=
     tailEntry_compiled_shapes callerContext panInit panCalleeInit panCondition panBody panTail sourceInitShape
       panInitShape panConditionShape panBodyShape panTailShape
-  refine ⟨condition,?_⟩
+  refine ⟨condition,conditionCompiled,?_⟩
   exact panTailEntry_frontend_riscvWithin ctxt live name (compileProgExactHOLW callerContext panInit) initShape
     (compileProgExactHOLW (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) panCalleeInit) calleeInitShape
     condition conditionShape (compileProgExactHOLW (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) panBody)

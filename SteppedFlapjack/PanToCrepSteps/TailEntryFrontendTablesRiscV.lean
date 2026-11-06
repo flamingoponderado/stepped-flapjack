@@ -69,6 +69,7 @@ theorem panTailEntry_frontendTables_riscvWithin {F : Type}
     (panBound : globalEntrySteps panInit name [] pan ≤ limit) :
     TailProgramShapes (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)) ∧
     ∃ (condition : CrepExpHOL 64),
+    compileExpExactHOLW (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) panCondition = ([condition],.one) ∧
     let panContext := ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []
     let init := compileProgExactHOLW callerContext panInit
     let calleeInit := compileProgExactHOLW panContext panCalleeInit
@@ -170,12 +171,12 @@ theorem panTailEntry_frontendTables_riscvWithin {F : Type}
   have loopWordRel : loopToWordStateRelHOLExact target word :=
     ⟨len,hm,hd,hs,hc,hbe,hffi,hbase,hlen,htop,hglobals,loopWordCode⟩
   have shapes := WordAllocSteps.wholeCrep_word_shapes arch crepPrograms programShapes
-  obtain ⟨condition,post,result,postRel,resultRel,extra,loopPost,loopRel,backendTheorem⟩ :=
+  obtain ⟨condition,conditionCompiled,post,result,postRel,resultRel,extra,loopPost,loopRel,backendTheorem⟩ :=
     panTailEntry_compiled_riscvWithin ctxt live name source target word limit crepRel memRel globalsRel codeRel
       localsRel loopWordRel panInit panCalleeInit panCondition panBody panTail callerContext sourceInitShape panInitShape
       panConditionShape panBodyShape panTailShape pan panMiddle panPost panResult panLocals panReturnShape panInitRun
       panLookup panClock panRun panComplete initLocalised initialPanRel initialCodeRel initialExcpRel initialLocalsRel panBound
-  refine ⟨shapes,condition,post,result,postRel,resultRel,extra,loopPost,loopRel,?_⟩
+  refine ⟨shapes,condition,conditionCompiled,post,result,postRel,resultRel,extra,loopPost,loopRel,?_⟩
   dsimp only
   intro ac count entryName alg regCount col wordCtxt labels compiledCode locals wordLocals retLookup dim retLabel vars gc
     wc programs programsEq entryMember algorithm registers colour wordCode compiledCodeEq localsRelWord domain
