@@ -244,6 +244,7 @@ import SteppedFlapjack.StackToLabSteps.FullInitRemoveLabSteps
 import SteppedFlapjack.StackToLabSteps.FullInitAllocSteps
 import SteppedFlapjack.StackToLabSteps.FullInitStackLabSteps
 import SteppedFlapjack.StackToLabSteps.FullInitRiscVSteps
+import SteppedFlapjack.StackToLabSteps.FullInitWordRiscV
 import SteppedFlapjack.StackToLabSteps.PipelineComposition
 import SteppedFlapjack.StackToLabSteps.RiscVPipeline
 import SteppedFlapjack.LabToTargetSteps.LabRiscVComposition
