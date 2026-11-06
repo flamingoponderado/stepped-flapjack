@@ -22,8 +22,8 @@ open Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 
 
 /-- An upper bound on an original initialized loop's control visits gives a
-bound on the compiled RISC-V execution. The generated initializer is counted
-separately; the source step counter treats expressions as atomic. -/
+bound on the compiled RISC-V execution. The generated initializer is bounded
+by its syntax size; the source step counter treats expressions as atomic. -/
 theorem panOriginalEntry_riscvWithin {F : Type}
     (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
     (source : CrepSemHOLState 64 F)
@@ -97,7 +97,7 @@ theorem panOriginalEntry_riscvWithin {F : Type}
     (entryNameDef : entryName = startName)
     (entryBodyDef : entryBody = .seq (compileProgExactHOLW callerContext panInit) (.call none name []))
     (liveDef : live = .ln) :
-    let limit := controlSteps (nestedSeqHOL initializers) pan +
+    let limit := sizeOf (nestedSeqHOL initializers) +
       (3 + sizeOf (compileProgExactHOL globalContext originalInit) +
         sizeOf (compileProgExactHOL globalContext originalBody) + sizeOf (compileProgExactHOL globalContext originalTail)) *
         sourceLimit + 2
@@ -215,13 +215,15 @@ theorem panOriginalEntry_riscvWithin {F : Type}
   subst panBody
   subst panTail
   have bound : globalEntrySteps panInit name [] pan ≤
-      controlSteps (nestedSeqHOL initializers) pan +
+      sizeOf (nestedSeqHOL initializers) +
         (3 + sizeOf (compileProgExactHOL globalContext originalInit) +
           sizeOf (compileProgExactHOL globalContext originalBody) + sizeOf (compileProgExactHOL globalContext originalTail)) *
           sourceLimit + 2 := by
     have scaled := Nat.mul_le_mul_left
       (3 + sizeOf (compileProgExactHOL globalContext originalInit) +
         sizeOf (compileProgExactHOL globalContext originalBody) + sizeOf (compileProgExactHOL globalContext originalTail)) sourceBound
+    have initBound : controlSteps (nestedSeqHOL initializers) pan ≤ sizeOf (nestedSeqHOL initializers) := by
+      exact branch_control_static (by simpa only [initDef] using sourceInitShape) pan
     simp only [initDef,nameDef]
     omega
   have ffiEq : originalFinal.ffi = panPost.ffi := postRel.2.2.2.2.2.2.2.2.2.2.2.2.2.1
