@@ -19,6 +19,7 @@ import SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrameRiscV
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclCommonBound
 import SteppedFlapjack.PanToCrepSteps.ReplayLimitMono
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
+import SteppedFlapjack.PanToCrepSteps.SourceInitialGlobals
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram
 import SteppedFlapjack.PanToCrepSteps.CountedDeclExample
 import SteppedFlapjack.PanToCrepSteps.CountedLoopExample
@@ -511,6 +512,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.GlobalInitializers`: Supported scalar global declarations and generated initializer stores.
 - `SteppedFlapjack.PanToCrepSteps.GlobalShapes`: Supported global-lowering shapes and branch bounds.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial`: Concrete original and lowered global-entry state relations.
+- `SteppedFlapjack.PanToCrepSteps.SourceInitialGlobals`: Source-first no-global call-entry construction.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclRiscV`: Counted concrete source execution through the RISC-V bound.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclNativeRiscV`: Native initialization for the concrete RISC-V bound.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrame`: Concrete native frame and RISC-V resource alternative.
