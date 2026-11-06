@@ -11,6 +11,17 @@ import Flapjack.Pancake.CrepToLoop.Proofs.MakeFuncsLemmas
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.LoopToWord
 open SteppedFlapjack.CrepToLoopSteps
+open Flapjack Flapjack.WordToStackProofs Flapjack.WordToStackProofs.CompCorrect
+open Flapjack.StackSemControl Flapjack.StackSemStateOps Flapjack.StackSemEvaluate
+open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.StackLang
+open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackAlloc Flapjack.Compiler.Backend.StackAlloc.CompCorrect
+open Flapjack.Compiler.Backend.StackRemove Flapjack.Compiler.Backend.StackNames
+open Flapjack.Compiler.Backend.Semantics.TargetProps Flapjack.Compiler.Encoders.RiscV.Target
+open SteppedFlapjack.StackAllocSteps SteppedFlapjack.StackRemoveSteps.CompCorrect SteppedFlapjack.LabToTargetSteps
+open SteppedFlapjack.StackSteps SteppedFlapjack.StackToLabSteps SteppedFlapjack.WordSimpSteps
+open Flapjack.Compiler.Backend.WordToStack.Native Flapjack.Compiler.Backend.WordToWord
+open Flapjack.WordToStackProofs.InitializationStateRel Flapjack.WordSemStateFiniteExact
+
 
 /-- The actual Crep simplifier leaves a supported initializer and direct
 zero-argument tail call unchanged. -/
@@ -202,7 +213,7 @@ theorem globalEntry_nonInline_stack_inputs {width : Nat} [NeZero width] {C F : T
     funs exns context compiled initShape notInline state wc ac
   have lookup := lookups.1
   rw [sptLookup_sptFromAList] at lookup
-  have member := sptAListLookup_mem _ _ _ lookup
+  have member := Flapjack.sptAListLookup_mem _ _ _ lookup
   have unique : ((loopToWordCompileHOL (compileProgHOLExact arch
       (compileProgDeclsHOLW (compileTopExactHOL declarations start)))).map Prod.fst).Nodup :=
     loopToWordFirstCompileAllDistinct _ (firstCompileProgAllDistinctExact arch _)
@@ -293,7 +304,7 @@ theorem globalEntry_nonInline_frame_or_resource {C F : Type}
     funs exns context compiled initShape notInline state wc ac
   have lookup := lookups.1
   rw [sptLookup_sptFromAList] at lookup
-  have member := sptAListLookup_mem _ _ _ lookup
+  have member := Flapjack.sptAListLookup_mem _ _ _ lookup
   have unique : ((loopToWordCompileHOL (compileProgHOLExact arch
       (compileProgDeclsHOLW (compileTopExactHOL declarations start)))).map Prod.fst).Nodup :=
     loopToWordFirstCompileAllDistinct _ (firstCompileProgAllDistinctExact arch _)
@@ -317,5 +328,110 @@ theorem globalEntry_nonInline_frame_or_resource {C F : Type}
     simp [storeConstsStubLocation,wordNumStubs,stackNumStubs] at lower
   exact SteppedFlapjack.WordToStackSteps.wholeWordStack_tailEntryFrame_or_resource wc ac _ firstLoopName _ member unique
     stack coracle noRaise noStore codeEq bitmapsPrefix ok limit
+
+/-- The actual global entry obtains its frame or reaches a bounded RISC-V resource outcome. -/
+theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
+    (arch : Compiler.Encoders.Asm.AsmArchitecture)
+    (declarations : List (DeclHOL 64)) (start : MlString)
+    (initializers : List (ProgHOL 64)) (returnShape : ShapeHOL) (original : ProgHOL 64)
+    (found : (functionsHOL declarations).lookup start = some ([],original,returnShape))
+    (funs exns : List (DeclHOL 64)) (context : PanGlobalsContextExact 64)
+    (compiled :
+      let renamed := fpermDecsHOL start (newMainNameHOL declarations) (resortDeclsHOL declarations)
+      let initial : PanGlobalsContextExact 64 :=
+        { globals := HolFiniteMapExact.empty, globalsSize := 0,
+          maxGlobalsSize := cakeBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL renamed).map sizeOfShapeHOL).sum }
+      compileDecsExactHOL initial renamed = (initializers,funs,exns,context))
+    (initShape : CrepToLoopSteps.BranchProgram (compileProgExactHOLW
+      (mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
+        (makeFuncsExactHOL (functionsHOL (compileTopExactHOL declarations start))) (sizeOfShapeHOL (.comb [])-1)
+        (getEidsFromDeclsHOL (compileTopExactHOL declarations start))) (nestedSeqHOL initializers)))
+    (notInline : newMainNameHOL declarations ∉
+      (functionsHOL ((compileTopExactHOL declarations start).filter inlinableHOL)).map Prod.fst)
+    (state : CrepSemHOLState 64 F)
+    (wc : Compiler.Backend.WordToWord.Config) (ac : Compiler.Encoders.Asm.AsmConfigExact 64)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config F)
+    (coracle : Nat → (Nat × LabToTarget.Config) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (codeEq : stack.code = sptFromAList (Flapjack.Compiler.Backend.WordToStack.Native.compileNative ac false
+      (Compiler.Backend.WordToWord.compile wc ac (loopToWordCompileHOL
+        (compileProgHOLExact arch (compileProgDeclsHOLW (compileTopExactHOL declarations start))))).2).2.2.2)
+    (bitmapsPrefix : (Flapjack.Compiler.Backend.WordToStack.Native.compileNative ac false
+      (Compiler.Backend.WordToWord.compile wc ac (loopToWordCompileHOL
+        (compileProgHOLExact arch (compileProgDeclsHOLW (compileTopExactHOL declarations start))))).2).1.IsPrefix stack.bitmaps)
+    (ok : Flapjack.WordToStackProofs.InitializationStateRel.initStateOk ac
+      (ac.regCount-(5+ac.avoidRegs.length)) stack coracle) (limit : Nat)
+    (inputCode : List (Nat × HolProg 64))
+    (anything : WordSemGcFun 64) (cr : CompileFn 64 LabToTarget.Config) (c : DataToWord.Config)
+    (jump : Bool) (bounds : BitVec 64 × BitVec 64) (pointer : Nat)
+    (f : Spt Nat) (gen : Bool) (maxHeap a b : Nat) (removeInput : List (Nat × HolProg 64))
+    (oracle : Nat → LabToTarget.Config × List (Nat × HolProg 64) × List (BitVec 64))
+    (renamed : StackSemStateFiniteExact 64 LabToTarget.Config F) (lab : LabSem.State 64 LabToTarget.Config F)
+    (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
+    (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
+    (distinct : (inputCode.map Prod.fst).Nodup) (sourceCode : stack.code = sptFromAList inputCode)
+    (pre : Pre cr c {stack with code := sptFromAList (StackRawCall.compile inputCode), clock := limit+1} stack.regs)
+    (relation : stateRelHOL jump bounds pointer
+      (Tgt anything cr c {stack with code := sptFromAList (StackRawCall.compile inputCode), clock := limit+1} 0 stack.regs)
+      (makeInit f (sptFromAList (StackRemove.compileHOL jump bounds gen maxHeap a b removeInput)) oracle renamed))
+    (ha : ¬renamed.useAlloc) (hs : ¬renamed.useStore) (hk : ¬renamed.useStack)
+    (hf : Function.Bijective (findNameSpt f))
+    (hcode : renamed.code = sptFromAList (compileHOL f (StackRemove.compileHOL jump bounds gen maxHeap a b removeInput)))
+    (hor : renamed.compileOracle = Prod.map id (Prod.map (compileHOL f) id) ∘ oracle)
+    (rel : Flapjack.Compiler.Backend.StackToLab.Proofs.StateRel.stateRel renamed lab)
+    (hpc : LabSem.locToPc firstLoopName 0 lab.code = some lab.pc)
+    (hmc : mc.target = riscvTarget) (tie : LabToTarget.oracleTie mc machine lab)
+    (machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) lab asm machine) :
+    let lowered := compileTopExactHOL declarations start
+    let sourceContext : PanToCrepContextExact 64 := mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
+      (makeFuncsExactHOL (functionsHOL lowered)) (sizeOfShapeHOL (.comb [])-1) (getEidsFromDeclsHOL lowered)
+    let init := compileProgExactHOLW sourceContext (nestedSeqHOL initializers)
+    let code := compileProgDeclsHOLW lowered
+    let loopContext := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable code) 0
+    let loop := optimiseHOL (compileHOLExact loopContext .ln (.seq init (.call none (newMainNameHOL declarations) [])))
+    let ctxt := makeCtxtHOL 2 (fromNumSetHOL (sptDifference (accVarsHOL loop .ln) (toNumSetHOL []))) .ln
+    let programs := loopToWordCompileHOL (compileProgHOLExact arch code)
+    let q := (LoopToWord.compHOL ctxt loop (firstLoopName,2)).1
+    let out := (Compiler.Backend.WordToWord.fullCompileSingle ac.twoRegArith
+      (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+      ((firstLoopName,1,q),SteppedFlapjack.WordAllocSteps.entryColour wc programs firstLoopName)).2.2
+    ∃ bs n bsPost nPost body frame frameSize,
+      frame = max (maxVarHOL out / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (1-(ac.regCount-(5+ac.avoidRegs.length))) ∧
+      frameSize = (if frame = 0 then 0 else frame+1) ∧
+      Compiler.Backend.WordToStack.Native.compNative ac false out (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
+      sptLookup firstLoopName stack.code = some (Compiler.Backend.WordToStack.Native.compileProgNative ac false out 1 (ac.regCount-(5+ac.avoidRegs.length)) (bs,n)).1 ∧
+      (appListAppend bs).length ≤ n ∧ n-(appListAppend bs).length ≤ stack.bitmaps.length ∧
+      (appListAppend bsPost).IsPrefix (stack.bitmaps.drop (n-(appListAppend bs).length)) ∧
+      (Flapjack.WordToStackProofs.stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
+        (WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
+          (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2) coracle))
+        {stack with stackSpace := stack.stackSpace-frameSize} [] 0 ∧
+       Flapjack.WordToStackProofs.stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
+        {(WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
+          (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2) coracle)) with clock := limit}
+        {stack with stackSpace := stack.stackSpace-frameSize,clock := limit} [] 0 ∨
+       ∃ (ticks : Nat) (finalMachine : RiscV.L3.riscv_state) (finalFfi : HolFfiState F),
+         ticks ≤ labTickBound 4 labCode lab.codeBuffer *
+          (flattenStepFactor * (computedRunCost bounds (uniformFactor (width := 64) c * 3)
+            (.call none (.inl firstLoopName) none)
+            (Tgt anything cr c {stack with code := sptFromAList (StackRawCall.compile inputCode), clock := limit+1} 0 stack.regs) *
+            (uniformFactor (width := 64) c * 3) + 4)) ∧
+         evaluateTargetHOL mc lab.ffi ticks machine = (.halt HolOutcome.resourceLimitHit,finalMachine,finalFfi) ∧
+         finalFfi.ioEvents = stack.ffi.ioEvents) := by
+  obtain ⟨bs,n,bsPost,nPost,body,frame,frameSize,frameDef,sizeDef,compilation,foundEntry,
+    lengthBound,gapBound,bitmapPrefix,caseResult⟩ :=
+    globalEntry_nonInline_frame_or_resource arch declarations start initializers returnShape original found
+      funs exns context compiled initShape notInline state wc ac stack coracle codeEq bitmapsPrefix ok limit
+  refine ⟨bs,n,bsPost,nPost,body,frame,frameSize,frameDef,sizeDef,compilation,foundEntry,
+    lengthBound,gapBound,bitmapPrefix,?_⟩
+  rcases caseResult with success | ⟨post,run,ffi,stepBound⟩
+  · exact Or.inl success
+  · right
+    have classification : stackEntryClass (some (.halt (.word 2)) : Option (StackSemResult 64)) =
+        .CompleteResult HolOutcome.resourceLimitHit := by simp [stackEntryClass]
+    obtain ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,events⟩ :=
+      stackPipelineRiscVWithin inputCode stack firstLoopName (limit+1) 3 (some (.halt (.word 2))) post
+        anything cr c jump bounds pointer f gen maxHeap a b removeInput oracle renamed lab HolOutcome.resourceLimitHit
+        pc mc labCode labs asm machine distinct sourceCode run (by simp) stepBound pre relation ha hs hk hf hcode hor rel hpc classification hmc tie machineRel
+    exact ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,by simpa only [ffi] using events⟩
 
 end SteppedFlapjack.PanToCrepSteps
