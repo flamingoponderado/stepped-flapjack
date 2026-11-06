@@ -45,12 +45,10 @@ theorem panTailEntry_supportedGlobal_riscvWithin {F : Type}
     (panBodyShape : PanToCrepSteps.BranchProgram (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) panBody)
     (panTailShape : PanToCrepSteps.BranchProgram (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) panTail)
     (pan panMiddle panPost : PanSemStateFiniteExact 64 F) (panResult : Option (PanSemResultExact 64))
-    (panLocals : HolFiniteMapExact MlString (ValueHOL 64)) (panReturnShape : ShapeHOL)
+    (panReturnShape : ShapeHOL)
     (panInitRun : pan.evaluateHOLFiniteState panInit = (none,panMiddle))
-    (panLookup : lookupCodeHOLFinite panMiddle.code.lookup name [] =
-      some (.seq panCalleeInit (.seq (.while panCondition panBody) panTail),panLocals,panReturnShape))
     (panClock : panMiddle.clock ≠ 0)
-    (panRun : (callEntryStateHOLFinite panMiddle panLocals).evaluateHOLFiniteState
+    (panRun : (callEntryStateHOLFinite panMiddle HolFiniteMapExact.empty).evaluateHOLFiniteState
       (.seq panCalleeInit (.seq (.while panCondition panBody) panTail)) = (panResult,panPost))
     (panComplete : CompletePanResult panResult)
     (initLocalised : localisedProgHOL panInit = true)
@@ -73,6 +71,8 @@ theorem panTailEntry_supportedGlobal_riscvWithin {F : Type}
     (programsDef : crepPrograms = compileProgDeclsHOLW (compileTopExactHOL declarations startName))
     (panCode : pan.code = HolFiniteMapExact.empty.updateList
       (functionsHOL (compileTopExactHOL declarations startName)).reverse)
+    (calleeFound : (functionsHOL (compileTopExactHOL declarations startName)).lookup name =
+      some ([],.seq panCalleeInit (.seq (.while panCondition panBody) panTail),panReturnShape))
     (localised : ∀ entry ∈ functionsHOL (compileTopExactHOL declarations startName), localisedProgHOL entry.2.2.1 = true)
     (preShapes : ∀ n ps p, (n,ps,p) ∈ compileToCrepExactHOLW (compileTopExactHOL declarations startName) → SupportedCodeBody p)
     (noTail : ∀ n ps init callee,
@@ -193,13 +193,16 @@ theorem panTailEntry_supportedGlobal_riscvWithin {F : Type}
     panCode actualCode actualUnique localised preShapes noTail
   have programShapes : ∀ n ps p, (n,ps,p) ∈ crepPrograms → SupportedCodeBody p := by
     simpa only [programsDef] using shapes
+  have panLookup : lookupCodeHOLFinite panMiddle.code.lookup name [] =
+      some (.seq panCalleeInit (.seq (.while panCondition panBody) panTail),HolFiniteMapExact.empty,panReturnShape) :=
+    global_lowered_lookup_after_init declarations startName name pan panMiddle panInit _ panReturnShape panCode panInitRun calleeFound
   have initialCodeRel : codeRelExactHOLW callerContext pan.code source.code := by
     rw [callerDef]
     exact codeRel
   exact panTailEntry_globalWord_riscvWithin ctxt live name source target word limit crepRel memRel globalsRel localsRel
     arch crepPrograms entryName entryBody unique programShapes ctxtEq sourceCodeEq loopCodeEq wordCodeEq wordData
     panInit panCalleeInit panCondition panBody panTail callerContext sourceInitShape panInitShape panConditionShape panBodyShape
-    panTailShape pan panMiddle panPost panResult panLocals panReturnShape panInitRun panLookup panClock panRun panComplete
+    panTailShape pan panMiddle panPost panResult HolFiniteMapExact.empty panReturnShape panInitRun panLookup panClock panRun panComplete
     initLocalised initialPanRel initialCodeRel initialExcpRel initialLocalsRel panBound declarations startName initializers
     returnShape original globalFound funs exns globalContext globalCompiled notInline programsDef callerDef initDef nameDef
     entryNameDef entryBodyDef liveDef

@@ -1,5 +1,6 @@
 import SteppedFlapjack.CrepToLoopSteps.InlineSupported
 import SteppedFlapjack.PanToCrepSteps.GlobalCodeRelations
+import Flapjack.Pancake.Proofs.PanGlobals.SemanticsInitCall
 
 /-! Source-to-Crep code relation for the actual global-lowered program. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -65,5 +66,28 @@ theorem global_supported_panCrep_codeAndShapes {width : Nat} [NeZero width] {F :
   change (name,params,p) ∈ CrepInlineCanonical.compileInlTopHOLExact _ _ at member
   rw [fixed] at member
   exact shapes name params p member
+
+/-- A successful initializer preserves the actual lowered source code table.
+Consequently a zero-argument function found in that table is available at the
+callee entry with empty locals. -/
+theorem global_lowered_lookup_after_init {width : Nat} [NeZero width] {F : Type}
+    (declarations : List (DeclHOL width)) (start callee : MlString)
+    (pan middle : PanSemStateFiniteExact width F) (init body : ProgHOL width) (returnShape : ShapeHOL)
+    (panCode : pan.code = HolFiniteMapExact.empty.updateList
+      (functionsHOL (compileTopExactHOL declarations start)).reverse)
+    (initRun : pan.evaluateHOLFiniteState init = (none,middle))
+    (found : (functionsHOL (compileTopExactHOL declarations start)).lookup callee = some ([],body,returnShape)) :
+    PanSemStateFiniteExact.lookupCodeHOLFinite middle.code.lookup callee [] =
+      some (body,HolFiniteMapExact.empty,returnShape) := by
+  have preserved : middle.code = pan.code := by
+    have h := SemInitSupport.eval_code pan init
+    rw [initRun] at h
+    exact h
+  apply SemInitSupport.lookup_init
+  rw [preserved,panCode]
+  change Flapjack.FLOOKUP (Flapjack.FUPDATE_LIST Flapjack.FEMPTY
+    (functionsHOL (compileTopExactHOL declarations start)).reverse) callee = some ([],body,returnShape)
+  rw [Flapjack.FLOOKUP_FUPDATE_LIST_reverse_eq_lookup]
+  exact found
 
 end SteppedFlapjack.PanToCrepSteps
