@@ -73,8 +73,9 @@ source and native inputs for this supported fragment from a Lab initialization
 context. Its `withClock` variant derives a sufficient proof clock from the
 source budget without changing the counted run or RISC-V machine.
 `labInitialized_countdown_fromGeneral_withClock_riscv` applies that general
-theorem to a countdown with a separately proved exact source cost. Concrete initialization guards remain to be proved for
-an application.
+theorem to a countdown with a separately proved exact source cost. `labInit_countdown_fromGeneral_riscv` constructs the backend directly from
+the Lab and Stack initializer guards and the compiler's native code and bitmap
+outputs. Those concrete guards remain to be proved for an application.
 
 The reusable concrete declaration example is kept in the library because it
 instantiates the actual global entry and serves as an end-to-end proof target.
