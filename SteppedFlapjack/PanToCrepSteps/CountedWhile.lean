@@ -141,4 +141,96 @@ theorem counted_while_break {σ : Type}
       change 1 + (controlSteps bodyHOL source.decClockHOLFinite + 0) ≤ _
       omega
 
+
+/-- A word return or final FFI event from a loop body propagates immediately;
+the loop contributes the condition cost and one statement visit. -/
+theorem counted_while_terminal {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (source final : PanSemStateFiniteExact 64 σ) [DecidablePred source.memaddrs]
+    (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
+    (condition : Exp (RiscV.Word 64)) (conditionRanged : ExpByteRanged condition) (word : BitVec 64)
+    (conditionRun : evalPanSemStateExp production condition = some (.word word))
+    (nonzero : word ≠ 0) (clock : source.clock ≠ 0)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel : Nat)
+    (body : Prog (RiscV.Word 64)) (bodyHOL : ProgHOL 64)
+    (localsPost globalsPost : VarName → Option (PanValue (RiscV.Word 64)))
+    (memoryPost : BitVec 64 → Option (PanValue (BitVec 64))) (ffiPost : FfiState σ) (bodyCost : Nat)
+    (terminal : Sum (BitVec 64) (FfiFinalEvent × HolFinalEvent))
+    (terminalRel : match terminal with
+      | .inl _ => True
+      | .inr events => FfiFinalEventRel events.1 events.2)
+    (bodyExec : evalPanValueFfiProgSteps context primitive handler production.structs functions
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+      production.locals production.globals production.memory production.ffi body
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
+      some (match terminal with
+        | .inl value => .returned localsPost globalsPost memoryPost ffiPost [.word value]
+        | .inr events => .finalFfi localsPost globalsPost memoryPost ffiPost events.1,bodyCost))
+    (bodyRun : source.decClockHOLFinite.evaluateHOLFiniteState bodyHOL =
+      (some (match terminal with
+        | .inl value => .returned (.val (.word value))
+        | .inr events => .finalFfi events.2),final))
+    (bodyBound : controlSteps bodyHOL source.decClockHOLFinite ≤ bodyCost) :
+    evalPanValueFfiProgSteps context primitive handler production.structs functions
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+1)
+      production.locals production.globals production.memory production.ffi (.while condition body)
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
+        some (match terminal with
+          | .inl value => .returned localsPost globalsPost memoryPost ffiPost [.word value]
+          | .inr events => .finalFfi localsPost globalsPost memoryPost ffiPost events.1,
+            panValueExpStepCost condition+bodyCost+1) ∧
+    source.evaluateHOLFiniteState (.while (expToHOL condition) bodyHOL) =
+      (some (match terminal with
+        | .inl value => .returned (.val (.word value))
+        | .inr events => .finalFfi events.2),final) ∧
+    controlSteps (.while (expToHOL condition) bodyHOL) source ≤ panValueExpStepCost condition+bodyCost+1 ∧
+    (match terminal with | .inl _ => True | .inr events => FfiFinalEventRel events.1 events.2) := by
+  obtain ⟨conditionCounted,exactEval⟩ := counted_condition_word production source rel ranged condition conditionRanged word conditionRun
+  have zeroBits : word ≠ (0#64) := by simpa using nonzero
+  cases terminal <;> simp only at bodyExec bodyRun ⊢
+  all_goals
+    constructor
+    · rw [evalPanValueFfiProgSteps]
+      simp [conditionCounted,zeroBits,bodyExec]
+    · constructor
+      · rw [evaluateHOLFiniteState_while_fixClockRewrite]
+        have finiteEval : @evalHOLFinite 64 σ _ source
+            (fun address => Classical.propDecidable (source.memaddrs address)) (expToHOL condition) = some (.val (.word word)) := exactEval
+        rw [finiteEval]
+        simp [zeroBits,clock,bodyRun]
+      · constructor
+        · rw [controlSteps_while]
+          simp only [exactEval,if_pos (show word ≠ 0 ∧ source.clock ≠ 0 from ⟨nonzero,clock⟩),bodyRun]
+          change 1 + (controlSteps bodyHOL source.decClockHOLFinite + 0) ≤ _
+          omega
+        · exact terminalRel
+
+
+/-- A concrete one-iteration loop, with no assumed child-cost bound: both
+semantics execute `while 1 do break`, and its counted cost is exactly three. -/
+theorem counted_while_one_break_example {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (source : PanSemStateFiniteExact 64 σ) [DecidablePred source.memaddrs]
+    (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
+    (clock : source.clock ≠ 0)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel : Nat) :
+    evalPanValueFfiProgSteps context primitive handler production.structs functions
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+2)
+      production.locals production.globals production.memory production.ffi (.while (.const 1) .break)
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
+        some (.normal production.locals production.globals production.memory production.ffi,3) ∧
+    source.evaluateHOLFiniteState (.while (.const 1) .break) = (none,source.decClockHOLFinite) ∧
+    controlSteps (.while (.const 1) .break) source ≤ 3 := by
+  have result := counted_while_break production source source.decClockHOLFinite rel ranged
+    (.const 1) (by simp [ExpByteRanged]) 1 (by simp [evalPanSemStateExp_64_eq_previous,evalPanValueExp])
+    (by decide) clock context primitive handler functions (fuel+1) .break .break
+    production.locals production.globals production.memory production.ffi 1
+    (by simp [evalPanValueFfiProgSteps]) (by simp [evaluateHOLFiniteState_break])
+    (by rw [controlSteps.eq_def]; rfl)
+  simpa [panValueExpStepCost,expToHOL] using result
+
 end SteppedFlapjack.PanToCrepSteps
