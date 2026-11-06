@@ -58,6 +58,7 @@ import SteppedFlapjack.PanToCrepSteps.TailEntryCrepBound
 import SteppedFlapjack.CrepToLoopSteps.TailRiscVComposition
 import SteppedFlapjack.WordToStackSteps.TailEntryFrame
 import SteppedFlapjack.WordToStackSteps.WholeTailInitialization
+import SteppedFlapjack.CrepToLoopSteps.TailRiscVInputsCommon
 import SteppedFlapjack.CrepToLoopSteps.RiscVInputs
 import SteppedFlapjack.WordAllocSteps.WholeTailCode
 import SteppedFlapjack.WordToStackSteps.DirectTailRiscV
@@ -477,6 +478,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.CrepToLoopSteps.BranchWhileRiscV`: Crep initialization and loop through RISC-V.
 - `SteppedFlapjack.CrepToLoopSteps.DeclRiscVComposition`: Declaration-wrapped entry through actual RISC-V execution.
 - `SteppedFlapjack.CrepToLoopSteps.DeclRiscVInputs`: Backend inputs and replay limit for a declaration-wrapped entry.
+- `SteppedFlapjack.CrepToLoopSteps.TailRiscVInputsCommon`: Shared callee-independent Loop backend facts.
 - `SteppedFlapjack.CrepToLoopSteps.DeclTerminal`: Declaration-wrapped loop execution bounds through Crep-to-Loop.
 - `SteppedFlapjack.CrepToLoopSteps.BranchPrefix`: compositional branch-prefix visit bounds.
 - `SteppedFlapjack.PanToCrepSteps.WhileSequenceRiscV`: Pancake loops with continuations through RISC-V.

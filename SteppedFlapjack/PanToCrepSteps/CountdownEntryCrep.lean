@@ -16,9 +16,10 @@ open Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open SteppedFlapjack.LabToTargetSteps
 
 /-- The generated entry's Crep execution and visit bound for the actual
-counted countdown. The initial global and frontend state relations remain
-explicit. -/
-theorem countdown_globalEntry_crep {σ : Type} (count : Nat)
+counted countdown, using any supplied upper bound on its source steps. The
+initial global and frontend state relations remain explicit. -/
+theorem countdown_globalEntry_crep {σ : Type} (count sourceBudget : Nat)
+    (budgetBound : 6*count+9 ≤ sourceBudget)
     (declarations : List (DeclHOL 64)) (start : MlString) (initializers : List (ProgHOL 64))
     (globals : PanGlobalsContextExact 64) (caller : PanToCrepContextExact 64)
     (production : PanSemState (RiscV.Word 64) (FfiState σ))
@@ -54,7 +55,7 @@ theorem countdown_globalEntry_crep {σ : Type} (count : Nat)
     let globalLimit := controlSteps (nestedSeqHOL initializers) pan +
       (4 + sizeOf (compileProgExactHOL globals (.skip : ProgHOL 64)) +
         sizeOf (compileProgExactHOL globals (countdownBodyHOL name)) +
-        sizeOf (compileProgExactHOL globals (.return (.const returned)))) * (6*count+9) + 2
+        sizeOf (compileProgExactHOL globals (.return (.const returned)))) * sourceBudget + 2
     let crepLimit := sizeOf crepInit + 2 +
       (4 + sizeOf (compileProgExactHOLW inner (compileProgExactHOL globals (.skip))) +
         sizeOf (compileProgExactHOLW inner (compileProgExactHOL globals (countdownBodyHOL name))) +
@@ -109,15 +110,27 @@ theorem countdown_globalEntry_crep {σ : Type} (count : Nat)
     calleeLocalsRel (by simpa [loweredBody,originalBody,compileProgExactHOL] using calleeLocalised)
   refine ⟨sourceResult,sourceFinal,panPost,crepMiddle,crepPost,crepResult,sourceExec,sourceRun,postRel,crepInitRun,
     crepFound,crepClock,crepRun,complete,finalRel,resultRel,?_⟩
+  have budgetScale := Nat.mul_le_mul_left
+    (4 + sizeOf (compileProgExactHOL globals (.skip : ProgHOL 64)) +
+      sizeOf (compileProgExactHOL globals (countdownBodyHOL name)) +
+      sizeOf (compileProgExactHOL globals (.return (.const returned)))) budgetBound
+  have budgetedGlobal : globalEntrySteps (nestedSeqHOL initializers) (newMainNameHOL declarations) [] pan ≤
+    controlSteps (nestedSeqHOL initializers) pan +
+      (4 + sizeOf (compileProgExactHOL globals (.skip : ProgHOL 64)) +
+        sizeOf (compileProgExactHOL globals (countdownBodyHOL name)) +
+        sizeOf (compileProgExactHOL globals (.return (.const returned)))) * sourceBudget + 2 := by
+    omega
   have scaled := Nat.mul_le_mul_left
     (4 + sizeOf (compileProgExactHOLW (scalarDeclContext calleeContext (ofString name)) (compileProgExactHOL globals (.skip))) +
       sizeOf (compileProgExactHOLW (scalarDeclContext calleeContext (ofString name)) (compileProgExactHOL globals (countdownBodyHOL name))) +
-      sizeOf (compileProgExactHOLW (scalarDeclContext calleeContext (ofString name)) (compileProgExactHOL globals (.return (.const returned))))) globalBound
+      sizeOf (compileProgExactHOLW (scalarDeclContext calleeContext (ofString name)) (compileProgExactHOL globals (.return (.const returned))))) budgetedGlobal
   dsimp only [calleeContext] at scaled crepBound ⊢
   omega
 
-/-- The counted countdown reaches the optimized Loop entry within the source-derived limit. -/
-theorem countdown_globalEntry_loop {σ : Type} (count : Nat)
+/-- The counted countdown reaches the optimized Loop entry within a limit
+computed from the supplied source-step budget. -/
+theorem countdown_globalEntry_loop {σ : Type} (count sourceBudget : Nat)
+    (budgetBound : 6*count+9 ≤ sourceBudget)
     (declarations : List (DeclHOL 64)) (start : MlString) (initializers : List (ProgHOL 64))
     (globals : PanGlobalsContextExact 64) (caller : PanToCrepContextExact 64)
     (production : PanSemState (RiscV.Word 64) (FfiState σ))
@@ -161,7 +174,7 @@ theorem countdown_globalEntry_loop {σ : Type} (count : Nat)
     let globalLimit := controlSteps (nestedSeqHOL initializers) pan +
       (4 + sizeOf (compileProgExactHOL globals (.skip : ProgHOL 64)) +
         sizeOf (compileProgExactHOL globals (countdownBodyHOL name)) +
-        sizeOf (compileProgExactHOL globals (.return (.const returned)))) * (6*count+9) + 2
+        sizeOf (compileProgExactHOL globals (.return (.const returned)))) * sourceBudget + 2
     let crepLimit := sizeOf crepInit + 2 +
       (4 + sizeOf (compileProgExactHOLW inner (compileProgExactHOL globals (.skip))) +
         sizeOf (compileProgExactHOLW inner (compileProgExactHOL globals (countdownBodyHOL name))) +
@@ -208,7 +221,7 @@ theorem countdown_globalEntry_loop {σ : Type} (count : Nat)
           {word with clock := word.clock+extra} loopLimit := by
   obtain ⟨sourceResult,sourceFinal,panPost,crepMiddle,crepPost,crepResult,sourceExec,sourceRun,postRel,crepInitRun,
     crepFound,crepClock,crepRun,complete,finalRel,resultRel,crepBound⟩ :=
-    countdown_globalEntry_crep count declarations start initializers globals caller production source pan middle crep
+    countdown_globalEntry_crep count sourceBudget budgetBound declarations start initializers globals caller production source pan middle crep
       rel ranged name nameRanged wordRange sourceClock returned panCode initRun sourceFound entryClock globalRel
       panStateRel panCodeRel panExcpRel panLocalsRel initLocalised initShape context primitive handler functions fuel
   refine ⟨sourceResult,sourceFinal,panPost,crepMiddle,crepPost,crepResult,sourceExec,sourceRun,postRel,crepInitRun,
