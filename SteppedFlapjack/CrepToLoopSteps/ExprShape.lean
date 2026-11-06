@@ -18,6 +18,10 @@ theorem compile_exprProgram_select {width : Nat} [NeZero width]
   | returnNil =>
     simp only [compileHOLExact,compileExpsHOLExact,genTemps,List.nil_append]
     exact .seq (.leaf (.ret _)) (.leaf .skip)
+  | returnOne expr =>
+    obtain ⟨value,h⟩ := directExpression_noCode expr ctxt (ctxt.vmax + 1) live
+    simp [compileHOLExact,compileExpsHOLExact,h,genTemps,loopNestedSeqHOL]
+    exact .seq (.assign _ _) (.seq (.leaf (.ret _)) (.leaf .skip))
   | assign name expr =>
     simp only [compileHOLExact]
     cases ctxt.vars.lookup name with

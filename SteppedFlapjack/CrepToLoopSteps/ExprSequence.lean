@@ -45,6 +45,7 @@ theorem directExpression_noCode {width : Nat} [NeZero width]
 inductive ExprProgram {width : Nat} [NeZero width] : CrepProgHOL width → Prop
   | leaf {p} : DirectLeaf p → ExprProgram p
   | returnNil : ExprProgram (.return [])
+  | returnOne {e} : DirectExpression e → ExprProgram (.return [e])
   | assign (name) {e} : DirectExpression e → ExprProgram (.assign name e)
   | storeGlob (name) {e} : DirectExpression e → ExprProgram (.storeGlob name e)
   | store {dst src} : DirectExpression dst → DirectExpression src → ExprProgram (.store dst src)
@@ -60,6 +61,10 @@ theorem compile_exprProgram {width : Nat} [NeZero width]
   | returnNil =>
     simp only [compileHOLExact, compileExpsHOLExact, genTemps, List.nil_append]
     exact .seq (.leaf (.ret _)) (.leaf .skip)
+  | returnOne expr =>
+    obtain ⟨value,h⟩ := directExpression_noCode expr ctxt (ctxt.vmax + 1) live
+    simp [compileHOLExact,compileExpsHOLExact,h,genTemps,loopNestedSeqHOL]
+    exact .seq (.leaf (.assign _ _)) (.seq (.leaf (.ret _)) (.leaf .skip))
   | assign name expr =>
     simp only [compileHOLExact]
     cases found : ctxt.vars.lookup name with
@@ -218,6 +223,16 @@ theorem exprProgram_correct_with_steps {width : Nat} [NeZero width] {σ : Type}
     rw [sourceOne]
     simp [compileHOLExact, compileExpsHOLExact, genTemps, loopNestedSeqHOL,
       LoopSteps.steps_seq, evaluate, LoopSemStateFiniteExact.getVars, LoopSteps.steps_leaf]
+  | @returnOne e expr =>
+    intro source result sourceFinal target ctxt live run nonerror stateRel memRel globalsRel codeRel localsRel
+    obtain ⟨extra,targetResult,targetFinal,he,hs,hm,hg,hc,hr,hl⟩ :=
+      crepToLoopNcompileCorrectOf (.return [e]) source result sourceFinal target ctxt live run nonerror
+        stateRel memRel globalsRel codeRel localsRel
+    refine ⟨extra,targetResult,targetFinal,he,hs,hm,hg,hc,hr,hl,?_⟩
+    rw [CrepSteps.steps_leaf _ _ (by rfl)]
+    obtain ⟨value,h⟩ := directExpression_noCode expr ctxt (ctxt.vmax + 1) live
+    simp only [compileHOLExact,compileExpsHOLExact,h,List.nil_append,genTemps]
+    exact twoLeaves_steps_bound _ _ _ (by rfl) (by rfl)
   | @assign name e expr =>
     intro source result sourceFinal target ctxt live run nonerror stateRel memRel globalsRel codeRel localsRel
     obtain ⟨extra,targetResult,targetFinal,he,hs,hm,hg,hc,hr,hl⟩ :=

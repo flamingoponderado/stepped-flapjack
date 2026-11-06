@@ -1,3 +1,7 @@
+import SteppedFlapjack.CrepToLoopSteps.BranchRiscV
+import SteppedFlapjack.CrepToLoopSteps.Branch
+import SteppedFlapjack.LoopSteps.BranchedStatic
+import SteppedFlapjack.LoopSteps.BranchedClock
 import SteppedFlapjack.CrepToLoopSteps.ExprRiscV
 import SteppedFlapjack.CrepToLoopSteps.ExprShape
 import SteppedFlapjack.CrepToLoopSteps.ExprSequence
@@ -272,6 +276,10 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.WordInstSteps.StackComposition`: bounded selected Word runs through Stack.
 - `SteppedFlapjack.WordInstSteps.Expression`: general selected-expression shape, conventions and cost.
 - `SteppedFlapjack.WordInstSteps.Simple`: quantitative instruction selection for Word expression statements.
+- `SteppedFlapjack.CrepToLoopSteps.BranchRiscV`: Crep conditional programs through RISC-V.
+- `SteppedFlapjack.CrepToLoopSteps.Branch`: Crep conditional compilation and source-step bounds.
+- `SteppedFlapjack.LoopSteps.BranchedStatic`: loop-free branch visit bounds.
+- `SteppedFlapjack.LoopSteps.BranchedClock`: branch count stability under clock extension.
 - `SteppedFlapjack.CrepToLoopSteps.ExprRiscV`: Crep expression programs through instruction selection and RISC-V.
 - `SteppedFlapjack.CrepToLoopSteps.ExprShape`: compiled Crep expression programs fit selected Loop bounds.
 - `SteppedFlapjack.CrepToLoopSteps.ExprSequence`: Crep assignment and sequence bounds.
