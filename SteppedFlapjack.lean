@@ -203,6 +203,7 @@ import SteppedFlapjack.StackAllocSteps.EntrySteps
 import SteppedFlapjack.StackAllocSteps.MakeInitEntrySteps
 import SteppedFlapjack.StackAllocSteps.RawCallComposition
 import SteppedFlapjack.StackAllocSteps.ThreePassComposition
+import SteppedFlapjack.StackAllocSteps.NamedPipelineClock
 import SteppedFlapjack.StackRemoveSteps.EntrySteps
 import SteppedFlapjack.StackRemoveSteps.InitSteps
 import SteppedFlapjack.StackRemoveSteps.InitEntrySteps

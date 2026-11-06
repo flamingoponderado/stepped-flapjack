@@ -3,6 +3,7 @@ import SteppedFlapjack.CrepToLoopSteps.SimpFixed
 import SteppedFlapjack.WordAllocSteps.WholeTailCode
 import SteppedFlapjack.WordToStackSteps.WholeTailInitialization
 import SteppedFlapjack.WordToStackSteps.TailEntryFrame
+import SteppedFlapjack.StackAllocSteps.NamedPipelineClock
 import Flapjack.Pancake.LoopToWord.Proofs.ProgramNames
 import Flapjack.Pancake.LoopToWord.Proofs.LabPres
 import Flapjack.Pancake.CrepToLoop.Proofs.MakeFuncsLemmas
@@ -360,7 +361,7 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
       (Compiler.Backend.WordToWord.compile wc ac (loopToWordCompileHOL
         (compileProgHOLExact arch (compileProgDeclsHOLW (compileTopExactHOL declarations start))))).2).1.IsPrefix stack.bitmaps)
     (ok : Flapjack.WordToStackProofs.InitializationStateRel.initStateOk ac
-      (ac.regCount-(5+ac.avoidRegs.length)) stack coracle) (limit : Nat)
+      (ac.regCount-(5+ac.avoidRegs.length)) stack coracle) (limit initialClock : Nat)
     (inputCode : List (Nat × HolProg 64))
     (anything : WordSemGcFun 64) (cr : CompileFn 64 LabToTarget.Config) (c : DataToWord.Config)
     (jump : Bool) (bounds : BitVec 64 × BitVec 64) (pointer : Nat)
@@ -370,9 +371,9 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
     (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
     (distinct : (inputCode.map Prod.fst).Nodup) (sourceCode : stack.code = sptFromAList inputCode)
-    (pre : Pre cr c {stack with code := sptFromAList (StackRawCall.compile inputCode), clock := limit+1} stack.regs)
+    (pre : Pre cr c {stack with code := sptFromAList (StackRawCall.compile inputCode), clock := initialClock} stack.regs)
     (relation : stateRelHOL jump bounds pointer
-      (Tgt anything cr c {stack with code := sptFromAList (StackRawCall.compile inputCode), clock := limit+1} 0 stack.regs)
+      (Tgt anything cr c {stack with code := sptFromAList (StackRawCall.compile inputCode), clock := initialClock} 0 stack.regs)
       (makeInit f (sptFromAList (StackRemove.compileHOL jump bounds gen maxHeap a b removeInput)) oracle renamed))
     (ha : ¬renamed.useAlloc) (hs : ¬renamed.useStore) (hk : ¬renamed.useStack)
     (hf : Function.Bijective (findNameSpt f))
@@ -466,10 +467,18 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
   · right
     have classification : stackEntryClass (some (.halt (.word 2)) : Option (StackSemResult 64)) =
         .CompleteResult HolOutcome.resourceLimitHit := by simp [stackEntryClass]
+    obtain ⟨newPre,newRel,newLabRel,newTie,newMachineRel⟩ :=
+      SteppedFlapjack.StackAllocSteps.namedPipelineInitial_setClock
+        {stack with code := sptFromAList (StackRawCall.compile inputCode)} renamed lab
+        anything cr c stack.regs jump bounds pointer initialClock (limit+1) f
+        (sptFromAList (StackRemove.compileHOL jump bounds gen maxHeap a b removeInput)) oracle
+        mc machine labCode labs pc asm pre relation rel tie machineRel
     obtain ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,events⟩ :=
       stackPipelineRiscVWithin inputCode stack firstLoopName (limit+1) 3 (some (.halt (.word 2))) post
-        anything cr c jump bounds pointer f gen maxHeap a b removeInput oracle renamed lab HolOutcome.resourceLimitHit
-        pc mc labCode labs asm machine distinct sourceCode run (by simp) stepBound pre relation ha hs hk hf hcode hor rel hpc classification hmc tie machineRel
+        anything cr c jump bounds pointer f gen maxHeap a b removeInput oracle
+        {renamed with clock := limit+1} {lab with clock := limit+1} HolOutcome.resourceLimitHit
+        pc mc labCode labs asm machine distinct sourceCode run (by simp) stepBound newPre newRel
+        ha hs hk hf hcode hor newLabRel hpc classification hmc newTie newMachineRel
     exact ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,by simpa only [ffi] using events⟩
 
 end SteppedFlapjack.PanToCrepSteps
