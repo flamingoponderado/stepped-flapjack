@@ -104,6 +104,7 @@ import SteppedFlapjack.WordToStackSteps.WholeEntryFrame
 import SteppedFlapjack.WordToStackSteps.InitialFrame
 import SteppedFlapjack.WordToStackSteps.WholeInitialization
 import SteppedFlapjack.WordToStackSteps.WholeProgram
+import SteppedFlapjack.WordToStackSteps.DeterministicEntry
 import SteppedFlapjack.WordAllocSteps.WholeProgram
 import SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileWordAllocatedRiscV
 import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordAllocated
@@ -540,6 +541,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.WordToStackSteps.CallSequence`: source-clock accounting and zero-clock simulation for sequences containing calls.
 - `SteppedFlapjack.WordToStackSteps.ReturningHandlerComplete`: source-step bounds and compiled execution for returning handler calls over loop blocks.
 - `SteppedFlapjack.WordToStackSteps.ReturningHandlerZeroClock`: zero-clock handler callee and continuation proofs for loop blocks.
+- `SteppedFlapjack.WordToStackSteps.DeterministicEntry`: Executable bitmap state for the compiled entry.
 - `SteppedFlapjack.WordToStackSteps.ReturningZeroClock`: zero-clock callee and
   matching normal-return continuation composition from the actual call history.
 - `SteppedFlapjack.WordToStackSteps.ReturningNormalized`: source-step clock
