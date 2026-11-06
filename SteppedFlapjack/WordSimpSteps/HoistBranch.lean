@@ -48,7 +48,7 @@ theorem tryIfHoist2_branch (fuel : Nat) : ∀
             · contradiction
             · cases h
               exact .seq ha (constFp_branch (.ite cmp lhs rhs (.seq (.seq h1 hi) ht) (.seq (.seq h2 hi) ht)))
-    | assign _ _ | inst _ | move _ _ | get _ _ | set _ _ | store _ _ | skip | tick | ret _ _ | «break» _ | «continue» _ =>
+    | assign _ _ | inst _ | move _ _ | get _ _ | opCurrHeap _ _ _ | set _ _ | store _ _ | skip | tick | ret _ _ | «break» _ | «continue» _ =>
       simp [tryIfHoist2] at h
 
 /-- The hoist entry point returns a branch whenever both inputs are branches. -/
@@ -70,6 +70,7 @@ theorem simpDuplicateIf_branch {p : WordLangProgHOL (BitVec width)} (shape : Bra
   | inst i => exact .inst i
   | move pri ms => exact .move pri ms
   | get dst n => exact .get dst n
+  | opCurrHeap op dst src => exact .opCurrHeap op dst src
   | set n e => exact .set n e
   | store e src => exact .store e src
   | skip => exact .skip

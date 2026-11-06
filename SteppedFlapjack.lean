@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordSsaSteps.Selection
 import SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileWordSimpRiscV
 import SteppedFlapjack.PanToCrepSteps.ConditionWordSimpRiscV
 import SteppedFlapjack.LoopToWordSteps.WordSimpRiscV
@@ -305,6 +306,9 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.CrepToLoopSteps.WhileClock`: compiled while loops bounded by clock consumption.
 - `SteppedFlapjack.CrepToLoopSteps.BranchRiscV`: Crep conditional programs through RISC-V.
 - `SteppedFlapjack.StackRemoveSteps.EmptyOracle`: constant Stack-removal cost for an empty-install oracle.
+- `SteppedFlapjack.WordSsaSteps.Selection`: actual WordSimp, selection and SSA prefix has a syntax-and-clock visit bound.
+- `SteppedFlapjack.WordSsaSteps.Program`: full SSA preserves branch-bodied loop sequences.
+- `SteppedFlapjack.WordSsaSteps.Branch`: SSA branch bodies have a static visit bound.
 - `SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileWordSimpRiscV`: Pancake initialization, comparison loop and continuation through WordSimp to RISC-V.
 - `SteppedFlapjack.LoopToWordSteps.WordSimpSequenceRiscV`: source-relative WordSimp sequence bound through RISC-V.
 - `SteppedFlapjack.WordSimpSteps.LoopSequenceBound`: normalized source-step bound for WordSimp loop sequences.

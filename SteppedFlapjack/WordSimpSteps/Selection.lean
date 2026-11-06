@@ -16,6 +16,7 @@ theorem branch_program {p : WordLangProgHOL (BitVec width)} (shape : Branch p) :
   | inst i => exact .inst i
   | move pri ms => exact .move pri ms
   | get dst n => exact .get dst n
+  | opCurrHeap op dst src => exact .opCurrHeap op dst src
   | set n e => exact .set n e
   | store e src => exact .store e src
   | skip => exact .skip

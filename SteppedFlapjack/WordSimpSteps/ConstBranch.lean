@@ -18,6 +18,7 @@ theorem constFpLoop_branch {p : WordLangProgHOL (BitVec width)} (hp : Branch p) 
   | inst i => intro cs; exact .inst i
   | move pri ms => intro cs; exact .move pri ms
   | get dst n => intro cs; exact .get dst n
+  | opCurrHeap op dst src => intro cs; exact .opCurrHeap op dst src
   | set n e => intro cs; exact .set n e
   | store e src => intro cs; exact .store _ src
   | skip => intro cs; exact .skip

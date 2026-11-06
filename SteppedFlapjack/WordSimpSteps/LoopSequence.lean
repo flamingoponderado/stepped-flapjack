@@ -34,6 +34,7 @@ theorem seqAssoc_loopSequence {p : WordLangProgHOL (BitVec width)} (hp : LoopSeq
     | inst i => exact smartSeq_loopSequence hprefix (.branch (.inst i))
     | move pri ms => exact smartSeq_loopSequence hprefix (.branch (.move pri ms))
     | get dst n => exact smartSeq_loopSequence hprefix (.branch (.get dst n))
+    | opCurrHeap op dst src => exact smartSeq_loopSequence hprefix (.branch (.opCurrHeap op dst src))
     | set n e => exact smartSeq_loopSequence hprefix (.branch (.set n e))
     | store e src => exact smartSeq_loopSequence hprefix (.branch (.store e src))
     | tick => exact smartSeq_loopSequence hprefix (.branch .tick)

@@ -12,6 +12,7 @@ inductive Branch : WordLangProgHOL (BitVec width) → Prop
   | inst (i) : Branch (.inst i)
   | move (pri ms) : Branch (.move pri ms)
   | get (dst name) : Branch (.get dst name)
+  | opCurrHeap (op dst src) : Branch (.opCurrHeap op dst src)
   | set (name e) : Branch (.set name e)
   | store (e src) : Branch (.store e src)
   | skip : Branch .skip
@@ -40,7 +41,7 @@ theorem branch_static {p : WordLangProgHOL (BitVec width)} (hp : Branch p)
     cases getVar r s <;> cases getVarImm ri s <;> simp only
     all_goals try { simp_wf; omega }
     split <;> simp_wf <;> omega
-  | assign _ _ | inst _ | move _ _ | get _ _ | set _ _ | store _ _ | skip | tick | ret _ _ | «break» _ | «continue» _ =>
+  | assign _ _ | inst _ | move _ _ | get _ _ | opCurrHeap _ _ _ | set _ _ | store _ _ | skip | tick | ret _ _ | «break» _ | «continue» _ =>
     rw [steps_leaf _ _ rfl]
     simp_wf
     all_goals omega
@@ -54,6 +55,7 @@ theorem smartSeq_branch {a b : WordLangProgHOL (BitVec width)}
   | inst i => exact .seq (.inst i) hb
   | move pri ms => exact .seq (.move pri ms) hb
   | get x n => exact .seq (.get x n) hb
+  | opCurrHeap op dst src => exact .seq (.opCurrHeap op dst src) hb
   | set n e => exact .seq (.set n e) hb
   | store e x => exact .seq (.store e x) hb
   | tick => exact .seq .tick hb
@@ -77,6 +79,7 @@ theorem seqAssoc_branch {b : WordLangProgHOL (BitVec width)} (hb : Branch b) :
   | inst i => intro a ha; exact smartSeq_branch ha (.inst i)
   | move pri ms => intro a ha; exact smartSeq_branch ha (.move pri ms)
   | get x n => intro a ha; exact smartSeq_branch ha (.get x n)
+  | opCurrHeap op dst src => intro a ha; exact smartSeq_branch ha (.opCurrHeap op dst src)
   | set n e => intro a ha; exact smartSeq_branch ha (.set n e)
   | store e x => intro a ha; exact smartSeq_branch ha (.store e x)
   | tick => intro a ha; exact smartSeq_branch ha .tick
