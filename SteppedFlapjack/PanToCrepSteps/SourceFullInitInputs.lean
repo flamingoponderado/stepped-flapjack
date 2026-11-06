@@ -115,9 +115,9 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
       (concreteDeclLoopState arch (concreteDeclCrepState source
         (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
         (compileProgDeclsHOLW (compileTopExactHOL declarations start))).memory address)
-    (domain : stack.mdomain = (concreteDeclLoopState arch (concreteDeclCrepState source
-      (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
-      (compileProgDeclsHOLW (compileTopExactHOL declarations start))).mdomain)
+    (sourceDomain : ∀ address, source.memaddrs address ↔
+      Flapjack.Compiler.Backend.StackRemove.addresses source.baseAddr
+        (((heapEnd - source.baseAddr).toNat / 8) + ((heapEnd - source.baseAddr).toNat / 8)) address)
     (shared : backend.lab.sharedMemDomain = (concreteDeclLoopState arch (concreteDeclCrepState source
       (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
       (compileProgDeclsHOLW (compileTopExactHOL declarations start))).shMdomain)
@@ -130,11 +130,19 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
       (concreteDeclLoopState arch (concreteDeclCrepState source
         (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
         (compileProgDeclsHOLW (compileTopExactHOL declarations start))) := by
+  classical
   have compat := emptyNativeWordOracle_compatible ac backend.bitmaps.length cfg
   have current : stack.store.lookup .currHeap = some (.word source.baseAddr) := by
     obtain ⟨base,labBase,heapBase,_⟩ := backend.heap_base_and_memory_lab
     have baseEq : base = source.baseAddr := by simpa [baseReg,eq_comm] using labBase
     simpa [baseEq] using heapBase
+  have domain : stack.mdomain = (concreteDeclLoopState arch (concreteDeclCrepState source
+      (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+      (compileProgDeclsHOLW (compileTopExactHOL declarations start))).mdomain := by
+    funext address
+    have eq := (backend.heap_domain_of_pointers source.baseAddr heapEnd current endHeap address).trans (sourceDomain address).symm
+    cases h : stack.mdomain address <;> by_cases sourceMember : source.memaddrs address <;>
+      simp_all [concreteDeclLoopState,concreteDeclCrepState]
   have memory : stack.memory = (concreteDeclLoopState arch (concreteDeclCrepState source
       (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
       (compileProgDeclsHOLW (compileTopExactHOL declarations start))).memory := by

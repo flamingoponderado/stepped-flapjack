@@ -186,12 +186,27 @@ theorem FullInitMachineContext.heap_domain {F : Type}
       stack.store.lookup .endOfHeap = some (.word other) ∧
       stack.store.lookup .heapLength = some (.word (BitVec.ofNat 64 length * bytesInWord 64)) ∧
       other = current + bytesInWord 64 * BitVec.ofNat 64 length ∧
+      (BitVec.ofNat 64 length * bytesInWord 64).toNat / 8 = length ∧
       ∀ address, stack.mdomain address = true ↔ addresses current (length + length) address := by
   obtain ⟨current,other,length,curr,_,last,len,otherEq,heap⟩ := backend.heap_shape
   rw [otherEq,← WordListMemory.wordListExistsAdd] at heap
   obtain ⟨values,assertion⟩ := heap
   obtain ⟨wordList,lengthEq⟩ := (WordListExists.starCond _ _ _).mp assertion
-  refine ⟨current,other,length,curr,last,len,otherEq,?_⟩
+  have framed : SetSep.star SetSep.emp (Misc.wordList current values)
+      (SetSep.fun2Set (stack.memory, fun a => stack.mdomain a = true)) := by
+    refine ⟨(fun _ => False),_,?_,rfl,wordList⟩
+    simp [SetSep.split]
+  have bound := InitCodeCorrect.wordListNoWrap (width := 64) (by simp [goodDimindex])
+    SetSep.emp current values stack.memory (fun a => stack.mdomain a = true) framed
+  rw [lengthEq] at bound
+  have small : length * 8 < 2 ^ 64 := by omega
+  have count : (BitVec.ofNat 64 length * bytesInWord 64).toNat / 8 = length := by
+    simp only [BitVec.toNat_mul,BitVec.toNat_ofNat,bytesInWord]
+    have lsmall : length < 2 ^ 64 := by omega
+    rw [Nat.mod_eq_of_lt lsmall]
+    norm_num at *
+    omega
+  refine ⟨current,other,length,curr,last,len,otherEq,count,?_⟩
   intro address
   have graph : stack.mdomain address = true ↔
       ∃ value, SetSep.fun2Set (stack.memory, fun a => stack.mdomain a = true) (address,value) := by
@@ -201,6 +216,25 @@ theorem FullInitMachineContext.heap_domain {F : Type}
     · rintro ⟨value,member⟩
       exact ((SetSep.fun2SetThm _ _ _ _).mp member).2
   rw [graph,wordList_heap_domain values current _ wordList address,lengthEq]
+
+/-- The initialized domain is determined by its current and end pointers. -/
+theorem FullInitMachineContext.heap_domain_of_pointers {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack)
+    (current other : BitVec 64)
+    (hcurrent : stack.store.lookup .currHeap = some (.word current))
+    (hother : stack.store.lookup .endOfHeap = some (.word other)) :
+    ∀ address, stack.mdomain address = true ↔
+      addresses current (((other - current).toNat / 8) + ((other - current).toNat / 8)) address := by
+  obtain ⟨c,o,n,hc,ho,_,offset,count,domain⟩ := backend.heap_domain
+  have ec : c = current := by simpa [hcurrent,eq_comm] using hc
+  have eo : o = other := by simpa [hother,eq_comm] using ho
+  subst c
+  subst o
+  have diff : other - current = BitVec.ofNat 64 n * bytesInWord 64 := by
+    rw [offset]
+    simp [mul_comm]
+  rw [diff,count]
+  exact domain
 
 /-- The initialized heap length is determined by its current and end pointers. -/
 theorem FullInitMachineContext.heap_length_of_pointers {F : Type}
