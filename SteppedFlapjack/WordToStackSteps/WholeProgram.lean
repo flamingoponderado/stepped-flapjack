@@ -145,6 +145,97 @@ theorem wholeWordStack_entry_bitmaps (wc : Flapjack.Compiler.Backend.WordToWord.
     compileNative_entry_bitmaps ac _ name count _ hmember outputNodup notRaise notStore
   exact ⟨col,_,bs,n,bsPost,nPost,body,frame,rfl,bodyCompiled,lookup,lengthBound,gapBound,bitmapPrefix⟩
 
+/-- The compiler-selected entry exposes the exact frame formula, body
+compilation and bitmap conditions needed by the Word-to-RISC-V simulation. -/
+theorem wholeWordStack_simulation_inputs (wc : Flapjack.Compiler.Backend.WordToWord.Config)
+    (ac : AsmConfigExact width) (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (name count : Nat) (p : WordLangProgHOL (BitVec width)) (member : (name,count,p) ∈ programs)
+    (nodup : (programs.map Prod.fst).Nodup)
+    (notRaise : name ≠ raiseStubLocation) (notStore : name ≠ storeConstsStubLocation)
+    (shape : LoopSequence p) :
+    ∃ col q bs n bsPost nPost body frame frameSize,
+      q = (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac ((name,count,p),col)).2.2 ∧
+      LoopBlock q ∧ noInstallSubprogsHOL q = true ∧ flatExpConventions q = true ∧
+      postAllocConventionsHOL (ac.regCount-(5+ac.avoidRegs.length)) q = true ∧
+      frame = max (maxVarHOL q / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (count-(ac.regCount-(5+ac.avoidRegs.length))) ∧
+      frameSize = (if frame = 0 then 0 else frame+1) ∧
+      compNative ac false q (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
+      sptLookup name (sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2) =
+        some (.seq (.stackAlloc (frameSize-(count-(ac.regCount-(5+ac.avoidRegs.length))))) body) ∧
+      sptLookup name (sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2) =
+        some (compileProgNative ac false q count (ac.regCount-(5+ac.avoidRegs.length)) (bs,n)).1 ∧
+      (appListAppend bs).length ≤ n ∧
+      n-(appListAppend bs).length ≤ (compileNative ac false (compile wc ac programs).2).1.length ∧
+      (appListAppend bsPost).IsPrefix ((compileNative ac false (compile wc ac programs).2).1.drop (n-(appListAppend bs).length)) := by
+  obtain ⟨col,q,bs,n,bsPost,nPost,entry,frameSize,qDef,programCompiled,lookup,lengthBound,gapBound,bitmapPrefix⟩ :=
+    wholeWordStack_entry_bitmaps wc ac programs name count p member nodup notRaise notStore
+  let k := ac.regCount-(5+ac.avoidRegs.length)
+  let frame := max (maxVarHOL q / 2 + 1 - k) (count-k)
+  let size := if frame = 0 then 0 else frame+1
+  rcases h : compNative ac false q (bs,n) (k,size,frame) with ⟨body,bm⟩
+  rcases bm with ⟨after,afterN⟩
+  have hp : compileProgNative ac false q count k (bs,n) =
+      (.seq (.stackAlloc (size-(count-k))) body,size,after,afterN) := by
+    change (Flapjack.Compiler.Backend.StackLang.Prog.seq (.stackAlloc (size-(count-k))) (compNative ac false q (bs,n) (k,size,frame)).1,
+      size,(compNative ac false q (bs,n) (k,size,frame)).2) = _
+    rw [h]
+  rw [hp] at programCompiled
+  simp only [Prod.mk.injEq] at programCompiled
+  obtain ⟨rfl,rfl,rfl,rfl⟩ := programCompiled
+  have ready := fullCompileSingle_stackReady ac ac.twoRegArith count name wc.regAlg k col shape
+  rw [← qDef] at ready
+  have found : sptLookup name (sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2) =
+      some (compileProgNative ac false q count k (bs,n)).1 := by
+    rw [hp]
+    exact lookup
+  exact ⟨col,q,bs,n,after,afterN,body,frame,size,qDef,ready.1,ready.2.1,ready.2.2.1,ready.2.2.2,
+    rfl,rfl,h,lookup,found,lengthBound,gapBound,bitmapPrefix⟩
+
+/-- One set of actual compiler witnesses provides both the source-related Word
+run and all syntactic, frame and bitmap inputs for its Stack simulation. -/
+theorem wholeWordStack_simulation_bound {C F : Type} (wc : Flapjack.Compiler.Backend.WordToWord.Config)
+    (ac : AsmConfigExact width) (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (name count : Nat) (p : WordLangProgHOL (BitVec width)) (member : (name,count,p) ∈ programs)
+    (nodup : (programs.map Prod.fst).Nodup)
+    (notRaise : name ≠ raiseStubLocation) (notStore : name ≠ storeConstsStubLocation)
+    (shape : LoopSequence p) (s post : WordSemStateFiniteExact width C F)
+    (res : Option (WordSemResult width)) (locals : Spt (WordLocW width)) (limit : Nat)
+    (run : evaluate p s = (res,post)) (nonerror : res ≠ some .error) (notTimeout : res ≠ some .timeOut)
+    (sourceBound : steps p s ≤ limit) (gc : gcFunConstOk s.gcFun)
+    (localRel : wordLocalsRel (maxVarHOL (compileExp p)+1) s.locals locals)
+    (domain : sptDomain locals = (fun key => key ∈ evenList count)) :
+    ∃ col q bs n bsPost nPost body frame frameSize selectedLocals targetPost,
+      q = (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac ((name,count,p),col)).2.2 ∧
+      LoopBlock q ∧ noInstallSubprogsHOL q = true ∧ flatExpConventions q = true ∧
+      postAllocConventionsHOL (ac.regCount-(5+ac.avoidRegs.length)) q = true ∧
+      frame = max (maxVarHOL q / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (count-(ac.regCount-(5+ac.avoidRegs.length))) ∧
+      frameSize = (if frame = 0 then 0 else frame+1) ∧
+      compNative ac false q (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
+      sptLookup name (sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2) =
+        some (compileProgNative ac false q count (ac.regCount-(5+ac.avoidRegs.length)) (bs,n)).1 ∧
+      (appListAppend bs).length ≤ n ∧
+      n-(appListAppend bs).length ≤ (compileNative ac false (compile wc ac programs).2).1.length ∧
+      (appListAppend bsPost).IsPrefix ((compileNative ac false (compile wc ac programs).2).1.drop (n-(appListAppend bs).length)) ∧
+      evaluate q {s with locals := locals,clock := limit} = (res,targetPost) ∧
+      wordStateEqRel {post with locals := selectedLocals,clock := limit-(s.clock-post.clock)} targetPost ∧
+      steps q {s with locals := locals,clock := limit} ≤ sizeOf q * (limit+1) := by
+  obtain ⟨col,q,bs,n,bsPost,nPost,body,frame,frameSize,qDef,block,noInstall,flat,postAlloc,
+    frameDef,sizeDef,compilation,_,found,lengthBound,gapBound,bitmapPrefix⟩ :=
+    wholeWordStack_simulation_inputs wc ac programs name count p member nodup notRaise notStore shape
+  obtain ⟨selectedLocals,targetPost,targetRun,rel,bound⟩ := compilerPrefix_alloc_correct
+    ac ac.twoRegArith count name wc.regAlg (ac.regCount-(5+ac.avoidRegs.length)) col shape
+    s post res locals limit run nonerror notTimeout sourceBound gc localRel domain
+  have qRun : evaluate q {s with locals := locals,clock := limit} = (res,targetPost) := by
+    rw [qDef,fullCompileSingle_eq_alloc ac ac.twoRegArith count name wc.regAlg
+      (ac.regCount-(5+ac.avoidRegs.length)) col shape]
+    exact targetRun
+  have qBound : steps q {s with locals := locals,clock := limit} ≤ sizeOf q * (limit+1) := by
+    rw [qDef,fullCompileSingle_eq_alloc ac ac.twoRegArith count name wc.regAlg
+      (ac.regCount-(5+ac.avoidRegs.length)) col shape]
+    exact bound
+  exact ⟨col,q,bs,n,bsPost,nPost,body,frame,frameSize,selectedLocals,targetPost,qDef,block,noInstall,flat,postAlloc,
+    frameDef,sizeDef,compilation,found,lengthBound,gapBound,bitmapPrefix,qRun,rel,qBound⟩
+
 /-- The Word body at the native Stack entry has a source-related execution and
 visit bound, with the actual oracle and accumulated bitmap state chosen by the
 whole-program compilers. -/
