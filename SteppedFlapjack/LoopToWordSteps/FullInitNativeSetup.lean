@@ -2,6 +2,7 @@ import SteppedFlapjack.LoopToWordSteps.FullInitTailSetup
 import SteppedFlapjack.LoopToWordSteps.NativeTailCompilerFacts
 import SteppedFlapjack.StackToLabSteps.FullInitRiscVSteps
 import Flapjack.Compiler.Backend.DataToWord.Proofs.Gc.GcFunConstOk
+import Flapjack.Compiler.Backend.StackRemove.Proofs.InitFfi
 
 /-! Construct a full-initialization backend from the actual native compiler. -/
 namespace SteppedFlapjack.LoopToWordSteps
@@ -43,6 +44,20 @@ structure FullInitMachineContext {F : Type} (stack : StackSemStateFiniteExact 64
   hmc : mc.target = riscvTarget
   tie : LabToTarget.oracleTie mc machine lab
   machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) lab asm machine
+
+/-- Full initialization preserves the Lab state's FFI state. -/
+theorem FullInitMachineContext.ffi_eq {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
+    stack.ffi = backend.lab.ffi := by
+  calc
+    stack.ffi = (fullMakeInit backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset
+      backend.bitmaps backend.inputCode backend.lab backend.saveRegs backend.dataSp backend.coracle).1.ffi :=
+        congrArg (fun s => s.ffi) backend.stackEq
+    _ = backend.lab.ffi := by
+      rw [fullMakeInit_eq]
+      simp only [StackAlloc.makeInit]
+      rw [StackRemove.Proofs.InitFfi.makeInitAnyFfi]
+      rfl
 
 /-- The full initializer's three-Stack-step resource bound. -/
 noncomputable def FullInitMachineContext.resourceTickLimit {F : Type}

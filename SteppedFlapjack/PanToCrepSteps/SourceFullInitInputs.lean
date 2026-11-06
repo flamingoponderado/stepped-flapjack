@@ -82,4 +82,53 @@ noncomputable def sourceFullInitInputs {σ : Type}
   exact ⟨sourceCompilerInputs declarations start caller loopCtxt entry limit arch source wc ac stack coracle heapLength
     callerEq loopContextEq codeEq prefixEq ok memory domain shared clock endian ffi current length heap,backend⟩
 
+/-- Construct source inputs for an initializer with a no-install oracle. -/
+noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
+    (declarations : List (DeclHOL 64)) (start : MlString)
+    (caller : PanToCrepContextExact 64) (loopCtxt : CrepToLoopContextExact)
+    (entry : HolLoopProg 64) (limit : Nat) (arch : AsmArchitecture)
+    (source : PanSemStateFiniteExact 64 σ)
+    (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact 64)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (cfg : LabToTarget.Config)
+    (heapLength : BitVec 64)
+    (callerEq : caller = mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
+      (makeFuncsExactHOL (functionsHOL (compileTopExactHOL declarations start))) (sizeOfShapeHOL (.comb [])-1)
+      (getEidsFromDeclsHOL (compileTopExactHOL declarations start)))
+    (loopContextEq : loopCtxt = mkCtxtExact arch (makeVmapExact [])
+      (crepToLoopMakeFuncsExactExecutable (compileProgDeclsHOLW (compileTopExactHOL declarations start))) 0)
+    (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (programsEq : programs = (compile wc ac (loopToWordCompileHOL (compileProgHOLExact arch
+      (compileProgDeclsHOLW (compileTopExactHOL declarations start))))).2)
+    (backend : FullInitMachineContext stack)
+    (inputCodeEq : backend.inputCode = (Flapjack.Compiler.Backend.WordToStack.Native.compileNative ac false
+      programs).2.2.2)
+    (bitmapPrefix : (Flapjack.Compiler.Backend.WordToStack.Native.compileNative ac false
+      programs).1.IsPrefix backend.bitmaps)
+    (registers : 4 < ac.regCount-(5+ac.avoidRegs.length))
+    (stackOracle : backend.coracle = fun _ => (cfg, [], []))
+    (memory : stack.memory = (concreteDeclLoopState arch (concreteDeclCrepState source
+      (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+      (compileProgDeclsHOLW (compileTopExactHOL declarations start))).memory)
+    (domain : stack.mdomain = (concreteDeclLoopState arch (concreteDeclCrepState source
+      (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+      (compileProgDeclsHOLW (compileTopExactHOL declarations start))).mdomain)
+    (shared : stack.shMdomain = (concreteDeclLoopState arch (concreteDeclCrepState source
+      (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+      (compileProgDeclsHOLW (compileTopExactHOL declarations start))).shMdomain)
+    (clock : stack.clock = source.clock) (endian : stack.be = source.be) (ffi : backend.lab.ffi = source.ffi)
+    (current : stack.store.lookup .currHeap = some (.word source.baseAddr))
+    (length : stack.store.lookup .heapLength = some (.word heapLength))
+    (heap : source.topAddr = source.baseAddr + 2 * heapLength)
+ :
+    FullInitAssignLoopInputs declarations start caller loopCtxt entry limit
+      (concreteDeclLoopState arch (concreteDeclCrepState source
+        (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+        (compileProgDeclsHOLW (compileTopExactHOL declarations start))) := by
+  have compat := emptyNativeWordOracle_compatible ac backend.bitmaps.length cfg
+  exact sourceFullInitInputs declarations start caller loopCtxt entry limit arch source wc ac stack
+    (emptyNativeWordOracle backend.bitmaps.length cfg) heapLength callerEq loopContextEq programs programsEq
+    backend inputCodeEq bitmapPrefix registers compat.1 (stackOracle.trans compat.2.symm)
+    memory domain shared clock endian (backend.ffi_eq.trans ffi) current length heap
+
 end SteppedFlapjack.PanToCrepSteps
