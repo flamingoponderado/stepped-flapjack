@@ -1,3 +1,4 @@
+import SteppedFlapjack.LoopToWordSteps.WordSimpRiscV
 import SteppedFlapjack.WordSimpSteps.RiscV
 import SteppedFlapjack.WordSimpSteps.CompileLoop
 import SteppedFlapjack.WordSimpSteps.PushBranch
@@ -302,6 +303,9 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.CrepToLoopSteps.WhileClock`: compiled while loops bounded by clock consumption.
 - `SteppedFlapjack.CrepToLoopSteps.BranchRiscV`: Crep conditional programs through RISC-V.
 - `SteppedFlapjack.StackRemoveSteps.EmptyOracle`: constant Stack-removal cost for an empty-install oracle.
+- `SteppedFlapjack.LoopToWordSteps.WordSimpRiscV`: Loop-to-RISC-V bound including actual WordSimp for supported loop bodies.
+- `SteppedFlapjack.LoopToWordSteps.WordSimpLoop`: Loop-to-WordSimp visits and derived output shape.
+- `SteppedFlapjack.WordSimpSteps.TickLoop`: WordSimp bound on the tick-wrapped compiled loop.
 - `SteppedFlapjack.WordSimpSteps.RiscV`: WordSimp and instruction selection through the bounded RISC-V backend.
 - `SteppedFlapjack.WordSimpSteps.Stack`: WordSimp and selection through Word-to-Stack.
 - `SteppedFlapjack.WordSimpSteps.Selection`: WordSimp composed with instruction selection.
