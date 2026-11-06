@@ -86,6 +86,7 @@ import SteppedFlapjack.LoopToWordSteps.NativeTailCompilerFacts
 import SteppedFlapjack.LoopToWordSteps.NativeTailSetup
 import SteppedFlapjack.CrepToLoopSteps.NativeTailFrontendSetup
 import SteppedFlapjack.CrepToLoopSteps.WholeNativeCodeKeys
+import SteppedFlapjack.CrepToLoopSteps.NativeSetupFromLab
 import SteppedFlapjack.LoopToWordSteps.TailRiscVClock
 import SteppedFlapjack.PanToCrepSteps.NativeTailClockOutcome
 import SteppedFlapjack.PanToCrepSteps.NativeTailOutcome
