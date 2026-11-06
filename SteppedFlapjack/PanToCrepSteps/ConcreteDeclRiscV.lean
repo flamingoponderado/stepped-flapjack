@@ -1,4 +1,4 @@
-import SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram
+import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
 import SteppedFlapjack.PanToCrepSteps.GlobalDecl
 import SteppedFlapjack.PanToCrepSteps.GlobalInitializers
 
@@ -40,8 +40,6 @@ theorem concreteDecl_riscvWithin {F : Type}
     (wordCodeEq : word.code = sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)))
     (wordData : LoopWordDataRel target word)
     (localName : VarName) (returned : BitVec 64)
-    (panInitializer : ExpHOL 64)
-    (panInit panCalleeInit : ProgHOL 64) (panCondition : ExpHOL 64) (panBody panTail : ProgHOL 64)
     (callerContext : PanToCrepContextExact 64)
     (production : PanSemState (RiscV.Word 64) (FfiState F))
     (originalState : PanSemStateFiniteExact 64 F) [DecidablePred originalState.memaddrs]
@@ -51,40 +49,25 @@ theorem concreteDecl_riscvWithin {F : Type}
     (execContext : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) F)
     (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel : Nat)
-    (pan panMiddle : PanSemStateFiniteExact 64 F)
-    (panReturnShape : ShapeHOL)
-    (panInitRun : pan.evaluateHOLFiniteState panInit = (none,panMiddle))
-    (panClock : panMiddle.clock ≠ 0)
-    (initLocalised : localisedProgHOL panInit = true)
+    (pan : PanSemStateFiniteExact 64 F)
+    (panClock : pan.clock ≠ 0)
     (initialPanRel : panToCrepStateRelFiniteExact pan source)
     (initialExcpRel : panToCrepExcpRelFiniteExact callerContext.eids pan.eshapes)
     (initialLocalsRel : panToCrepLocalsRelFiniteExact callerContext pan.locals source.locals)
-    (startName : MlString) (initializers : List (ProgHOL 64))
-    (funs exns : List (DeclHOL 64)) (globalContext : PanGlobalsContextExact 64)
-    (originalFound : originalState.code.lookup (newMainNameHOL (concreteDeclProgram startName localName returned)) =
-      some ([],.dec (ofString localName) .one (.const 1) (.seq (.skip) (.seq (.while (.var .local (ofString localName)) (.assign .local (ofString localName) (.const 0))) (.return (.const returned)))),panReturnShape))
-    (globalRel : panGlobalsStateRelHOLExact true globalContext originalState
-      (callEntryStateHOLFinite panMiddle HolFiniteMapExact.empty))
-    (initializerDef : panInitializer = compileExpExactHOL globalContext (.const 1))
-    (calleeInitDef : panCalleeInit = compileProgExactHOL globalContext (.skip))
-    (conditionDef : panCondition = compileExpExactHOL globalContext (.var .local (ofString localName)))
-    (calleeBodyDef : panBody = compileProgExactHOL globalContext (.assign .local (ofString localName) (.const 0)))
-    (calleeTailDef : panTail = compileProgExactHOL globalContext (.return (.const returned)))
-    (globalCompiled :
-      let renamed := fpermDecsHOL startName (newMainNameHOL (concreteDeclProgram startName localName returned)) (resortDeclsHOL (concreteDeclProgram startName localName returned))
-      let initial : PanGlobalsContextExact 64 :=
-        { globals := HolFiniteMapExact.empty, globalsSize := 0,
-          maxGlobalsSize := cakeBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL renamed).map sizeOfShapeHOL).sum }
-      compileDecsExactHOL initial renamed = (initializers,funs,exns,globalContext))
+    (startName : MlString)
+    (stateDef : originalState = concreteDeclOriginalState startName localName returned
+      (callEntryStateHOLFinite pan HolFiniteMapExact.empty))
+    (panStructs : pan.structs = []) (panTopOutside : ¬ pan.memaddrs pan.topAddr)
+    (panAligned : panGlobalsByteAlignedHOL pan.topAddr)
     (programsDef : crepPrograms = compileProgDeclsHOLW (compileTopExactHOL (concreteDeclProgram startName localName returned) startName))
     (panCode : pan.code = HolFiniteMapExact.empty.updateList
       (functionsHOL (compileTopExactHOL (concreteDeclProgram startName localName returned) startName)).reverse)
     (callerDef : callerContext = mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
       (makeFuncsExactHOL (functionsHOL (compileTopExactHOL (concreteDeclProgram startName localName returned) startName))) (sizeOfShapeHOL (.comb [])-1)
       (getEidsFromDeclsHOL (compileTopExactHOL (concreteDeclProgram startName localName returned) startName)))
-    (initDef : panInit = nestedSeqHOL initializers) (nameDef : name = newMainNameHOL (concreteDeclProgram startName localName returned))
+    (nameDef : name = newMainNameHOL (concreteDeclProgram startName localName returned))
     (entryNameDef : entryName = startName)
-    (entryBodyDef : entryBody = .seq (compileProgExactHOLW callerContext panInit) (.call none name []))
+    (entryBodyDef : entryBody = .seq (compileProgExactHOLW callerContext (.skip : ProgHOL 64)) (.call none name []))
     (liveDef : live = .ln) :
     ∃ countedResult originalFinal,
       evalPanValueFfiProgSteps execContext primitive handler production.structs functions
@@ -93,25 +76,25 @@ theorem concreteDecl_riscvWithin {F : Type}
         (.dec localName .one (.const 1) (.seq .skip (.seq (.while (.var .local localName)
           (.assign .local localName (.const 0))) (.return (.const returned)))))
         (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (countedResult,13) ∧
-    let limit := sizeOf (nestedSeqHOL initializers) +
-      (4 + sizeOf (compileProgExactHOL globalContext (.skip)) +
-        sizeOf (compileProgExactHOL globalContext (.assign .local (ofString localName) (.const 0))) + sizeOf (compileProgExactHOL globalContext (.return (.const returned)))) *
+    let limit := sizeOf (nestedSeqHOL ([] : List (ProgHOL 64))) +
+      (4 + sizeOf (compileProgExactHOL (concreteDeclGlobalContext startName localName returned) (.skip)) +
+        sizeOf (compileProgExactHOL (concreteDeclGlobalContext startName localName returned) (.assign .local (ofString localName) (.const 0))) + sizeOf (compileProgExactHOL (concreteDeclGlobalContext startName localName returned) (.return (.const returned)))) *
         13 + 2
-    ∃ panPost, panGlobalsStateRelHOLExact (goodResHOL (some (.returned (.val (.word returned))))) globalContext originalFinal panPost ∧
+    ∃ panPost, panGlobalsStateRelHOLExact (goodResHOL (some (.returned (.val (.word returned))))) (concreteDeclGlobalContext startName localName returned) originalFinal panPost ∧
     TailProgramShapes (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)) ∧
     ∃ (value condition : CrepExpHOL 64),
-    compileExpExactHOLW (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) panInitializer = ([value],.one) ∧
-    compileExpExactHOLW (scalarDeclContext (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) (ofString localName)) panCondition = ([condition],.one) ∧
+    compileExpExactHOLW (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) (.const 1) = ([value],.one) ∧
+    compileExpExactHOLW (scalarDeclContext (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) (ofString localName)) (.var .local (ofString localName)) = ([condition],.one) ∧
     let panContext := ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []
-    let init := compileProgExactHOLW callerContext panInit
+    let init := compileProgExactHOLW callerContext (.skip : ProgHOL 64)
     let inner := scalarDeclContext panContext (ofString localName)
-    let calleeInit := compileProgExactHOLW inner panCalleeInit
-    let body := compileProgExactHOLW inner panBody
-    let tail := compileProgExactHOLW inner panTail
+    let calleeInit := compileProgExactHOLW inner (.skip)
+    let body := compileProgExactHOLW inner (.assign .local (ofString localName) (.const 0))
+    let tail := compileProgExactHOLW inner (.return (.const returned))
     let loopEntry := optimiseHOL (compileHOLExact ctxt live (.seq init (.call none name [])))
     let loopLimit := branchTailDeclLoopLimit ctxt live name init (panContext.vmax+1) value calleeInit condition body tail
-      (sizeOf init + 2 + (4 + sizeOf (compileProgExactHOLW inner panCalleeInit) +
-        sizeOf (compileProgExactHOLW inner panBody) + sizeOf (compileProgExactHOLW inner panTail)) * limit)
+      (sizeOf init + 2 + (4 + sizeOf (compileProgExactHOLW inner (.skip)) +
+        sizeOf (compileProgExactHOLW inner (.assign .local (ofString localName) (.const 0))) + sizeOf (compileProgExactHOLW inner (.return (.const returned)))) * limit)
     ∃ (post : CrepSemHOLState 64 F) (result : Option (CrepResultHOLExact 64)),
     panToCrepStateRelFiniteExact panPost post ∧
     pcCompileCorrectResultRel panContext panPost post (some (.returned (.val (.word returned)))) result ∧
@@ -208,7 +191,29 @@ theorem concreteDecl_riscvWithin {F : Type}
       (.seq .skip (.seq (.while (.var .local (ofString localName)) (.assign .local (ofString localName) (.const 0)))
         (.return (.const returned))))) originalState ≤ 13 := by
     simpa only [concreteDeclBody] using sourceBound
-  have initSupported : BranchProgram callerContext panInit ∨ ∀ shape globalName value,
+  obtain ⟨funs,globalCompiled,_⟩ := concreteDecl_global_compile startName localName returned
+  have initDef : (.skip : ProgHOL 64) = nestedSeqHOL [] := rfl
+  have panInitRun : pan.evaluateHOLFiniteState (.skip : ProgHOL 64) = (none,pan) :=
+    evaluateHOLFiniteState_skip pan
+  have initLocalised : localisedProgHOL (.skip : ProgHOL 64) = true := rfl
+  have originalFound : originalState.code.lookup (newMainNameHOL (concreteDeclProgram startName localName returned)) =
+      some ([],.dec (ofString localName) .one (.const 1) (.seq .skip
+        (.seq (.while (.var .local (ofString localName)) (.assign .local (ofString localName) (.const 0)))
+          (.return (.const returned)))),.one) := by
+    rw [stateDef]
+    simp [concreteDeclOriginalState,HolFiniteMapExact.lookup_update,FUPDATE,concreteDeclBody]
+  have loweredLookup : (callEntryStateHOLFinite pan HolFiniteMapExact.empty).code.lookup
+      (newMainNameHOL (concreteDeclProgram startName localName returned)) =
+      some ([],concreteDeclBody localName returned,.one) := by
+    simpa [callEntryStateHOLFinite,decClockHOLFinite] using
+      concreteDecl_lowered_lookup startName localName returned pan panCode
+  have globalRel := concreteDecl_original_globalRel startName localName returned
+    (callEntryStateHOLFinite pan HolFiniteMapExact.empty)
+    (by simpa [callEntryStateHOLFinite,decClockHOLFinite] using panStructs)
+    (by simpa [callEntryStateHOLFinite,decClockHOLFinite] using panTopOutside)
+    (by simpa [callEntryStateHOLFinite,decClockHOLFinite] using panAligned) loweredLookup
+  rw [← stateDef] at globalRel
+  have initSupported : BranchProgram callerContext (.skip : ProgHOL 64) ∨ ∀ shape globalName value,
       DeclHOL.decl shape globalName value ∈
         fpermDecsHOL startName (newMainNameHOL (concreteDeclProgram startName localName returned))
           (resortDeclsHOL (concreteDeclProgram startName localName returned)) →
@@ -232,13 +237,15 @@ theorem concreteDecl_riscvWithin {F : Type}
     simp
   exact panOriginalDeclEntry_riscvWithin ctxt live name source target word crepRel memRel globalsRel localsRel
     arch crepPrograms entryName entryBody unique ctxtEq sourceCodeEq loopCodeEq wordCodeEq wordData
-    (ofString localName) panInitializer panInit panCalleeInit panCondition panBody panTail callerContext
+    (ofString localName) (.const 1) (.skip : ProgHOL 64) (.skip) (.var .local (ofString localName)) (.assign .local (ofString localName) (.const 0)) (.return (.const returned)) callerContext
     (.const 1) .skip (.var .local (ofString localName)) (.assign .local (ofString localName) (.const 0))
     (.return (.const returned)) originalState countedFinal 13 sourceBound' initializerShape initShape conditionShape bodyShape tailShape
-    pan panMiddle (some (.returned (.val (.word returned)))) panReturnShape panInitRun panClock (.return _) initLocalised initialPanRel initialExcpRel initialLocalsRel
-    (concreteDeclProgram startName localName returned) startName initializers .one (by simpa only [concreteDeclBody] using globalFound) funs exns globalContext
+    pan pan (some (.returned (.val (.word returned)))) (.one : ShapeHOL) panInitRun panClock (.return _) initLocalised initialPanRel initialExcpRel initialLocalsRel
+    (concreteDeclProgram startName localName returned) startName ([] : List (ProgHOL 64)) .one (by simpa only [concreteDeclBody] using globalFound) funs [] (concreteDeclGlobalContext startName localName returned)
     (by simpa only [concreteDeclBody] using countedRun) originalFound globalRel
-    initializerDef calleeInitDef conditionDef calleeBodyDef calleeTailDef globalCompiled initSupported notInline programsDef
+    (by simp [compileExpExactHOL]) (by simp [compileProgExactHOL])
+    (by simp [compileExpExactHOL]) (by simp [compileProgExactHOL,compileExpExactHOL])
+    (by simp [compileProgExactHOL,compileExpExactHOL]) globalCompiled initSupported notInline programsDef
     panCode localised preShapes noTail callerDef initDef nameDef entryNameDef entryBodyDef liveDef
 
 end SteppedFlapjack.PanToCrepSteps

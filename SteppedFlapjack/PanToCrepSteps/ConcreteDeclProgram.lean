@@ -123,6 +123,13 @@ theorem concreteDecl_globalEntry_inputs {σ : Type}
     simp only [concreteDeclBody] at scaled
     omega
 
+/-- The exact initial context used by the global compiler for this program. -/
+def concreteDeclGlobalContext (start : MlString) (name : VarName) (returned : BitVec 64) : PanGlobalsContextExact 64 :=
+  let declarations := concreteDeclProgram start name returned
+  let renamed := fpermDecsHOL start (newMainNameHOL declarations) (resortDeclsHOL declarations)
+  { globals := HolFiniteMapExact.empty, globalsSize := 0,
+    maxGlobalsSize := cakeBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL renamed).map sizeOfShapeHOL).sum }
+
 /-- Global lowering of the singleton function generates no initializers or
 exceptions, and retains a single non-inlined renamed function. -/
 theorem concreteDecl_global_compile (start : MlString) (name : VarName) (returned : BitVec 64) :
@@ -221,5 +228,27 @@ theorem concreteDecl_localised (start : MlString) (name : VarName) (returned : B
       localisedProgHOL entry.2.2.1 = true := by
   rw [concreteDecl_compileTop]
   simp [functionsHOL,localisedProgHOL,localisedExpHOL,everyExpHOL,everyExpListHOL,concreteDeclBody]
+
+/-- Any result of concrete global compilation has no initializers or
+exceptions and retains the initial global context. -/
+theorem concreteDecl_global_compile_components (start : MlString) (name : VarName) (returned : BitVec 64)
+    (initializers : List (ProgHOL 64)) (funcs exns : List (DeclHOL 64)) (globals : PanGlobalsContextExact 64)
+    (compiled :
+      let declarations := concreteDeclProgram start name returned
+      let renamed := fpermDecsHOL start (newMainNameHOL declarations) (resortDeclsHOL declarations)
+      let initial : PanGlobalsContextExact 64 :=
+        { globals := HolFiniteMapExact.empty, globalsSize := 0,
+          maxGlobalsSize := cakeBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL renamed).map sizeOfShapeHOL).sum }
+      compileDecsExactHOL initial renamed = (initializers,funcs,exns,globals)) :
+    let declarations := concreteDeclProgram start name returned
+    let renamed := fpermDecsHOL start (newMainNameHOL declarations) (resortDeclsHOL declarations)
+    let initial : PanGlobalsContextExact 64 :=
+      { globals := HolFiniteMapExact.empty, globalsSize := 0,
+        maxGlobalsSize := cakeBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL renamed).map sizeOfShapeHOL).sum }
+    initializers = [] ∧ exns = [] ∧ globals = initial := by
+  obtain ⟨actual,actualCompile,_⟩ := concreteDecl_global_compile start name returned
+  have eq := actualCompile.symm.trans compiled
+  simp only [Prod.mk.injEq] at eq
+  exact ⟨eq.1.symm,eq.2.2.1.symm,eq.2.2.2.symm⟩
 
 end SteppedFlapjack.PanToCrepSteps
