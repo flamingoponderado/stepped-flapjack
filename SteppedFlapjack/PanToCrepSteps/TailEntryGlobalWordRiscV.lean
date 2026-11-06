@@ -11,7 +11,7 @@ import Flapjack.Compiler.Backend.DataToWord.Proofs.Gc.GcFunConstOk
 import Flapjack.Pancake.LoopToWord.Proofs.ProgramNames
 import Flapjack.Pancake.CrepToLoop.Proofs.MakeFuncsLemmas
 
-/-! Crep-to-RISC-V composition for a branch entry calling an initialized loop. -/
+/-! Pancake global-entry steps through the compiled RISC-V machine. -/
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack.Basis.Pure.MlString Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open Flapjack Flapjack.LoopSemStateFiniteExact Flapjack.WordAlloc
@@ -30,7 +30,18 @@ open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.WordAllocSteps
 open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.CrepToLoopSteps
 open Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 
-/-- The machine bound uses the actual generated global Word entry. -/
+/-- Bound the actual generated global Word entry through RISC-V for a supported
+Pancake initializer and zero-argument loop callee. The conclusion distinguishes
+matching outcomes and events from the resource-limit event-prefix case.
+
+The bound multiplies the Lab tick and flattening factors by a finite-prefix
+Stack-removal cost and an allocation/call-sequence cost. The Stack replay limit
+contains the Word replay limit, which contains six times the Loop limit; these
+limits include program-size factors. Both the consumed oracle prefix and
+`callSequenceCost` may depend on the supplied source limit, so no general
+linear bound with program-only constants is claimed. Frontend state relations,
+native entry compilation/frame witnesses and backend initialization remain
+premises. -/
 theorem panTailEntry_globalWord_riscvWithin {F : Type}
     (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
     (source : CrepSemHOLState 64 F)
@@ -118,6 +129,8 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
     let regCount := ac.regCount-(5+ac.avoidRegs.length)
     let col := entryColour wc programs entryName
     let compiledCode := sptFromAList (Flapjack.Compiler.Backend.WordToWord.compile wc ac programs).2
+    let wordBody := (LoopToWord.compHOL wordCtxt loopEntry labels).1
+    let out := (fullCompileSingle ac.twoRegArith regCount alg ac ((entryName,count,wordBody),col)).2.2
     let locals := word.locals
     ∀ (entry : StackSemStateFiniteExact 64 LabToTarget.Config F) (frameSize frame : Nat)
     (coracle : Nat → (Nat × LabToTarget.Config) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
@@ -134,17 +147,17 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
     let start := firstLoopName
     let argumentCount := 1
     ∀ (_native : Flapjack.Compiler.Backend.WordToStack.Native.compNative ac false
-      (fullCompileSingle ac.twoRegArith regCount alg ac ((entryName,count,(LoopToWord.compHOL wordCtxt loopEntry labels).1),col)).2.2
+      out
       (bs,n) (regCount,frameSize,frame) = (compiled,(bsPost,nPost)))
     (_lengthBound : (appListAppend bs).length ≤ n) (_bitmapBound : n-(appListAppend bs).length ≤ entry.bitmaps.length)
     (_bitmapPrefix : List.IsPrefix (appListAppend bsPost) (entry.bitmaps.drop (n-(appListAppend bs).length)))
     (_labelCheck : ∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact entry.code loc)
-    (_maxBound : maxVarHOL (fullCompileSingle ac.twoRegArith regCount alg ac ((entryName,count,(LoopToWord.compHOL wordCtxt loopEntry labels).1),col)).2.2 < 2*frame+2*regCount)
-    (_frameDef : frame = max (maxVarHOL (fullCompileSingle ac.twoRegArith regCount alg ac ((entryName,count,(LoopToWord.compHOL wordCtxt loopEntry labels).1),col)).2.2 / 2 + 1 - regCount) (argumentCount-regCount))
+    (_maxBound : maxVarHOL out < 2*frame+2*regCount)
+    (_frameDef : frame = max (maxVarHOL out / 2 + 1 - regCount) (argumentCount-regCount))
     (_frameSizeDef : frameSize = if frame = 0 then 0 else frame+1)
     (_space : frameSize-(argumentCount-regCount) ≤ entry.stackSpace)
     (_found : sptLookup start entry.code = some (Flapjack.Compiler.Backend.WordToStack.Native.compileProgNative ac false
-      (fullCompileSingle ac.twoRegArith regCount alg ac ((entryName,count,(LoopToWord.compHOL wordCtxt loopEntry labels).1),col)).2.2 argumentCount regCount (bs,n)).1)
+      out argumentCount regCount (bs,n)).1)
     (inputCode : List (Nat × HolProg 64)) (anything : WordSemGcFun 64) (cr : CompileFn 64 LabToTarget.Config) (c : DataToWord.Config)
     (jump : Bool) (bounds : BitVec 64 × BitVec 64) (pointer : Nat) (f : Spt Nat) (gen : Bool) (maxHeap a b : Nat)
     (removeInput : List (Nat × HolProg 64))
@@ -165,7 +178,6 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
     (_hpc : LabSem.locToPc start 0 lab.code = some lab.pc)
     (_hmc : mc.target = riscvTarget) (_tie : LabToTarget.oracleTie mc machine lab)
     (_machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) lab asm machine),
-    let out := (fullCompileSingle ac.twoRegArith regCount alg ac ((entryName,count,(LoopToWord.compHOL wordCtxt loopEntry labels).1),col)).2.2
     let stackLimit := tailStackReplayLimit ac count entryName alg regCount col loopEntry wordCtxt labels compiledCode loopLimit
     sptLookup entryName compiledCode = some (count,out) ∧
     ∃ (outcome : HolOutcome) (ticks : Nat) (finalMachine : RiscV.L3.riscv_state) (finalFfi : HolFfiState F)

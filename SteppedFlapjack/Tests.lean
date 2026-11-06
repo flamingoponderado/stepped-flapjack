@@ -1,4 +1,5 @@
 import SteppedFlapjack.Test.Ffi
+import SteppedFlapjack.Test.GlobalEntryExample
 import SteppedFlapjack.Test.LabToTargetSteps
 import SteppedFlapjack.Test.PanCost
 import SteppedFlapjack.Test.PanEvaluateParity
