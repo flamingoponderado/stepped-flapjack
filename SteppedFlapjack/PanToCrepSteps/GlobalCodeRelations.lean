@@ -1,6 +1,7 @@
 import SteppedFlapjack.PanToCrepSteps.GlobalTailWord
 import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
 import SteppedFlapjack.LoopToWordSteps.WholeCodeRel
+import SteppedFlapjack.WordAllocSteps.WholeFrontendShapes
 
 /-! Code relations for the actual generated global-entry program. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -37,7 +38,8 @@ theorem globalEntry_nonInline_frontend_codeRelations {width : Nat} [NeZero width
     crepToLoopCodeRelExact loopContext (alistToFmapCodeExact code)
       (sptFromAList (compileProgHOLExact arch code)) ∧
     loopToWordCodeRelHOLExact (sptFromAList (compileProgHOLExact arch code))
-      (sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch code))) := by
+      (sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch code))) ∧
+    WordAllocSteps.TailProgramShapes (loopToWordCompileHOL (compileProgHOLExact arch code)) := by
   obtain ⟨bound,entry,_⟩ := globalEntry_nonInline_preserved declarations start initializers returnShape original found
     funs exns context compiled initShape notInline state
   let code := compileProgDeclsHOLW (compileTopExactHOL declarations start)
@@ -53,6 +55,7 @@ theorem globalEntry_nonInline_frontend_codeRelations {width : Nat} [NeZero width
         simpa [code,h,init,sourceContext] using entry
       simp [holAlookup,firstEq]
   exact ⟨wholeCrep_supported_executable_codeRel arch code start _ unique lookup shapes,
-    LoopToWordSteps.wholeCrepLoopWord_codeRel arch code⟩
+    LoopToWordSteps.wholeCrepLoopWord_codeRel arch code,
+    WordAllocSteps.wholeCrep_word_shapes arch code shapes⟩
 
 end SteppedFlapjack.PanToCrepSteps
