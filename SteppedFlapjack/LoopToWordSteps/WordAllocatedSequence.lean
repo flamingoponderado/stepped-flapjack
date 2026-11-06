@@ -35,11 +35,8 @@ theorem loopSequence_wordAllocated_bound {F C : Type}
       wordStateEqRel {wordPost with locals := selectedLocals,clock := 6*limit-(word.clock-wordPost.clock)} targetPost ∧
       WordSemStateFiniteExact.evaluate compiled {word with locals := locals,clock := 6*limit} = (wordResult,targetPost) ∧
       WordSteps.steps compiled {word with locals := locals,clock := 6*limit} ≤ sizeOf compiled * (6*limit+1) := by
-  obtain ⟨wordPost,wordResult,wordRun,wordFfi,wordRel,wordBound⟩ :=
-    loopProgram_correct_with_steps (loopSelect_loopProgram (loopSequenceSource_select shape))
-      source result sourcePost word ctxt (.loc 1 0) labels premises
-  obtain ⟨_,nonerror,notTimeout⟩ := completeLoop_resultCase ctxt word wordPost sourcePost result wordResult complete wordRel
-  have bound : WordSteps.steps (LoopToWord.compHOL ctxt p labels).1 word ≤ 6*limit := by omega
+  obtain ⟨wordPost,wordResult,wordRun,wordFfi,wordRel,nonerror,notTimeout,bound⟩ :=
+    loopSequence_word_execution p shape source sourcePost result word ctxt labels limit premises complete sourceBound
   have wordShape := loopSequenceSource_word shape ctxt labels
   obtain ⟨selectedLocals,targetPost,targetRun,rel,targetBound⟩ :=
     compilerPrefix_alloc_correct ac ac.twoRegArith count name alg regCount col wordShape

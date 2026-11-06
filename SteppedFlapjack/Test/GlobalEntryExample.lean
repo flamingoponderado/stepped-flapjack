@@ -1,9 +1,9 @@
 import SteppedFlapjack.PanToCrepSteps.TailEntryRelations
 
-/-! Concrete frontend satisfiability check. The empty code maps here do not
-instantiate the global-entry call or any backend premise. -/
+/-! Concrete frontend satisfiability checks, including a nonempty one-loop
+function table. These do not instantiate the global call or backend premises. -/
 namespace SteppedFlapjack.Test.GlobalEntryExample
-open Flapjack Flapjack.Pancake.PanLang SteppedFlapjack.PanToCrepSteps
+open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
 
 private def ffi : HolFfiState Unit :=
   { oracle := fun _ state _ _ => .ret state [], ffiState := (), ioEvents := [] }
@@ -75,5 +75,46 @@ example : ∃ condition : CrepExpHOL 64,
     tailEntry_compiled_shapes context .skip .skip (.const 0) .skip (.return (.const 7))
       .skip .skip (.const 0) .skip (.return (.const 7))
   exact ⟨condition,compiled,init,body⟩
+
+private def oneLoopFunction : FunDeclHOL 64 where
+  name := ofString "main"
+  inline := false
+  exported := false
+  params := []
+  body := .seq .skip (.seq (.while (.const 0) .skip) (.return (.const 7)))
+  returnShape := .one
+
+private def oneLoopDeclarations : List (DeclHOL 64) := [.function oneLoopFunction]
+
+/-- A nonempty, concrete source function table and its compiler-generated
+Crep table satisfy the complete Pancake-to-Crep code relation. -/
+private theorem oneLoopCodeRel : codeRelExactHOLW
+    (mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL oneLoopDeclarations)) 0
+      (getEidsFromDeclsHOL oneLoopDeclarations))
+    (HolFiniteMapExact.empty.updateList (functionsHOL oneLoopDeclarations).reverse)
+    (HolFiniteMapExact.empty.updateList (compileToCrepExactHOLW oneLoopDeclarations).reverse) := by
+  apply mkCtxtCodeImpCodeRelExactHOLW
+  · simp [oneLoopDeclarations, functionsHOL]
+  · intro entry member
+    simp [oneLoopDeclarations, functionsHOL] at member
+    subst entry
+    rfl
+
+/-- The concrete one-loop source and compiled Crep code tables coexist
+with the initial state, exception and local relations. -/
+example :
+    let ctx := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL oneLoopDeclarations)) 0
+      (getEidsFromDeclsHOL oneLoopDeclarations)
+    let p := {pan with code := HolFiniteMapExact.empty.updateList (functionsHOL oneLoopDeclarations).reverse}
+    let q := {crep with code := HolFiniteMapExact.empty.updateList (compileToCrepExactHOLW oneLoopDeclarations).reverse}
+    panToCrepStateRelFiniteExact p q ∧ codeRelExactHOLW ctx p.code q.code ∧
+      panToCrepExcpRelFiniteExact ctx.eids p.eshapes ∧
+      panToCrepLocalsRelFiniteExact ctx p.locals q.locals := by
+  refine ⟨⟨rfl,rfl,rfl,rfl,by funext key; rfl,rfl,rfl,rfl,rfl,rfl⟩,oneLoopCodeRel,?_,?_⟩
+  · simp [panToCrepExcpRelFiniteExact, mkCtxtExactHOL, pan, HolFiniteMapExact.empty,
+      getEidsFromDeclsHOL, getEidsEntriesHOL, exceptionsHOL, isExnDeclHOL, alistToFmap, FEMPTY,
+      oneLoopDeclarations, oneLoopFunction]
+  · simp [panToCrepLocalsRelFiniteExact, noOverlapFiniteExact, ctxtMaxFiniteExact,
+      mkCtxtExactHOL, pan, crep, HolFiniteMapExact.empty]
 
 end SteppedFlapjack.Test.GlobalEntryExample
