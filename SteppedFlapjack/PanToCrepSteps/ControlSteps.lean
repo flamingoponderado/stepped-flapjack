@@ -42,6 +42,47 @@ theorem controlSteps_pos {width : Nat} [NeZero width] {σ : Type}
   rw [controlSteps.eq_def]
   exact Nat.le_add_right _ _
 
+/-- A source while counts the body and each reached recursive iteration. -/
+theorem controlSteps_while {width : Nat} [NeZero width] {σ : Type}
+    (condition : ExpHOL width) (body : ProgHOL width) (source : PanSemStateFiniteExact width σ) :
+    controlSteps (.while condition body) source = 1 +
+      match @evalHOLExact width σ _ source.toExact (fun address => Classical.propDecidable (source.memaddrs address)) condition with
+      | some (.val (.word w)) => if w ≠ 0 ∧ source.clock ≠ 0 then
+          let entry := source.decClockHOLFinite
+          controlSteps body entry + match entry.evaluateHOLFiniteState body with
+          | (none,t) | (some .continue,t) => controlSteps (.while condition body) t
+          | _ => 0
+        else 0
+      | _ => 0 := by
+  rw [controlSteps.eq_def]
+  dsimp only
+  rcases h : @evalHOLExact width σ _ source.toExact (fun address => Classical.propDecidable (source.memaddrs address)) condition with _ | v <;> try rfl
+  cases v with
+  | val v =>
+    cases v with
+    | word w =>
+      by_cases guard : w ≠ 0 ∧ source.clock ≠ 0 <;> try simp only [if_neg guard]
+      have smaller : Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b)
+          (source.decClockHOLFinite.clock,sizeOf body)
+          (source.clock,sizeOf (.while condition body : ProgHOL width)) := by
+        apply Prod.Lex.left
+        simp only [PanSemStateFiniteExact.decClockHOLFinite]
+        omega
+      simp only [dif_pos smaller]
+      rcases run : source.decClockHOLFinite.evaluateHOLFiniteState body with ⟨res,t⟩
+      have clock := evaluateHOLFiniteState_clock_le source.decClockHOLFinite body
+      rw [run] at clock
+      have smallerLoop : Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b)
+          (t.clock,sizeOf (.while condition body : ProgHOL width))
+          (source.clock,sizeOf (.while condition body : ProgHOL width)) := by
+        apply Prod.Lex.left
+        simp only [PanSemStateFiniteExact.decClockHOLFinite] at clock
+        omega
+      cases res with
+      | none => simp only [dif_pos smallerLoop]
+      | some r => cases r <;> simp only [dif_pos smallerLoop]
+  | _ => rfl
+
 /-- Actual compiled Crep visits are bounded by a syntax factor times the
 Pancake source control visits for each supported loop-free branch. -/
 theorem branch_compiled_steps {width : Nat} [NeZero width] {σ τ : Type}

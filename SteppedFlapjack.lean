@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.WhileSteps
 import SteppedFlapjack.PanToCrepSteps.ControlSteps
 import SteppedFlapjack.CrepSteps.WhileClock
 import SteppedFlapjack.CrepSteps.BranchClock
@@ -289,6 +290,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.CrepSteps.BranchClock`: source branch-program clock consumption bounded by visits.
 - `SteppedFlapjack.CrepToLoopSteps.WhileClock`: compiled while loops bounded by clock consumption.
 - `SteppedFlapjack.CrepToLoopSteps.BranchRiscV`: Crep conditional programs through RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.WhileSteps`: semantic and quantitative Pancake-to-Crep loop correctness.
 - `SteppedFlapjack.PanToCrepSteps.ControlSteps`: exact-state source control visits and compiled branch bounds.
 - `SteppedFlapjack.PanToCrepSteps.Shape`: source fragments lowered to supported Crep.
 - `SteppedFlapjack.CrepSteps.BranchStatic`: syntax-size bounds for loop-free Crep visits.
