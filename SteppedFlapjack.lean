@@ -251,6 +251,7 @@ import SteppedFlapjack.StackToLabSteps.FullInitWordRiscV
 import SteppedFlapjack.LoopToWordSteps.FullInitTailRiscV
 import SteppedFlapjack.LoopToWordSteps.FullInitTailSetup
 import SteppedFlapjack.LoopToWordSteps.FullInitNativeSetup
+import SteppedFlapjack.LoopToWordSteps.FullInitNativeValidity
 import SteppedFlapjack.CrepToLoopSteps.FullInitNativeFrontend
 import SteppedFlapjack.PanToCrepSteps.FullInitTailClockOutcome
 import SteppedFlapjack.PanToCrepSteps.FullInitTailOutcome
