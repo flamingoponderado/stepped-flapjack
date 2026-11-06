@@ -109,6 +109,112 @@ theorem sourceFullInit_memoryRel {σ : Type}
   have inDomain : stack.mdomain address = true := domain.mpr ((sourceDomain address).mp sourceMember)
   simpa [concreteDeclCrepState] using ((preserved address inDomain).trans (memory address sourceMember)).symm
 
+/-- Build the data fields of a Pancake entry from the Lab input of full
+initialization, retaining the template's code and local environments. -/
+noncomputable def labInitializedSource {σ : Type}
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack) : PanSemStateFiniteExact 64 σ :=
+  let base := wordSemTheWord (backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 2))
+  {template with
+    memory := fun address => .word (wordSemTheWord (backend.lab.memory address))
+    memaddrs := Flapjack.Compiler.Backend.StackRemove.addresses base
+      ((backend.labHeapLength.toNat / 8) + (backend.labHeapLength.toNat / 8))
+    shMemaddrs := fun address => backend.lab.sharedMemDomain address = true
+    clock := backend.lab.clock
+    be := backend.lab.be
+    ffi := backend.lab.ffi
+    baseAddr := base
+    topAddr := base + 2 * backend.labHeapLength }
+
+/-- Original source entry whose no-globals call consumes the one clock tick
+needed to reach the Lab-aligned pre-call state. -/
+noncomputable def labInitializedOriginal {σ : Type}
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack) : PanSemStateFiniteExact 64 σ :=
+  {labInitializedSource template stack backend with clock := backend.lab.clock - 1}
+
+/-- The source-first no-globals call entry has exactly the Lab-aligned data
+and the requested compiled source code table. -/
+theorem labInitializedOriginal_preCall {σ : Type}
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack)
+    (code : HolFiniteMapExact MlString (List (MlString × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (clockPositive : 0 < backend.lab.clock) :
+    noGlobalsLoweredPreCall (labInitializedOriginal template stack backend) code =
+      {labInitializedSource template stack backend with code := code} := by
+  simp [noGlobalsLoweredPreCall,labInitializedOriginal,labInitializedSource]
+  omega
+
+/-- The canonical source has the heap, register and ambient fields required
+by the initializer construction. -/
+theorem labInitializedSource_fields {σ : Type}
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack) :
+    let source := labInitializedSource template stack backend
+    backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 2) = .word source.baseAddr ∧
+    (∀ address, source.memaddrs address ↔
+      Flapjack.Compiler.Backend.StackRemove.addresses source.baseAddr
+        ((backend.labHeapLength.toNat / 8) + (backend.labHeapLength.toNat / 8)) address) ∧
+    source.topAddr = source.baseAddr + 2 * backend.labHeapLength ∧
+    source.clock = backend.lab.clock ∧ source.be = backend.lab.be ∧ source.ffi = backend.lab.ffi ∧
+    (∀ address, source.shMemaddrs address ↔ backend.lab.sharedMemDomain address = true) := by
+  obtain ⟨base,read,_,_⟩ := backend.heap_base_and_memory_lab
+  simp [labInitializedSource,read,wordSemTheWord]
+
+/-- Word-valued Lab memory on the heap yields the required Crep-to-Loop
+memory relation for the canonical source, without a condition outside it. -/
+theorem labInitializedSource_memoryRel {σ : Type}
+    (template : PanSemStateFiniteExact 64 σ)
+    (programs : List (MlString × List Nat × CrepProgHOL 64))
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack)
+    (wordMemory : ∀ address, (labInitializedSource template stack backend).memaddrs address →
+      ∃ word, backend.lab.memory address = .word word) :
+    crepToLoopMemRelHOLExact (concreteDeclCrepState (labInitializedSource template stack backend) programs).memory
+      stack.memory (concreteDeclCrepState (labInitializedSource template stack backend) programs).memaddrs := by
+  have fields := labInitializedSource_fields template stack backend
+  apply sourceFullInit_memoryRel (labInitializedSource template stack backend) programs stack backend fields.1 fields.2.1
+  intro address inHeap
+  obtain ⟨word,read⟩ := wordMemory address inHeap
+  simp [labInitializedSource,read,wordSemTheWord,wlabWlocExact]
+
+/-- The counted source theorem's actual no-globals pre-call state has the
+required memory relation when Lab heap cells contain words. -/
+theorem labInitializedOriginal_preCall_memoryRel {σ : Type}
+    (template : PanSemStateFiniteExact 64 σ)
+    (programs : List (MlString × List Nat × CrepProgHOL 64))
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack)
+    (code : HolFiniteMapExact MlString (List (MlString × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (clockPositive : 0 < backend.lab.clock)
+    (wordMemory : ∀ address, (labInitializedOriginal template stack backend).memaddrs address →
+      ∃ word, backend.lab.memory address = .word word) :
+    crepToLoopMemRelHOLExact
+      (concreteDeclCrepState (noGlobalsLoweredPreCall (labInitializedOriginal template stack backend) code) programs).memory
+      stack.memory
+      (concreteDeclCrepState (noGlobalsLoweredPreCall (labInitializedOriginal template stack backend) code) programs).memaddrs := by
+  rw [labInitializedOriginal_preCall template stack backend code clockPositive]
+  apply labInitializedSource_memoryRel template programs stack backend
+  simpa [labInitializedOriginal] using wordMemory
+
+/-- The canonical source's shared domain matches the Lab input. -/
+theorem labInitializedSource_shared {σ : Type}
+    (template : PanSemStateFiniteExact 64 σ)
+    (programs : List (MlString × List Nat × CrepProgHOL 64))
+    (arch : AsmArchitecture)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack) :
+    backend.lab.sharedMemDomain = (concreteDeclLoopState arch
+      (concreteDeclCrepState (labInitializedSource template stack backend) programs) programs).shMdomain := by
+  classical
+  funext address
+  cases h : backend.lab.sharedMemDomain address <;>
+    simp [concreteDeclLoopState,concreteDeclCrepState,labInitializedSource,h]
+
 /-- Construct source inputs for an initializer with a no-install oracle. -/
 noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
     (declarations : List (DeclHOL 64)) (start : MlString)
@@ -195,5 +301,38 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
     · simp [target,concreteDeclLoopState,loopToWordGlobalsRelHOLExact,HolFiniteMapExact.lookup_empty]
   exact ⟨⟨arch,crepPrograms,rfl,callerEq,loopContextEq,wc,ac,rfl,stack,
     emptyNativeWordOracle backend.bitmaps.length cfg,codeEq,prefixEq,ok,data⟩,backend⟩
+
+/-- Assemble compiler inputs for the canonical Lab-aligned source. -/
+noncomputable def labInitializedSource_inputs {σ : Type}
+    (declarations : List (DeclHOL 64)) (start : MlString)
+    (caller : PanToCrepContextExact 64) (loopCtxt : CrepToLoopContextExact)
+    (entry : HolLoopProg 64) (limit : Nat) (arch : AsmArchitecture)
+    (template : PanSemStateFiniteExact 64 σ)
+    (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact 64)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (cfg : LabToTarget.Config)
+    (callerEq : caller = mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
+      (makeFuncsExactHOL (functionsHOL (compileTopExactHOL declarations start))) (sizeOfShapeHOL (.comb [])-1)
+      (getEidsFromDeclsHOL (compileTopExactHOL declarations start)))
+    (loopContextEq : loopCtxt = mkCtxtExact arch (makeVmapExact [])
+      (crepToLoopMakeFuncsExactExecutable (compileProgDeclsHOLW (compileTopExactHOL declarations start))) 0)
+    (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (programsEq : programs = (compile wc ac (loopToWordCompileHOL (compileProgHOLExact arch
+      (compileProgDeclsHOLW (compileTopExactHOL declarations start))))).2)
+    (backend : FullInitMachineContext stack)
+    (inputCodeEq : backend.inputCode = (Flapjack.Compiler.Backend.WordToStack.Native.compileNative ac false programs).2.2.2)
+    (bitmapPrefix : (Flapjack.Compiler.Backend.WordToStack.Native.compileNative ac false programs).1.IsPrefix backend.bitmaps)
+    (registers : 4 < ac.regCount-(5+ac.avoidRegs.length))
+    (stackOracle : backend.coracle = fun _ => (cfg, [], [])) :
+    FullInitAssignLoopInputs declarations start caller loopCtxt entry limit
+      {concreteDeclLoopState arch (concreteDeclCrepState (labInitializedSource template stack backend)
+        (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+        (compileProgDeclsHOLW (compileTopExactHOL declarations start)) with memory := stack.memory} := by
+  have fields := labInitializedSource_fields template stack backend
+  exact sourceFullInitEmptyOracleInputs declarations start caller loopCtxt entry limit arch
+    (labInitializedSource template stack backend) wc ac stack cfg callerEq loopContextEq programs programsEq
+    backend inputCodeEq bitmapPrefix registers stackOracle fields.2.1
+    (labInitializedSource_shared template _ arch stack backend)
+    fields.2.2.2.1.symm fields.2.2.2.2.1.symm fields.2.2.2.2.2.1.symm fields.1 fields.2.2.1
 
 end SteppedFlapjack.PanToCrepSteps
