@@ -38,7 +38,8 @@ theorem wholeWordStack_tailEntryFrame_or_resource {C F : Type}
       sptLookup name t.code = some (compileProgNative ac false q 1 (ac.regCount-(5+ac.avoidRegs.length)) (bs,n)).1 ∧
       (appListAppend bs).length ≤ n ∧ n-(appListAppend bs).length ≤ t.bitmaps.length ∧
       (appListAppend bsPost).IsPrefix (t.bitmaps.drop (n-(appListAppend bs).length)) ∧
-      (stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
+      (frameSize ≤ t.stackSpace ∧
+       stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
         (callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
           (makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) t (sptFromAList (compile wc ac programs).2) coracle))
         {t with stackSpace := t.stackSpace-frameSize} [] 0 ∧
@@ -65,7 +66,7 @@ theorem wholeWordStack_tailEntryFrame_or_resource {C F : Type}
       split <;> simp_all
     have related := wholeWordStack_initialFrame wc ac programs t coracle noRaise noStore codeEq bitmapsPrefix ok
       frameSize frame frameShape fits
-    exact ⟨related,stateRel_setClocks ac _ frameSize frame _ _ [] 0 limit related⟩
+    exact ⟨fits,related,stateRel_setClocks ac _ frameSize frame _ _ [] 0 limit related⟩
   · right
     obtain ⟨post,run,_,ffi,bound⟩ := allocationFailure_entry t name limit frameSize body foundBody ok.2.2.2.1 (by omega)
     exact ⟨post,run,ffi,bound⟩

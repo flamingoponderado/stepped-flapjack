@@ -289,7 +289,8 @@ theorem globalEntry_nonInline_frame_or_resource {C F : Type}
       sptLookup firstLoopName stack.code = some (Compiler.Backend.WordToStack.Native.compileProgNative ac false out 1 (ac.regCount-(5+ac.avoidRegs.length)) (bs,n)).1 ∧
       (appListAppend bs).length ≤ n ∧ n-(appListAppend bs).length ≤ stack.bitmaps.length ∧
       (appListAppend bsPost).IsPrefix (stack.bitmaps.drop (n-(appListAppend bs).length)) ∧
-      (Flapjack.WordToStackProofs.stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
+      (frameSize ≤ stack.stackSpace ∧
+       Flapjack.WordToStackProofs.stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
         (WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
           (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2) coracle))
         {stack with stackSpace := stack.stackSpace-frameSize} [] 0 ∧
@@ -403,7 +404,8 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
       (appListAppend bsPost).IsPrefix (stack.bitmaps.drop (n-(appListAppend bs).length)) ∧
       maxVarHOL out < 2*frame+2*(ac.regCount-(5+ac.avoidRegs.length)) ∧
       (∀ loc, StackSem.getLabelsExact body loc → StackSem.locCheckExact stack.code loc) ∧
-      (Flapjack.WordToStackProofs.stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
+      (frameSize ≤ stack.stackSpace ∧
+       Flapjack.WordToStackProofs.stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
         (WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
           (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2) coracle))
         {stack with stackSpace := stack.stackSpace-frameSize} [] 0 ∧
@@ -443,13 +445,13 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
     lengthBound,gapBound,bitmapPrefix,entryFacts.1,entryFacts.2,?_⟩
   rcases caseResult with success | ⟨post,run,ffi,stepBound⟩
   · left
-    refine ⟨success.1,success.2,?_⟩
+    refine ⟨success.1,success.2.1,success.2.2,?_⟩
     intro temp
     have facts := SteppedFlapjack.WordToStackSteps.initializedTail_simulation_state ac _ frameSize frame stack
       (sptFromAList (Compiler.Backend.WordToWord.compile wc ac
         (loopToWordCompileHOL (compileProgHOLExact arch (compileProgDeclsHOLW (compileTopExactHOL declarations start))))).2)
       (sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch
-        (compileProgDeclsHOLW (compileTopExactHOL declarations start))))) coracle limit temp success.1
+        (compileProgDeclsHOLW (compileTopExactHOL declarations start))))) coracle limit temp success.2.1
     refine ⟨facts.1,facts.2.1,facts.2.2.1,facts.2.2.2,?_,?_⟩
     · simpa using (SteppedFlapjack.WordToStackSteps.nativeTailEntry_loopLocals _
         (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack
