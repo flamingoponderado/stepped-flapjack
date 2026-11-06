@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordAllocated
 import SteppedFlapjack.WordAllocSteps.Prefix
 import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordCse
 import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordOptimized
