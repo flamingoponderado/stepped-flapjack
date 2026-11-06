@@ -21,6 +21,7 @@ import SteppedFlapjack.PanToCrepSteps.ReplayLimitMono
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
 import SteppedFlapjack.PanToCrepSteps.SourceInitialGlobals
 import SteppedFlapjack.PanToCrepSteps.SourceInitialFrontend
+import SteppedFlapjack.PanToCrepSteps.SingleEntryGlobals
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram
 import SteppedFlapjack.PanToCrepSteps.CountedDeclExample
 import SteppedFlapjack.PanToCrepSteps.CountedLoopExample
@@ -516,6 +517,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial`: Concrete original and lowered global-entry state relations.
 - `SteppedFlapjack.PanToCrepSteps.SourceInitialGlobals`: Source-first no-global call-entry construction.
 - `SteppedFlapjack.PanToCrepSteps.SourceInitialFrontend`: Source-first initial Crep and Loop state relations.
+- `SteppedFlapjack.PanToCrepSteps.SingleEntryGlobals`: Actual globals compilation for a single entry function.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclRiscV`: Counted concrete source execution through the RISC-V bound.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclNativeRiscV`: Native initialization for the concrete RISC-V bound.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrame`: Concrete native frame and RISC-V resource alternative.

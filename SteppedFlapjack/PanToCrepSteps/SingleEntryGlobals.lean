@@ -1,0 +1,112 @@
+import SteppedFlapjack.PanToCrepSteps.SourceInitialGlobals
+import SteppedFlapjack.PanToCrepSteps.GlobalPanCodeRel
+
+/-! Actual globals-pass code for one zero-argument function. -/
+namespace SteppedFlapjack.PanToCrepSteps
+open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.PanSemStateFiniteExact
+
+/-- A zero-argument program with no globals or exceptions. -/
+def singleEntryProgram (start : MlString) (body : ProgHOL 64) : List (DeclHOL 64) :=
+  [.function ⟨start,false,false,[],body,.one⟩]
+
+/-- The actual global compiler creates the wrapper and a renamed, lowered
+callee; no property of the body is assumed. -/
+theorem singleEntry_compileTop (start : MlString) (body : ProgHOL 64) :
+    let declarations := singleEntryProgram start body
+    let renamed := newMainNameHOL declarations
+    compileTopExactHOL declarations start =
+      [.function ⟨start,false,false,[],.seq .skip (.call none renamed []),.one⟩,
+       .function ⟨renamed,false,false,[],
+         compileProgExactHOL emptyGlobalsContext (fpermHOL start renamed body),.one⟩] := by
+  simp [compileTopExactHOL,compileTopFunctionLookup_eq_lookup,singleEntryProgram,functionsHOL,
+    resortDeclsHOL,isNameHOL,isExnDeclHOL,isDeclHOL,isFunctionHOL,List.filter,
+    fpermDecsHOL,fpermName,compileDecsExactHOL,decShapesHOL,emptyGlobalsContext]
+
+/-- A local-assignment loop has no function calls to rename, independently
+of its condition and assignment expressions. -/
+theorem declaredAssignLoop_fperm (start renamed name : MlString) (initial returned : BitVec 64)
+    (condition assignment : ExpHOL 64) :
+    fpermHOL start renamed (.dec name .one (.const initial) (.seq .skip
+      (.seq (.while condition (.assign .local name assignment)) (.return (.const returned))))) =
+      .dec name .one (.const initial) (.seq .skip
+        (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))) := by
+  simp [fpermHOL]
+
+
+/-- Every function in the singleton original code table has the expected
+compiled lookup in the actual generated table. The original table contains
+the renamed body, as required at the generated call entry. -/
+theorem singleEntry_compiled_code_lookup {σ : Type}
+    (start : MlString) (body : ProgHOL 64) (source : PanSemStateFiniteExact 64 σ)
+    (sourceCode : source.code = HolFiniteMapExact.empty.update
+      (newMainNameHOL (singleEntryProgram start body),
+        ([],fpermHOL start (newMainNameHOL (singleEntryProgram start body)) body,.one))) :
+    ∀ function parameters program returnShape,
+      source.code.lookup function = some (parameters,program,returnShape) →
+      (HolFiniteMapExact.empty.updateList
+        (functionsHOL (compileTopExactHOL (singleEntryProgram start body) start)).reverse).lookup function =
+          some (parameters,compileProgExactHOL emptyGlobalsContext program,returnShape) := by
+  intro function parameters program returnShape found
+  rw [sourceCode] at found
+  simp only [HolFiniteMapExact.lookup_update,FUPDATE,HolFiniteMapExact.lookup_empty] at found
+  split at found
+  · rename_i eq
+    simp only [Option.some.injEq,Prod.mk.injEq] at found
+    rcases found with ⟨rfl,rfl,rfl⟩
+    have same : newMainNameHOL (singleEntryProgram start body) = function := by simpa using eq
+    subst function
+    have fresh : newMainNameHOL (singleEntryProgram start body) ≠ start := by
+      intro same
+      have notMem := PanGlobalsDeclListExact.freshNameMlS_correct (ofString "main")
+        ((functionsHOL (singleEntryProgram start body)).map Prod.fst)
+      apply notMem
+      simpa [newMainNameHOL,singleEntryProgram,functionsHOL] using same
+    rw [singleEntry_compileTop]
+    simp [functionsHOL,HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,Ne.symm fresh]
+  · simp at found
+
+
+/-- Global lowering of a single function has no initialization or global
+context, with the callee body compiled in the empty context. -/
+theorem singleEntry_globalLowered (start : MlString) (body : ProgHOL 64) :
+    let declarations := singleEntryProgram start body
+    let renamed := newMainNameHOL declarations
+    globalLoweredDecs declarations start =
+      ([],[.function ⟨renamed,false,false,[],
+        compileProgExactHOL emptyGlobalsContext (fpermHOL start renamed body),.one⟩],[],emptyGlobalsContext) := by
+  simp [globalLoweredDecs,singleEntryProgram,resortDeclsHOL,isNameHOL,isExnDeclHOL,
+    isDeclHOL,isFunctionHOL,List.filter,fpermDecsHOL,fpermName,compileDecsExactHOL,
+    decShapesHOL,emptyGlobalsContext]
+
+/-- The actual code table meets the source-first machine theorem's globals
+lookup premise for every declared assignment loop of the supported shape. -/
+theorem singleEntry_declared_code_lookup {σ : Type}
+    (start name : MlString) (initial returned : BitVec 64)
+    (condition assignment : ExpHOL 64) (source : PanSemStateFiniteExact 64 σ)
+    (sourceCode : source.code = HolFiniteMapExact.empty.update
+      (newMainNameHOL (singleEntryProgram start (.dec name .one (.const initial) (.seq .skip
+        (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))))),
+      ([],.dec name .one (.const initial) (.seq .skip
+        (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))),.one))) :
+    ∀ function parameters program returnShape,
+      source.code.lookup function = some (parameters,program,returnShape) →
+      (HolFiniteMapExact.empty.updateList
+        (functionsHOL (compileTopExactHOL (singleEntryProgram start (.dec name .one (.const initial) (.seq .skip
+          (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))))) start)).reverse).lookup function =
+          some (parameters,compileProgExactHOL emptyGlobalsContext program,returnShape) := by
+  apply singleEntry_compiled_code_lookup
+  simpa only [declaredAssignLoop_fperm] using sourceCode
+
+
+/-- The actual singleton compiled program contributes no exception IDs to
+the frontend compiler context. -/
+theorem singleEntry_compiled_eids_empty (start : MlString) (body : ProgHOL 64) :
+    getEidsFromDeclsHOL (compileTopExactHOL (singleEntryProgram start body) start) =
+      HolFiniteMapExact.empty := by
+  apply HolFiniteMapExact.ext_lookup
+  intro key
+  rw [singleEntry_compileTop]
+  simp [getEidsFromDeclsHOL,getEidsEntriesHOL,exceptionsHOL,HolFiniteMapExact.lookup_empty,
+    Flapjack.alistToFmap,FEMPTY]
+
+end SteppedFlapjack.PanToCrepSteps
