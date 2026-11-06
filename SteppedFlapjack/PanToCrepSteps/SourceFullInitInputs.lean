@@ -91,7 +91,6 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
     (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact 64)
     (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
     (cfg : LabToTarget.Config)
-    (heapEnd : BitVec 64)
     (callerEq : caller = mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
       (makeFuncsExactHOL (functionsHOL (compileTopExactHOL declarations start))) (sizeOfShapeHOL (.comb [])-1)
       (getEidsFromDeclsHOL (compileTopExactHOL declarations start)))
@@ -117,14 +116,13 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
         (compileProgDeclsHOLW (compileTopExactHOL declarations start))).memory address)
     (sourceDomain : ∀ address, source.memaddrs address ↔
       Flapjack.Compiler.Backend.StackRemove.addresses source.baseAddr
-        (((heapEnd - source.baseAddr).toNat / 8) + ((heapEnd - source.baseAddr).toNat / 8)) address)
+        ((backend.labHeapLength.toNat / 8) + (backend.labHeapLength.toNat / 8)) address)
     (shared : backend.lab.sharedMemDomain = (concreteDeclLoopState arch (concreteDeclCrepState source
       (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
       (compileProgDeclsHOLW (compileTopExactHOL declarations start))).shMdomain)
     (clock : backend.lab.clock = source.clock) (endian : backend.lab.be = source.be) (ffi : backend.lab.ffi = source.ffi)
     (baseReg : backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 2) = .word source.baseAddr)
-    (endHeap : stack.store.lookup .endOfHeap = some (.word heapEnd))
-    (heap : source.topAddr = source.baseAddr + 2 * (heapEnd - source.baseAddr))
+    (heap : source.topAddr = source.baseAddr + 2 * backend.labHeapLength)
  :
     FullInitAssignLoopInputs declarations start caller loopCtxt entry limit
       (concreteDeclLoopState arch (concreteDeclCrepState source
@@ -140,7 +138,11 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
       (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
       (compileProgDeclsHOLW (compileTopExactHOL declarations start))).mdomain := by
     funext address
-    have eq := (backend.heap_domain_of_pointers source.baseAddr heapEnd current endHeap address).trans (sourceDomain address).symm
+    have endHeap := backend.heap_end_lab source.baseAddr current
+    have domainFact := backend.heap_domain_of_pointers source.baseAddr (source.baseAddr + backend.labHeapLength) current endHeap address
+    have distance : source.baseAddr + backend.labHeapLength - source.baseAddr = backend.labHeapLength := by simp
+    rw [distance] at domainFact
+    have eq := domainFact.trans (sourceDomain address).symm
     cases h : stack.mdomain address <;> by_cases sourceMember : source.memaddrs address <;>
       simp_all [concreteDeclLoopState,concreteDeclCrepState]
   have memory : stack.memory = (concreteDeclLoopState arch (concreteDeclCrepState source
@@ -155,10 +157,10 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
         exact preserved address domainEq
       exact preserved.trans (heapMemory address domainEq)
   exact sourceFullInitInputs declarations start caller loopCtxt entry limit arch source wc ac stack
-    (emptyNativeWordOracle backend.bitmaps.length cfg) (heapEnd - source.baseAddr) callerEq loopContextEq programs programsEq
+    (emptyNativeWordOracle backend.bitmaps.length cfg) backend.labHeapLength callerEq loopContextEq programs programsEq
     backend inputCodeEq bitmapPrefix registers compat.1 (stackOracle.trans compat.2.symm)
     memory domain (backend.ambient_eq.2.2.trans shared) (backend.ambient_eq.1.trans clock)
     (backend.ambient_eq.2.1.trans endian) (backend.ffi_eq.trans ffi) current
-    (backend.heap_length_of_pointers source.baseAddr heapEnd current endHeap) heap
+    backend.heap_length_lab heap
 
 end SteppedFlapjack.PanToCrepSteps
