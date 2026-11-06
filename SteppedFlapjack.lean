@@ -26,6 +26,8 @@ import SteppedFlapjack.PanToCrepSteps.CountedWhile
 import SteppedFlapjack.PanToCrepSteps.CountedWhileTrace
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoop
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopInvert
+import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopReturn
+import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopEntry
 import SteppedFlapjack.PanToCrepSteps.CountedCountdown
 import SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep
 import SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample
@@ -506,6 +508,8 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.CountedCountdown`: Arbitrary-count countdown with nested declarations.
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoop`: Counted assignment loops through global and Crep lowering.
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopInvert`: Reconstruct assignment-loop paths from counted runs.
+- `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopReturn`: Assignment loops followed by a source return and global entry.
+- `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopEntry`: Assignment-loop source budgets through the compiled RISC-V entry.
 - `SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep`: Countdown through generated entries to a packaged RISC-V backend.
 - `SteppedFlapjack.LoopToWordSteps.TailRiscVSetup`: Shared RISC-V backend initialization interface.
 - `SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample`: A constructed state-changing loop trace.
