@@ -205,7 +205,8 @@ theorem counted_countdown_with_return {σ : Type} (count : Nat)
         (.seq .skip (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))) =
           (some (.returned (.val (.word returned))),final) ∧
       controlSteps (.seq .skip (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned))))
-        source ≤ 6*count+7 := by
+        source ≤ 6*count+7 ∧
+      result = .returned (fun _ => none) production.globals production.memory production.ffi [.word returned] := by
   classical
   obtain ⟨finalLocals,middle,loopExec,loopRun,loopBound,middleRel,middleRanged⟩ :=
     counted_countdown count production source rel ranged name nameRanged initial wordRange clock context primitive handler functions fuel
@@ -250,7 +251,7 @@ theorem counted_countdown_with_return {σ : Type} (count : Nat)
   have fuelEq : fuel+count+2+1 = fuel+count+3 := by omega
   rw [costEq,fuelEq] at exec
   rw [costEq] at bound
-  exact ⟨_,_,exec,run,bound⟩
+  exact ⟨_,_,exec,run,bound,rfl⟩
 
 /-- A fresh scalar declaration initializes the countdown local, and the
 resulting loop-and-return body has the compiler's supported shape. -/
@@ -274,7 +275,9 @@ theorem counted_decl_countdown_return {σ : Type} (count : Nat)
         (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (result,6*count+9) ∧
       source.evaluateHOLFiniteState holProgram = (some (.returned (.val (.word returned))),final) ∧
       controlSteps holProgram source ≤ 6*count+9 ∧
-      SteppedFlapjack.CrepToLoopSteps.SupportedCodeBody (compileProgExactHOLW ctxt holProgram) := by
+      SteppedFlapjack.CrepToLoopSteps.SupportedCodeBody (compileProgExactHOLW ctxt holProgram) ∧
+      result = .returned (restorePanValueLocal (fun _ => none) name (production.locals name))
+        production.globals production.memory production.ffi [.word returned] := by
   let word := BitVec.ofNat 64 count
   let entry := setVarHOLFinite (ofString name) (.val (.word word)) source
   let productionEntry := {production with locals := updatePanValueMap production.locals name (.word word)}
@@ -286,7 +289,7 @@ theorem counted_decl_countdown_return {σ : Type} (count : Nat)
   have initial : productionEntry.locals name = some (.word (BitVec.ofNat 64 count)) := by
     simp [productionEntry,word,updatePanValueMap]
   have entryClock : count ≤ entry.clock := by simpa [entry,setVarHOLFinite] using clock
-  obtain ⟨result,final,bodyExec,bodyRun,bodyBound⟩ := @counted_countdown_with_return σ count productionEntry entry entryDec
+  obtain ⟨result,final,bodyExec,bodyRun,bodyBound,resultEq⟩ := @counted_countdown_with_return σ count productionEntry entry entryDec
     entryRel entryRanged name nameRanged initial wordRange entryClock returned context primitive handler functions fuel
   have bodyExec' : evalPanValueFfiProgSteps context primitive handler production.structs functions
       production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+count+3)
@@ -307,7 +310,7 @@ theorem counted_decl_countdown_return {σ : Type} (count : Nat)
   rw [costEq,fuelEq] at exec
   rw [costEq] at bound
   refine ⟨restorePanValueFfiLocal name (production.locals name) result,
-    {final with locals := HolFiniteMapExact.resVarEq final.locals (ofString name,source.locals.lookup (ofString name))},?_,?_,?_,?_⟩
+    {final with locals := HolFiniteMapExact.resVarEq final.locals (ofString name,source.locals.lookup (ofString name))},?_,?_,?_,?_,?_⟩
   · simpa [word] using exec
   · simpa [word,expToHOL] using run
   · simpa [word,expToHOL] using bound
@@ -316,6 +319,7 @@ theorem counted_decl_countdown_return {σ : Type} (count : Nat)
       (.var .local (ofString name)) .skip
       (.assign .local (ofString name) (.op .sub [.var .local (ofString name),.const 1])) (.return (.const returned))
       (.const _) .skip (.scalar (.local _ _ found)) (.assign _ _ found (.op .sub (.local _ _ found) (.const _))) (.return (.const _))
+  · simpa [productionEntry,restorePanValueFfiLocal] using congrArg (restorePanValueFfiLocal name (production.locals name)) resultEq
 
 /-- The counted countdown return supplies the original source run and a
 source-count-dependent visit bound for the actual generated global entry. -/
@@ -358,7 +362,7 @@ theorem countdown_globalEntry_inputs {σ : Type} (count : Nat)
           (4 + sizeOf (compileProgExactHOL globals (.skip : ProgHOL 64)) +
             sizeOf (compileProgExactHOL globals (countdownBodyHOL name)) +
             sizeOf (compileProgExactHOL globals (.return (.const returned)))) * (6*count+9) + 2 := by
-  obtain ⟨result,sourceFinal,exec,run,bound,_⟩ := counted_decl_countdown_return count production source rel ranged
+  obtain ⟨result,sourceFinal,exec,run,bound,_,_⟩ := counted_decl_countdown_return count production source rel ranged
     name nameRanged wordRange sourceClock returned caller context primitive handler functions fuel
   let inner := scalarDeclContext caller (ofString name)
   have found := scalarDeclContext_local caller (ofString name)
@@ -423,7 +427,7 @@ theorem countdown_globalCrep_steps {σ : Type} (count : Nat)
       pcCompileCorrectResultRel ctxt loweredFinal crepFinal (some (.returned (.val (.word returned)))) crepResult ∧
       SteppedFlapjack.CrepSteps.steps (compileProgExactHOLW ctxt (compileProgExactHOL globals body)) crep ≤
         factor * (6*count+9) := by
-  obtain ⟨result,sourceFinal,exec,run,bound,_⟩ := counted_decl_countdown_return count production source rel ranged
+  obtain ⟨result,sourceFinal,exec,run,bound,_,_⟩ := counted_decl_countdown_return count production source rel ranged
     name nameRanged wordRange sourceClock returned ctxt context primitive handler functions fuel
   let inner := scalarDeclContext ctxt (ofString name)
   have found := scalarDeclContext_local ctxt (ofString name)
