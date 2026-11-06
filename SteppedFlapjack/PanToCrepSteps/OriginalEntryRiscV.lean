@@ -21,7 +21,9 @@ open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.CrepToLoopSteps
 open Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 
 
-/-- An original initialized-loop execution bounds the compiled RISC-V execution. -/
+/-- An upper bound on an original initialized loop's control visits gives a
+bound on the compiled RISC-V execution. The generated initializer is counted
+separately; the source step counter treats expressions as atomic. -/
 theorem panOriginalEntry_riscvWithin {F : Type}
     (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
     (source : CrepSemHOLState 64 F)
@@ -41,7 +43,8 @@ theorem panOriginalEntry_riscvWithin {F : Type}
     (panInit panCalleeInit : ProgHOL 64) (panCondition : ExpHOL 64) (panBody panTail : ProgHOL 64)
     (callerContext : PanToCrepContextExact 64)
     (originalInit : ProgHOL 64) (originalCondition : ExpHOL 64) (originalBody originalTail : ProgHOL 64)
-    (originalState originalFinal : PanSemStateFiniteExact 64 F)
+    (originalState originalFinal : PanSemStateFiniteExact 64 F) (sourceLimit : Nat)
+    (sourceBound : controlSteps (.seq originalInit (.seq (.while originalCondition originalBody) originalTail)) originalState ≤ sourceLimit)
     (sourceInitShape : PanToCrepSteps.BranchProgram callerContext panInit)
     (originalInitShape : BranchProgram (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) originalInit)
     (originalConditionShape : ScalarExpression (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) originalCondition)
@@ -97,7 +100,7 @@ theorem panOriginalEntry_riscvWithin {F : Type}
     let limit := controlSteps (nestedSeqHOL initializers) pan +
       (3 + sizeOf (compileProgExactHOL globalContext originalInit) +
         sizeOf (compileProgExactHOL globalContext originalBody) + sizeOf (compileProgExactHOL globalContext originalTail)) *
-        controlSteps (.seq originalInit (.seq (.while originalCondition originalBody) originalTail)) originalState + 2
+        sourceLimit + 2
     ∃ panPost, panGlobalsStateRelHOLExact (goodResHOL panResult) globalContext originalFinal panPost ∧
     TailProgramShapes (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)) ∧
     ∃ (condition : CrepExpHOL 64),
@@ -196,8 +199,8 @@ theorem panOriginalEntry_riscvWithin {F : Type}
           {shiftedWord with code := compiledCode,locals := locals,clock := stackLimit}
           {targetPost with clock := stackLimit-(tailWordReplayLimit loopEntry wordCtxt labels compiledCode loopLimit-targetPost.clock)}
           stackPost wordResult stackResult lens ∧
-        ((LoopMachineOutcome (resultToLoop result) outcome ∧ finalFfi.ioEvents = panPost.ffi.ioEvents) ∨
-          (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: panPost.ffi.ioEvents ∧
+        ((LoopMachineOutcome (resultToLoop result) outcome ∧ finalFfi.ioEvents = originalFinal.ffi.ioEvents) ∨
+          (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: originalFinal.ffi.ioEvents ∧
             targetPost.stackMax.getD (targetPost.stackLimit+1) > targetPost.stackLimit)) := by
   have nonerror : panResult ≠ some .error := by cases panComplete <;> simp
   have initRun : pan.evaluateHOLFiniteState (nestedSeqHOL initializers) = (none,panMiddle) := by
@@ -215,10 +218,15 @@ theorem panOriginalEntry_riscvWithin {F : Type}
       controlSteps (nestedSeqHOL initializers) pan +
         (3 + sizeOf (compileProgExactHOL globalContext originalInit) +
           sizeOf (compileProgExactHOL globalContext originalBody) + sizeOf (compileProgExactHOL globalContext originalTail)) *
-          controlSteps (.seq originalInit (.seq (.while originalCondition originalBody) originalTail)) originalState + 2 := by
-    simpa only [initDef,nameDef] using panBound
+          sourceLimit + 2 := by
+    have scaled := Nat.mul_le_mul_left
+      (3 + sizeOf (compileProgExactHOL globalContext originalInit) +
+        sizeOf (compileProgExactHOL globalContext originalBody) + sizeOf (compileProgExactHOL globalContext originalTail)) sourceBound
+    simp only [initDef,nameDef]
+    omega
+  have ffiEq : originalFinal.ffi = panPost.ffi := postRel.2.2.2.2.2.2.2.2.2.2.2.2.2.1
   refine ⟨panPost,postRel,?_⟩
-  exact panTailEntry_supportedGlobal_riscvWithin ctxt live name source target word _ crepRel memRel globalsRel localsRel
+  have machineResult := panTailEntry_supportedGlobal_riscvWithin ctxt live name source target word _ crepRel memRel globalsRel localsRel
     arch crepPrograms entryName entryBody unique ctxtEq sourceCodeEq loopCodeEq wordCodeEq wordData
     panInit _ _ _ _ callerContext sourceInitShape panInitShape panConditionShape panBodyShape panTailShape
     pan panMiddle panPost panResult panReturnShape panInitRun panClock panRun panComplete initLocalised
@@ -226,5 +234,6 @@ theorem panOriginalEntry_riscvWithin {F : Type}
     (.seq originalInit (.seq (.while originalCondition originalBody) originalTail)) globalFound funs exns globalContext
     globalCompiled notInline programsDef panCode (by simpa only [nameDef] using calleeFound)
     localised preShapes noTail callerDef initDef nameDef entryNameDef entryBodyDef liveDef
+  simpa only [← ffiEq] using machineResult
 
 end SteppedFlapjack.PanToCrepSteps
