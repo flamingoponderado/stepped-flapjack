@@ -133,4 +133,47 @@ theorem FullInitMachineContext.nativeInitOk_of_compiled {F : Type}
   obtain ⟨tail,header⟩ := backend.nativeBitmapHeader ac programs bitmapPrefix
   exact backend.nativeInitOk ac wordOracle tail registers header oracleValid oracleEq
 
+
+/-- An oracle that never installs code and begins at the supplied bitmap
+length. Its configuration is carried through unchanged. -/
+def emptyNativeWordOracle (bitmapLength : Nat) (cfg : LabToTarget.Config) :
+    Nat → (Nat × LabToTarget.Config) × List (Nat × Nat × WordLangProgHOL (BitVec 64)) :=
+  fun _ => ((bitmapLength,cfg),[])
+
+/-- The empty Word oracle satisfies all compiler conventions and translates
+to the empty Stack oracle. -/
+theorem emptyNativeWordOracle_compatible (ac : AsmConfigExact 64) (bitmapLength : Nat)
+    (cfg : LabToTarget.Config) :
+    (∀ n,
+      let ((bm0, _), progs) := emptyNativeWordOracle bitmapLength cfg n
+      progs.all (fun p => postAllocConventionsHOL (ac.regCount-(5+ac.avoidRegs.length)) p.2.2) = true ∧
+      progs.all (fun p => flatExpConventions p.2.2) = true ∧
+      progs.all (fun p => decide (raiseStubLocation ≠ p.1)) = true ∧
+      progs.all (fun p => decide (storeConstsStubLocation ≠ p.1)) = true ∧
+      (n = 0 → bm0 = bitmapLength)) ∧
+    (fun n =>
+      let ((bm0,c),progs) := emptyNativeWordOracle bitmapLength cfg n
+      let (compiled,_,bm) := compileWordToStackNative ac false (ac.regCount-(5+ac.avoidRegs.length)) progs (.nil,bm0)
+      (c,compiled,appListAppend bm.1)) = (fun _ => (cfg,[],[])) := by
+  constructor
+  · intro n
+    simp [emptyNativeWordOracle]
+  · funext n
+    simp [emptyNativeWordOracle,compileWordToStackNative,appListAppend,appendAux]
+
+/-- For a Stack oracle that never installs code, all Word-oracle convention
+and translation obligations follow from the empty oracle construction. -/
+theorem FullInitMachineContext.nativeInitOk_emptyOracle {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack)
+    (ac : AsmConfigExact 64) (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (cfg : LabToTarget.Config)
+    (registers : 4 < ac.regCount-(5+ac.avoidRegs.length))
+    (bitmapPrefix : (compileNative ac false programs).1.IsPrefix backend.bitmaps)
+    (stackOracle : backend.coracle = fun _ => (cfg,[],[])) :
+    Flapjack.WordToStackProofs.InitializationStateRel.initStateOk ac
+      (ac.regCount-(5+ac.avoidRegs.length)) stack (emptyNativeWordOracle backend.bitmaps.length cfg) := by
+  have compat := emptyNativeWordOracle_compatible ac backend.bitmaps.length cfg
+  apply backend.nativeInitOk_of_compiled ac programs _ registers bitmapPrefix compat.1
+  exact stackOracle.trans compat.2.symm
+
 end SteppedFlapjack.LoopToWordSteps
