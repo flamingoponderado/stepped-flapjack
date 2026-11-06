@@ -191,4 +191,28 @@ theorem singleEntry_declared_localised (start name : MlString) (initial returned
     localisedExpHOL,everyExpHOL,everyExpListHOL] at hc ha ⊢
   exact ⟨hc,ha⟩
 
+/-- Function renaming preserves an unprefixed declaration-wrapped assignment loop. -/
+theorem declaredWhileAssignLoop_fperm (start renamed name : MlString) (initial returned : BitVec 64)
+    (condition assignment : ExpHOL 64) :
+    fpermHOL start renamed (.dec name .one (.const initial)
+      (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))) =
+      .dec name .one (.const initial)
+        (.seq (.while condition (.assign .local name assignment)) (.return (.const returned))) := by
+  simp [fpermHOL]
+
+/-- The unprefixed singleton's actual generated functions are localized. -/
+theorem singleEntry_declaredWhile_localised (start name : MlString) (initial returned : BitVec 64)
+    (condition assignment : ExpHOL 64) (ctxt : PanToCrepContextExact 64)
+    (conditionShape : ScalarExpression ctxt condition) (assignmentShape : ScalarExpression ctxt assignment) :
+    ∀ entry ∈ functionsHOL (compileTopExactHOL
+      (singleEntryProgram start (.dec name .one (.const initial)
+        (.seq (.while condition (.assign .local name assignment)) (.return (.const returned))))) start),
+      localisedProgHOL entry.2.2.1 = true := by
+  have hc := scalarExpression_localised (globalCompile_scalar_shape emptyGlobalsContext conditionShape)
+  have ha := scalarExpression_localised (globalCompile_scalar_shape emptyGlobalsContext assignmentShape)
+  rw [singleEntry_compileTop]
+  simp [functionsHOL,declaredWhileAssignLoop_fperm,compileProgExactHOL,compileExpExactHOL,localisedProgHOL,
+    localisedExpHOL,everyExpHOL,everyExpListHOL] at hc ha ⊢
+  exact ⟨hc,ha⟩
+
 end SteppedFlapjack.PanToCrepSteps
