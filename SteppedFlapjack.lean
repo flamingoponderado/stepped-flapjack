@@ -1,3 +1,4 @@
+import SteppedFlapjack.Pancake.Semantics.PanSem.ExpressionCostBridge
 import SteppedFlapjack.PanToCrepSteps.GlobalInitializers
 import SteppedFlapjack.PanToCrepSteps.OriginalEntryRiscV
 import SteppedFlapjack.PanToCrepSteps.GlobalSourceEntry
@@ -324,6 +325,7 @@ phase 4 of flapjack#1251:
   `SteppedFlapjack.PanValueFfiClockStepsBridge`: the bridge from Flapjack's
   clocked evaluator to stepped results, which cannot cover timed-out runs;
 - `SteppedFlapjack.PanCost`: source-level step costs;
+- `SteppedFlapjack.Pancake.Semantics.PanSem.ExpressionCostBridge`: Values and counted expression costs across the executable/HOL boundary.
 - `SteppedFlapjack.Pancake.Semantics.PanSem.EvalExecutedCountedBridge`: the
   counted expression evaluator against `PanSem.evalExecuted`;
 - `SteppedFlapjack.StepPreservation.Basic`: linear step bounds, their
