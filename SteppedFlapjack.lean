@@ -17,6 +17,7 @@ import SteppedFlapjack.PanToCrepSteps.GlobalShapes
 import SteppedFlapjack.PanToCrepSteps.TailEntryGlobalWordRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntrySupportedGlobalRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryFrontendTablesRiscV
+import SteppedFlapjack.CrepToLoopSteps.DeclTerminal
 import SteppedFlapjack.CrepToLoopSteps.WholeInitialRelations
 import SteppedFlapjack.WordAllocSteps.WholeFrontendShapes
 import SteppedFlapjack.PanToCrepSteps.GlobalCodeRelations
@@ -446,6 +447,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.BranchWhileRiscV`: initialization, loop and continuation through RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.BranchWhile`: initialization and loop through the Pancake frontend.
 - `SteppedFlapjack.CrepToLoopSteps.BranchWhileRiscV`: Crep initialization and loop through RISC-V.
+- `SteppedFlapjack.CrepToLoopSteps.DeclTerminal`: Declaration-wrapped loop execution bounds through Crep-to-Loop.
 - `SteppedFlapjack.CrepToLoopSteps.BranchPrefix`: compositional branch-prefix visit bounds.
 - `SteppedFlapjack.PanToCrepSteps.WhileSequenceRiscV`: Pancake loops with continuations through RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.WhileSequence`: source-to-Crep loop and continuation bound.
