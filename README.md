@@ -72,8 +72,8 @@ machine relations. `labInitialized_counted_declared_fullCompiler_riscv` construc
 source and native inputs for this supported fragment from a Lab initialization
 context. Its `withClock` variant derives a sufficient proof clock from the
 source budget without changing the counted run or RISC-V machine.
-`labInitialized_countdown_fullCompiler_riscv` applies the chain to a
-countdown. Concrete initialization guards remain to be proved for
+`labInitialized_countdown_fromGeneral_withClock_riscv` applies that general
+theorem to a countdown with a separately proved exact source cost. Concrete initialization guards remain to be proved for
 an application.
 
 The reusable concrete declaration example is kept in the library because it
