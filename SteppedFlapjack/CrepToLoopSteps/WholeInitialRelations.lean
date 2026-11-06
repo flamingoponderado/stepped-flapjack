@@ -43,6 +43,31 @@ theorem nativeEntry_loopWordDataRel_iff {width : Nat} [NeZero width] {C F : Type
     Compiler.Backend.WordToStack.Native.Initialization.makeInit, loopToWordGlobalsRelHOLExact,
     HolFiniteMapExact.lookup_eraseEq, FDOMSUB_HOL]
 
+/-- At the zero-argument entry, no Loop variable is live. Replace the Loop
+locals by the empty tree without changing any data or state relation; this
+aligns the frontend state with the compiler-initialized native Word entry. -/
+theorem emptyLive_initial_relations {width : Nat} [NeZero width] {C F : Type}
+    (ctxt : CrepToLoopContextExact) (source : CrepSemHOLState width F)
+    (loop : LoopSemStateFiniteExact width F) (word : WordSemStateFiniteExact width C F)
+    (state : crepToLoopStateRelExact source loop)
+    (memory : crepToLoopMemRelHOLExact source.memory loop.memory source.memaddrs)
+    (globals : crepToLoopGlobalsRelHOLExact source.globals loop.globals)
+    (locals : crepToLoopLocalsRelExact ctxt .ln source.locals loop.locals)
+    (data : LoopWordDataRel loop word) :
+    let initial := {loop with locals := .ln}
+    crepToLoopStateRelExact source initial ∧
+    crepToLoopMemRelHOLExact source.memory initial.memory source.memaddrs ∧
+    crepToLoopGlobalsRelHOLExact source.globals initial.globals ∧
+    crepToLoopLocalsRelExact ctxt .ln source.locals initial.locals ∧
+    LoopWordDataRel initial word := by
+  refine ⟨state,memory,globals,?_,data⟩
+  refine ⟨locals.1,locals.2.1,?_,?_⟩
+  · intro n h
+    simp [sptMem, sptDomain] at h
+  · intro name value found
+    obtain ⟨n,_,live,_⟩ := locals.2.2.2 name value found
+    simp [sptMem, sptDomain] at live
+
 /-- Initial data relations and supported whole-program syntax give both full
 frontend state/code relations for the actual compiled code tables. -/
 theorem wholeFrontend_initial_relations {width : Nat} [NeZero width] {C F : Type}

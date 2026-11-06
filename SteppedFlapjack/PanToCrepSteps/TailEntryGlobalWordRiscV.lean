@@ -107,7 +107,7 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
     ∀ (ac : AsmConfigExact 64) (count entryName alg regCount : Nat) (col : Option (Spt Nat))
       (wordCtxt : Spt Nat) (labels : Nat × Nat)
       (compiledCode : Spt (Nat × WordLangProgHOL (BitVec 64))) (locals : Spt (WordLocW 64))
-      (_wordLocals : LoopToWord.localsRelHOL wordCtxt target.locals word.locals)
+      (_wordLocals : LoopToWord.localsRelHOL wordCtxt .ln word.locals)
       (_retLookup : sptLookup 0 word.locals = some (.loc 1 0))
       (_gc : gcFunConstOk word.gcFun)
     (wc : Flapjack.Compiler.Backend.WordToWord.Config)
@@ -196,9 +196,12 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
     exact actualLookup
   have globalMember := globalEntry_nonInline_word_member arch declarations startName initializers returnShape original globalFound
     funs exns globalContext globalCompiled globalInitShape notInline source
+  have normalized := emptyLive_initial_relations ctxt source target word crepRel memRel globalsRel
+    (by simpa only [liveDef] using localsRel) wordData
   obtain ⟨wordShapes,condition,post,result,postRel,resultRel,extra,loopPost,loopRel,backend⟩ :=
-    panTailEntry_frontendTables_riscvWithin ctxt live name source target word limit crepRel memRel globalsRel localsRel
-      arch crepPrograms entryName entryBody unique entryLookup programShapes ctxtEq sourceCodeEq loopCodeEq wordCodeEq wordData
+    panTailEntry_frontendTables_riscvWithin ctxt live name source {target with locals := .ln} word limit
+      normalized.1 normalized.2.1 normalized.2.2.1 (by simpa only [liveDef] using normalized.2.2.2.1)
+      arch crepPrograms entryName entryBody unique entryLookup programShapes ctxtEq sourceCodeEq loopCodeEq wordCodeEq normalized.2.2.2.2
       panInit panCalleeInit panCondition panBody panTail callerContext sourceInitShape panInitShape panConditionShape panBodyShape
       panTailShape pan panMiddle panPost panResult panLocals panReturnShape panInitRun panLookup panClock panRun panComplete
       initLocalised initialPanRel initialCodeRel initialExcpRel initialLocalsRel panBound
