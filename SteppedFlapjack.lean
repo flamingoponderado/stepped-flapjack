@@ -1,5 +1,6 @@
 import SteppedFlapjack.PanToCrepSteps.DeclLoopShape
 import SteppedFlapjack.PanToCrepSteps.CountedDecl
+import SteppedFlapjack.PanToCrepSteps.CountedDeclList
 import SteppedFlapjack.PanToCrepSteps.OriginalDeclEntryRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryDeclSupportedGlobalRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryDeclGlobalWordRiscV
@@ -492,6 +493,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrameRiscV`: Counted source and bounded machine execution for the selected frame.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclCommonBound`: A single bound for both concrete native entry outcomes.
 - `SteppedFlapjack.StackRemoveSteps.CostMono`: Monotone bitmap and finite-oracle cost factors.
+- `SteppedFlapjack.PanToCrepSteps.CountedDeclList`: Counted/HOL bridge for nested scalar declarations.
 - `SteppedFlapjack.PanToCrepSteps.ReplayLimitMono`: Monotonic source-derived compiler replay budgets.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram`: Concrete zero-argument source and global-entry bounds.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclExample`: Exact counted declaration-loop execution and supported shape.
