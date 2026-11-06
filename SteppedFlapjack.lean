@@ -16,6 +16,7 @@ import SteppedFlapjack.PanToCrepSteps.ConcreteDeclNativeRiscV
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrame
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrameRiscV
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclCommonBound
+import SteppedFlapjack.PanToCrepSteps.ReplayLimitMono
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram
 import SteppedFlapjack.PanToCrepSteps.CountedDeclExample
@@ -489,6 +490,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrame`: Concrete native frame and RISC-V resource alternative.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrameRiscV`: Counted source and bounded machine execution for the selected frame.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclCommonBound`: A single bound for both concrete native entry outcomes.
+- `SteppedFlapjack.PanToCrepSteps.ReplayLimitMono`: Monotonic source-derived compiler replay budgets.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram`: Concrete zero-argument source and global-entry bounds.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclExample`: Exact counted declaration-loop execution and supported shape.
 - `SteppedFlapjack.PanToCrepSteps.CountedLoopExample`: State-changing counted loop with a repeated condition.
