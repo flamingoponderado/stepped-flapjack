@@ -24,6 +24,7 @@ import SteppedFlapjack.PanToCrepSteps.CountedDeclExample
 import SteppedFlapjack.PanToCrepSteps.CountedLoopExample
 import SteppedFlapjack.PanToCrepSteps.CountedWhile
 import SteppedFlapjack.PanToCrepSteps.CountedWhileTrace
+import SteppedFlapjack.PanToCrepSteps.CountedAssignLoop
 import SteppedFlapjack.PanToCrepSteps.CountedCountdown
 import SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep
 import SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample
@@ -502,6 +503,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.StackRemoveSteps.CostMono`: Monotone bitmap and finite-oracle cost factors.
 - `SteppedFlapjack.PanToCrepSteps.CountedWhileTrace`: Finite counted/HOL loop traces.
 - `SteppedFlapjack.PanToCrepSteps.CountedCountdown`: Arbitrary-count countdown with nested declarations.
+- `SteppedFlapjack.PanToCrepSteps.CountedAssignLoop`: Counted assignment loops through global and Crep lowering.
 - `SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep`: Countdown through generated entries to a packaged RISC-V backend.
 - `SteppedFlapjack.LoopToWordSteps.TailRiscVSetup`: Shared RISC-V backend initialization interface.
 - `SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample`: A constructed state-changing loop trace.
