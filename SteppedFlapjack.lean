@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.CountedReturn
 import SteppedFlapjack.Pancake.Semantics.PanSem.ExpressionCostBridge
 import SteppedFlapjack.PanToCrepSteps.GlobalInitializers
 import SteppedFlapjack.PanToCrepSteps.OriginalEntryRiscV
@@ -449,6 +450,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.GlobalWhile`: Global lowering and Crep visit bounds for initialized loops.
 - `SteppedFlapjack.PanToCrepSteps.GlobalInitializers`: Supported scalar global declarations and generated initializer stores.
 - `SteppedFlapjack.PanToCrepSteps.GlobalShapes`: Supported global-lowering shapes and branch bounds.
+- `SteppedFlapjack.PanToCrepSteps.CountedReturn`: Counted executable and HOL scalar-return correspondence.
 - `SteppedFlapjack.PanToCrepSteps.ControlSteps`: exact-state source control visits and compiled branch bounds.
 - `SteppedFlapjack.PanToCrepSteps.Shape`: source fragments lowered to supported Crep.
 - `SteppedFlapjack.CrepSteps.BranchStatic`: syntax-size bounds for loop-free Crep visits.
