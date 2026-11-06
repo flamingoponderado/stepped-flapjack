@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordSimpSteps.CompileLoop
 import SteppedFlapjack.WordSimpSteps.PushBranch
 import SteppedFlapjack.WordSimpSteps.Loop
 import SteppedFlapjack.WordSimpSteps.Sequence
@@ -300,6 +301,9 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.CrepToLoopSteps.WhileClock`: compiled while loops bounded by clock consumption.
 - `SteppedFlapjack.CrepToLoopSteps.BranchRiscV`: Crep conditional programs through RISC-V.
 - `SteppedFlapjack.StackRemoveSteps.EmptyOracle`: constant Stack-removal cost for an empty-install oracle.
+- `SteppedFlapjack.WordSimpSteps.CompileLoop`: complete WordSimp semantics and visit bounds for loops with branch bodies.
+- `SteppedFlapjack.WordSimpSteps.CompileBranch`: complete WordSimp semantics and visit bounds for loop-free branches.
+- `SteppedFlapjack.WordSimpSteps.HoistBranch`: duplicate-conditional hoisting preserves branch shape.
 - `SteppedFlapjack.WordSimpSteps.PushBranch`: conditional push-out preserves bounded branch shape.
 - `SteppedFlapjack.WordSimpSteps.ConstBranch`: sequence normalization and constant propagation on branches.
 - `SteppedFlapjack.WordSimpSteps.Branch`: bounds for branch and loop sequence normalization.
