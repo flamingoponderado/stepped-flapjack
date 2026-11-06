@@ -1,3 +1,6 @@
+import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordCse
+import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordOptimized
+import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordCopy
 import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordDead
 import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordSsa
 import SteppedFlapjack.WordSsaSteps.Selection
@@ -308,6 +311,12 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.CrepToLoopSteps.WhileClock`: compiled while loops bounded by clock consumption.
 - `SteppedFlapjack.CrepToLoopSteps.BranchRiscV`: Crep conditional programs through RISC-V.
 - `SteppedFlapjack.StackRemoveSteps.EmptyOracle`: constant Stack-removal cost for an empty-install oracle.
+- `SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordOptimized`: Crep initialization, loop and continuation through all pre-allocation Word optimizations.
+- `SteppedFlapjack.WordDeadSteps.Second`: semantic and visit bound through the second dead-code pass.
+- `SteppedFlapjack.WordUnreachSteps.Correct`: semantic and visit bound through unreachable removal.
+- `SteppedFlapjack.WordTwoRegSteps.Correct`: semantic and visit bound through three-to-two rewriting.
+- `SteppedFlapjack.WordCopySteps.Correct`: semantic and visit bound through copy propagation.
+- `SteppedFlapjack.WordCseSteps.Correct`: semantic and visit bound through CSE.
 - `SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordDead`: Crep initialization, loop and continuation through first dead-code elimination.
 - `SteppedFlapjack.LoopToWordSteps.WordDeadSequence`: Loop sequences through SSA and first dead-code elimination.
 - `SteppedFlapjack.WordDeadSteps.Correct`: dead-code semantics and source-relative visit bounds.
