@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordSimpSteps.Loop
 import SteppedFlapjack.WordSimpSteps.Sequence
 import SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileRiscV
 import SteppedFlapjack.PanToCrepSteps.ConditionRiscV
@@ -298,6 +299,8 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.CrepToLoopSteps.WhileClock`: compiled while loops bounded by clock consumption.
 - `SteppedFlapjack.CrepToLoopSteps.BranchRiscV`: Crep conditional programs through RISC-V.
 - `SteppedFlapjack.StackRemoveSteps.EmptyOracle`: constant Stack-removal cost for an empty-install oracle.
+- `SteppedFlapjack.WordSimpSteps.Loop`: complete WordSimp pass on loops with straight-line bodies.
+- `SteppedFlapjack.WordSimpSteps.Straight`: complete WordSimp pass on straight-line code.
 - `SteppedFlapjack.WordSimpSteps.Sequence`: sequence reassociation visit bounds and straight-line normalization.
 - `SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileRiscV`: initialization, comparison-controlled loop, and continuation through RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.ConditionRiscV`: comparison-controlled loop through RISC-V.
