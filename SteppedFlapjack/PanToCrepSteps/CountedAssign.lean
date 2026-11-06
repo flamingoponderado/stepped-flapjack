@@ -1,4 +1,5 @@
 import SteppedFlapjack.PanToCrepSteps.CountedReturn
+import SteppedFlapjack.PanToCrepSteps.CountedSequence
 import Flapjack.Pancake.Semantics.PanSem.TotalEvalExpBridge
 
 /-! Counted local assignments and their exact HOL state updates. -/
@@ -148,18 +149,24 @@ theorem counted_assign_then_return {σ : Type}
   obtain ⟨secondExec,secondHol,finalRel,secondBound⟩ :=
     @counted_return_word_related σ productionPost post postDecidable postRel postRanged returned returnedRanged word returnEvaluated
       context primitive handler functions fuel
-  constructor
-  · simp only [productionPost,panSemBitVec64MemoryAccess,evalPanValueFfiProgSteps] at secondExec
-    simp only [panSemBitVec64MemoryAccess,evalPanValueFfiProgSteps] at firstExec
-    simp [evalPanValueFfiProgSteps,panSemBitVec64MemoryAccess,firstExec,secondExec]
-  · constructor
-    · rw [evaluateHOLFiniteState_seq_line780,firstHol]
-      exact secondHol
-    · constructor
-      · exact finalRel
-      · rw [controlSteps_seq,firstHol]
-        simp only
-        dsimp only [post] at secondBound
-        omega
+  have secondExec' : evalPanValueFfiProgSteps context primitive handler production.structs functions
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+1)
+      (updatePanValueMap production.locals name value) production.globals production.memory production.ffi (.return returned)
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
+        some (.returned (fun _ => none) production.globals production.memory production.ffi [.word word],
+          panValueExpStepCost returned+1) := by
+    simpa only [productionPost,panSemBitVec64MemoryAccess] using secondExec
+  obtain ⟨wholeExec,wholeHol,wholeBound⟩ := counted_seq_normal context primitive handler production.structs functions
+    production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+1)
+    production.locals production.globals production.memory production.ffi
+    (updatePanValueMap production.locals name value) production.globals production.memory production.ffi
+    (.assign .local name assignment) (.return returned)
+    (.assign .local (ofString name) (expToHOL assignment)) (.return (expToHOL returned))
+    (some (panSemBitVec64MemoryAccess production)) none none
+    (.returned (fun _ => none) production.globals production.memory production.ffi [.word word])
+    (panValueExpStepCost assignment+1) (panValueExpStepCost returned+1)
+    exact post (emptyLocalsHOLFinite post) (some (.returned (.val (.word word))))
+    firstExec secondExec' firstHol secondHol firstBound secondBound
+  exact ⟨wholeExec,wholeHol,finalRel,wholeBound⟩
 
 end SteppedFlapjack.PanToCrepSteps
