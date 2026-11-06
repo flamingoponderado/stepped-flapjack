@@ -1,4 +1,5 @@
 import SteppedFlapjack.PanToCrepSteps.TailEntryGlobalWordRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntrySupportedGlobalRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryFrontendTablesRiscV
 import SteppedFlapjack.CrepToLoopSteps.WholeInitialRelations
 import SteppedFlapjack.WordAllocSteps.WholeFrontendShapes
