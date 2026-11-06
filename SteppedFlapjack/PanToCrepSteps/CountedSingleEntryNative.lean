@@ -43,12 +43,6 @@ theorem counted_singleEntry_declared_native_riscv {σ : Type}
     (conditionShape : ScalarExpression (scalarDeclContext (ctxtFcExactHOL caller.funcs caller.eids [] [] []) (ofString name)) (expToHOL condition))
     (bodyShape : BranchProgram (scalarDeclContext (ctxtFcExactHOL caller.funcs caller.eids [] [] []) (ofString name))
       (.assign .local (ofString name) (expToHOL assignment)))
-    (unique : ((compileProgDeclsHOLW (compileTopExactHOL declarations start)).map Prod.fst).Nodup)
-    (localised : ∀ entry ∈ functionsHOL (compileTopExactHOL declarations start), localisedProgHOL entry.2.2.1 = true)
-    (preShapes : ∀ n ps p, (n,ps,p) ∈ compileToCrepExactHOLW (compileTopExactHOL declarations start) → SupportedCodeBody p)
-    (noTail : ∀ n ps init callee, (n,ps,.seq init (.call none callee [])) ∈
-      compileToCrepExactHOLW (compileTopExactHOL declarations start) →
-      callee ∉ (functionsHOL ((compileTopExactHOL declarations start).filter inlinableHOL)).map Prod.fst)
     (loopCtxt : CrepToLoopContextExact) (target : LoopSemStateFiniteExact 64 σ)
     (arch : AsmArchitecture)
     (initializersEmpty : initializers = []) (globalsEmpty : globals = emptyGlobalsContext)
@@ -86,6 +80,46 @@ theorem counted_singleEntry_declared_native_riscv {σ : Type}
             (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = native.stack.ffi.ioEvents))) := by
   let body : ProgHOL 64 := (.dec (ofString name) .one (.const initial) (.seq .skip (.seq
         (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment))) (.return (.const returned)))))
+  have assignmentShape : ScalarExpression
+      (scalarDeclContext (ctxtFcExactHOL caller.funcs caller.eids [] [] []) (ofString name)) (expToHOL assignment) := by
+    cases bodyShape with
+    | assign _ _ _ shape => exact shape
+  have localised : ∀ entry ∈ functionsHOL (compileTopExactHOL declarations start),
+      localisedProgHOL entry.2.2.1 = true := by
+    rw [singleDef]
+    exact singleEntry_declared_localised start (ofString name) initial returned (expToHOL condition)
+      (expToHOL assignment) _ conditionShape assignmentShape
+  have unique : ((compileProgDeclsHOLW (compileTopExactHOL declarations start)).map Prod.fst).Nodup := by
+    rw [singleDef]
+    exact singleEntry_compiled_names_unique start body
+  have noTail : ∀ n ps init callee, (n,ps,.seq init (.call none callee [])) ∈
+      compileToCrepExactHOLW (compileTopExactHOL declarations start) →
+      callee ∉ (functionsHOL ((compileTopExactHOL declarations start).filter inlinableHOL)).map Prod.fst := by
+    rw [singleDef,singleEntry_inline_selection_empty]
+    simp
+  have preShapes : ∀ n ps p, (n,ps,p) ∈ compileToCrepExactHOLW (compileTopExactHOL declarations start) →
+      SupportedCodeBody p := by
+    intro n ps p member
+    rw [singleDef,singleEntry_compileTop] at member
+    simp only [compileToCrepExactHOLW,functionsHOL,List.map_cons,List.map_nil,List.mem_cons,List.not_mem_nil,or_false,
+      Prod.mk.injEq] at member
+    rcases member with first | second
+    · rcases first with ⟨_,_,rfl⟩
+      simp only [compFuncExactHOLW,List.map_nil,sizeOfShapeHOL,sizeOfShapesHOL,Nat.zero_sub,
+        compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,List.flatMap_nil]
+      exact .tail (.expr (.leaf .skip)) _
+    · rcases second with ⟨_,_,rfl⟩
+      simp only [compFuncExactHOLW,List.map_nil,sizeOfShapeHOL,sizeOfShapesHOL,Nat.zero_sub,
+        declaredAssignLoop_fperm,compileProgExactHOL,compileExpExactHOL]
+      apply scalarDeclLoop_supported
+      · exact .const _
+      · exact .skip
+      · apply BranchCondition.scalar
+        have shape := globalCompile_scalar_shape emptyGlobalsContext conditionShape
+        simpa [native.callerEq,singleDef,singleEntry_compileTop,functionsHOL,declaredAssignLoop_fperm,compileProgExactHOL,compileExpExactHOL,ctxtFcExactHOL,mkCtxtExactHOL,panToCrepMakeVmapHOLExact,maxList] using shape
+      · have shape := globalCompile_branch_shape emptyGlobalsContext bodyShape
+        simpa [native.callerEq,singleDef,singleEntry_compileTop,functionsHOL,declaredAssignLoop_fperm,compileProgExactHOL,compileExpExactHOL,ctxtFcExactHOL,mkCtxtExactHOL,panToCrepMakeVmapHOLExact,maxList] using shape
+      · exact .return (.const _)
   have sourceFound : source.code.lookup (newMainNameHOL declarations) = some ([],body,.one) := by
     simp [sourceCode,HolFiniteMapExact.lookup_update,FUPDATE,body]
   have globalFound : (functionsHOL declarations).lookup start = some ([],body,.one) := by

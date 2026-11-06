@@ -109,4 +109,48 @@ theorem singleEntry_compiled_eids_empty (start : MlString) (body : ProgHOL 64) :
   simp [getEidsFromDeclsHOL,getEidsEntriesHOL,exceptionsHOL,HolFiniteMapExact.lookup_empty,
     Flapjack.alistToFmap,FEMPTY]
 
+
+/-- Fresh renaming makes the actual compiled Crep function names distinct. -/
+theorem singleEntry_compiled_names_unique (start : MlString) (body : ProgHOL 64) :
+    ((compileProgDeclsHOLW (compileTopExactHOL (singleEntryProgram start body) start)).map Prod.fst).Nodup := by
+  apply panToCrepFirstCompileProgAllDistinctExact
+  have fresh : newMainNameHOL (singleEntryProgram start body) ≠ start := by
+    intro equal
+    have notMem := PanGlobalsDeclListExact.freshNameMlS_correct (ofString "main")
+      ((functionsHOL (singleEntryProgram start body)).map Prod.fst)
+    apply notMem
+    simpa [newMainNameHOL,singleEntryProgram,functionsHOL] using equal
+  rw [singleEntry_compileTop]
+  simp [functionsHOL,Ne.symm fresh]
+
+/-- Both generated functions are explicitly marked non-inline. -/
+theorem singleEntry_inline_selection_empty (start : MlString) (body : ProgHOL 64) :
+    (functionsHOL ((compileTopExactHOL (singleEntryProgram start body) start).filter inlinableHOL)).map Prod.fst = [] := by
+  rw [singleEntry_compileTop]
+  simp [List.filter,inlinableHOL,functionsHOL]
+
+
+/-- Supported scalar expressions contain no global variables. -/
+theorem scalarExpression_localised {width : Nat} [NeZero width]
+    {ctxt : PanToCrepContextExact width} {e : ExpHOL width}
+    (shape : ScalarExpression ctxt e) : localisedExpHOL e = true := by
+  induction shape <;> simp_all [localisedExpHOL,everyExpHOL,everyExpListHOL]
+
+
+/-- The actual generated functions are localized whenever the loop's two
+expressions have the supported scalar shape. -/
+theorem singleEntry_declared_localised (start name : MlString) (initial returned : BitVec 64)
+    (condition assignment : ExpHOL 64) (ctxt : PanToCrepContextExact 64)
+    (conditionShape : ScalarExpression ctxt condition) (assignmentShape : ScalarExpression ctxt assignment) :
+    ∀ entry ∈ functionsHOL (compileTopExactHOL
+      (singleEntryProgram start (.dec name .one (.const initial) (.seq .skip
+        (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))))) start),
+      localisedProgHOL entry.2.2.1 = true := by
+  have hc := scalarExpression_localised (globalCompile_scalar_shape emptyGlobalsContext conditionShape)
+  have ha := scalarExpression_localised (globalCompile_scalar_shape emptyGlobalsContext assignmentShape)
+  rw [singleEntry_compileTop]
+  simp [functionsHOL,declaredAssignLoop_fperm,compileProgExactHOL,compileExpExactHOL,localisedProgHOL,
+    localisedExpHOL,everyExpHOL,everyExpListHOL] at hc ha ⊢
+  exact ⟨hc,ha⟩
+
 end SteppedFlapjack.PanToCrepSteps
