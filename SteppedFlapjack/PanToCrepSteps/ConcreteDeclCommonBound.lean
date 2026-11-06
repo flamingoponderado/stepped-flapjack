@@ -40,6 +40,25 @@ open Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 
 
 
+/-- The concrete initializer's singleton Crep expression, computed by the frontend. -/
+def concreteDeclCompiledValue (context : PanToCrepContextExact 64) : CrepExpHOL 64 :=
+  (compileExpExactHOLW context (.const 1)).1.headD (.const 0)
+
+/-- The concrete loop condition's singleton Crep expression, computed by the frontend. -/
+def concreteDeclCompiledCondition (context : PanToCrepContextExact 64) (name : MlString) : CrepExpHOL 64 :=
+  (compileExpExactHOLW (scalarDeclContext context name) (.var .local name)).1.headD (.const 0)
+
+private theorem compiledValue_eq (context : PanToCrepContextExact 64) (value : CrepExpHOL 64)
+    (compiled : compileExpExactHOLW context (.const 1) = ([value],.one)) :
+    concreteDeclCompiledValue context = value := by
+  unfold concreteDeclCompiledValue
+  rw [compiled]
+  rfl
+
+private theorem compiledCondition_eq (context : PanToCrepContextExact 64) (name : MlString) (value : CrepExpHOL 64)
+    (compiled : compileExpExactHOLW (scalarDeclContext context name) (.var .local name) = ([value],.one)) :
+    concreteDeclCompiledCondition context name = value := by simp [concreteDeclCompiledCondition,compiled]
+
 /-- The concrete counted source has a single RISC-V bound covering either native entry outcome. -/
 theorem concreteDecl_counted_riscv_bounded {F : Type}
     (arch : AsmArchitecture) (start : MlString) (name : VarName) (returned : BitVec 64)
@@ -130,6 +149,12 @@ theorem concreteDecl_counted_riscv_bounded {F : Type}
     let out := (Compiler.Backend.WordToWord.fullCompileSingle ac.twoRegArith
       (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
       ((firstLoopName,1,q),SteppedFlapjack.WordAllocSteps.entryColour wc programs firstLoopName)).2.2
+    let entryBitmap := (SteppedFlapjack.WordToStackSteps.nativeEntryBitmap ac false
+      (ac.regCount-(5+ac.avoidRegs.length)) firstLoopName
+      (Compiler.Backend.WordToWord.compile wc ac programs).2 (.list [4],1)).getD (.list [],0)
+    let actualFrame := max (maxVarHOL out / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length)))
+      (1-(ac.regCount-(5+ac.avoidRegs.length)))
+    let actualFrameSize := if actualFrame = 0 then 0 else actualFrame+1
     ∃ bs n bsPost nPost body frame frameSize,
       SteppedFlapjack.WordToStackSteps.nativeEntryBitmap ac false (ac.regCount-(5+ac.avoidRegs.length))
         firstLoopName (Compiler.Backend.WordToWord.compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
@@ -154,7 +179,8 @@ theorem concreteDecl_counted_riscv_bounded {F : Type}
             sizeOf (compileProgExactHOL (concreteDeclGlobalContext start name returned) (.assign .local (ofString name) (.const 0))) +
             sizeOf (compileProgExactHOL (concreteDeclGlobalContext start name returned) (.return (.const returned)))) * 13 + 2
         let loopLimit := branchTailDeclLoopLimit loopContext .ln (newMainNameHOL (concreteDeclProgram start name returned)) init
-          (panContext.vmax+1) value calleeInit condition bodyCrep tail
+          (panContext.vmax+1) (concreteDeclCompiledValue panContext) calleeInit
+          (concreteDeclCompiledCondition panContext (ofString name)) bodyCrep tail
           (sizeOf init + 2 + (4 + sizeOf (compileProgExactHOLW inner (.skip)) +
             sizeOf (compileProgExactHOLW inner (.assign .local (ofString name) (.const 0))) +
             sizeOf (compileProgExactHOLW inner (.return (.const returned)))) * sourceLimit)
@@ -164,12 +190,12 @@ theorem concreteDecl_counted_riscv_bounded {F : Type}
         ∃ (outcome : HolOutcome) (ticks : Nat) (finalMachine : RiscV.L3.riscv_state) (finalFfi : HolFfiState F),
           ticks ≤ max (labTickBound 4 labCode lab.codeBuffer *
             (flattenStepFactor * (computedRunCost bounds
-              (uniformFactor (width := 64) c * (3 + callSequenceCost ac stackLimit stack.code out (bs,n)
-                (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame)))
+              (uniformFactor (width := 64) c * (3 + callSequenceCost ac stackLimit stack.code out entryBitmap
+                (ac.regCount-(5+ac.avoidRegs.length),actualFrameSize,actualFrame)))
               (.call none (.inl firstLoopName) none)
               (Tgt anything cr c {stack with code := sptFromAList (StackRawCall.compile inputCode),clock := stackLimit+1} 0 stack.regs) *
-              (uniformFactor (width := 64) c * (3 + callSequenceCost ac stackLimit stack.code out (bs,n)
-                (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame))) + 4))) (labTickBound 4 labCode lab.codeBuffer *
+              (uniformFactor (width := 64) c * (3 + callSequenceCost ac stackLimit stack.code out entryBitmap
+                (ac.regCount-(5+ac.avoidRegs.length),actualFrameSize,actualFrame))) + 4))) (labTickBound 4 labCode lab.codeBuffer *
           (flattenStepFactor * (computedRunCost bounds (uniformFactor (width := 64) c * 3)
             (.call none (.inl firstLoopName) none)
             (Tgt anything cr c {stack with code := sptFromAList (StackRawCall.compile inputCode), clock := limit+1} 0 stack.regs) *
@@ -193,6 +219,14 @@ theorem concreteDecl_counted_riscv_bounded {F : Type}
   have localFound := scalarDeclContext_local panContext (ofString name)
   obtain ⟨condition,conditionEq,_⟩ := scalar_compile (ScalarExpression.local (ofString name) (panContext.vmax+1) localFound)
   refine ⟨value,condition,valueEq,conditionEq,?_⟩
+  have entryEq : (SteppedFlapjack.WordToStackSteps.nativeEntryBitmap ac false
+      (ac.regCount-(5+ac.avoidRegs.length)) firstLoopName
+      (Compiler.Backend.WordToWord.compile wc ac (loopToWordCompileHOL (compileProgHOLExact arch
+        (compileProgDeclsHOLW (compileTopExactHOL (concreteDeclProgram start name returned) start))))).2
+      (.list [4],1)).getD (.list [],0) = (bs,n) := by rw [selected]; rfl
+  dsimp only
+  rw [compiledValue_eq panContext value valueEq, compiledCondition_eq panContext (ofString name) condition conditionEq]
+  rw [entryEq, ← frameDef, ← sizeDef]
   rcases alternatives with ⟨_,_,_,_,_,value',condition',valueEq',conditionEq',outcome,ticks,finalMachine,finalFfi,bound,run⟩ | ⟨ticks,finalMachine,finalFfi,bound,run,_,_⟩
   · have sameValue : value' = value := by
       rw [valueEq] at valueEq'
