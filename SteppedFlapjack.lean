@@ -28,6 +28,7 @@ import SteppedFlapjack.PanToCrepSteps.CountedAssignLoop
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopInvert
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopReturn
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopEntry
+import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopNative
 import SteppedFlapjack.PanToCrepSteps.CountedCountdown
 import SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep
 import SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample
@@ -517,6 +518,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopInvert`: Reconstruct assignment-loop paths from counted runs.
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopReturn`: Assignment loops followed by a source return and global entry.
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopEntry`: Assignment-loop source budgets through the compiled RISC-V entry.
+- `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopNative`: Direct counted-source and native RISC-V bound.
 - `SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep`: Countdown through generated entries to a packaged RISC-V backend.
 - `SteppedFlapjack.LoopToWordSteps.TailRiscVSetup`: Shared RISC-V backend initialization interface.
 - `SteppedFlapjack.LoopToWordSteps.NativeTailRiscVReady`: Native Loop/Word local initialization.

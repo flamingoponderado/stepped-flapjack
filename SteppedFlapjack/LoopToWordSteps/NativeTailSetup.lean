@@ -73,6 +73,27 @@ noncomputable def NativeTailMachineSetup.resourceTickLimit {F : Type}
         {stack with code := sptFromAList (StackRawCall.compile backend.inputCode),clock := stackReplay+1} 0 stack.regs) *
       (uniformFactor (width := 64) backend.c * 3) + 4))
 
+/-- Machine tick limit computed from the whole compiler's selected bitmap
+and frame, independently of the setup witness. -/
+noncomputable def NativeTailMachineSetup.successTickLimit {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} {name stackReplay : Nat}
+    (backend : NativeTailMachineSetup stack name stackReplay)
+    (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact 64)
+    (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (p : HolLoopProg 64) (ctxt : Spt Nat) (labels : Nat × Nat) : Nat :=
+  let k := ac.regCount-(5+ac.avoidRegs.length)
+  let out := (fullCompileSingle ac.twoRegArith k wc.regAlg ac
+    ((name,1,(LoopToWord.compHOL ctxt p labels).1),entryColour wc programs name)).2.2
+  let bitmap := (nativeEntryBitmap ac false k name (compile wc ac programs).2 (.list [4],1)).getD (.list [],0)
+  let frame := max (maxVarHOL out / 2 + 1-k) (1-k)
+  let frameSize := if frame = 0 then 0 else frame+1
+  let cost := uniformFactor (width := 64) backend.c *
+    (3 + callSequenceCost ac stackReplay stack.code out bitmap (k,frameSize,frame))
+  labTickBound 4 backend.labCode backend.lab.codeBuffer *
+    (flattenStepFactor * (computedRunCost backend.bounds cost (.call none (.inl name) none)
+      (Tgt backend.anything backend.cr backend.c
+        {stack with code := sptFromAList (StackRawCall.compile backend.inputCode),clock := stackReplay+1} 0 stack.regs) * cost + 4))
+
 /-- The actual whole compiler constructs a `TailRiscVSetup` from a valid native
 Stack initialization and the remaining Stack-to-machine witnesses, or yields
 an actual bounded RISC-V resource-limit outcome for a failed entry frame. -/
@@ -98,6 +119,7 @@ theorem nativeTail_setup_or_resource {F : Type}
     (∃ (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
        (setup : TailRiscVSetup p word limit),
       setup.ctxt = ctxt ∧ setup.machine = backend.machine ∧ setup.mc = backend.mc ∧ setup.lab = backend.lab ∧
+      setup.tickLimit = backend.successTickLimit wc ac programs p ctxt labels ∧
       ∃ frameSize,
         word = {Flapjack.WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
           (Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length))
@@ -148,7 +170,11 @@ theorem nativeTail_setup_or_resource {F : Type}
       ha := backend.ha, hs := backend.hs, hk := backend.hk, hf := backend.hf, hcode := backend.hcode,
       hor := backend.hor, labRel := backend.labRel, hpc := backend.hpc, hmc := backend.hmc,
       tie := backend.tie, machineRel := backend.machineRel }
-    exact Or.inl ⟨word,setup,rfl,rfl,rfl,rfl,frameSize,rfl⟩
+    have tickEq : setup.tickLimit = backend.successTickLimit wc ac programs p ctxt labels := by
+      dsimp only [setup,TailRiscVSetup.tickLimit,NativeTailMachineSetup.successTickLimit,entry,k,compiledCode]
+      rw [selected]
+      simp only [Option.getD_some,← frameDef,← sizeDef]
+    exact Or.inl ⟨word,setup,rfl,rfl,rfl,rfl,tickEq,frameSize,rfl⟩
   · obtain ⟨post,run,ffi,bound⟩ := resource
     obtain ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,events⟩ :=
       stackPipelineRiscVWithin backend.inputCode stack name _ 3 (some (.halt (.word 2))) post

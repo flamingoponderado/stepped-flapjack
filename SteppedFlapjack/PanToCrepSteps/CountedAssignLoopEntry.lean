@@ -14,6 +14,54 @@ open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps
 open Flapjack.LoopSemStateFiniteExact Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open Flapjack.Compiler.Backend
 
+/-- The actual singleton condition produced by Pancake-to-Crep compilation. -/
+def assignLoopEntryCondition (globals : PanGlobalsContextExact 64) (caller : PanToCrepContextExact 64)
+    (condition : Exp (RiscV.Word 64)) : CrepExpHOL 64 :=
+  (compileExpExactHOLW (ctxtFcExactHOL caller.funcs caller.eids [] [] [])
+    (compileExpExactHOL globals (expToHOL condition))).1.headD (.const 0)
+
+/-- Supported scalar conditions compile to the selected singleton expression. -/
+theorem assignLoopEntryCondition_compiled (globals : PanGlobalsContextExact 64) (caller : PanToCrepContextExact 64)
+    (condition : Exp (RiscV.Word 64))
+    (shape : ScalarExpression (ctxtFcExactHOL caller.funcs caller.eids [] [] []) (expToHOL condition)) :
+    compileExpExactHOLW (ctxtFcExactHOL caller.funcs caller.eids [] [] [])
+      (compileExpExactHOL globals (expToHOL condition)) = ([assignLoopEntryCondition globals caller condition],.one) := by
+  obtain ⟨value,compiled,_⟩ := scalar_compile (globalCompile_scalar_shape globals shape)
+  simp [assignLoopEntryCondition,compiled]
+
+/-- The optimized Loop entry generated for the source global wrapper. -/
+def assignLoopEntryProgram (declarations : List (DeclHOL 64)) (initializers : List (ProgHOL 64))
+    (caller : PanToCrepContextExact 64) (loopCtxt : CrepToLoopContextExact) (live : NumSet) : HolLoopProg 64 :=
+  optimiseHOL (compileHOLExact loopCtxt live
+    (.seq (compileProgExactHOLW caller (nestedSeqHOL initializers)) (.call none (newMainNameHOL declarations) [])))
+
+/-- The compiler-selected Loop-to-Word context for a zero-argument entry. -/
+def assignLoopEntryWordContext (entry : HolLoopProg 64) : Spt Nat :=
+  makeCtxtHOL 2 (LoopToWord.fromNumSetHOL (sptDifference (accVarsHOL entry .ln) (LoopToWord.toNumSetHOL []))) .ln
+
+/-- Source-budget-derived replay limit for the actual compiled assignment-loop entry. -/
+noncomputable def assignLoopEntryLimit {σ : Type}
+    (declarations : List (DeclHOL 64)) (initializers : List (ProgHOL 64))
+    (globals : PanGlobalsContextExact 64) (caller : PanToCrepContextExact 64)
+    (condition assignment : Exp (RiscV.Word 64)) (name : VarName) (returned : BitVec 64)
+    (pan : PanSemStateFiniteExact 64 σ) (budget : Nat) (loopCtxt : CrepToLoopContextExact) (live : NumSet) : Nat :=
+  let body := ProgHOL.assign .local (ofString name) (expToHOL assignment)
+  let calleeContext := ctxtFcExactHOL caller.funcs caller.eids [] [] []
+  let crepInit := compileProgExactHOLW caller (nestedSeqHOL initializers)
+  let globalLimit := controlSteps (nestedSeqHOL initializers) pan +
+    (3 + sizeOf (compileProgExactHOL globals (.skip : ProgHOL 64)) +
+      sizeOf (compileProgExactHOL globals body) +
+      sizeOf (compileProgExactHOL globals (.return (.const returned)))) * budget + 2
+  let crepLimit := sizeOf crepInit + 2 +
+    (3 + sizeOf (compileProgExactHOLW calleeContext (compileProgExactHOL globals (.skip))) +
+      sizeOf (compileProgExactHOLW calleeContext (compileProgExactHOL globals body)) +
+      sizeOf (compileProgExactHOLW calleeContext (compileProgExactHOL globals (.return (.const returned))))) * globalLimit
+  branchTailLoopLimit loopCtxt live (newMainNameHOL declarations) crepInit
+    (compileProgExactHOLW calleeContext (compileProgExactHOL globals (.skip)))
+    (assignLoopEntryCondition globals caller condition)
+    (compileProgExactHOLW calleeContext (compileProgExactHOL globals body))
+    (compileProgExactHOLW calleeContext (compileProgExactHOL globals (.return (.const returned)))) crepLimit
+
 /-- A normally terminating counted assignment loop and return yield the actual
 generated Crep and optimized Loop entry runs, and a bounded RISC-V run for each
 compatible backend setup, using the separately supplied source budget. -/
@@ -92,15 +140,16 @@ theorem counted_assignLoop_globalEntry_riscv {σ : Type}
       CompleteCrepResult crepResult ∧ panToCrepStateRelFiniteExact panPost crepPost ∧
       pcCompileCorrectResultRel calleeContext panPost crepPost (some (.returned (.val (.word returned)))) crepResult ∧
       SteppedFlapjack.CrepSteps.steps (.seq crepInit (.call none callee [])) crep ≤ crepLimit ∧
-      ∃ (crepCondition : CrepExpHOL 64) (extra : Nat) (loopPost : LoopSemStateFiniteExact 64 σ),
+      let crepCondition := assignLoopEntryCondition globals caller condition
+      ∃ (extra : Nat) (loopPost : LoopSemStateFiniteExact 64 σ),
         compileExpExactHOLW calleeContext (compileExpExactHOL globals (expToHOL condition)) = ([crepCondition],.one) ∧
         let calleeInit := compileProgExactHOLW calleeContext (compileProgExactHOL globals (.skip))
         let crepBody := compileProgExactHOLW calleeContext (compileProgExactHOL globals body)
         let crepTail := compileProgExactHOLW calleeContext (compileProgExactHOL globals (.return (.const returned)))
         let compiledCallee := ocompileHOLExact (ctxtFcExact loopCtxt.target loopCtxt.funcs [] []) .ln
           (.seq calleeInit (.seq (.while crepCondition crepBody) crepTail))
-        let loopEntry := optimiseHOL (compileHOLExact loopCtxt live (.seq crepInit (.call none callee [])))
-        let loopLimit := branchTailLoopLimit loopCtxt live callee crepInit calleeInit crepCondition crepBody crepTail crepLimit
+        let loopEntry := assignLoopEntryProgram declarations initializers caller loopCtxt live
+        let loopLimit := assignLoopEntryLimit declarations initializers globals caller condition assignment name returned pan budget loopCtxt live
         SteppedFlapjack.LoopLiveSteps.SingleTailEntryShape (findLabExact loopCtxt callee) loopEntry ∧
         LoopSequenceSource compiledCallee ∧
         sptLookup (findLabExact loopCtxt callee) {target with clock := target.clock+extra}.code = some ([],compiledCallee) ∧
@@ -168,6 +217,9 @@ theorem counted_assignLoop_globalEntry_riscv {σ : Type}
       (globalCompile_branch_shape globals (.skip : BranchProgram calleeContext .skip))
       (globalCompile_scalar_shape globals conditionShape) (globalCompile_branch_shape globals bodyShape)
       (globalCompile_branch_shape globals (.return (.const _)))
+  have selectedCondition : crepCondition = assignLoopEntryCondition globals caller condition := by
+    simp [assignLoopEntryCondition,conditionEq]
+  subst crepCondition
   have found' := crepFound
   have run' := crepRun
   simp only [lowered,original,compileProgExactHOL] at found' run' compiledEq
@@ -175,13 +227,13 @@ theorem counted_assignLoop_globalEntry_riscv {σ : Type}
   obtain ⟨extra,loopPost,entryShape,calleeShape,calleeLookup,loopRun,notError,loopComplete,shiftedRel,postLoopRel,loopBound⟩ :=
     branchTail_riscv_inputs loopCtxt live (newMainNameHOL declarations) crepInit initCrepShape
       (compileProgExactHOLW calleeContext (compileProgExactHOL globals (.skip))) calleeInitShape
-      crepCondition conditionCrepShape
+      (assignLoopEntryCondition globals caller condition) conditionCrepShape
       (compileProgExactHOLW calleeContext (compileProgExactHOL globals (.assign .local (ofString name) (expToHOL assignment))))
       (compileProgExactHOLW calleeContext (compileProgExactHOL globals (.return (.const returned))))
       bodyCrepShape tailCrepShape crep crepMiddle crepPost crepResult target word _ crepInitRun
       (by simpa only [compileProgExactHOL] using found') crepClock
       (by simpa only [compileProgExactHOL] using run') complete crepRel memRel globalsRel codeRel localsRel loopWordRel boundedCrep
-  refine ⟨crepCondition,extra,loopPost,conditionEq,entryShape,calleeShape,calleeLookup,shiftedRel,
+  refine ⟨extra,loopPost,conditionEq,entryShape,calleeShape,calleeLookup,shiftedRel,
     loopRun,notError,loopComplete,postLoopRel,loopBound,?_⟩
   have ready := tailRiscVReady_of_loop _ loopPost _ _ _ entryShape calleeShape calleeLookup
     loopRun notError shiftedRel loopComplete loopBound

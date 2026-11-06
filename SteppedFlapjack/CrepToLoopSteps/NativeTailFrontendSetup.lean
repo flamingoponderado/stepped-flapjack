@@ -45,6 +45,7 @@ theorem wholeNativeTail_frontend_setup_or_resource {F : Type}
     (∃ (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
        (setup : TailRiscVSetup p word limit),
       setup.ctxt = ctxt ∧ setup.machine = backend.machine ∧ setup.mc = backend.mc ∧ setup.lab = backend.lab ∧
+      setup.tickLimit = backend.successTickLimit wc ac (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)) p ctxt labels ∧
       loopToWordStateRelHOLExact loop word ∧
       ∃ (base : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (frameSize : Nat),
         word.locals = (callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize) base).locals) ∨
@@ -76,7 +77,7 @@ theorem wholeNativeTail_frontend_setup_or_resource {F : Type}
   have shapes : TailProgramShapes programs := wholeCrep_word_shapes arch crepPrograms programShapes
   rcases nativeTail_setup_or_resource wc ac programs p ctxt labels name shapes member nodup stack coracle
       noRaise noStore codeEq bitmapsPrefix ok limit backend with success | resource
-  · obtain ⟨word,setup,contextEq,machineEq,mcEq,labEq,frameSize,wordEq⟩ := success
+  · obtain ⟨word,setup,contextEq,machineEq,mcEq,labEq,tickEq,frameSize,wordEq⟩ := success
     have stackData := (nativeEntry_loopWordDataRel_iff ac k 0 stack compiledCode originalCode coracle loop).mp data
     have frameData := (nativeEntry_loopWordDataRel_iff ac k frameSize stack compiledCode originalCode coracle loop).mpr stackData
     have wordData : LoopWordDataRel loop word := by simpa only [wordEq] using frameData
@@ -85,7 +86,7 @@ theorem wholeNativeTail_frontend_setup_or_resource {F : Type}
     have codeRel : loopToWordCodeRelHOLExact loop.code word.code := by
       rw [loopCode,wordCode]
       exact wholeCrepLoopWord_codeRel arch crepPrograms
-    refine Or.inl ⟨word,setup,contextEq,machineEq,mcEq,labEq,
+    refine Or.inl ⟨word,setup,contextEq,machineEq,mcEq,labEq,tickEq,
       ⟨len,hm,hd,hs,hc,hbe,hffi,hbase,hlen,htop,hglobals,codeRel⟩,?_⟩
     exact ⟨(Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit ac k stack compiledCode coracle :
       WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F), frameSize,by rw [wordEq]⟩
