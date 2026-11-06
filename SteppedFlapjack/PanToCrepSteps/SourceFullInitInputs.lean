@@ -91,7 +91,7 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
     (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact 64)
     (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
     (cfg : LabToTarget.Config)
-    (heapLength : BitVec 64)
+    (heapEnd : BitVec 64)
     (callerEq : caller = mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
       (makeFuncsExactHOL (functionsHOL (compileTopExactHOL declarations start))) (sizeOfShapeHOL (.comb [])-1)
       (getEidsFromDeclsHOL (compileTopExactHOL declarations start)))
@@ -118,8 +118,8 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
       (compileProgDeclsHOLW (compileTopExactHOL declarations start))).shMdomain)
     (clock : backend.lab.clock = source.clock) (endian : backend.lab.be = source.be) (ffi : backend.lab.ffi = source.ffi)
     (current : stack.store.lookup .currHeap = some (.word source.baseAddr))
-    (length : stack.store.lookup .heapLength = some (.word heapLength))
-    (heap : source.topAddr = source.baseAddr + 2 * heapLength)
+    (endHeap : stack.store.lookup .endOfHeap = some (.word heapEnd))
+    (heap : source.topAddr = source.baseAddr + 2 * (heapEnd - source.baseAddr))
  :
     FullInitAssignLoopInputs declarations start caller loopCtxt entry limit
       (concreteDeclLoopState arch (concreteDeclCrepState source
@@ -127,9 +127,10 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
         (compileProgDeclsHOLW (compileTopExactHOL declarations start))) := by
   have compat := emptyNativeWordOracle_compatible ac backend.bitmaps.length cfg
   exact sourceFullInitInputs declarations start caller loopCtxt entry limit arch source wc ac stack
-    (emptyNativeWordOracle backend.bitmaps.length cfg) heapLength callerEq loopContextEq programs programsEq
+    (emptyNativeWordOracle backend.bitmaps.length cfg) (heapEnd - source.baseAddr) callerEq loopContextEq programs programsEq
     backend inputCodeEq bitmapPrefix registers compat.1 (stackOracle.trans compat.2.symm)
     memory domain (backend.ambient_eq.2.2.trans shared) (backend.ambient_eq.1.trans clock)
-    (backend.ambient_eq.2.1.trans endian) (backend.ffi_eq.trans ffi) current length heap
+    (backend.ambient_eq.2.1.trans endian) (backend.ffi_eq.trans ffi) current
+    (backend.heap_length_of_pointers source.baseAddr heapEnd current endHeap) heap
 
 end SteppedFlapjack.PanToCrepSteps

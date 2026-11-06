@@ -7,7 +7,7 @@ namespace SteppedFlapjack.LoopToWordSteps
 open Flapjack Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend
 open Flapjack.Compiler.Backend.StackLang Flapjack.Compiler.Backend.WordToStack.Native
 open Flapjack.Compiler.Backend.WordSimp
-open Flapjack.Compiler.Backend.StackRemove.Proofs
+open Flapjack.Compiler.Backend.StackRemove Flapjack.Compiler.Backend.StackRemove.Proofs
 open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInit
 open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
 
@@ -26,6 +26,49 @@ theorem FullInitMachineContext.initializer_succeeds {F : Type}
     (s2 backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset backend.inputCode
       backend.lab backend.saveRegs backend.coracle) backend.bitmaps backend.dataSp bundles
   exact ⟨initialized,by simpa only [fullMakeInit_eq] using opt⟩
+
+/-- Successful full initialization provides the two contiguous, separated
+heap regions and the corresponding Stack store entries. -/
+theorem FullInitMachineContext.heap_shape {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
+    ∃ (current other : BitVec 64) (length : Nat),
+      stack.store.lookup .currHeap = some (.word current) ∧
+      stack.store.lookup .nextFree = some (.word current) ∧
+      stack.store.lookup .endOfHeap = some (.word other) ∧
+      stack.store.lookup .heapLength = some (.word (BitVec.ofNat 64 length * bytesInWord 64)) ∧
+      other = current + bytesInWord 64 * BitVec.ofNat 64 length ∧
+      SetSep.star (Misc.wordListExists current length) (Misc.wordListExists other length)
+        (SetSep.fun2Set (stack.memory, fun address => stack.mdomain address = true)) := by
+  obtain ⟨initialized,fullOpt⟩ := backend.initializer_succeeds
+  simp only [fullMakeInit_eq] at fullOpt
+  obtain ⟨_,_,prop⟩ := InitAny.makeInitOpt_eq_some fullOpt
+  rcases prop with ⟨current,other,bitmap,length,hcurrent,hnext,_,hend,_,_,hlength,rest⟩
+  rcases rest with ⟨_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,hother,_,_,_,_,_,hheap⟩
+  have eq := backend.stackEq
+  rw [fullMakeInit_eq] at eq
+  have stateEq : stack = StackAlloc.makeInit backend.dataConf (sptFromAList backend.inputCode) backend.coracle initialized := by
+    simpa [InitMake.makeInitAny,fullOpt] using eq
+  refine ⟨current,other,length,?_,?_,?_,?_,hother,?_⟩
+  · simpa [stateEq,StackAlloc.makeInit] using hcurrent
+  · simpa [stateEq,StackAlloc.makeInit] using hnext
+  · simpa [stateEq,StackAlloc.makeInit] using hend
+  · simpa [stateEq,StackAlloc.makeInit] using hlength
+  · simpa [stateEq,StackAlloc.makeInit] using hheap
+
+/-- The initialized heap length is determined by its current and end pointers. -/
+theorem FullInitMachineContext.heap_length_of_pointers {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack)
+    (current other : BitVec 64)
+    (hcurrent : stack.store.lookup .currHeap = some (.word current))
+    (hother : stack.store.lookup .endOfHeap = some (.word other)) :
+    stack.store.lookup .heapLength = some (.word (other - current)) := by
+  obtain ⟨c,o,n,hc,_,ho,hn,offset,_⟩ := backend.heap_shape
+  have ec : c = current := by simpa [hcurrent,eq_comm] using hc
+  have eo : o = other := by simpa [hother,eq_comm] using ho
+  subst c
+  subst o
+  rw [offset]
+  simpa [BitVec.add_comm, BitVec.add_sub_cancel, mul_comm] using hn
 
 /-- Full initialization supplies the native entry-state validity relation
 when the native oracle obeys the compiler's conventions and generates the
