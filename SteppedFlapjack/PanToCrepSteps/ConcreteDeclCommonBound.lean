@@ -131,6 +131,8 @@ theorem concreteDecl_counted_riscv_bounded {F : Type}
       (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
       ((firstLoopName,1,q),SteppedFlapjack.WordAllocSteps.entryColour wc programs firstLoopName)).2.2
     ∃ bs n bsPost nPost body frame frameSize,
+      SteppedFlapjack.WordToStackSteps.nativeEntryBitmap ac false (ac.regCount-(5+ac.avoidRegs.length))
+        firstLoopName (Compiler.Backend.WordToWord.compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
       frame = max (maxVarHOL out / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (1-(ac.regCount-(5+ac.avoidRegs.length))) ∧
       frameSize = (if frame = 0 then 0 else frame+1) ∧
       Compiler.Backend.WordToStack.Native.compNative ac false out (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
@@ -174,7 +176,7 @@ theorem concreteDecl_counted_riscv_bounded {F : Type}
             (uniformFactor (width := 64) c * 3) + 4))) ∧
           evaluateTargetHOL mc lab.ffi ticks machine = (.halt outcome,finalMachine,finalFfi) := by
   obtain ⟨countedResult,originalFinal,sourceExec,sourceRun,sourceBound,bs,n,bsPost,nPost,body,frame,frameSize,
-    frameDef,sizeDef,compilation,foundEntry,lengthBound,gapBound,bitmapPrefix,maxBound,labelCheck,alternatives⟩ :=
+    selected,frameDef,sizeDef,compilation,foundEntry,lengthBound,gapBound,bitmapPrefix,maxBound,labelCheck,alternatives⟩ :=
     concreteDecl_counted_riscv_with_frame arch start name returned pan originalState originalDef ffiState ffiRel
       nameRanged sourceClock execContext primitive handler functions fuel state stateDef panClock panLocalsEmpty
       panExceptionsEmpty panGlobalsEmpty panStructs panTopOutside panAligned panCode wc ac stack coracle codeEq
@@ -182,7 +184,7 @@ theorem concreteDecl_counted_riscv_bounded {F : Type}
       inputCode anything cr c jump bounds pointer f gen maxHeap a b removeInput oracle renamed lab pc mc labCode
       labs asm machine distinct sourceCode pre relation ha hs hk hf hcode hor rel hpc hmc tie machineRel
   refine ⟨countedResult,originalFinal,sourceExec,sourceRun,sourceBound,bs,n,bsPost,nPost,body,frame,frameSize,
-    frameDef,sizeDef,compilation,foundEntry,lengthBound,gapBound,bitmapPrefix,maxBound,labelCheck,?_⟩
+    selected,frameDef,sizeDef,compilation,foundEntry,lengthBound,gapBound,bitmapPrefix,maxBound,labelCheck,?_⟩
   let caller := mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
     (makeFuncsExactHOL (functionsHOL (compileTopExactHOL (concreteDeclProgram start name returned) start)))
     (sizeOfShapeHOL (.comb [])-1) (getEidsFromDeclsHOL (compileTopExactHOL (concreteDeclProgram start name returned) start))

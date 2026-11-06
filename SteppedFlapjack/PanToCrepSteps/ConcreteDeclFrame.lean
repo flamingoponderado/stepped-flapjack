@@ -70,6 +70,8 @@ theorem concreteDecl_frame_or_riscvResource {F : Type}
       (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
       ((firstLoopName,1,q),SteppedFlapjack.WordAllocSteps.entryColour wc programs firstLoopName)).2.2
     ∃ bs n bsPost nPost body frame frameSize,
+      SteppedFlapjack.WordToStackSteps.nativeEntryBitmap ac false (ac.regCount-(5+ac.avoidRegs.length))
+        firstLoopName (Compiler.Backend.WordToWord.compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
       frame = max (maxVarHOL out / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (1-(ac.regCount-(5+ac.avoidRegs.length))) ∧
       frameSize = (if frame = 0 then 0 else frame+1) ∧
       Compiler.Backend.WordToStack.Native.compNative ac false out (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
@@ -190,6 +192,8 @@ theorem concreteDecl_frame_data_or_riscvResource {F : Type}
       (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
       ((firstLoopName,1,q),SteppedFlapjack.WordAllocSteps.entryColour wc programs firstLoopName)).2.2
     ∃ bs n bsPost nPost body frame frameSize,
+      SteppedFlapjack.WordToStackSteps.nativeEntryBitmap ac false (ac.regCount-(5+ac.avoidRegs.length))
+        firstLoopName (Compiler.Backend.WordToWord.compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
       frame = max (maxVarHOL out / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (1-(ac.regCount-(5+ac.avoidRegs.length))) ∧
       frameSize = (if frame = 0 then 0 else frame+1) ∧
       Compiler.Backend.WordToStack.Native.compNative ac false out (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
@@ -242,13 +246,13 @@ theorem concreteDecl_frame_data_or_riscvResource {F : Type}
             (uniformFactor (width := 64) c * 3) + 4)) ∧
          evaluateTargetHOL mc lab.ffi ticks machine = (.halt HolOutcome.resourceLimitHit,finalMachine,finalFfi) ∧
          finalFfi.ioEvents = stack.ffi.ioEvents) := by
-  obtain ⟨bs,n,bsPost,nPost,body,frame,frameSize,frameDef,sizeDef,compilation,foundEntry,
+  obtain ⟨bs,n,bsPost,nPost,body,frame,frameSize,selected,frameDef,sizeDef,compilation,foundEntry,
     lengthBound,gapBound,bitmapPrefix,maxBound,labelCheck,alternatives⟩ :=
     concreteDecl_frame_or_riscvResource arch start name returned state wc ac stack coracle codeEq
       bitmapsPrefix ok limit initialClock inputCode anything cr c jump bounds pointer f gen maxHeap a b
       removeInput oracle renamed lab pc mc labCode labs asm machine distinct sourceCode pre relation
       ha hs hk hf hcode hor rel hpc hmc tie machineRel
-  refine ⟨bs,n,bsPost,nPost,body,frame,frameSize,frameDef,sizeDef,compilation,foundEntry,
+  refine ⟨bs,n,bsPost,nPost,body,frame,frameSize,selected,frameDef,sizeDef,compilation,foundEntry,
     lengthBound,gapBound,bitmapPrefix,maxBound,labelCheck,?_⟩
   rcases alternatives with ⟨space,initial,clocked,remaining⟩ | resource
   · left
@@ -345,6 +349,8 @@ theorem concreteDecl_counted_frame_or_riscvResource {F : Type}
       (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
       ((firstLoopName,1,q),SteppedFlapjack.WordAllocSteps.entryColour wc programs firstLoopName)).2.2
     ∃ bs n bsPost nPost body frame frameSize,
+      SteppedFlapjack.WordToStackSteps.nativeEntryBitmap ac false (ac.regCount-(5+ac.avoidRegs.length))
+        firstLoopName (Compiler.Backend.WordToWord.compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
       frame = max (maxVarHOL out / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (1-(ac.regCount-(5+ac.avoidRegs.length))) ∧
       frameSize = (if frame = 0 then 0 else frame+1) ∧
       Compiler.Backend.WordToStack.Native.compNative ac false out (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
@@ -414,13 +420,13 @@ theorem concreteDecl_counted_frame_or_riscvResource {F : Type}
       [newMainNameHOL (concreteDeclProgram start name returned)]) originalState execRel execRanged
       name nameRanged sourceClock returned caller start execContext primitive handler functions fuel
   refine ⟨countedResult,originalFinal,sourceExec,sourceRun,sourceBound,?_⟩
-  obtain ⟨bs,n,bsPost,nPost,body,frame,frameSize,frameDef,sizeDef,compilation,foundEntry,
+  obtain ⟨bs,n,bsPost,nPost,body,frame,frameSize,selected,frameDef,sizeDef,compilation,foundEntry,
     lengthBound,gapBound,bitmapPrefix,maxBound,labelCheck,alternatives⟩ :=
     concreteDecl_frame_data_or_riscvResource arch start name returned state wc ac stack coracle codeEq
       bitmapsPrefix ok limit initialClock heapLength memory domain shared clock endian ffi current length heap
       inputCode anything cr c jump bounds pointer f gen maxHeap a b removeInput oracle renamed lab pc mc labCode
       labs asm machine distinct sourceCode pre relation ha hs hk hf hcode hor rel hpc hmc tie machineRel
-  refine ⟨bs,n,bsPost,nPost,body,frame,frameSize,frameDef,sizeDef,compilation,foundEntry,
+  refine ⟨bs,n,bsPost,nPost,body,frame,frameSize,selected,frameDef,sizeDef,compilation,foundEntry,
     lengthBound,gapBound,bitmapPrefix,maxBound,labelCheck,?_⟩
   rcases alternatives with success | ⟨ticks,finalMachine,finalFfi,bound,run,trace⟩
   · exact Or.inl success

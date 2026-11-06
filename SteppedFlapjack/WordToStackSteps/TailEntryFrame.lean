@@ -32,6 +32,7 @@ theorem wholeWordStack_tailEntryFrame_or_resource {C F : Type}
     let q := (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
       ((name,1,p),SteppedFlapjack.WordAllocSteps.entryColour wc programs name)).2.2
     ∃ bs n bsPost nPost body frame frameSize,
+      nativeEntryBitmap ac false (ac.regCount-(5+ac.avoidRegs.length)) name (compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
       frame = max (maxVarHOL q / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (1-(ac.regCount-(5+ac.avoidRegs.length))) ∧
       frameSize = (if frame = 0 then 0 else frame+1) ∧
       compNative ac false q (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
@@ -51,7 +52,7 @@ theorem wholeWordStack_tailEntryFrame_or_resource {C F : Type}
             (some (.halt (.word 2)),post) ∧ post.ffi = t.ffi ∧
           StackSteps.steps (.call none (.inl name) none,{t with clock := limit+1}) ≤ 3) := by
   obtain ⟨_,bs,n,bsPost,nPost,body,frame,frameSize,
-    frameDef,sizeDef,compilation,found,lengthBound,gapBound,bitmapPrefix⟩ :=
+    selected,frameDef,sizeDef,compilation,found,lengthBound,gapBound,bitmapPrefix⟩ :=
     wholeWordStack_tail_initialized_inputs wc ac programs name 1 p member nodup t coracle noRaise noStore codeEq bitmapsPrefix ok
   have regBound : 1 ≤ ac.regCount-(5+ac.avoidRegs.length) := by have h := ok.1; omega
   have argSpace : 1-(ac.regCount-(5+ac.avoidRegs.length)) = 0 := by omega
@@ -59,7 +60,7 @@ theorem wholeWordStack_tailEntryFrame_or_resource {C F : Type}
     simp only [compileProgNative, ← frameDef, ← sizeDef, compilation] at found
     simpa only [argSpace,Nat.sub_zero] using found
   refine ⟨bs,n,bsPost,nPost,body,frame,frameSize,
-    frameDef,sizeDef,compilation,found,lengthBound,gapBound,bitmapPrefix,?_⟩
+    selected,frameDef,sizeDef,compilation,found,lengthBound,gapBound,bitmapPrefix,?_⟩
   by_cases fits : frameSize ≤ t.stackSpace
   · left
     have frameShape : if frame = 0 then frameSize = 0 else frameSize = frame+1 := by
