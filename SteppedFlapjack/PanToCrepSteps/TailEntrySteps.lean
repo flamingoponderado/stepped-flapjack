@@ -82,4 +82,25 @@ theorem globalEntry_return_with_steps {width : Nat} [NeZero width] {σ : Type}
       arguments lookup clock bodyRun shapeMatch
   · exact globalEntrySteps_bound init name args s post values body locals shape limit initRun arguments lookup clock bodyBound
 
+/-- A final FFI result from the reached callee propagates through the real
+tail-call entry with the same explicit control-visit bound. -/
+theorem globalEntry_ffi_with_steps {width : Nat} [NeZero width] {σ : Type}
+    (init : ProgHOL width) (name : MlString) (args : List (ExpHOL width))
+    (s post final : PanSemStateFiniteExact width σ) (values : List (ValueHOL width))
+    (body : ProgHOL width) (locals : HolFiniteMapExact MlString (ValueHOL width))
+    (shape : ShapeHOL) (event : HolFinalEvent) (limit : Nat)
+    (initRun : s.evaluateHOLFiniteState init = (none,post))
+    (arguments : @evalListHOLFinite width σ _ post (fun a => Classical.propDecidable (post.memaddrs a)) args = some values)
+    (lookup : lookupCodeHOLFinite post.code.lookup name values = some (body,locals,shape))
+    (clock : post.clock ≠ 0)
+    (bodyRun : (callEntryStateHOLFinite post locals).evaluateHOLFiniteState body = (some (.finalFfi event),final))
+    (bodyBound : controlSteps body (callEntryStateHOLFinite post locals) ≤ limit) :
+    s.evaluateHOLFiniteState (.seq init (.call none name args)) = (some (.finalFfi event),emptyLocalsHOLFinite final) ∧
+    globalEntrySteps init name args s ≤ controlSteps init s + limit + 2 := by
+  constructor
+  · rw [evaluateHOLFiniteState_seq_line780,initRun]
+    exact evaluateHOLFiniteState_call_body_fallback post none name args values body locals shape (.finalFfi event) final
+      arguments lookup clock bodyRun (Or.inr (Or.inr ⟨event,rfl⟩))
+  · exact globalEntrySteps_bound init name args s post values body locals shape limit initRun arguments lookup clock bodyBound
+
 end SteppedFlapjack.PanToCrepSteps
