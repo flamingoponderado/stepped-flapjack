@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordToStackSteps.WholeEntryFrame
 import SteppedFlapjack.WordToStackSteps.InitialFrame
 import SteppedFlapjack.WordToStackSteps.WholeInitialization
 import SteppedFlapjack.WordToStackSteps.WholeProgram
