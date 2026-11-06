@@ -76,7 +76,7 @@ structure FullInitTailSetup {F : Type} (p : HolLoopProg 64)
   dataSp : Nat
   coracle : Nat → LabToTarget.Config × List (Nat × HolProg 64) × List (BitVec 64)
   initAssumptions : Assumptions stackConf dataConf maxHeap sp offset bitmaps inputCode lab saveRegs dataSp coracle
-  entryEq : entry = (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps inputCode lab saveRegs dataSp coracle).1
+  entryEq : entry = {(fullMakeInit stackConf dataConf maxHeap sp offset bitmaps inputCode lab saveRegs dataSp coracle).1 with clock := entry.clock}
   pc : BitVec 64
   mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection
   labCode : LabSem.LabProgHOL 64

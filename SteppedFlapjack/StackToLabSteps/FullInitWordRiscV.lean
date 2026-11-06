@@ -46,7 +46,7 @@ theorem fullInitAllocatedWordSequenceRiscVWithin {F : Type}
     (lab : LabSem.State 64 LabToTarget.Config F) (saveRegs : Nat → Bool) (dataSp : Nat)
     (coracle : Nat → LabToTarget.Config × List (Nat × HolProg 64) × List (BitVec 64))
     (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle)
-    (entryEq : entry = (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1)
+    (entryEq : entry = {(fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1 with clock := entry.clock})
     (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
     (hmc : mc.target = riscvTarget) (tie : LabToTarget.oracleTie mc machine lab)
@@ -80,9 +80,12 @@ theorem fullInitAllocatedWordSequenceRiscVWithin {F : Type}
   have full := fullInitAllocatedBodyRiscVWithin stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle
     hA pc mc labCode labs asm machine hmc tie machineRel limit (frameSize-(argumentCount-k))
     (callSequenceCost ac limit entry.code program (bs,n) (k,frameSize,frame)) compiled stackResult stackPost outcome
-  have result := full (by simpa only [← entryEq] using foundBody) (by simpa only [← entryEq] using enabled)
-    (by simpa only [← entryEq] using space) (by simpa only [← entryEq] using bodyRun) classification
-    (by simpa only [← entryEq] using bodyBound)
+  have entryCode : entry.code = (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1.code := by
+    rw [entryEq]
+  rw [entryEq] at foundBody enabled space bodyRun bodyBound
+  have result := full (by simpa only using foundBody) (by simpa only using enabled)
+    (by simpa only using space) (by simpa only using bodyRun) classification
+    (by simpa only [entryCode] using bodyBound)
   obtain ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,events⟩ := result
   exact ⟨outcome,ticks,finalMachine,finalFfi,stackPost,stackResult,tickBound,machineRun,events,classification,bodyRelation⟩
 
@@ -116,7 +119,7 @@ theorem fullInitAllocatedRegTailRiscVWithin {F : Type}
     (lab : LabSem.State 64 LabToTarget.Config F) (saveRegs : Nat → Bool) (dataSp : Nat)
     (coracle : Nat → LabToTarget.Config × List (Nat × HolProg 64) × List (BitVec 64))
     (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle)
-    (entryEq : entry = (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1)
+    (entryEq : entry = {(fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1 with clock := entry.clock})
     (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
     (hmc : mc.target = riscvTarget) (tie : LabToTarget.oracleTie mc machine lab)
@@ -150,9 +153,12 @@ theorem fullInitAllocatedRegTailRiscVWithin {F : Type}
   have full := fullInitAllocatedBodyRiscVWithin stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle
     hA pc mc labCode labs asm machine hmc tie machineRel limit (frameSize-(argumentCount-k))
     (callSequenceCost ac limit entry.code program (bs,n) (k,frameSize,frame)) compiled stackResult stackPost outcome
-  have result := full (by simpa only [← entryEq] using foundBody) (by simpa only [← entryEq] using enabled)
-    (by simpa only [← entryEq] using space) (by simpa only [← entryEq] using bodyRun) classification
-    (by simpa only [← entryEq] using bodyBound)
+  have entryCode : entry.code = (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1.code := by
+    rw [entryEq]
+  rw [entryEq] at foundBody enabled space bodyRun bodyBound
+  have result := full (by simpa only using foundBody) (by simpa only using enabled)
+    (by simpa only using space) (by simpa only using bodyRun) classification
+    (by simpa only [entryCode] using bodyBound)
   obtain ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,events⟩ := result
   exact ⟨outcome,ticks,finalMachine,finalFfi,stackPost,stackResult,tickBound,machineRun,events,classification,bodyRelation⟩
 

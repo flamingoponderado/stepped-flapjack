@@ -58,7 +58,7 @@ theorem singleTail_fullInit_riscvWithin {F : Type} {loc : Nat} {p callee : HolLo
     (lab : LabSem.State 64 LabToTarget.Config F) (saveRegs : Nat → Bool) (dataSp : Nat)
     (coracle : Nat → LabToTarget.Config × List (Nat × HolProg 64) × List (BitVec 64))
     (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps inputCode lab saveRegs dataSp coracle)
-    (entryEq : entry = (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps inputCode lab saveRegs dataSp coracle).1)
+    (entryEq : entry = {(fullMakeInit stackConf dataConf maxHeap sp offset bitmaps inputCode lab saveRegs dataSp coracle).1 with clock := entry.clock})
     (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
     (hmc : mc.target = riscvTarget) (tie : LabToTarget.oracleTie mc machine lab)
