@@ -1,3 +1,136 @@
+import SteppedFlapjack.PanToCrepSteps.TailEntryGlobalWordRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryFrontendTablesRiscV
+import SteppedFlapjack.CrepToLoopSteps.WholeInitialRelations
+import SteppedFlapjack.WordAllocSteps.WholeFrontendShapes
+import SteppedFlapjack.PanToCrepSteps.GlobalCodeRelations
+import SteppedFlapjack.LoopToWordSteps.WholeCodeRel
+import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
+import SteppedFlapjack.PanToCrepSteps.GlobalTailWord
+import SteppedFlapjack.PanToCrepSteps.TailEntryCompiledRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryFrontendRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryRelations
+import SteppedFlapjack.PanToCrepSteps.TailEntryRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryCrepBound
+import SteppedFlapjack.CrepToLoopSteps.TailRiscVComposition
+import SteppedFlapjack.WordToStackSteps.TailEntryFrame
+import SteppedFlapjack.WordToStackSteps.WholeTailInitialization
+import SteppedFlapjack.CrepToLoopSteps.RiscVInputs
+import SteppedFlapjack.WordAllocSteps.WholeTailCode
+import SteppedFlapjack.WordToStackSteps.DirectTailRiscV
+import SteppedFlapjack.LoopToWordSteps.TailEntryCompiledCode
+import SteppedFlapjack.LoopToWordSteps.TailEntryRiscV
+import SteppedFlapjack.WordAllocSteps.CompiledCodeTail
+import SteppedFlapjack.WordToStackSteps.CompiledTail
+import SteppedFlapjack.WordToStackSteps.DirectTailLocal
+import SteppedFlapjack.WordAllocSteps.TailEntry
+import SteppedFlapjack.LoopToWordSteps.TailEntryWordAllocated
+import SteppedFlapjack.WordTwoRegSteps.TailEntry
+import SteppedFlapjack.WordUnreachSteps.TailEntry
+import SteppedFlapjack.WordDeadSteps.SecondTailEntry
+import SteppedFlapjack.LoopToWordSteps.TailEntryWordSecondDead
+import SteppedFlapjack.WordDeadSteps.TailEntry
+import SteppedFlapjack.WordCseSteps.TailEntry
+import SteppedFlapjack.WordCopySteps.TailEntry
+import SteppedFlapjack.LoopToWordSteps.TailEntryWordCopy
+import SteppedFlapjack.WordSsaSteps.TailEntry
+import SteppedFlapjack.WordInstSteps.TailEntry
+import SteppedFlapjack.WordSimpSteps.TailTargets
+import SteppedFlapjack.LoopToWordSteps.TailEntryWordSimp
+import SteppedFlapjack.WordSimpSteps.TailCallBound
+import SteppedFlapjack.WordSimpSteps.TailEntry
+import SteppedFlapjack.LoopToWordSteps.TailCall
+import SteppedFlapjack.LoopLiveSteps.TailEntryCode
+import SteppedFlapjack.LoopLiveSteps.TailEntryGlobalBound
+import SteppedFlapjack.LoopLiveSteps.TailEntryBound
+import SteppedFlapjack.CrepToLoopSteps.OptimisedTailEntry
+import SteppedFlapjack.CrepToLoopSteps.TailEntryLoop
+import SteppedFlapjack.CrepToLoopSteps.TailCallSteps
+import SteppedFlapjack.PanToCrepSteps.GlobalCrepEntry
+import SteppedFlapjack.CrepToLoopSteps.InlineEntry
+import SteppedFlapjack.PanToCrepSteps.GlobalEntry
+import SteppedFlapjack.PanToCrepSteps.TailEntrySteps
+import SteppedFlapjack.PanToCrepSteps.WholeWordRiscV
+import SteppedFlapjack.PanToCrepSteps.ActualDeclsRiscV
+import SteppedFlapjack.PanToCrepSteps.ActualWordRiscV
+import SteppedFlapjack.PanToCrepSteps.OptimisedAllFramesRiscV
+import SteppedFlapjack.CrepToLoopSteps.SimpFixed
+import SteppedFlapjack.LoopLiveSteps.Consumption
+import SteppedFlapjack.LoopLiveSteps.FrontendMember
+import SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileAllFramesRiscV
+import SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileFixedEntryRiscV
+import SteppedFlapjack.LoopToWordSteps.FixedEntryRiscV
+import SteppedFlapjack.WordToStackSteps.FixedEntryFrame
+import SteppedFlapjack.WordToStackSteps.WholeEntryRiscV
+import SteppedFlapjack.WordToStackSteps.WholeEntryFrame
+import SteppedFlapjack.WordToStackSteps.InitialFrame
+import SteppedFlapjack.WordToStackSteps.WholeInitialization
+import SteppedFlapjack.WordToStackSteps.WholeProgram
+import SteppedFlapjack.WordAllocSteps.WholeProgram
+import SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileWordAllocatedRiscV
+import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordAllocated
+import SteppedFlapjack.WordAllocSteps.Prefix
+import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordCse
+import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordOptimized
+import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordCopy
+import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordDead
+import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordSsa
+import SteppedFlapjack.WordSsaSteps.Selection
+import SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileWordSimpRiscV
+import SteppedFlapjack.PanToCrepSteps.ConditionWordSimpRiscV
+import SteppedFlapjack.LoopToWordSteps.WordSimpRiscV
+import SteppedFlapjack.WordSimpSteps.RiscV
+import SteppedFlapjack.WordSimpSteps.CompileLoop
+import SteppedFlapjack.WordSimpSteps.PushBranch
+import SteppedFlapjack.WordSimpSteps.Loop
+import SteppedFlapjack.WordSimpSteps.Sequence
+import SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileRiscV
+import SteppedFlapjack.PanToCrepSteps.ConditionRiscV
+import SteppedFlapjack.PanToCrepSteps.BranchWhileRiscV
+import SteppedFlapjack.PanToCrepSteps.WhileSequenceRiscV
+import SteppedFlapjack.StackRemoveSteps.EmptyOracle
+import SteppedFlapjack.PanToCrepSteps.WhileRiscV
+import SteppedFlapjack.PanToCrepSteps.WhileSteps
+import SteppedFlapjack.PanToCrepSteps.ControlSteps
+import SteppedFlapjack.CrepSteps.WhileClock
+import SteppedFlapjack.CrepSteps.BranchClock
+import SteppedFlapjack.CrepToLoopSteps.WhileClock
+import SteppedFlapjack.LoopSteps.IterationClock
+import SteppedFlapjack.CrepToLoopSteps.BranchRiscV
+import SteppedFlapjack.CrepToLoopSteps.WhileRiscV
+import SteppedFlapjack.CrepToLoopSteps.WhileInduction
+import SteppedFlapjack.CrepToLoopSteps.WhileIteration
+import SteppedFlapjack.CrepToLoopSteps.BranchExtraClock
+import SteppedFlapjack.CrepToLoopSteps.Branch
+import SteppedFlapjack.LoopSteps.BranchedStatic
+import SteppedFlapjack.LoopSteps.BranchedClock
+import SteppedFlapjack.CrepToLoopSteps.ExprRiscV
+import SteppedFlapjack.CrepToLoopSteps.ExprShape
+import SteppedFlapjack.CrepToLoopSteps.ExprSequence
+import SteppedFlapjack.LoopToWordSteps.SelectedRiscV
+import SteppedFlapjack.LoopToWordSteps.SelectedComposition
+import SteppedFlapjack.LoopToWordSteps.SelectedShape
+import SteppedFlapjack.WordInstSteps.ProgramRiscV
+import SteppedFlapjack.WordInstSteps.ProgramStack
+import SteppedFlapjack.WordInstSteps.Compositional
+import SteppedFlapjack.WordInstSteps.LoopGeneric
+import SteppedFlapjack.WordInstSteps.LoopStack
+import SteppedFlapjack.WordInstSteps.Loop
+import SteppedFlapjack.WordInstSteps.Expression
+import SteppedFlapjack.WordInstSteps.StackComposition
+import SteppedFlapjack.WordInstSteps.Simple
+import SteppedFlapjack.CrepToLoopSteps.RiscVComposition
+import SteppedFlapjack.CrepToLoopSteps.BackendReady
+import SteppedFlapjack.CrepToLoopSteps.WordComposition
+import SteppedFlapjack.CrepToLoopSteps.Sequence
+import SteppedFlapjack.LoopSteps.Clock
+import SteppedFlapjack.CrepToLoopSteps.DirectLeaf
+import SteppedFlapjack.CrepSteps.Defs
+import SteppedFlapjack.LoopToWordSteps.LoopRiscV
+import SteppedFlapjack.LoopToWordSteps.LoopProgram
+import SteppedFlapjack.LoopToWordSteps.LoopBound
+import SteppedFlapjack.LoopToWordSteps.LoopSetup
+import SteppedFlapjack.LoopToWordSteps.LoopResult
+import SteppedFlapjack.LoopToWordSteps.SixBound
 import SteppedFlapjack.LoopToWordSteps.Outcome
 import SteppedFlapjack.LoopToWordSteps.LoopCost
 import SteppedFlapjack.LoopToWordSteps.ConditionalRiscV
@@ -70,6 +203,7 @@ import SteppedFlapjack.StackAllocSteps.EntrySteps
 import SteppedFlapjack.StackAllocSteps.MakeInitEntrySteps
 import SteppedFlapjack.StackAllocSteps.RawCallComposition
 import SteppedFlapjack.StackAllocSteps.ThreePassComposition
+import SteppedFlapjack.StackAllocSteps.NamedPipelineClock
 import SteppedFlapjack.StackRemoveSteps.EntrySteps
 import SteppedFlapjack.StackRemoveSteps.InitSteps
 import SteppedFlapjack.StackRemoveSteps.InitEntrySteps
@@ -218,6 +352,15 @@ phase 4 of flapjack#1251:
   no-handler bound for all non-error, non-timeout outcomes.
 - `SteppedFlapjack.WordToStackSteps.ReturningNoneSteps`: complete no-handler
   zero-clock simulation and a source-step-based matching-return bound.
+- `SteppedFlapjack.LoopToWordSteps.SixBound`: sixfold sequence and conditional simulation.
+- `SteppedFlapjack.LoopToWordSteps.LoopResult`: loop-result classification.
+- `SteppedFlapjack.LoopToWordSteps.LoopSetup`: derived loop cut and timeout setup.
+- `SteppedFlapjack.LoopToWordSteps.LoopBound`: quantitative loop induction.
+- `SteppedFlapjack.LoopToWordSteps.LoopProgram`: nested-loop fragment and Word compilation shape.
+- `SteppedFlapjack.LoopToWordSteps.SelectedRiscV`: Loop runs through instruction selection and RISC-V.
+- `SteppedFlapjack.LoopToWordSteps.SelectedComposition`: Loop-to-selected-Word semantic and step composition.
+- `SteppedFlapjack.LoopToWordSteps.SelectedShape`: Loop compiler output accepted by instruction-selection bounds.
+- `SteppedFlapjack.LoopToWordSteps.LoopRiscV`: nested-loop executions composed through RISC-V.
 - `SteppedFlapjack.LoopToWordSteps.Outcome`: source-to-machine outcome and trace correspondence.
 - `SteppedFlapjack.LoopToWordSteps.LoopCost`: cost of the compiled loop wrapper and continuing iterations.
 - `SteppedFlapjack.LoopToWordSteps.Conditional`: Loop-to-Word step preservation with conditional branches.
@@ -226,6 +369,94 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.LoopToWordSteps.Sequence`: Loop-to-Word step preservation for direct statements, sequences, and marks.
 - `SteppedFlapjack.LoopToWordSteps.StackReady`: common Loop-to-Stack fragment and composed bounded simulation.
 - `SteppedFlapjack.LoopToWordSteps.RiscVComposition`: bounded Loop execution composed through the RISC-V backend.
+- `SteppedFlapjack.WordInstSteps.ProgramRiscV`: compositional selected Word programs through RISC-V.
+- `SteppedFlapjack.WordInstSteps.ProgramStack`: compositional selected programs through Stack.
+- `SteppedFlapjack.WordInstSteps.Compositional`: bottom-up bounds for sequences, branches and nested loops.
+- `SteppedFlapjack.WordInstSteps.LoopGeneric`: quantitative loop induction from an established body bound.
+- `SteppedFlapjack.WordInstSteps.LoopStack`: selected Word loops composed through Stack.
+- `SteppedFlapjack.WordInstSteps.Loop`: iteration-sensitive instruction-selection bounds.
+- `SteppedFlapjack.WordInstSteps.StackComposition`: bounded selected Word runs through Stack.
+- `SteppedFlapjack.WordInstSteps.Expression`: general selected-expression shape, conventions and cost.
+- `SteppedFlapjack.WordInstSteps.Simple`: quantitative instruction selection for Word expression statements.
+- `SteppedFlapjack.CrepSteps.WhileClock`: source while-loop clock consumption bounded by visits.
+- `SteppedFlapjack.CrepSteps.BranchClock`: source branch-program clock consumption bounded by visits.
+- `SteppedFlapjack.CrepToLoopSteps.WhileClock`: compiled while loops bounded by clock consumption.
+- `SteppedFlapjack.CrepToLoopSteps.BranchRiscV`: Crep conditional programs through RISC-V.
+- `SteppedFlapjack.StackRemoveSteps.EmptyOracle`: constant Stack-removal cost for an empty-install oracle.
+- `SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordOptimized`: Crep initialization, loop and continuation through all pre-allocation Word optimizations.
+- `SteppedFlapjack.WordDeadSteps.Second`: semantic and visit bound through the second dead-code pass.
+- `SteppedFlapjack.WordUnreachSteps.Correct`: semantic and visit bound through unreachable removal.
+- `SteppedFlapjack.WordTwoRegSteps.Correct`: semantic and visit bound through three-to-two rewriting.
+- `SteppedFlapjack.WordCopySteps.Correct`: semantic and visit bound through copy propagation.
+- `SteppedFlapjack.WordCseSteps.Correct`: semantic and visit bound through CSE.
+- `SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordDead`: Crep initialization, loop and continuation through first dead-code elimination.
+- `SteppedFlapjack.LoopToWordSteps.WordDeadSequence`: Loop sequences through SSA and first dead-code elimination.
+- `SteppedFlapjack.WordDeadSteps.Correct`: dead-code semantics and source-relative visit bounds.
+- `SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordSsa`: Crep initialization, loop and continuation through full SSA.
+- `SteppedFlapjack.LoopToWordSteps.WordSsaSequence`: Loop sequences through the full SSA prefix.
+- `SteppedFlapjack.WordSsaSteps.Composition`: WordSimp, instruction selection and SSA semantics and visit bound.
+- `SteppedFlapjack.WordSsaSteps.Permute`: permutation independence for supported loops and branches.
+- `SteppedFlapjack.WordSsaSteps.Selection`: actual WordSimp, selection and SSA prefix has a syntax-and-clock visit bound.
+- `SteppedFlapjack.WordSsaSteps.Program`: full SSA preserves branch-bodied loop sequences.
+- `SteppedFlapjack.WordSsaSteps.Branch`: SSA branch bodies have a static visit bound.
+- `SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileWordSimpRiscV`: Pancake initialization, comparison loop and continuation through WordSimp to RISC-V.
+- `SteppedFlapjack.LoopToWordSteps.WordSimpSequenceRiscV`: source-relative WordSimp sequence bound through RISC-V.
+- `SteppedFlapjack.WordSimpSteps.LoopSequenceBound`: normalized source-step bound for WordSimp loop sequences.
+- `SteppedFlapjack.PanToCrepSteps.ConditionWordSimpRiscV`: comparison-controlled Pancake loops through WordSimp to RISC-V.
+- `SteppedFlapjack.CrepToLoopSteps.ConditionWordSimpRiscV`: Crep comparison-controlled loops through WordSimp to RISC-V.
+- `SteppedFlapjack.CrepToLoopSteps.WordSimpShape`: derives generated Loop branch shapes.
+- `SteppedFlapjack.LoopToWordSteps.WordSimpRiscV`: Loop-to-RISC-V bound including actual WordSimp for supported loop bodies.
+- `SteppedFlapjack.LoopToWordSteps.WordSimpLoop`: Loop-to-WordSimp visits and derived output shape.
+- `SteppedFlapjack.WordSimpSteps.TickLoop`: WordSimp bound on the tick-wrapped compiled loop.
+- `SteppedFlapjack.WordSimpSteps.RiscV`: WordSimp and instruction selection through the bounded RISC-V backend.
+- `SteppedFlapjack.WordSimpSteps.Stack`: WordSimp and selection through Word-to-Stack.
+- `SteppedFlapjack.WordSimpSteps.Selection`: WordSimp composed with instruction selection.
+- `SteppedFlapjack.WordSimpSteps.CompileLoop`: complete WordSimp semantics and visit bounds for loops with branch bodies.
+- `SteppedFlapjack.WordSimpSteps.CompileBranch`: complete WordSimp semantics and visit bounds for loop-free branches.
+- `SteppedFlapjack.WordSimpSteps.HoistBranch`: duplicate-conditional hoisting preserves branch shape.
+- `SteppedFlapjack.WordSimpSteps.PushBranch`: conditional push-out preserves bounded branch shape.
+- `SteppedFlapjack.WordSimpSteps.ConstBranch`: sequence normalization and constant propagation on branches.
+- `SteppedFlapjack.WordSimpSteps.Branch`: bounds for branch and loop sequence normalization.
+- `SteppedFlapjack.WordSimpSteps.Loop`: complete WordSimp pass on loops with straight-line bodies.
+- `SteppedFlapjack.WordSimpSteps.Straight`: complete WordSimp pass on straight-line code.
+- `SteppedFlapjack.WordSimpSteps.Sequence`: sequence reassociation visit bounds and straight-line normalization.
+- `SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileRiscV`: initialization, comparison-controlled loop, and continuation through RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.ConditionRiscV`: comparison-controlled loop through RISC-V.
+- `SteppedFlapjack.CrepToLoopSteps.ConditionInduction`: bounded compiler clock and visits for comparison-controlled loops.
+- `SteppedFlapjack.PanToCrepSteps.BranchWhileRiscV`: initialization, loop and continuation through RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.BranchWhile`: initialization and loop through the Pancake frontend.
+- `SteppedFlapjack.CrepToLoopSteps.BranchWhileRiscV`: Crep initialization and loop through RISC-V.
+- `SteppedFlapjack.CrepToLoopSteps.BranchPrefix`: compositional branch-prefix visit bounds.
+- `SteppedFlapjack.PanToCrepSteps.WhileSequenceRiscV`: Pancake loops with continuations through RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.WhileSequence`: source-to-Crep loop and continuation bound.
+- `SteppedFlapjack.CrepToLoopSteps.WhileSequenceRiscV`: Crep loops with continuations through RISC-V.
+- `SteppedFlapjack.CrepToLoopSteps.WhileSequence`: Crep-to-Loop sequence bound.
+- `SteppedFlapjack.LoopSteps.IterationShift`: loop visit stability under clock extension.
+- `SteppedFlapjack.PanToCrepSteps.WhileRiscV`: Pancake loop visits through instruction selection to RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.WhileSteps`: semantic and quantitative Pancake-to-Crep loop correctness.
+- `SteppedFlapjack.PanToCrepSteps.ControlSteps`: exact-state source control visits and compiled branch bounds.
+- `SteppedFlapjack.PanToCrepSteps.Shape`: source fragments lowered to supported Crep.
+- `SteppedFlapjack.CrepSteps.BranchStatic`: syntax-size bounds for loop-free Crep visits.
+- `SteppedFlapjack.CrepToLoopSteps.WhileRiscV`: Crep while loops through instruction selection and RISC-V.
+- `SteppedFlapjack.CrepToLoopSteps.WhileInduction`: source-step bounds on compiled Crep while loops.
+- `SteppedFlapjack.CrepToLoopSteps.WhileIteration`: compiled loop executions for false and continuing direct guards.
+- `SteppedFlapjack.CrepToLoopSteps.DirectExpressionEval`: direct condition evaluation with no extra clock.
+- `SteppedFlapjack.CrepToLoopSteps.BranchExtraClock`: syntax bound on compiler extra clock for Crep branch programs.
+- `SteppedFlapjack.CrepToLoopSteps.Branch`: Crep conditional compilation and source-step bounds.
+- `SteppedFlapjack.LoopSteps.IterationClock`: loop visits bounded by consumed clock and body size.
+- `SteppedFlapjack.LoopSteps.ClockConsumption`: loop-free branch clock consumption bounded by visits.
+- `SteppedFlapjack.LoopSteps.BranchedStatic`: loop-free branch visit bounds.
+- `SteppedFlapjack.LoopSteps.BranchedClock`: branch count stability under clock extension.
+- `SteppedFlapjack.CrepToLoopSteps.ExprRiscV`: Crep expression programs through instruction selection and RISC-V.
+- `SteppedFlapjack.CrepToLoopSteps.ExprShape`: compiled Crep expression programs fit selected Loop bounds.
+- `SteppedFlapjack.CrepToLoopSteps.ExprSequence`: Crep assignment and sequence bounds.
+- `SteppedFlapjack.CrepToLoopSteps.RiscVComposition`: completed Crep runs through the bounded RISC-V backend.
+- `SteppedFlapjack.CrepToLoopSteps.BackendReady`: compiled fragment and completed outcome bridge to the backend.
+- `SteppedFlapjack.CrepToLoopSteps.WordComposition`: Crep-to-Word bounded execution for direct sequences.
+- `SteppedFlapjack.CrepToLoopSteps.Sequence`: quantitative Crep-to-Loop correctness for direct sequences.
+- `SteppedFlapjack.CrepToLoopSteps.DirectLeaf`: semantic and exact step preservation for direct Crep leaves.
+- `SteppedFlapjack.CrepSteps.Defs`: exact Crep statement counts and basic control-flow equations.
+- `SteppedFlapjack.LoopSteps.Clock`: clock-extension stability for direct sequential Loop runs.
 - `SteppedFlapjack.LoopSteps.Defs`: exact-evaluator LoopSem statement counts and control-flow equations.
 - `SteppedFlapjack.LoopSteps.DirectLeaf`: direct Loop-to-Word semantic correctness with exact step counts.
 - `SteppedFlapjack.WordToStackSteps.EntryComposition`: bounded Word call sequences composed through the RISC-V backend.

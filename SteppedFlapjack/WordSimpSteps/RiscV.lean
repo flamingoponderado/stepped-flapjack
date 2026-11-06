@@ -1,0 +1,108 @@
+import SteppedFlapjack.WordSimpSteps.Stack
+import SteppedFlapjack.WordInstSteps.ProgramRiscV
+import SteppedFlapjack.WordToStackSteps.EntryComposition
+
+/-! Compositional Word instruction selection through RISC-V. -/
+namespace SteppedFlapjack.WordSimpSteps
+open Flapjack Flapjack.WordSemStateFiniteExact Flapjack.WordToStackProofs
+open Flapjack.WordToStackProofs.CompCorrect SteppedFlapjack.WordToStackSteps
+open Flapjack.Compiler.Backend.WordInst Flapjack.StackSemStateOps
+open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
+open Flapjack.Compiler.Backend.StackAlloc Flapjack.Compiler.Backend.StackAlloc.CompCorrect
+open Flapjack.Compiler.Backend.StackRemove Flapjack.Compiler.Backend.StackNames
+open Flapjack.Compiler.Backend.Semantics.TargetProps Flapjack.Compiler.Encoders.Asm
+open Flapjack.Compiler.Encoders.RiscV.Target
+open SteppedFlapjack.StackAllocSteps SteppedFlapjack.StackRemoveSteps.CompCorrect
+open SteppedFlapjack.StackToLabSteps SteppedFlapjack.LabToTargetSteps
+open SteppedFlapjack.WordInstSteps Flapjack.Compiler.Backend.WordSimp
+
+/-- A completed supported Word loop runs through WordSimp, instruction selection,
+and the proved backend to RISC-V with a source-visit-dependent bound. -/
+theorem simp_select_loop_riscvWithin {F : Type}
+    (ac : AsmConfigExact 64) (temp : Nat) (names exits : Spt Unit)
+    (body : WordLangProgHOL (BitVec 64)) (bodyShape : Branch body)
+    (p : WordLangProgHOL (BitVec 64)) (pDef : p = compileExp (.loop names body exits))
+    (factor : Nat) (factorDef : factor = programFactor ac temp p)
+    (q : WordLangProgHOL (BitVec 64)) (selected : q = instSelect ac temp p)
+    (source sourcePost : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
+    (result : Option (WordSemResult 64)) (locals : Spt (WordLocW 64))
+    (entry : StackSemStateFiniteExact 64 LabToTarget.Config F)
+    (k frameSize frame limit : Nat) (lens : List Nat) (bs bsPost : AppList (BitVec 64)) (n nPost : Nat)
+    (compiled : HolProg 64) (start argumentCount : Nat)
+    (complete : CompleteWordResult result) (sourceBound : WordSteps.steps (.loop names body exits) source ≤ limit)
+    (sourceRun : evaluate (.loop names body exits) source = (result,sourcePost))
+    (gc : gcFunConstOk source.gcFun)
+    (vars : everyVarHOL (fun x => decide (x < temp)) p = true)
+    (localRel : wordLocalsRel temp source.locals locals)
+    (noInstallCode : WordProps.noInstallCode source.code)
+    (wordCode : ∀ loc arity r, sptLookup loc source.code = some (arity,r) → LoopBlock r)
+    (wordPremises : stateRel ac k frameSize frame {source with locals := locals}
+      {entry with stackSpace := entry.stackSpace - (frameSize - (argumentCount-k))} lens 0 ∧
+      postAllocConventionsHOL k q = true ∧
+      Flapjack.Compiler.Backend.WordToStack.Native.compNative ac false q (bs,n) (k,frameSize,frame) = (compiled,(bsPost,nPost)) ∧
+      (appListAppend bs).length ≤ n ∧ n - (appListAppend bs).length ≤ entry.bitmaps.length ∧
+      List.IsPrefix (appListAppend bsPost) (entry.bitmaps.drop (n - (appListAppend bs).length)) ∧
+      (∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact entry.code loc) ∧
+      maxVarHOL q < 2 * frame + 2 * k)
+    (frameDef : frame = max (maxVarHOL q / 2 + 1 - k) (argumentCount-k))
+    (frameSizeDef : frameSize = if frame = 0 then 0 else frame+1)
+    (space : frameSize - (argumentCount-k) ≤ entry.stackSpace)
+    (found : sptLookup start entry.code = some
+      (Flapjack.Compiler.Backend.WordToStack.Native.compileProgNative ac false q argumentCount k (bs,n)).1)
+    (inputCode : List (Nat × HolProg 64))
+    (anything : WordSemGcFun 64) (cr : CompileFn 64 LabToTarget.Config) (c : DataToWord.Config)
+    (jump : Bool) (bounds : BitVec 64 × BitVec 64) (pointer : Nat)
+    (f : Spt Nat) (gen : Bool) (maxHeap a b : Nat) (removeInput : List (Nat × HolProg 64))
+    (oracle : Nat → LabToTarget.Config × List (Nat × HolProg 64) × List (BitVec 64))
+    (renamed : StackSemStateFiniteExact 64 LabToTarget.Config F)
+    (lab : LabSem.State 64 LabToTarget.Config F)
+    (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
+    (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
+    (distinct : (inputCode.map Prod.fst).Nodup) (sourceCode : entry.code = sptFromAList inputCode)
+    (pre : Pre cr c {entry with code := sptFromAList (StackRawCall.compile inputCode), clock := (factor*((1 + sizeOf (compileExp body))*limit))+1} entry.regs)
+    (relation : stateRelHOL jump bounds pointer
+      (Tgt anything cr c {entry with code := sptFromAList (StackRawCall.compile inputCode), clock := (factor*((1 + sizeOf (compileExp body))*limit))+1} 0 entry.regs)
+      (makeInit f (sptFromAList (StackRemove.compileHOL jump bounds gen maxHeap a b removeInput)) oracle renamed))
+    (ha : ¬renamed.useAlloc) (hs : ¬renamed.useStore) (hk : ¬renamed.useStack)
+    (hf : Function.Bijective (findNameSpt f))
+    (hcode : renamed.code = sptFromAList (compileHOL f (StackRemove.compileHOL jump bounds gen maxHeap a b removeInput)))
+    (hor : renamed.compileOracle = Prod.map id (Prod.map (compileHOL f) id) ∘ oracle)
+    (rel : Flapjack.Compiler.Backend.StackToLab.Proofs.StateRel.stateRel renamed lab)
+    (hpc : LabSem.locToPc start 0 lab.code = some lab.pc)
+    (hmc : mc.target = riscvTarget) (tie : LabToTarget.oracleTie mc machine lab)
+    (machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) lab asm machine) :
+    ∃ (outcome : HolOutcome) (ticks : Nat) (finalMachine : RiscV.L3.riscv_state)
+      (finalFfi : HolFfiState F) (stackPost : StackSemStateFiniteExact 64 LabToTarget.Config F)
+      (stackResult : Option (StackSemResult 64)),
+      ticks ≤ labTickBound 4 labCode lab.codeBuffer *
+        (flattenStepFactor * (computedRunCost bounds
+          (uniformFactor (width := 64) c * (3 + callSequenceCost ac (factor*((1 + sizeOf (compileExp body))*limit)) entry.code q (bs,n) (k,frameSize,frame)))
+          (.call none (.inl start) none)
+          (Tgt anything cr c {entry with code := sptFromAList (StackRawCall.compile inputCode), clock := (factor*((1 + sizeOf (compileExp body))*limit))+1} 0 entry.regs) *
+          (uniformFactor (width := 64) c * (3 + callSequenceCost ac (factor*((1 + sizeOf (compileExp body))*limit)) entry.code q (bs,n) (k,frameSize,frame))) + 4)) ∧
+      evaluateTargetHOL mc lab.ffi ticks machine = (.halt outcome,finalMachine,finalFfi) ∧
+      finalFfi.ioEvents = stackPost.ffi.ioEvents ∧
+      stackEntryClass stackResult = .CompleteResult outcome ∧
+      ∃ localsPost,
+        evaluate q {source with locals := locals} = (result,{sourcePost with locals := localsPost}) ∧
+        compCorrectResult ac k frameSize frame {source with locals := locals, clock := factor*((1 + sizeOf (compileExp body))*limit)}
+          {sourcePost with locals := localsPost, clock := factor*((1 + sizeOf (compileExp body))*limit) - (source.clock - sourcePost.clock)}
+          stackPost result stackResult lens := by
+  have simpCorrect := compileExp_loop_branch_correct names exits bodyShape source gc
+  have simpRun : evaluate p source = (result,sourcePost) := by rw [pDef]; exact simpCorrect.1.trans sourceRun
+  have simpBound : WordSteps.steps p source ≤ (1 + sizeOf (compileExp body))*limit := by
+    rw [pDef]
+    exact Nat.le_trans simpCorrect.2 (Nat.mul_le_mul_left _ sourceBound)
+  have program : Program p := by
+    rw [pDef,compileExp_loop]
+    exact .loop names exits (branch_program (compileExp_branch bodyShape))
+  have shape : BoundedProgram ac temp p factor := by
+    rw [factorDef]
+    exact program_factor ac temp program
+  exact boundedProgram_riscvWithin ac temp p factor shape q selected source sourcePost result locals entry
+    k frameSize frame ((1 + sizeOf (compileExp body))*limit) lens bs bsPost n nPost compiled start argumentCount
+    complete simpBound simpRun vars localRel noInstallCode wordCode wordPremises frameDef frameSizeDef space found
+    inputCode anything cr c jump bounds pointer f gen maxHeap a b removeInput oracle renamed lab pc mc labCode labs asm machine
+    distinct sourceCode pre relation ha hs hk hf hcode hor rel hpc hmc tie machineRel
+
+end SteppedFlapjack.WordSimpSteps

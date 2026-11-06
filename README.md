@@ -55,6 +55,14 @@ keep their names in the `Flapjack` namespace.
   and `SteppedFlapjack.Test.PanValueFfiSemantics` holds the shared stateful-FFI
   fixtures.
 
+The `*Steps` directories also contain the quantitative compiler chain:
+Pancake → Crep → Loop → Word passes → Stack → Lab → RISC-V. The global-entry
+composition is `PanToCrepSteps.panTailEntry_globalWord_riscvWithin`; it covers
+a supported initialized loop and retains frontend, native-entry, and backend
+initialization premises. Its machine bound can depend on an execution-selected
+oracle prefix and other limit-dependent backend costs; a full-compiler bound
+with all initialization premises discharged is still in progress.
+
 Code shared with the clocked evaluator stays in Flapjack, in
 `Flapjack.PanValueFfiCore` and `Flapjack.PanExpressionEvaluatorBase`.
 
