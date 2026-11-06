@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.WholeInitialRelations
 import SteppedFlapjack.WordAllocSteps.WholeFrontendShapes
 import SteppedFlapjack.PanToCrepSteps.GlobalCodeRelations
 import SteppedFlapjack.LoopToWordSteps.WholeCodeRel
