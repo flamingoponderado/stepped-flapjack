@@ -7,6 +7,7 @@ import SteppedFlapjack.CrepToLoopSteps.WholeInitialRelations
 import SteppedFlapjack.PanToCrepSteps.TailEntryFrontendTablesRiscV
 import SteppedFlapjack.PanToCrepSteps.GlobalCodeRelations
 import SteppedFlapjack.StackAllocSteps.NamedPipelineClock
+import Flapjack.Compiler.Backend.DataToWord.Proofs.Gc.GcFunConstOk
 import Flapjack.Pancake.LoopToWord.Proofs.ProgramNames
 import Flapjack.Pancake.CrepToLoop.Proofs.MakeFuncsLemmas
 
@@ -123,7 +124,6 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
     (_wordInit : word = {WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
       (Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit ac regCount entry compiledCode coracle) with
         code := sptFromAList programs})
-    (_gc : gcFunConstOk entry.gcFun)
     (_initOk : Flapjack.WordToStackProofs.InitializationStateRel.initStateOk ac regCount entry coracle)
     (_initialFrame : stateRel ac regCount frameSize frame
       (WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
@@ -213,7 +213,7 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
       initLocalised initialPanRel initialCodeRel initialExcpRel initialLocalsRel panBound
   refine ⟨wordShapes,condition,conditionCompiled,post,result,postRel,resultRel,extra,loopPost,loopRel,?_⟩
   dsimp only
-  intro ac wc stackEntry frameSize frame coracle wordInit stackGc initOk initialFrame
+  intro ac wc stackEntry frameSize frame coracle wordInit initOk initialFrame
     bs bsPost n nPost compiled native lengthBound
     bitmapBound bitmapPrefix labelCheck maxBound frameDef frameSizeDef space foundEntry inputCode anything cr c jump bounds pointer f
     gen maxHeap a b removeInput oracle renamed lab pc mc labCode labs asm machine initialClock distinct sourceCode pre relation ha hs hk hf
@@ -258,7 +258,11 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
   have retLookup : sptLookup 0 word.locals = some (.loc 1 0) := by
     rw [wordInit]
     exact initialFacts.2.2.1
-  have gc : gcFunConstOk word.gcFun := by rw [wordInit]; exact stackGc
+  have gc : gcFunConstOk word.gcFun := by
+    rw [wordInit]
+    change gcFunConstOk stackEntry.gcFun
+    rw [pre.gcFun]
+    exact Flapjack.Compiler.Backend.DataToWord.Proofs.Gc.gcFunConstOkWordGcFun
   have localsRelWord : wordLocalsRel (maxVarHOL (compileExp (LoopToWord.compHOL wordCtxt loopEntry labels).1)+1)
       ({word with clock := word.clock+extra} : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F).locals locals := by
     dsimp only [locals]
