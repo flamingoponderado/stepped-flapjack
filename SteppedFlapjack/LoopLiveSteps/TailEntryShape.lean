@@ -67,6 +67,52 @@ theorem compiled_tailEntry_shape (ctxt : CrepToLoopContextExact) (live : NumSet)
     exact .seq (.branch (compile_branchProgram_loopBranch shape ctxt live)) (.seq (.call _) (.branch .skip))
   exact ⟨h,optimise_tailEntry h⟩
 
+/-- An entry whose direct tail calls all target the same location. -/
+inductive SingleTailEntryShape (loc : Nat) : HolLoopProg width → Prop
+  | branch {p} : LoopBranch p → SingleTailEntryShape loc p
+  | call : SingleTailEntryShape loc (.call none (some loc) [] none)
+  | seq {a b} : SingleTailEntryShape loc a → SingleTailEntryShape loc b → SingleTailEntryShape loc (.seq a b)
+  | mark {p} : SingleTailEntryShape loc p → SingleTailEntryShape loc (.mark p)
+
+theorem singleTail_to_tail {loc : Nat} {p : HolLoopProg width} (h : SingleTailEntryShape loc p) : TailEntryShape p := by
+  induction h with
+  | branch h => exact .branch h
+  | call => exact .call loc
+  | seq _ _ a b => exact .seq a b
+  | mark _ ih => exact .mark ih
+
+theorem shrink_singleTail {loc : Nat} {p : HolLoopProg width} (h : SingleTailEntryShape loc p) :
+    ∀ lt live, SingleTailEntryShape loc (shrinkHOL lt p live).1 := by
+  induction h with
+  | branch h => intro lt live; exact .branch (shrink_branch h lt live)
+  | call => intro lt live; simp only [shrinkHOL]; exact .call
+  | @seq a b ha hb iha ihb =>
+    intro lt live
+    simp only [shrinkHOL]
+    exact .seq (iha lt (shrinkHOL lt b live).2) (ihb lt live)
+  | mark h ih => intro lt live; simpa only [shrinkHOL] using ih lt live
+
+theorem markAll_singleTail {loc : Nat} {p : HolLoopProg width} (h : SingleTailEntryShape loc p) :
+    SingleTailEntryShape loc (markAllHOL p).1 ∧ (markAllHOL p).2 = true := by
+  induction h with
+  | branch h => exact ⟨.branch (markAll_branch h).1,(markAll_branch h).2⟩
+  | call => simp only [markAllHOL]; exact ⟨.mark .call,True.intro⟩
+  | @seq a b ha hb iha ihb =>
+    simp only [markAllHOL,iha.2,ihb.2,Bool.true_and,if_true]
+    exact ⟨.mark (.seq iha.1 ihb.1),True.intro⟩
+  | mark h ih => simpa only [markAllHOL] using ih
+
+theorem optimise_singleTail {loc : Nat} {p : HolLoopProg width} (h : SingleTailEntryShape loc p) :
+    SingleTailEntryShape loc (optimiseHOL p) := by
+  simp only [optimiseHOL,loopCall_tailEntry (singleTail_to_tail h) .ln,compHOL]
+  exact (markAll_singleTail (shrink_singleTail h [] .ln)).1
+
+theorem compiled_singleTail_shape (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (init : CrepProgHOL width) (shape : BranchProgram init) (name : Basis.Pure.MlString.MlString) :
+    SingleTailEntryShape (findLabExact ctxt name) (compileHOLExact ctxt live (.seq init (.call none name []))) := by
+  simp only [compileHOLExact,compileExpsHOLExact,genTemps,List.nil_append]
+  exact .seq (.branch (compile_branchProgram_loopBranch shape ctxt live)) (.seq .call (.branch .skip))
+
 /-- Word programs generated from the branch-and-tail-call entry. -/
 inductive WordTailEntryShape : WordLangProgHOL (BitVec width) → Prop
   | branch {p} : WordSimpSteps.Branch p → WordTailEntryShape p
