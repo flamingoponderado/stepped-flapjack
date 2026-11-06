@@ -3,6 +3,7 @@ import SteppedFlapjack.PanToCrepSteps.TailEntryFrontendTablesRiscV
 import SteppedFlapjack.CrepToLoopSteps.WholeInitialRelations
 import SteppedFlapjack.WordAllocSteps.WholeFrontendShapes
 import SteppedFlapjack.PanToCrepSteps.GlobalCodeRelations
+import SteppedFlapjack.PanToCrepSteps.GlobalPanCodeRel
 import SteppedFlapjack.LoopToWordSteps.WholeCodeRel
 import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
 import SteppedFlapjack.PanToCrepSteps.GlobalTailWord
