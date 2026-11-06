@@ -1,8 +1,42 @@
+import SteppedFlapjack.PanToCrepSteps.DeclLoopShape
+import SteppedFlapjack.PanToCrepSteps.CountedDecl
+import SteppedFlapjack.PanToCrepSteps.OriginalDeclEntryRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryDeclSupportedGlobalRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryDeclGlobalWordRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryDeclTablesRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryDeclCompiledRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryDeclFrontendRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryDeclRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryDeclBound
+import SteppedFlapjack.PanToCrepSteps.GlobalDecl
+import SteppedFlapjack.PanToCrepSteps.DeclSteps
+import SteppedFlapjack.PanToCrepSteps.DeclShape
+import SteppedFlapjack.PanToCrepSteps.ConcreteDeclRiscV
+import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
+import SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram
+import SteppedFlapjack.PanToCrepSteps.CountedDeclExample
+import SteppedFlapjack.PanToCrepSteps.CountedLoopExample
+import SteppedFlapjack.PanToCrepSteps.CountedWhile
+import SteppedFlapjack.PanToCrepSteps.CountedIte
+import SteppedFlapjack.PanToCrepSteps.CountedSequence
+import SteppedFlapjack.PanToCrepSteps.CountedAssign
+import SteppedFlapjack.PanToCrepSteps.CountedReturn
+import SteppedFlapjack.Pancake.Semantics.PanSem.ExpressionCostBridge
+import SteppedFlapjack.PanToCrepSteps.GlobalInitializers
+import SteppedFlapjack.PanToCrepSteps.OriginalEntryRiscV
+import SteppedFlapjack.PanToCrepSteps.GlobalSourceEntry
+import SteppedFlapjack.PanToCrepSteps.GlobalWhile
+import SteppedFlapjack.PanToCrepSteps.GlobalShapes
 import SteppedFlapjack.PanToCrepSteps.TailEntryGlobalWordRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntrySupportedGlobalRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryFrontendTablesRiscV
+import SteppedFlapjack.CrepToLoopSteps.DeclRiscVComposition
+import SteppedFlapjack.CrepToLoopSteps.DeclRiscVInputs
+import SteppedFlapjack.CrepToLoopSteps.DeclTerminal
 import SteppedFlapjack.CrepToLoopSteps.WholeInitialRelations
 import SteppedFlapjack.WordAllocSteps.WholeFrontendShapes
 import SteppedFlapjack.PanToCrepSteps.GlobalCodeRelations
+import SteppedFlapjack.PanToCrepSteps.GlobalPanCodeRel
 import SteppedFlapjack.LoopToWordSteps.WholeCodeRel
 import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
 import SteppedFlapjack.PanToCrepSteps.GlobalTailWord
@@ -47,6 +81,7 @@ import SteppedFlapjack.CrepToLoopSteps.TailEntryLoop
 import SteppedFlapjack.CrepToLoopSteps.TailCallSteps
 import SteppedFlapjack.PanToCrepSteps.GlobalCrepEntry
 import SteppedFlapjack.CrepToLoopSteps.InlineEntry
+import SteppedFlapjack.CrepToLoopSteps.InlineSupported
 import SteppedFlapjack.PanToCrepSteps.GlobalEntry
 import SteppedFlapjack.PanToCrepSteps.TailEntrySteps
 import SteppedFlapjack.PanToCrepSteps.WholeWordRiscV
@@ -316,6 +351,7 @@ phase 4 of flapjack#1251:
   `SteppedFlapjack.PanValueFfiClockStepsBridge`: the bridge from Flapjack's
   clocked evaluator to stepped results, which cannot cover timed-out runs;
 - `SteppedFlapjack.PanCost`: source-level step costs;
+- `SteppedFlapjack.Pancake.Semantics.PanSem.ExpressionCostBridge`: Values and counted expression costs across the executable/HOL boundary.
 - `SteppedFlapjack.Pancake.Semantics.PanSem.EvalExecutedCountedBridge`: the
   counted expression evaluator against `PanSem.evalExecuted`;
 - `SteppedFlapjack.StepPreservation.Basic`: linear step bounds, their
@@ -426,6 +462,9 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.BranchWhileRiscV`: initialization, loop and continuation through RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.BranchWhile`: initialization and loop through the Pancake frontend.
 - `SteppedFlapjack.CrepToLoopSteps.BranchWhileRiscV`: Crep initialization and loop through RISC-V.
+- `SteppedFlapjack.CrepToLoopSteps.DeclRiscVComposition`: Declaration-wrapped entry through actual RISC-V execution.
+- `SteppedFlapjack.CrepToLoopSteps.DeclRiscVInputs`: Backend inputs and replay limit for a declaration-wrapped entry.
+- `SteppedFlapjack.CrepToLoopSteps.DeclTerminal`: Declaration-wrapped loop execution bounds through Crep-to-Loop.
 - `SteppedFlapjack.CrepToLoopSteps.BranchPrefix`: compositional branch-prefix visit bounds.
 - `SteppedFlapjack.PanToCrepSteps.WhileSequenceRiscV`: Pancake loops with continuations through RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.WhileSequence`: source-to-Crep loop and continuation bound.
@@ -434,6 +473,34 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.LoopSteps.IterationShift`: loop visit stability under clock extension.
 - `SteppedFlapjack.PanToCrepSteps.WhileRiscV`: Pancake loop visits through instruction selection to RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.WhileSteps`: semantic and quantitative Pancake-to-Crep loop correctness.
+- `SteppedFlapjack.PanToCrepSteps.OriginalEntryRiscV`: Original initialized-loop visits through the global entry to RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.GlobalSourceEntry`: Original loop execution and bounds at the generated global entry.
+- `SteppedFlapjack.PanToCrepSteps.GlobalWhile`: Global lowering and Crep visit bounds for initialized loops.
+- `SteppedFlapjack.PanToCrepSteps.GlobalInitializers`: Supported scalar global declarations and generated initializer stores.
+- `SteppedFlapjack.PanToCrepSteps.GlobalShapes`: Supported global-lowering shapes and branch bounds.
+- `SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial`: Concrete original and lowered global-entry state relations.
+- `SteppedFlapjack.PanToCrepSteps.ConcreteDeclRiscV`: Counted concrete source execution through the RISC-V bound.
+- `SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram`: Concrete zero-argument source and global-entry bounds.
+- `SteppedFlapjack.PanToCrepSteps.CountedDeclExample`: Exact counted declaration-loop execution and supported shape.
+- `SteppedFlapjack.PanToCrepSteps.CountedLoopExample`: State-changing counted loop with a repeated condition.
+- `SteppedFlapjack.PanToCrepSteps.CountedDecl`: Counted scalar declarations and local restoration.
+- `SteppedFlapjack.PanToCrepSteps.DeclLoopShape`: Supported compiler output for local declarations around loops.
+- `SteppedFlapjack.PanToCrepSteps.OriginalDeclEntryRiscV`: Original declaration-loop control bound through RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.TailEntryDeclSupportedGlobalRiscV`: Supported global declaration entry through RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.TailEntryDeclGlobalWordRiscV`: Global Word initialization for declaration entries.
+- `SteppedFlapjack.PanToCrepSteps.TailEntryDeclTablesRiscV`: Compiler-table relations for declaration entries.
+- `SteppedFlapjack.PanToCrepSteps.TailEntryDeclCompiledRiscV`: Derived declaration compiler shapes through RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.TailEntryDeclFrontendRiscV`: Declaration entry frontend execution through RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.TailEntryDeclRiscV`: Pancake declaration entry cost through RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.TailEntryDeclBound`: Pancake-to-Crep declaration entry visit bound.
+- `SteppedFlapjack.PanToCrepSteps.GlobalDecl`: Original declaration-loop costs through global lowering and Crep compilation.
+- `SteppedFlapjack.PanToCrepSteps.DeclSteps`: Quantitative scalar declaration and loop compilation.
+- `SteppedFlapjack.PanToCrepSteps.DeclShape`: Scalar declaration compiler context and shape.
+- `SteppedFlapjack.PanToCrepSteps.CountedWhile`: Counted loop zero, iteration, and break composition.
+- `SteppedFlapjack.PanToCrepSteps.CountedIte`: Counted conditional and selected HOL branch composition.
+- `SteppedFlapjack.PanToCrepSteps.CountedSequence`: Counted and HOL sequence composition for normal and early exits.
+- `SteppedFlapjack.PanToCrepSteps.CountedAssign`: Counted local assignment and related HOL post-state.
+- `SteppedFlapjack.PanToCrepSteps.CountedReturn`: Counted executable and HOL scalar-return correspondence.
 - `SteppedFlapjack.PanToCrepSteps.ControlSteps`: exact-state source control visits and compiled branch bounds.
 - `SteppedFlapjack.PanToCrepSteps.Shape`: source fragments lowered to supported Crep.
 - `SteppedFlapjack.CrepSteps.BranchStatic`: syntax-size bounds for loop-free Crep visits.

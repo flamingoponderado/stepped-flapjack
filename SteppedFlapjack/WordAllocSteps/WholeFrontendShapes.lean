@@ -26,6 +26,19 @@ theorem supportedBody_optimised_loop {width : Nat} [NeZero width]
   | loop hi hc hb ht =>
     left
     exact optimise_sequence (branchConditionWhileBranch_wordSimpShape _ hi _ hc _ _ hb ht _ _)
+  | declLoop hv hi hc hb ht =>
+    left
+    apply optimise_sequence
+    rw [compileHOLExact]
+    split
+    rename_i code value temporary live he
+    obtain ⟨direct,h⟩ := directExpression_noCode hv _ _ _
+    rw [he] at h
+    simp only [Prod.mk.injEq] at h
+    obtain ⟨rfl,rfl,rfl,rfl⟩ := h
+    simp only [loopNestedSeqHOL]
+    exact .seq (.branch .skip) (.seq (.branch (.assign _ _))
+      (branchConditionWhileBranch_wordSimpShape _ hi _ hc _ _ hb ht _ _))
 
 /-- Any list of supported Loop bodies becomes a whole Word program satisfying
 the code-shape premise used by the allocation and machine simulations. -/

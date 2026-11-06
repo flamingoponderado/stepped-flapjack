@@ -62,6 +62,9 @@ inductive SupportedCodeBody {width : Nat} [NeZero width] : CrepProgHOL width →
   | tail {init} : BranchProgram init → (name : MlString) → SupportedCodeBody (.seq init (.call none name []))
   | loop {init condition body tail} : BranchProgram init → BranchCondition condition →
       BranchProgram body → BranchProgram tail → SupportedCodeBody (.seq init (.seq (.while condition body) tail))
+  | declLoop {name value init condition body tail} : DirectExpression value → BranchProgram init →
+      BranchCondition condition → BranchProgram body → BranchProgram tail →
+      SupportedCodeBody (.dec name value (.seq init (.seq (.while condition body) tail)))
 
 /-- Every supported body is a fixed point of the real Crep simplifier. -/
 theorem supportedCodeBody_simp_fixed {width : Nat} [NeZero width] {p : CrepProgHOL width}
@@ -70,6 +73,8 @@ theorem supportedCodeBody_simp_fixed {width : Nat} [NeZero width] {p : CrepProgH
   | branch h => exact branchProgram_simp_fixed h
   | tail h name => simp [crepSimpProgHOL,branchProgram_simp_fixed h]
   | loop hi hc hb ht => exact branchConditionWhileBranch_simp_fixed _ hi _ hc _ _ hb ht
+  | declLoop hv hi hc hb ht =>
+    simp [crepSimpProgHOL,directExpression_simp_fixed hv,branchConditionWhileBranch_simp_fixed _ hi _ hc _ _ hb ht]
 
 /-- Supported syntax discharges the simplifier fixed-point condition for the
 actual executable Crep-to-Loop code relation. -/

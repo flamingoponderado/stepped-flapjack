@@ -40,11 +40,8 @@ theorem loopSequence_wordOptimized_bound {F C : Type}
           (compileExp (LoopToWord.compHOL ctxt p labels).1))))))))) {word with locals := locals,clock := 6*limit} ≤
         sizeOf (removeDeadProg (removeUnreach (threeToTwoRegProg ac.twoRegArith (copyProp (wordCommonSubexpElim (removeDeadProg (fullSsaCcTrans count (instSelect ac (maxVarHOL (compileExp (LoopToWord.compHOL ctxt p labels).1)+1)
           (compileExp (LoopToWord.compHOL ctxt p labels).1))))))))) * (6*limit+1) := by
-  obtain ⟨wordPost,wordResult,wordRun,wordFfi,wordRel,wordBound⟩ :=
-    loopProgram_correct_with_steps (loopSelect_loopProgram (loopSequenceSource_select shape))
-      source result sourcePost word ctxt (.loc 1 0) labels premises
-  obtain ⟨_,nonerror,notTimeout⟩ := completeLoop_resultCase ctxt word wordPost sourcePost result wordResult complete wordRel
-  have bound : WordSteps.steps (LoopToWord.compHOL ctxt p labels).1 word ≤ 6*limit := by omega
+  obtain ⟨wordPost,wordResult,wordRun,wordFfi,wordRel,nonerror,notTimeout,bound⟩ :=
+    loopSequence_word_execution p shape source sourcePost result word ctxt labels limit premises complete sourceBound
   obtain ⟨selectedLocals,targetPost,deadLocals,targetRun,rel,_,targetBound⟩ :=
     compilerPrefix_secondDead_correct ac ac.twoRegArith count (loopSequenceSource_word shape ctxt labels)
       word wordPost wordResult locals (6*limit) wordRun nonerror notTimeout bound gc vars localRel domain

@@ -8,14 +8,19 @@ open Flapjack Flapjack.Pancake.PanLang
 
 open Classical in
 /-- Counts reached source statements in the call-free control fragment.
-Expressions are atomic. Calls and declarations are outside this fragment and
-are counted as one; this is not a count of their recursive executions. -/
+Expressions are atomic. Declarations count their reached bodies. Calls are
+counted as one and do not include their recursive executions. -/
 noncomputable def controlSteps {width : Nat} [NeZero width] {σ : Type}
     (p : ProgHOL width) (s : PanSemStateFiniteExact width σ) : Nat :=
   let visit : ProgHOL width → PanSemStateFiniteExact width σ → Nat := fun q t =>
     if _h : Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b)
         (t.clock,sizeOf q) (s.clock,sizeOf p) then controlSteps q t else 0
   1 + match p with
+  | .dec name shape initializer body =>
+      match @evalHOLExact width σ _ s.toExact (fun address => Classical.propDecidable (s.memaddrs address)) initializer with
+      | some value => if shapeEqHOL shape (shapeOfHOLExact value) then
+          visit body (PanSemStateFiniteExact.setVarHOLFinite name value s) else 0
+      | none => 0
   | .seq a b => visit a s + match s.evaluateHOLFiniteState a with
       | (none,t) => visit b t
       | _ => 0
@@ -41,6 +46,24 @@ theorem controlSteps_pos {width : Nat} [NeZero width] {σ : Type}
     (p : ProgHOL width) (s : PanSemStateFiniteExact width σ) : 1 ≤ controlSteps p s := by
   rw [controlSteps.eq_def]
   exact Nat.le_add_right _ _
+
+
+/-- A successful declaration counts its body in the extended local state. -/
+theorem controlSteps_dec {width : Nat} [NeZero width] {σ : Type}
+    (name : MlS) (shape : ShapeHOL) (initializer : ExpHOL width) (body : ProgHOL width)
+    (state : PanSemStateFiniteExact width σ) (value : ValueHOL width)
+    (evaluated : @evalHOLExact width σ _ state.toExact
+      (fun address => Classical.propDecidable (state.memaddrs address)) initializer = some value)
+    (valid : shapeEqHOL shape (shapeOfHOLExact value) = true) :
+    controlSteps (.dec name shape initializer body) state =
+      1 + controlSteps body (PanSemStateFiniteExact.setVarHOLFinite name value state) := by
+  rw [controlSteps.eq_def]
+  have smaller : Prod.Lex (fun x y : Nat => x < y) (fun x y : Nat => x < y)
+      ((PanSemStateFiniteExact.setVarHOLFinite name value state).clock,sizeOf body)
+      (state.clock,sizeOf (.dec name shape initializer body : ProgHOL width)) := by
+    apply Prod.Lex.right
+    simp_wf
+  simp only [evaluated,valid,if_true,dif_pos smaller]
 
 /-- A source sequence counts its second statement exactly when it is reached. -/
 theorem controlSteps_seq {width : Nat} [NeZero width] {σ : Type}

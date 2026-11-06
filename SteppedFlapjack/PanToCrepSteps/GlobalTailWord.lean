@@ -4,6 +4,8 @@ import SteppedFlapjack.WordAllocSteps.WholeTailCode
 import SteppedFlapjack.WordToStackSteps.WholeTailInitialization
 import SteppedFlapjack.WordToStackSteps.TailEntryFrame
 import SteppedFlapjack.StackAllocSteps.NamedPipelineClock
+import SteppedFlapjack.CrepToLoopSteps.WholeInitialRelations
+import Flapjack.Compiler.Backend.DataToWord.Proofs.Gc.GcFunConstOk
 import Flapjack.Pancake.LoopToWord.Proofs.ProgramNames
 import Flapjack.Pancake.LoopToWord.Proofs.LabPres
 import Flapjack.Pancake.CrepToLoop.Proofs.MakeFuncsLemmas
@@ -419,6 +421,14 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
            (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length))
              stack (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2) coracle) with
                code := sptFromAList programs}
+         (∀ loopState : LoopSemStateFiniteExact 64 F,
+           CrepToLoopSteps.LoopWordDataRel loopState sourceWord ↔
+           CrepToLoopSteps.LoopWordDataRel loopState
+             {WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some 0)
+               (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length))
+                 stack (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2) coracle) with
+                   code := sptFromAList programs}) ∧
+         Flapjack.Compiler.Backend.WordSimp.gcFunConstOk sourceWord.gcFun ∧
          sptDomain sourceWord.locals = (fun key => key ∈ Flapjack.Compiler.Backend.WordAlloc.evenList 1) ∧
          wordLocalsRel temp sourceWord.locals sourceWord.locals ∧
          sptLookup 0 sourceWord.locals = some (.loc 1 0) ∧
@@ -453,7 +463,19 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
         (loopToWordCompileHOL (compileProgHOLExact arch (compileProgDeclsHOLW (compileTopExactHOL declarations start))))).2)
       (sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch
         (compileProgDeclsHOLW (compileTopExactHOL declarations start))))) coracle replayClock temp success.2.1
-    refine ⟨facts.1,facts.2.1,facts.2.2.1,facts.2.2.2,?_,?_⟩
+    have stackGc : Flapjack.Compiler.Backend.WordSimp.gcFunConstOk stack.gcFun := by
+      have gcEq : stack.gcFun = Flapjack.Compiler.Backend.WordGcFunctions.wordGcFun c := pre.gcFun
+      rw [gcEq]
+      exact Flapjack.Compiler.Backend.DataToWord.Proofs.Gc.gcFunConstOkWordGcFun
+    refine ⟨?_,?_,facts.1,facts.2.1,facts.2.2.1,facts.2.2.2,?_,?_⟩
+    · intro loopState
+      let compiledCode := sptFromAList (Compiler.Backend.WordToWord.compile wc ac
+        (loopToWordCompileHOL (compileProgHOLExact arch (compileProgDeclsHOLW (compileTopExactHOL declarations start))))).2
+      let originalCode := sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch
+        (compileProgDeclsHOLW (compileTopExactHOL declarations start))))
+      exact (CrepToLoopSteps.nativeEntry_loopWordDataRel_iff ac _ frameSize stack compiledCode originalCode coracle loopState).trans
+        (CrepToLoopSteps.nativeEntry_loopWordDataRel_iff ac _ 0 stack compiledCode originalCode coracle loopState).symm
+    · exact stackGc
     · simpa using (SteppedFlapjack.WordToStackSteps.nativeTailEntry_loopLocals _
         (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack
           (sptFromAList (Compiler.Backend.WordToWord.compile wc ac (loopToWordCompileHOL
