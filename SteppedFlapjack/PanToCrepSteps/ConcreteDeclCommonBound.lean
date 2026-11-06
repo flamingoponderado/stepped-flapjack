@@ -1,4 +1,5 @@
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrameRiscV
+import SteppedFlapjack.PanToCrepSteps.ReplayLimitMono
 
 /-! A single bound covering both native entry outcomes. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -59,7 +60,8 @@ private theorem compiledCondition_eq (context : PanToCrepContextExact 64) (name 
     (compiled : compileExpExactHOLW (scalarDeclContext context name) (.var .local name) = ([value],.one)) :
     concreteDeclCompiledCondition context name = value := by simp [concreteDeclCompiledCondition,compiled]
 
-/-- The concrete counted source has a single RISC-V bound covering either native entry outcome. -/
+/-- Any source budget at least the concrete run's 13 steps gives one
+RISC-V bound covering either native entry outcome. -/
 theorem concreteDecl_counted_riscv_bounded {F : Type}
     (arch : AsmArchitecture) (start : MlString) (name : VarName) (returned : BitVec 64)
     (pan : PanSemStateFiniteExact 64 F)
@@ -123,7 +125,8 @@ theorem concreteDecl_counted_riscv_bounded {F : Type}
     (rel : Flapjack.Compiler.Backend.StackToLab.Proofs.StateRel.stateRel renamed lab)
     (hpc : LabSem.locToPc firstLoopName 0 lab.code = some lab.pc)
     (hmc : mc.target = riscvTarget) (tie : LabToTarget.oracleTie mc machine lab)
-    (machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) lab asm machine) :
+    (machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) lab asm machine)
+    (sourceBudget : Nat) (sourceBudgetEnough : 13 ≤ sourceBudget) :
     let production := panSemExecStateOfHOLWithKeys originalState ffiState
       [newMainNameHOL (concreteDeclProgram start name returned)]
     ∃ countedResult originalFinal,
@@ -177,7 +180,7 @@ theorem concreteDecl_counted_riscv_bounded {F : Type}
         let sourceLimit := sizeOf (nestedSeqHOL ([] : List (ProgHOL 64))) +
           (4 + sizeOf (compileProgExactHOL (concreteDeclGlobalContext start name returned) (.skip)) +
             sizeOf (compileProgExactHOL (concreteDeclGlobalContext start name returned) (.assign .local (ofString name) (.const 0))) +
-            sizeOf (compileProgExactHOL (concreteDeclGlobalContext start name returned) (.return (.const returned)))) * 13 + 2
+            sizeOf (compileProgExactHOL (concreteDeclGlobalContext start name returned) (.return (.const returned)))) * sourceBudget + 2
         let loopLimit := branchTailDeclLoopLimit loopContext .ln (newMainNameHOL (concreteDeclProgram start name returned)) init
           (panContext.vmax+1) (concreteDeclCompiledValue panContext) calleeInit
           (concreteDeclCompiledCondition panContext (ofString name)) bodyCrep tail
@@ -238,7 +241,44 @@ theorem concreteDecl_counted_riscv_bounded {F : Type}
       simpa using conditionEq'
     subst value'
     subst condition'
-    exact ⟨outcome,ticks,finalMachine,finalFfi,le_trans bound (Nat.le_max_left _ _),run⟩
+    refine ⟨outcome,ticks,finalMachine,finalFfi,?_,run⟩
+    let code := compileProgDeclsHOLW (compileTopExactHOL (concreteDeclProgram start name returned) start)
+    let init := compileProgExactHOLW caller (.skip : ProgHOL 64)
+    let inner := scalarDeclContext panContext (ofString name)
+    let loopContext := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable code) 0
+    let loop := optimiseHOL (compileHOLExact loopContext .ln
+      (.seq init (.call none (newMainNameHOL (concreteDeclProgram start name returned)) [])))
+    let wordCtxt := makeCtxtHOL 2 (fromNumSetHOL (sptDifference (accVarsHOL loop .ln) (toNumSetHOL []))) .ln
+    let programs := loopToWordCompileHOL (compileProgHOLExact arch code)
+    let col := SteppedFlapjack.WordAllocSteps.entryColour wc programs firstLoopName
+    let compiledCode := sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2
+    let out := (Compiler.Backend.WordToWord.fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+      ((firstLoopName,1,(LoopToWord.compHOL wordCtxt loop (firstLoopName,2)).1),col)).2.2
+    let sourceLimit := fun n => sizeOf (nestedSeqHOL ([] : List (ProgHOL 64))) +
+      (4 + sizeOf (compileProgExactHOL (concreteDeclGlobalContext start name returned) (.skip)) +
+        sizeOf (compileProgExactHOL (concreteDeclGlobalContext start name returned) (.assign .local (ofString name) (.const 0))) +
+        sizeOf (compileProgExactHOL (concreteDeclGlobalContext start name returned) (.return (.const returned)))) * n + 2
+    let crepLimit := fun n => sizeOf init + 2 + (4 + sizeOf (compileProgExactHOLW inner (.skip)) +
+      sizeOf (compileProgExactHOLW inner (.assign .local (ofString name) (.const 0))) +
+      sizeOf (compileProgExactHOLW inner (.return (.const returned)))) * sourceLimit n
+    have crepMono : crepLimit 13 ≤ crepLimit sourceBudget := by
+      dsimp only [crepLimit,sourceLimit]
+      gcongr
+    let loopLimit := fun n => branchTailDeclLoopLimit loopContext .ln (newMainNameHOL (concreteDeclProgram start name returned))
+      init (panContext.vmax+1) value (compileProgExactHOLW inner (.skip)) condition
+      (compileProgExactHOLW inner (.assign .local (ofString name) (.const 0)))
+      (compileProgExactHOLW inner (.return (.const returned))) (crepLimit n)
+    let stackLimit := fun n => tailStackReplayLimit ac 1 firstLoopName wc.regAlg (ac.regCount-(5+ac.avoidRegs.length))
+      col loop wordCtxt (firstLoopName,2) compiledCode (loopLimit n)
+    have stackMono : stackLimit 13 ≤ stackLimit sourceBudget := by
+      apply tailStackReplayLimit_mono
+      apply branchTailDeclLoopLimit_mono
+      exact crepMono
+    have machineMono := machineCost_Tgt_mono ac stack.code out (bs,n)
+      (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) bounds (.call none (.inl firstLoopName) none)
+      {stack with code := sptFromAList (StackRawCall.compile inputCode)} anything cr c
+      (uniformFactor (width := 64) c) (labTickBound 4 labCode lab.codeBuffer) flattenStepFactor stackMono
+    exact le_trans bound (le_trans machineMono (Nat.le_max_left _ _))
   · exact ⟨.resourceLimitHit,ticks,finalMachine,finalFfi,le_trans bound (Nat.le_max_right _ _),run⟩
 
 end SteppedFlapjack.PanToCrepSteps

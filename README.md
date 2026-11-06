@@ -66,7 +66,7 @@ The reusable concrete declaration example is kept in the library because it
 instantiates the actual global entry and serves as an end-to-end proof target.
 `concreteDecl_counted_riscv_bounded` gives its 13-step source execution a common
 machine-step bound covering both successful entry and a resource-limit
-outcome. The bound computes the entry bitmap, frame and source expressions
+outcome, parameterized by any supplied source budget of at least 13. The bound computes the entry bitmap, frame and source expressions
 from compiler output and still depends on oracle prefix costs. The theorem
 assumes matching source, native Stack, Lab and
 RISC-V initial states, native initialization and backend relations. It does
