@@ -3,7 +3,10 @@ import SteppedFlapjack.CrepToLoopSteps.DirectExpressionEval
 import SteppedFlapjack.CrepToLoopSteps.WordSimpSequence
 import SteppedFlapjack.LoopLiveSteps.Consumption
 import SteppedFlapjack.CrepToLoopSteps.BackendReady
-import SteppedFlapjack.CrepToLoopSteps.TailCallSteps
+import SteppedFlapjack.CrepToLoopSteps.TailEntryLoop
+import SteppedFlapjack.LoopLiveSteps.TailEntryShape
+import SteppedFlapjack.LoopLiveSteps.TailEntryGlobalBound
+import SteppedFlapjack.LoopToWordSteps.TailCall
 
 /-! Quantitative compilation of declarations with terminal bodies. -/
 namespace SteppedFlapjack.CrepToLoopSteps
@@ -261,5 +264,156 @@ theorem compile_tailCall_nil_decl_bound {F : Type}
   rw [shift] at count
   dsimp only [c,p] at count optBound ⊢
   exact count.trans (by omega)
+
+/-- A successful initializer followed by a declaration-wrapped callee has a
+Loop execution bounded by the visits of the entire Crep entry. -/
+theorem branch_tailCall_nil_decl_entry_bound {F : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (callee : MlString)
+    (entryInit : CrepProgHOL 64) (entryShape : BranchProgram entryInit)
+    (name : Nat) (e : CrepExpHOL 64) (shape : DirectExpression e)
+    (init : CrepProgHOL 64) (condition : CrepExpHOL 64) (body tail : CrepProgHOL 64)
+    (initShape : BranchProgram init) (conditionShape : DirectExpression condition)
+    (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
+    (source middle post : CrepSemHOLState 64 F) (result : Option (CrepResultHOLExact 64))
+    (target : LoopSemStateFiniteExact 64 F)
+    (initRun : evalCrepSemHOLProgExact source entryInit = (none,middle))
+    (found : middle.code.lookup callee = some ([],.dec name e (.seq init (.seq (.while condition body) tail))))
+    (clock : middle.clock ≠ 0)
+    (run : evalCrepSemHOLProgExact (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []})
+      (.dec name e (.seq init (.seq (.while condition body) tail))) = (result,post))
+    (complete : CompleteCrepResult result)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
+    let c := ctxtFcExact ctxt.target ctxt.funcs [] []
+    let p := .dec name e (.seq init (.seq (.while condition body) tail))
+    let bc := {c with vars := c.vars.updateEq (name,c.vmax+1), vmax := c.vmax+1}
+    let bl := sptInsert (c.vmax+1) () .ln
+    let factor := 1 + sizeOf (compileHOLExact bc bl init) +
+      (1 + (1 + sizeOf (compileHOLExact bc bl (.while condition body))) *
+        (sizeOf (compileHOLExact bc bl body)+3) + sizeOf (compileHOLExact bc bl tail))
+    ∃ extra final,
+      evaluate (compileHOLExact ctxt live (.seq entryInit (.call none callee [])))
+        {target with clock := target.clock+extra} = (resultToLoop result,final) ∧
+      crepToLoopStateRelExact post final ∧
+      LoopSteps.steps (compileHOLExact ctxt live (.seq entryInit (.call none callee [])))
+        {target with clock := target.clock+extra} ≤
+      4 + sizeOf (compileHOLExact ctxt live entryInit) + sizeOf (ocompileHOLExact c .ln p) *
+        (2 * ((factor+4) * (CrepSteps.steps (.seq entryInit (.call none callee [])) source+1)) + 1) := by
+  obtain ⟨firstExtra,firstResult,firstTarget,firstRun,firstState,firstMem,firstGlobals,
+    firstCode,firstMap,firstLocals,_,_⟩ :=
+    branchProgram_correct_with_bounded_extra entryInit entryShape source middle none target ctxt live
+      initRun (by simp) stateRel memRel globalsRel codeRel localsRel
+  have firstNone : firstResult = none := by simpa [resultToLoop] using firstMap
+  subst firstResult
+  have targetClock : firstTarget.clock ≠ 0 := by
+    have h := firstState.2.2.1
+    omega
+  have ⟨calleeState,calleeMem,calleeGlobals,calleeCode,calleeLocals⟩ :=
+    tailCall_nil_entry_relations ctxt live middle firstTarget callee _ firstState firstMem firstGlobals firstCode firstLocals found
+  obtain ⟨callExtra,final,callRun,finalRel,callBound⟩ :=
+    compile_tailCall_nil_decl_bound ctxt live middle firstTarget callee name e shape init condition body tail
+      initShape conditionShape bodyShape tailShape _ post result firstCode found targetClock run complete
+      calleeState calleeMem calleeGlobals calleeCode calleeLocals
+  have lifted := evaluate_add_clock_eq (compileHOLExact ctxt live entryInit)
+    {target with clock := target.clock+firstExtra} none firstTarget callExtra firstRun (by simp)
+  have firstLift : evaluate (compileHOLExact ctxt live entryInit) {target with clock := target.clock+(firstExtra+callExtra)} =
+      (none,{firstTarget with clock := firstTarget.clock+callExtra}) := by
+    simpa [Nat.add_assoc] using lifted
+  have firstBound := LoopSteps.branchedProgram_static_bound (compile_branchProgram entryShape ctxt live)
+    {target with clock := target.clock+(firstExtra+callExtra)}
+  have count := LoopSteps.steps_seq (compileHOLExact ctxt live entryInit) (compileHOLExact ctxt live (.call none callee []))
+    {target with clock := target.clock+(firstExtra+callExtra)}
+  rw [firstLift] at count
+  have countLe := tailEntry_callee_steps_le entryInit callee (.dec name e (.seq init (.seq (.while condition body) tail)))
+    source middle initRun found clock
+  refine ⟨firstExtra+callExtra,final,?_,finalRel,?_⟩
+  · rw [compileHOLExact,evaluate_seq,firstLift]
+    exact callRun
+  · rw [compileHOLExact]
+    simp only at count
+    let c := ctxtFcExact ctxt.target ctxt.funcs [] []
+    let bc := {c with vars := c.vars.updateEq (name,c.vmax+1), vmax := c.vmax+1}
+    let bl := sptInsert (c.vmax+1) () .ln
+    let factor := 1 + sizeOf (compileHOLExact bc bl init) +
+      (1 + (1 + sizeOf (compileHOLExact bc bl (.while condition body))) *
+        (sizeOf (compileHOLExact bc bl body)+3) + sizeOf (compileHOLExact bc bl tail))
+    have scaled := Nat.mul_le_mul_left (sizeOf (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln
+      (.dec name e (.seq init (.seq (.while condition body) tail)))))
+      (Nat.add_le_add_right (Nat.mul_le_mul_left 2 (Nat.mul_le_mul_left (factor+4) (Nat.add_le_add_right countLe 1))) 1)
+    dsimp only [c,bc,bl,factor] at scaled
+    omega
+
+/-- The optimized entry has the actual tail-entry shape and a visit bound
+in terms of the full Crep entry execution. -/
+theorem branch_tailCall_nil_decl_optimised_bound {F : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (callee : MlString)
+    (entryInit : CrepProgHOL 64) (entryShape : BranchProgram entryInit)
+    (name : Nat) (e : CrepExpHOL 64) (shape : DirectExpression e)
+    (init : CrepProgHOL 64) (condition : CrepExpHOL 64) (body tail : CrepProgHOL 64)
+    (initShape : BranchProgram init) (conditionShape : DirectExpression condition)
+    (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
+    (source middle post : CrepSemHOLState 64 F) (result : Option (CrepResultHOLExact 64))
+    (target : LoopSemStateFiniteExact 64 F) (wordCtxt : Spt Nat) (labels : Nat × Nat)
+    (initRun : evalCrepSemHOLProgExact source entryInit = (none,middle))
+    (found : middle.code.lookup callee = some ([],.dec name e (.seq init (.seq (.while condition body) tail))))
+    (clock : middle.clock ≠ 0)
+    (run : evalCrepSemHOLProgExact (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []})
+      (.dec name e (.seq init (.seq (.while condition body) tail))) = (result,post))
+    (complete : CompleteCrepResult result)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
+    let c := ctxtFcExact ctxt.target ctxt.funcs [] []
+    let p := .dec name e (.seq init (.seq (.while condition body) tail))
+    let bc := {c with vars := c.vars.updateEq (name,c.vmax+1), vmax := c.vmax+1}
+    let bl := sptInsert (c.vmax+1) () .ln
+    let factor := 1 + sizeOf (compileHOLExact bc bl init) +
+      (1 + (1 + sizeOf (compileHOLExact bc bl (.while condition body))) *
+        (sizeOf (compileHOLExact bc bl body)+3) + sizeOf (compileHOLExact bc bl tail))
+    let entry := compileHOLExact ctxt live (.seq entryInit (.call none callee []))
+    let limit := 4 + sizeOf (compileHOLExact ctxt live entryInit) + sizeOf (ocompileHOLExact c .ln p) *
+      (2 * ((factor+4) * (CrepSteps.steps (.seq entryInit (.call none callee [])) source+1)) + 1)
+    ∃ extra final,
+      evaluate (optimiseHOL entry) {target with clock := target.clock+extra} = (resultToLoop result,final) ∧
+      LoopLiveSteps.WordTailEntryShape (LoopToWord.compHOL wordCtxt (optimiseHOL entry) labels).1 ∧
+      crepToLoopStateRelExact post final ∧
+      LoopSteps.steps (optimiseHOL entry) {target with clock := target.clock+extra} ≤
+        (sizeOf (optimiseHOL entry) + sizeOf (ocompileHOLExact c .ln p)) * (2 * limit + 1) := by
+  obtain ⟨extra,final,loopRun,rel,bound⟩ := branch_tailCall_nil_decl_entry_bound ctxt live callee entryInit entryShape
+    name e shape init condition body tail initShape conditionShape bodyShape tailShape source middle post result target
+    initRun found clock run complete stateRel memRel globalsRel codeRel localsRel
+  have entryLoopShape := LoopLiveSteps.compiled_singleTail_shape ctxt live entryInit entryShape callee
+  have codeEq := evaluateCodeInvariantHOL entryInit source none middle initRun
+  have foundSource : source.code.lookup callee = some ([],.dec name e (.seq init (.seq (.while condition body) tail))) := by
+    simpa only [codeEq] using found
+  obtain ⟨loc,len,hlab,hlen,hcode⟩ := codeRel.2 callee [] _ foundSource
+  have lenZero : len = 0 := by simpa using hlen.symm
+  subst len
+  have label : findLabExact ctxt callee = loc := by simp [findLabExact,hlab]
+  have calleeShape := LoopLiveSteps.optimise_sequence
+    (directDecl_branchWhileBranch_shape name e shape init condition body tail initShape conditionShape
+      bodyShape tailShape (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln)
+  have code : LoopLiveSteps.TailCodeBound {target with clock := target.clock+extra}.code
+      (findLabExact ctxt callee)
+      (sizeOf (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln
+        (.dec name e (.seq init (.seq (.while condition body) tail))))) := by
+    intro calleeBody lookup
+    rw [label] at lookup
+    have eq : calleeBody = ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln
+        (.dec name e (.seq init (.seq (.while condition body) tail))) := by
+      have h := Option.some.inj (lookup.symm.trans hcode)
+      exact (Prod.mk.inj h).2
+    subst calleeBody
+    exact ⟨by simpa only [ocompileHOLExact] using calleeShape, le_rfl⟩
+  obtain ⟨optRun,optShape,optBound⟩ := LoopLiveSteps.optimise_tailEntry_source_bound entryLoopShape
+    {target with clock := target.clock+extra} final (resultToLoop result) _ code loopRun (completeCrep_loop complete)
+  have wordShape := LoopLiveSteps.tailEntry_word (LoopLiveSteps.singleTail_to_tail optShape) wordCtxt labels
+  refine ⟨extra,final,optRun,wordShape,rel,?_⟩
+  exact optBound.trans (Nat.mul_le_mul_left _ (by omega))
 
 end SteppedFlapjack.CrepToLoopSteps
