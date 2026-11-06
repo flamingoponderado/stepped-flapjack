@@ -39,9 +39,6 @@ theorem branchConditionWhileBranch_wordAllocated_bound {F C : Type}
     (dim : goodDimindex 64) (retLabel : ¬ wordSemIsWordLoc (.loc 1 0 : WordLocW 64) = true)
     (loopVars : ∀ k, sptMem k (accVarsHOL (compileHOLExact ctxt live (.seq init (.seq (.while condition body) tail))) .ln) → sptMem k wordCtxt)
     (gc : gcFunConstOk word.gcFun)
-    (vars : everyVarHOL (fun x => decide (x < maxVarHOL (compileExp
-      (LoopToWord.compHOL wordCtxt (compileHOLExact ctxt live (.seq init (.seq (.while condition body) tail))) labels).1)+1))
-      (compileExp (LoopToWord.compHOL wordCtxt (compileHOLExact ctxt live (.seq init (.seq (.while condition body) tail))) labels).1) = true)
     (localRel : wordLocalsRel (maxVarHOL (compileExp
       (LoopToWord.compHOL wordCtxt (compileHOLExact ctxt live (.seq init (.seq (.while condition body) tail))) labels).1)+1) word.locals locals)
     (domain : sptDomain locals = (fun key => key ∈ evenList count)) :
@@ -79,7 +76,7 @@ theorem branchConditionWhileBranch_wordAllocated_bound {F C : Type}
       {loop with clock := loop.clock+extra} loopPost (resultToLoop result) {word with clock := word.clock+extra}
       wordCtxt labels locals (factor*(limit+1))
       ⟨loopRun,loopNotError,shiftedRel,loopLocalsRel,retLookup,dim,retLabel,loopVars⟩ loopComplete
-      (by simpa using gc) vars localRel domain bound
+      (by simpa using gc) localRel domain bound
   refine ⟨block,noInstall,flat,postAlloc,extra,loopPost,wordPost,wordResult,selectedLocals,targetPost,postRel,wordResultRel,?_,allocRel,allocRun,allocBound⟩
   have ffiRel : sourcePost.ffi = loopPost.ffi := postRel.2.2.2.2.1
   exact wordFfi.trans ffiRel.symm

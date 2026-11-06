@@ -22,8 +22,6 @@ theorem loopSequence_wordAllocated_bound {F C : Type}
       sptLookup 0 word.locals = some (.loc 1 0) ∧ goodDimindex 64 ∧ ¬ wordSemIsWordLoc (.loc 1 0 : WordLocW 64) = true ∧
       (∀ k, sptMem k (accVarsHOL p .ln) → sptMem k ctxt))
     (complete : CompleteLoopResult result) (gc : gcFunConstOk word.gcFun)
-    (vars : everyVarHOL (fun x => decide (x < maxVarHOL (compileExp (LoopToWord.compHOL ctxt p labels).1)+1))
-      (compileExp (LoopToWord.compHOL ctxt p labels).1) = true)
     (localRel : wordLocalsRel (maxVarHOL (compileExp (LoopToWord.compHOL ctxt p labels).1)+1) word.locals locals)
     (domain : sptDomain locals = (fun key => key ∈ evenList count))
     (sourceBound : LoopSteps.steps p source ≤ limit) :
@@ -45,7 +43,7 @@ theorem loopSequence_wordAllocated_bound {F C : Type}
   have wordShape := loopSequenceSource_word shape ctxt labels
   obtain ⟨selectedLocals,targetPost,targetRun,rel,targetBound⟩ :=
     compilerPrefix_alloc_correct ac ac.twoRegArith count name alg regCount col wordShape
-      word wordPost wordResult locals (6*limit) wordRun nonerror notTimeout bound gc vars localRel domain
+      word wordPost wordResult locals (6*limit) wordRun nonerror notTimeout bound gc localRel domain
   have ready := fullCompileSingle_stackReady ac ac.twoRegArith count name alg regCount col wordShape
   refine ⟨ready.1,ready.2.1,ready.2.2.1,ready.2.2.2,?_⟩
   rw [fullCompileSingle_eq_alloc ac ac.twoRegArith count name alg regCount col wordShape]

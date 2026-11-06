@@ -53,8 +53,6 @@ theorem branchConditionWhileBranch_wordAllocated_riscvWithin {F : Type}
     (dim : goodDimindex 64) (retLabel : ¬ wordSemIsWordLoc (.loc 1 0 : WordLocW 64) = true)
     (loopVars : ∀ k, sptMem k (accVarsHOL loopProg .ln) → sptMem k ctxt)
     (gc : gcFunConstOk word.gcFun)
-    (vars : everyVarHOL (fun x => decide (x < maxVarHOL (compileExp (LoopToWord.compHOL ctxt loopProg labels).1)+1))
-      (compileExp (LoopToWord.compHOL ctxt loopProg labels).1) = true)
     (localRel : wordLocalsRel (maxVarHOL (compileExp (LoopToWord.compHOL ctxt loopProg labels).1)+1) word.locals locals)
     (domain : sptDomain locals = (fun key => key ∈ evenList count))
     (noInstallCode : WordProps.noInstallCode word.code)
@@ -141,7 +139,7 @@ theorem branchConditionWhileBranch_wordAllocated_riscvWithin {F : Type}
       {word with clock := word.clock + extra} ctxt labels locals q selected
       {entry with clock := word.clock + extra} frameSize frame (crepFactor*(limit+1)) lens bs bsPost n nPost compiled start argumentCount
       loopComplete qBound ⟨qRun,loopNotError,shiftedRel,loopLocalsRel,retLookup,dim,retLabel,loopVars⟩
-      (by simpa using gc) vars localRel domain noInstallCode wordCode shiftedWordPremises frameDef frameSizeDef space found inputCode anything cr c
+      (by simpa using gc) localRel domain noInstallCode wordCode shiftedWordPremises frameDef frameSizeDef space found inputCode anything cr c
       jump bounds pointer f gen maxHeap a b removeInput oracle renamed lab pc mc labCode labs asm machine distinct sourceCode
       pre relation ha hs hk hf hcode hor rel hpc hmc tie machineRel
   refine ⟨outcome,ticks,finalMachine,finalFfi,tickBound,machineRun,?_⟩

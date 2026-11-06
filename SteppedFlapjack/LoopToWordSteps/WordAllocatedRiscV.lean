@@ -35,8 +35,6 @@ theorem loopSequence_wordAllocated_riscvWithin {F : Type}
       sptLookup 0 word.locals = some (.loc 1 0) ∧ goodDimindex 64 ∧ ¬ wordSemIsWordLoc (.loc 1 0 : WordLocW 64) = true ∧
       (∀ k, sptMem k (accVarsHOL p .ln) → sptMem k ctxt))
     (gc : gcFunConstOk word.gcFun)
-    (vars : everyVarHOL (fun x => decide (x < maxVarHOL (compileExp (LoopToWord.compHOL ctxt p labels).1)+1))
-      (compileExp (LoopToWord.compHOL ctxt p labels).1) = true)
     (localRel : wordLocalsRel (maxVarHOL (compileExp (LoopToWord.compHOL ctxt p labels).1)+1) word.locals locals)
     (domain : sptDomain locals = (fun key => key ∈ evenList count))
     (noInstallCode : WordProps.noInstallCode word.code)
@@ -89,7 +87,7 @@ theorem loopSequence_wordAllocated_riscvWithin {F : Type}
   obtain ⟨block,noInstall,flat,postAlloc,wordPost,wordResult,selectedLocals,targetPost,
     wordRel,wordFfi,allocRel,targetRun,targetBound⟩ :=
     loopSequence_wordAllocated_bound ac count name alg k col p shape source sourcePost result word ctxt labels locals limit
-      loopPremises complete gc vars localRel domain stepBound
+      loopPremises complete gc localRel domain stepBound
   rw [← selected] at block noInstall flat postAlloc targetRun targetBound
   obtain ⟨wordComplete,wordNonerror,notTimeout⟩ := completeLoop_resultCase ctxt word wordPost sourcePost result wordResult complete wordRel
   have targetFfi : targetPost.ffi = sourcePost.ffi := by

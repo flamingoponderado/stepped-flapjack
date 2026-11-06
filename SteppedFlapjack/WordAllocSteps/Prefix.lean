@@ -47,7 +47,6 @@ theorem compilerPrefix_alloc_correct (ac : AsmConfigExact width) (flag : Bool) (
     (locals : Spt (WordLocW width)) (limit : Nat)
     (run : evaluate p s = (res,post)) (nonerror : res ≠ some .error) (notTimeout : res ≠ some .timeOut)
     (sourceBound : steps p s ≤ limit) (gc : gcFunConstOk s.gcFun)
-    (vars : everyVarHOL (fun x => decide (x < maxVarHOL (compileExp p)+1)) (compileExp p) = true)
     (localRel : wordLocalsRel (maxVarHOL (compileExp p)+1) s.locals locals)
     (domain : sptDomain locals = (fun key => key ∈ evenList count)) :
     ∃ selectedLocals targetPost,
@@ -57,6 +56,9 @@ theorem compilerPrefix_alloc_correct (ac : AsmConfigExact width) (flag : Bool) (
       steps (wordAlloc fc ac alg k (preAlloc ac flag count p) col)
         {s with locals := locals,clock := limit} ≤
         sizeOf (wordAlloc fc ac alg k (preAlloc ac flag count p) col) * (limit+1) := by
+  have vars : everyVarHOL (fun x => decide (x < maxVarHOL (compileExp p)+1)) (compileExp p) = true :=
+    everyVarMono _ _ _ ⟨fun x hx => by simp only [decide_eq_true_eq] at hx ⊢; omega,
+      Flapjack.Compiler.Backend.WordAlloc.maxVarMax _⟩
   obtain ⟨selectedLocals,ssaPost,finalLocals,finalRun,ssaRel,_,_⟩ :=
     compilerPrefix_secondDead_correct ac flag count shape s post res locals limit run nonerror notTimeout sourceBound gc vars localRel domain
   obtain ⟨targetPost,targetRun,targetRel,_,targetBound⟩ := wordAlloc_correct_with_steps fc ac alg k col
