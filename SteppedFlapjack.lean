@@ -1,3 +1,5 @@
+import SteppedFlapjack.WordAllocSteps.CompiledCodeTail
+import SteppedFlapjack.WordToStackSteps.CompiledTail
 import SteppedFlapjack.WordToStackSteps.DirectTailLocal
 import SteppedFlapjack.WordAllocSteps.TailEntry
 import SteppedFlapjack.LoopToWordSteps.TailEntryWordAllocated
