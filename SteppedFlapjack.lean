@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.GlobalWhile
 import SteppedFlapjack.PanToCrepSteps.GlobalShapes
 import SteppedFlapjack.PanToCrepSteps.TailEntryGlobalWordRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntrySupportedGlobalRiscV
@@ -438,6 +439,8 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.LoopSteps.IterationShift`: loop visit stability under clock extension.
 - `SteppedFlapjack.PanToCrepSteps.WhileRiscV`: Pancake loop visits through instruction selection to RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.WhileSteps`: semantic and quantitative Pancake-to-Crep loop correctness.
+- `SteppedFlapjack.PanToCrepSteps.GlobalWhile`: Global lowering and Crep visit bounds for initialized loops.
+- `SteppedFlapjack.PanToCrepSteps.GlobalShapes`: Supported global-lowering shapes and branch bounds.
 - `SteppedFlapjack.PanToCrepSteps.ControlSteps`: exact-state source control visits and compiled branch bounds.
 - `SteppedFlapjack.PanToCrepSteps.Shape`: source fragments lowered to supported Crep.
 - `SteppedFlapjack.CrepSteps.BranchStatic`: syntax-size bounds for loop-free Crep visits.
