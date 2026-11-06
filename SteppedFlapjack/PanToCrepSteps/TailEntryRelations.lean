@@ -152,4 +152,32 @@ theorem tailEntry_compiled_execution {F : Type}
   exact ⟨middle,post,result,run,found,crepClock,bodyLocalised,calleeState,calleeCode,calleeExcp,calleeLocals,
     calleeRun,crepComplete,finalRel,finalResult⟩
 
+
+/-- The actual source compiler produces the entry initializer and supported
+callee shape required by the tail-entry machine theorem. -/
+theorem tailEntry_compiled_shapes {width : Nat} [NeZero width]
+    (callerContext : PanToCrepContextExact width)
+    (init calleeInit : ProgHOL width) (condition : ExpHOL width) (body tail : ProgHOL width)
+    (initShape : BranchProgram callerContext init)
+    (calleeInitShape : BranchProgram (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) calleeInit)
+    (conditionShape : ScalarExpression (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) condition)
+    (bodyShape : BranchProgram (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) body)
+    (tailShape : BranchProgram (ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []) tail) :
+    let calleeContext := ctxtFcExactHOL callerContext.funcs callerContext.eids [] [] []
+    ∃ crepCondition,
+      compileExpExactHOLW calleeContext condition = ([crepCondition],.one) ∧
+      CrepToLoopSteps.BranchCondition crepCondition ∧
+      CrepToLoopSteps.BranchProgram (compileProgExactHOLW callerContext init) ∧
+      CrepToLoopSteps.BranchProgram (compileProgExactHOLW calleeContext calleeInit) ∧
+      CrepToLoopSteps.BranchProgram (compileProgExactHOLW calleeContext body) ∧
+      CrepToLoopSteps.BranchProgram (compileProgExactHOLW calleeContext tail) ∧
+      compileProgExactHOLW calleeContext (.seq calleeInit (.seq (.while condition body) tail)) =
+        .seq (compileProgExactHOLW calleeContext calleeInit)
+          (.seq (.while crepCondition (compileProgExactHOLW calleeContext body))
+            (compileProgExactHOLW calleeContext tail)) := by
+  obtain ⟨crepCondition,compiled,direct⟩ := scalar_compile conditionShape
+  refine ⟨crepCondition,compiled,.direct direct,branch_compile initShape,branch_compile calleeInitShape,
+    branch_compile bodyShape,branch_compile tailShape,?_⟩
+  simp [compileProgExactHOLW,compileWhileExactHOLW,compiled]
+
 end SteppedFlapjack.PanToCrepSteps

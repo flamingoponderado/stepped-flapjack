@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.TailEntryCompiledRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryFrontendRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryRelations
 import SteppedFlapjack.PanToCrepSteps.TailEntryRiscV
