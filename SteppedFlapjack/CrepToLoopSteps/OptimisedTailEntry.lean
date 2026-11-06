@@ -1,6 +1,7 @@
 import SteppedFlapjack.CrepToLoopSteps.TailEntryLoop
 import SteppedFlapjack.LoopLiveSteps.TailEntryShape
 import SteppedFlapjack.LoopLiveSteps.TailEntryGlobalBound
+import SteppedFlapjack.LoopToWordSteps.TailCall
 
 /-! Actual optimizer execution for a source-bounded tail entry. -/
 namespace SteppedFlapjack.CrepToLoopSteps
@@ -125,5 +126,31 @@ theorem branch_tailCall_nil_optimised_bound {F : Type}
   have wordShape := LoopLiveSteps.tailEntry_word (LoopLiveSteps.singleTail_to_tail optShape) wordCtxt labels
   refine ⟨extra,final,optRun,wordShape,rel,?_⟩
   exact optBound.trans (Nat.mul_le_mul_left _ (by omega))
+
+/-- The actual optimized Crep entry and its reached compiled callee satisfy
+the sixfold Loop-to-Word bound, derived from the caller code relation. -/
+theorem branch_tailCall_nil_optimised_word_bound {F C : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
+    (init : CrepProgHOL 64) (initShape : BranchProgram init)
+    (calleeInit : CrepProgHOL 64) (calleeInitShape : BranchProgram calleeInit)
+    (condition : CrepExpHOL 64) (conditionShape : BranchCondition condition)
+    (body tail : CrepProgHOL 64) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
+    (source : CrepSemHOLState 64 F) (target : LoopSemStateFiniteExact 64 F)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (found : source.code.lookup name = some ([],.seq calleeInit (.seq (.while condition body) tail))) :
+    LoopToWordSteps.SixBoundPropertyAt C
+      (optimiseHOL (compileHOLExact ctxt live (.seq init (.call none name [])))) target := by
+  have shape := LoopLiveSteps.optimise_singleTail
+    (LoopLiveSteps.compiled_singleTail_shape ctxt live init initShape name)
+  have calleeShape := LoopLiveSteps.optimise_sequence
+    (branchConditionWhileBranch_wordSimpShape calleeInit calleeInitShape condition conditionShape
+      body tail bodyShape tailShape (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln)
+  have bodyProgram : LoopToWordSteps.LoopProgram
+      (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln
+        (.seq calleeInit (.seq (.while condition body) tail))) := by
+    apply LoopToWordSteps.loopSequence_program
+    simpa only [ocompileHOLExact] using calleeShape
+  exact LoopToWordSteps.singleTailEntry_correct_with_steps shape _ bodyProgram target
+    (tailCall_nil_lookup ctxt source target name _ codeRel found)
 
 end SteppedFlapjack.CrepToLoopSteps
