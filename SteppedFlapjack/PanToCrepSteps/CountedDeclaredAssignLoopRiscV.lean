@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.FullInitTailOutcome
 import SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopEntry
 import SteppedFlapjack.CrepToLoopSteps.DeclRiscVInputs
 import SteppedFlapjack.PanToCrepSteps.NativeTailOutcome
@@ -152,6 +153,8 @@ theorem counted_declared_assignLoop_globalEntry_riscv {σ : Type}
         TailRiscVReady loopEntry {target with clock := target.clock+extra} loopPost (resultToLoop crepResult)
           {word with clock := word.clock+extra} loopLimit ∧
         NativeReturnedReady loopEntry {target with clock := target.clock+extra}
+          {word with clock := word.clock+extra} loopLimit sourceFinal ∧
+        FullInitReturnedReady loopEntry {target with clock := target.clock+extra}
           {word with clock := word.clock+extra} loopLimit sourceFinal := by
   obtain ⟨sourceResult,sourceFinal,panPost,crepMiddle,crepPost,crepResult,sourceExec,sourceRun,postRel,crepInitRun,
     crepFound,crepClock,crepRun,complete,finalRel,resultRel,crepBound⟩ :=
@@ -199,8 +202,12 @@ theorem counted_declared_assignLoop_globalEntry_riscv {σ : Type}
     loopRun,notError,loopComplete,postLoopRel,loopBound,?_⟩
   have ready := tailRiscVReady_of_loop _ loopPost _ _ _ entryShape calleeShape calleeLookup
     loopRun notError shiftedRel loopComplete loopBound
-  refine ⟨ready,?_⟩
-  exact nativeReturnedReady_of_return globals calleeContext sourceFinal panPost crepPost _ loopPost crepResult returned
-    postRel finalRel resultRel postLoopRel _ _ _ ready
+  have fullReady := fullInitTailReady_of_loop _ loopPost _ _ _ entryShape calleeShape calleeLookup
+    loopRun notError shiftedRel loopComplete loopBound
+  refine ⟨ready,?_,?_⟩
+  · exact nativeReturnedReady_of_return globals calleeContext sourceFinal panPost crepPost _ loopPost crepResult returned
+      postRel finalRel resultRel postLoopRel _ _ _ ready
+  · exact fullInitReturnedReady_of_return globals calleeContext sourceFinal panPost crepPost _ loopPost crepResult returned
+      postRel finalRel resultRel postLoopRel _ _ _ fullReady
 
 end SteppedFlapjack.PanToCrepSteps

@@ -209,7 +209,7 @@ theorem counted_declared_assignLoop_native_riscv {σ : Type}
   have normalized := emptyLive_initial_relations loopCtxt crep target _ crepRel memRel globalsRel localsRel native.data
   apply native.machineBound declarations start caller loopCtxt entry limit target programShapes entryMember sourceFinal
   intro word wordRel
-  obtain ⟨_,sourceFinal',_,_,_,_,_,sourceRun',_,_,_,_,_,_,_,_,_,extra,loopPost,_,_,_,_,_,_,_,_,_,_,_,_,nativeReady⟩ :=
+  obtain ⟨_,sourceFinal',_,_,_,_,_,sourceRun',_,_,_,_,_,_,_,_,_,extra,loopPost,_,_,_,_,_,_,_,_,_,_,_,_,nativeReady,_⟩ :=
     counted_declared_assignLoop_globalEntry_riscv condition assignment initial loopCost budget budgetBound declarations start initializers
       globals caller production source pan middle crep rel ranged name nameRanged returned conditionRanged assignmentRanged clock
       conditionShape bodyShape panCode initRun sourceFound entryClock globalRel panStateRel panCodeRel panExcpRel panLocalsRel
