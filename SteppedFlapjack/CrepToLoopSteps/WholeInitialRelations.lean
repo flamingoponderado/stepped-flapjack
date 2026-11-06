@@ -1,6 +1,7 @@
 import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
 import SteppedFlapjack.LoopToWordSteps.WholeCodeRel
 import SteppedFlapjack.WordAllocSteps.WholeFrontendShapes
+import Flapjack.Compiler.Backend.WordToStack.Proofs.Initialization
 
 /-! Initialize frontend code relations from actual whole-program outputs. -/
 namespace SteppedFlapjack.CrepToLoopSteps
@@ -17,6 +18,30 @@ def LoopWordDataRel {width : Nat} [NeZero width] {C F : Type}
     word.store.lookup .heapLength = some (.word len) ∧
     loop.topAddr = loop.baseAddr + (2 : BitVec width) * len ∧
     loopToWordGlobalsRelHOLExact loop.globals word.store
+
+/-- The actual native Word entry has exactly the data relation induced by the
+initial Stack state. Entry locals, the generated code table and frame size do
+not affect the shared data relation. -/
+theorem nativeEntry_loopWordDataRel_iff {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (k frameSize : Nat)
+    (stack : StackSemStateFiniteExact width C F)
+    (compiledCode originalCode : Spt (Nat × WordLangProgHOL (BitVec width)))
+    (coracle : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (loop : LoopSemStateFiniteExact width F) :
+    LoopWordDataRel loop
+      {WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW width)] (some frameSize)
+        (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac k stack compiledCode coracle) with
+          code := originalCode} ↔
+    ∃ len : BitVec width,
+      stack.memory = loop.memory ∧ stack.mdomain = loop.mdomain ∧ stack.shMdomain = loop.shMdomain ∧
+      stack.clock = loop.clock ∧ stack.be = loop.be ∧ stack.ffi = loop.ffi ∧
+      stack.store.lookup .currHeap = some (.word loop.baseAddr) ∧
+      stack.store.lookup .heapLength = some (.word len) ∧
+      loop.topAddr = loop.baseAddr + (2 : BitVec width) * len ∧
+      loopToWordGlobalsRelHOLExact loop.globals stack.store := by
+  simp [LoopWordDataRel, WordSemStateFiniteExact.callEnv,
+    Compiler.Backend.WordToStack.Native.Initialization.makeInit, loopToWordGlobalsRelHOLExact,
+    HolFiniteMapExact.lookup_eraseEq, FDOMSUB_HOL]
 
 /-- Initial data relations and supported whole-program syntax give both full
 frontend state/code relations for the actual compiled code tables. -/
