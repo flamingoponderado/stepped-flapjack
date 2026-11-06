@@ -118,20 +118,22 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
     let col := entryColour wc programs entryName
     let compiledCode := sptFromAList (Flapjack.Compiler.Backend.WordToWord.compile wc ac programs).2
     let locals := word.locals
-    ∀ (_wordLocals : LoopToWord.localsRelHOL wordCtxt .ln word.locals)
-      (_retLookup : sptLookup 0 word.locals = some (.loc 1 0))
-      (_gc : gcFunConstOk word.gcFun)
-    (_localsRel : wordLocalsRel (maxVarHOL (compileExp (LoopToWord.compHOL wordCtxt loopEntry labels).1)+1) shiftedWord.locals locals)
-    (_domain : sptDomain locals = (fun key => key ∈ evenList count))
-    (entry : StackSemStateFiniteExact 64 LabToTarget.Config F) (frameSize frame : Nat)
+    ∀ (entry : StackSemStateFiniteExact 64 LabToTarget.Config F) (frameSize frame : Nat)
+    (coracle : Nat → (Nat × LabToTarget.Config) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (_wordInit : word = {WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
+      (Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit ac regCount entry compiledCode coracle) with
+        code := sptFromAList programs})
+    (_gc : gcFunConstOk entry.gcFun)
+    (_initOk : Flapjack.WordToStackProofs.InitializationStateRel.initStateOk ac regCount entry coracle)
+    (_initialFrame : stateRel ac regCount frameSize frame
+      (WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
+        (Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit ac regCount entry compiledCode coracle))
+      {entry with stackSpace := entry.stackSpace-frameSize} [] 0)
     (bs bsPost : AppList (BitVec 64)) (n nPost : Nat) (compiled : HolProg 64),
     let lens : List Nat := []
     let start := firstLoopName
     let argumentCount := 1
-    ∀ (_stackRel : stateRel ac regCount frameSize frame
-      {shiftedWord with code := compiledCode,locals := locals,clock := tailWordReplayLimit loopEntry wordCtxt labels compiledCode loopLimit}
-      {entry with stackSpace := entry.stackSpace-(frameSize-(argumentCount-regCount))} lens 0)
-    (_native : Flapjack.Compiler.Backend.WordToStack.Native.compNative ac false
+    ∀ (_native : Flapjack.Compiler.Backend.WordToStack.Native.compNative ac false
       (fullCompileSingle ac.twoRegArith regCount alg ac ((entryName,count,(LoopToWord.compHOL wordCtxt loopEntry labels).1),col)).2.2
       (bs,n) (regCount,frameSize,frame) = (compiled,(bsPost,nPost)))
     (_lengthBound : (appListAppend bs).length ≤ n) (_bitmapBound : n-(appListAppend bs).length ≤ entry.bitmaps.length)
@@ -211,8 +213,8 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
       initLocalised initialPanRel initialCodeRel initialExcpRel initialLocalsRel panBound
   refine ⟨wordShapes,condition,conditionCompiled,post,result,postRel,resultRel,extra,loopPost,loopRel,?_⟩
   dsimp only
-  intro ac wc wordLocals retLookup gc
-    localsRelWord domain stackEntry frameSize frame bs bsPost n nPost compiled stackRel native lengthBound
+  intro ac wc stackEntry frameSize frame coracle wordInit stackGc initOk initialFrame
+    bs bsPost n nPost compiled native lengthBound
     bitmapBound bitmapPrefix labelCheck maxBound frameDef frameSizeDef space foundEntry inputCode anything cr c jump bounds pointer f
     gen maxHeap a b removeInput oracle renamed lab pc mc labCode labs asm machine initialClock distinct sourceCode pre relation ha hs hk hf
     hcode hor labRel hpc hmc tie machineRel
@@ -245,6 +247,35 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
   let loopLimit := branchTailLoopLimit ctxt live name init calleeInit condition body tail
     (sizeOf init + 2 + (3 + sizeOf calleeInit + sizeOf body + sizeOf tail) * limit)
   let replayClock := tailStackReplayLimit ac 1 firstLoopName alg regCount col loopEntry wordCtxt labels compiledCode loopLimit + 1
+  let wordReplay := tailWordReplayLimit loopEntry wordCtxt labels compiledCode loopLimit
+  have initialFacts := SteppedFlapjack.WordToStackSteps.initializedTail_simulation_state ac regCount frameSize frame stackEntry
+    compiledCode (sptFromAList programs) coracle wordReplay
+    (maxVarHOL (compileExp (LoopToWord.compHOL wordCtxt loopEntry labels).1)+1) initialFrame
+  have wordLocals : LoopToWord.localsRelHOL wordCtxt .ln word.locals := by
+    rw [wordInit]
+    exact (SteppedFlapjack.WordToStackSteps.nativeTailEntry_loopLocals loopEntry
+      (Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit ac regCount stackEntry compiledCode coracle) frameSize).1
+  have retLookup : sptLookup 0 word.locals = some (.loc 1 0) := by
+    rw [wordInit]
+    exact initialFacts.2.2.1
+  have gc : gcFunConstOk word.gcFun := by rw [wordInit]; exact stackGc
+  have localsRelWord : wordLocalsRel (maxVarHOL (compileExp (LoopToWord.compHOL wordCtxt loopEntry labels).1)+1)
+      ({word with clock := word.clock+extra} : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F).locals locals := by
+    dsimp only [locals]
+    rw [wordInit]
+    exact initialFacts.2.1
+  have domain : sptDomain locals = (fun key => key ∈ evenList 1) := by
+    dsimp only [locals]
+    rw [wordInit]
+    exact initialFacts.1
+  have regBound : 1 ≤ regCount := by have h := initOk.1; omega
+  have argSpace : 1-regCount = 0 := by omega
+  have stackRel : stateRel ac regCount frameSize frame
+      {{word with clock := word.clock+extra} with code := compiledCode,locals := locals,clock := wordReplay}
+      {{stackEntry with clock := wordReplay} with stackSpace := stackEntry.stackSpace-(frameSize-(1-regCount))} [] 0 := by
+    dsimp only [locals]
+    rw [wordInit]
+    simpa only [argSpace,Nat.sub_zero] using initialFacts.2.2.2
   obtain ⟨newPre,newRel,newLabRel,newTie,newMachineRel⟩ :=
     SteppedFlapjack.StackAllocSteps.namedPipelineInitial_setClock
       {stackEntry with code := sptFromAList (StackRawCall.compile inputCode)} renamed lab
@@ -253,7 +284,7 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
       mc machine labCode labs pc asm pre relation labRel tie machineRel
   exact backend ac 1 firstLoopName alg regCount col wordCtxt labels compiledCode locals wordLocals retLookup dim retLabel vars gc
     wc programs rfl member rfl rfl rfl wordCode rfl localsRelWord domain
-    stackEntry frameSize frame [] bs bsPost n nPost compiled firstLoopName 1 stackRel native lengthBound bitmapBound
+    {stackEntry with clock := wordReplay} frameSize frame [] bs bsPost n nPost compiled firstLoopName 1 stackRel native lengthBound bitmapBound
     bitmapPrefix labelCheck maxBound frameDef frameSizeDef space foundEntry inputCode anything cr c jump bounds pointer f gen
     maxHeap a b removeInput oracle {renamed with clock := replayClock} {lab with clock := replayClock}
     pc mc labCode labs asm machine distinct sourceCode newPre newRel ha hs hk hf
