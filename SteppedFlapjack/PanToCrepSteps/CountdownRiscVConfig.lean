@@ -36,6 +36,8 @@ theorem labInit_countdown_riscvConfig_riscv {σ : Type}
     (newFfiNames : List HolFfiName) (shmemInfo newShmemInfo : List ShmemInfoNum)
     (hmc : mc.target = riscvTarget)
     (ptr : mc.ptrReg = 10) (len : mc.lenReg = 11) (ptr2 : mc.ptr2Reg = 12) (len2 : mc.len2Reg = 13)
+    (oracleLabels : cfg.labels = labs) (oraclePos : cfg.pos = (progToBytes code2).length)
+    (oracleFfi : cfg.ffiNames = some mc.ffiNames)
     (guards : LabMachineInitGuardsCore mc machine code code2 labs labelClock i cbspace asm memory dm sdm
       labOracle newFfiNames shmemInfo newShmemInfo)
     (nameRanged : NameRanged name) (wordRange : count < 2^64)
@@ -102,8 +104,15 @@ theorem labInit_countdown_riscvConfig_riscv {σ : Type}
   have noInstall := countdown_lab_noInstall_from_stackInit (ofString name) (BitVec.ofNat 64 count) returned wc
     stackConf dataConf maxHeap sp offset dataSp saveRegs (fun _ => (cfg,[],[])) lab mc.ffiNames
     (by simpa only [countdownNativeRiscV,countdownBodyHOL] using stackInit)
+  have oracleEq := labOracle_empty_of_stackInit stackConf dataConf maxHeap sp offset _ _ saveRegs dataSp cfg
+    mc machine ffi code asm memory dm sdm _ cbspace labOracle stackInit
+  have oracleOk : LabProps.noShareMemInst code → LabToTarget.compilerOracleOk labOracle labs (progToBytes code2).length
+      mc.target.config mc.ffiNames := by
+    intro _
+    rw [oracleEq]
+    exact emptyLabCompilerOracleOk cfg labs _ mc.target.config mc.ffiNames oracleLabels oraclePos oracleFfi
   have guards' := labMachineInitGuards_of_core mc machine code code2 labs labelClock i cbspace asm memory dm sdm
-    labOracle newFfiNames shmemInfo newShmemInfo guards (riscvTarget_mcConfOk mc hmc ptr len ptr2 len2) (by simpa only [lab,LabToTarget.makeInit] using noInstall)
+    labOracle newFfiNames shmemInfo newShmemInfo guards (riscvTarget_mcConfOk mc hmc ptr len ptr2 len2) oracleOk (by simpa only [lab,LabToTarget.makeInit] using noInstall)
   exact labInit_countdown_canonicalSource_riscv riscvConfig.isa name count budget returned context primitive handler functions fuel
     production template wc riscvConfig stackConf dataConf maxHeap sp offset saveRegs dataSp cfg mc machine ffi code code2 labs
     labelClock i cbspace labClock asm memory dm sdm labOracle newFfiNames shmemInfo newShmemInfo hmc guards'
