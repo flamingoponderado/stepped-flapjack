@@ -1,5 +1,6 @@
 import SteppedFlapjack.PanToCrepSteps.DeclLoopShape
 import SteppedFlapjack.PanToCrepSteps.CountedDecl
+import SteppedFlapjack.PanToCrepSteps.GlobalDecl
 import SteppedFlapjack.PanToCrepSteps.DeclSteps
 import SteppedFlapjack.PanToCrepSteps.DeclShape
 import SteppedFlapjack.PanToCrepSteps.CountedLoopExample
@@ -468,6 +469,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.CountedLoopExample`: State-changing counted loop with a repeated condition.
 - `SteppedFlapjack.PanToCrepSteps.CountedDecl`: Counted scalar declarations and local restoration.
 - `SteppedFlapjack.PanToCrepSteps.DeclLoopShape`: Supported compiler output for local declarations around loops.
+- `SteppedFlapjack.PanToCrepSteps.GlobalDecl`: Original declaration-loop costs through global lowering and Crep compilation.
 - `SteppedFlapjack.PanToCrepSteps.DeclSteps`: Quantitative scalar declaration and loop compilation.
 - `SteppedFlapjack.PanToCrepSteps.DeclShape`: Scalar declaration compiler context and shape.
 - `SteppedFlapjack.PanToCrepSteps.CountedWhile`: Counted loop zero, iteration, and break composition.
