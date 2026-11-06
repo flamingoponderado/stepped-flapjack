@@ -183,4 +183,36 @@ theorem counted_declList_wrap {σ : Type} (declarations : List (VarName × BitVe
     · simpa only [wrapCountedDeclListHOL,expToHOL] using run
     · simpa only [wrapCountedDeclListHOL,expToHOL] using bound
 
+/-- Installing scalar declarations preserves the executable/HOL state
+relation and byte-rangedness. -/
+theorem enterCountedDeclList_rel {σ : Type} (declarations : List (VarName × BitVec 64)) :
+    ∀ (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ),
+      PanSemStateRelExec production source.toExact → PanSemStateRelExecRanged production →
+      (∀ item ∈ declarations, NameRanged item.1) →
+      PanSemStateRelExec (enterCountedDeclList declarations production)
+        (enterCountedDeclListHOL declarations source).toExact ∧
+      PanSemStateRelExecRanged (enterCountedDeclList declarations production) := by
+  induction declarations with
+  | nil => intro production source rel ranged names; exact ⟨rel,ranged⟩
+  | cons item rest ih =>
+    rcases item with ⟨name,value⟩
+    intro production source rel ranged names
+    have nameRanged : NameRanged name := names (name,value) (by simp)
+    have restRanged : ∀ item ∈ rest, NameRanged item.1 := by
+      intro item member
+      exact names item (by simp [member])
+    have nextRel := PanSemStateRelExec.updateLocals rel name nameRanged (.word value)
+    have nextRanged := PanSemStateRelExecRanged.updateLocals ranged name (.word value) (by simp [PanValueByteRanged])
+    exact ih _ _ (by simpa using nextRel) nextRanged restRanged
+
+/-- Entering declarations does not change the HOL memory domain. -/
+theorem enterCountedDeclListHOL_memaddrs {σ : Type} (declarations : List (VarName × BitVec 64))
+    (source : PanSemStateFiniteExact 64 σ) :
+    (enterCountedDeclListHOL declarations source).memaddrs = source.memaddrs := by
+  induction declarations generalizing source with
+  | nil => rfl
+  | cons item rest ih =>
+    rcases item with ⟨name,value⟩
+    simpa [enterCountedDeclListHOL,setVarHOLFinite] using ih (setVarHOLFinite (ofString name) (.val (.word value)) source)
+
 end SteppedFlapjack.PanToCrepSteps
