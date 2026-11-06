@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.BranchWhileRiscV
 import SteppedFlapjack.PanToCrepSteps.WhileSequenceRiscV
 import SteppedFlapjack.StackRemoveSteps.EmptyOracle
 import SteppedFlapjack.PanToCrepSteps.WhileRiscV
@@ -294,6 +295,10 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.CrepToLoopSteps.WhileClock`: compiled while loops bounded by clock consumption.
 - `SteppedFlapjack.CrepToLoopSteps.BranchRiscV`: Crep conditional programs through RISC-V.
 - `SteppedFlapjack.StackRemoveSteps.EmptyOracle`: constant Stack-removal cost for an empty-install oracle.
+- `SteppedFlapjack.PanToCrepSteps.BranchWhileRiscV`: initialization, loop and continuation through RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.BranchWhile`: initialization and loop through the Pancake frontend.
+- `SteppedFlapjack.CrepToLoopSteps.BranchWhileRiscV`: Crep initialization and loop through RISC-V.
+- `SteppedFlapjack.CrepToLoopSteps.BranchPrefix`: compositional branch-prefix visit bounds.
 - `SteppedFlapjack.PanToCrepSteps.WhileSequenceRiscV`: Pancake loops with continuations through RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.WhileSequence`: source-to-Crep loop and continuation bound.
 - `SteppedFlapjack.CrepToLoopSteps.WhileSequenceRiscV`: Crep loops with continuations through RISC-V.
