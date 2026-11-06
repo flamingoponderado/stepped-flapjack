@@ -71,8 +71,10 @@ from compiler output and still depends on oracle prefix costs. The theorem
 assumes matching source, native Stack, Lab and
 RISC-V initial states, native initialization and backend relations. It does
 not yet construct a concrete machine state or prove a general bridge from
-arbitrary counted source runs to `controlSteps`. The example constructs its
-original source state from a lowered entry state.
+arbitrary counted source runs to `controlSteps`. The bounded theorem starts
+from an original state with empty locals, globals, exceptions and structures,
+and a concrete source code table; it constructs the lowered entry from that
+state. Earlier intermediate lemmas still use the reverse construction.
 
 The declaration chain currently duplicates much of the earlier tail-entry
 chain, including backend premises. Factoring the chain over supported callee

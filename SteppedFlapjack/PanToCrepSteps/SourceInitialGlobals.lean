@@ -100,4 +100,22 @@ theorem concreteDecl_source_initialization {σ : Type}
   · simp [noGlobalsLoweredPreCall]
   · exact concreteDecl_source_callEntry_rel start name returned source locals globals structs topOutside aligned sourceCode
 
+
+/-- The source-first construction agrees with the earlier concrete fixture's
+original-state representation, so its machine bound can be reused. -/
+theorem concreteDecl_source_recovered {σ : Type}
+    (start : MlString) (name : VarName) (returned : BitVec 64)
+    (source : PanSemStateFiniteExact 64 σ)
+    (locals : source.locals = HolFiniteMapExact.empty)
+    (globals : source.globals = HolFiniteMapExact.empty)
+    (sourceCode : source.code = HolFiniteMapExact.empty.update
+      (newMainNameHOL (concreteDeclProgram start name returned),([],concreteDeclBody name returned,.one))) :
+    source = concreteDeclOriginalState start name returned
+      (callEntryStateHOLFinite
+        (noGlobalsLoweredPreCall source (HolFiniteMapExact.empty.updateList
+          (functionsHOL (compileTopExactHOL (concreteDeclProgram start name returned) start)).reverse))
+        HolFiniteMapExact.empty) := by
+  cases source
+  simp_all [concreteDeclOriginalState,callEntryStateHOLFinite,noGlobalsLoweredPreCall]
+
 end SteppedFlapjack.PanToCrepSteps

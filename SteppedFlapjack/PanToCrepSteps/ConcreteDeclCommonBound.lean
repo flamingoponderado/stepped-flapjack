@@ -1,5 +1,6 @@
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrameRiscV
 import SteppedFlapjack.PanToCrepSteps.ReplayLimitMono
+import SteppedFlapjack.PanToCrepSteps.SourceInitialGlobals
 
 /-! A single bound covering both native entry outcomes. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -60,14 +61,23 @@ private theorem compiledCondition_eq (context : PanToCrepContextExact 64) (name 
     (compiled : compileExpExactHOLW (scalarDeclContext context name) (.var .local name) = ([value],.one)) :
     concreteDeclCompiledCondition context name = value := by simp [concreteDeclCompiledCondition,compiled]
 
-/-- Any source budget at least the concrete run's 13 steps gives one
-RISC-V bound covering either native entry outcome. -/
+/-- Starting from the original concrete source state, any budget at least
+the run's 13 steps gives one RISC-V bound covering either native entry
+outcome. The lowered entry is constructed from that source state. -/
 theorem concreteDecl_counted_riscv_bounded {F : Type}
     (arch : AsmArchitecture) (start : MlString) (name : VarName) (returned : BitVec 64)
     (pan : PanSemStateFiniteExact 64 F)
     (originalState : PanSemStateFiniteExact 64 F) [DecidablePred originalState.memaddrs] [DecidablePred originalState.shMemaddrs]
-    (originalDef : originalState = concreteDeclOriginalState start name returned
-      (callEntryStateHOLFinite pan HolFiniteMapExact.empty))
+    (originalLocals : originalState.locals = HolFiniteMapExact.empty)
+    (originalGlobals : originalState.globals = HolFiniteMapExact.empty)
+    (originalExceptions : originalState.eshapes = HolFiniteMapExact.empty)
+    (originalStructs : originalState.structs = [])
+    (originalTopOutside : ¬ originalState.memaddrs originalState.topAddr)
+    (originalAligned : panGlobalsByteAlignedHOL originalState.topAddr)
+    (originalCode : originalState.code = HolFiniteMapExact.empty.update
+      (newMainNameHOL (concreteDeclProgram start name returned),([],concreteDeclBody name returned,.one)))
+    (panDef : pan = noGlobalsLoweredPreCall originalState (HolFiniteMapExact.empty.updateList
+      (functionsHOL (compileTopExactHOL (concreteDeclProgram start name returned) start)).reverse))
     (ffiState : FfiState F) (ffiRel : FfiStateRel ffiState originalState.ffi)
     (nameRanged : NameRanged name) (sourceClock : originalState.clock ≠ 0)
     (execContext : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
@@ -76,13 +86,6 @@ theorem concreteDecl_counted_riscv_bounded {F : Type}
     (state : CrepSemHOLState 64 F)
     (stateDef : state = concreteDeclCrepState pan (compileProgDeclsHOLW
       (compileTopExactHOL (concreteDeclProgram start name returned) start)))
-    (panClock : pan.clock ≠ 0) (panLocalsEmpty : pan.locals = HolFiniteMapExact.empty)
-    (panExceptionsEmpty : pan.eshapes = HolFiniteMapExact.empty)
-    (panGlobalsEmpty : pan.globals = HolFiniteMapExact.empty)
-    (panStructs : pan.structs = []) (panTopOutside : ¬ pan.memaddrs pan.topAddr)
-    (panAligned : panGlobalsByteAlignedHOL pan.topAddr)
-    (panCode : pan.code = HolFiniteMapExact.empty.updateList
-      (functionsHOL (compileTopExactHOL (concreteDeclProgram start name returned) start)).reverse)
     (wc : Compiler.Backend.WordToWord.Config) (ac : Compiler.Encoders.Asm.AsmConfigExact 64)
     (stack : StackSemStateFiniteExact 64 LabToTarget.Config F)
     (coracle : Nat → (Nat × LabToTarget.Config) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
@@ -204,6 +207,20 @@ theorem concreteDecl_counted_riscv_bounded {F : Type}
             (Tgt anything cr c {stack with code := sptFromAList (StackRawCall.compile inputCode), clock := limit+1} 0 stack.regs) *
             (uniformFactor (width := 64) c * 3) + 4))) ∧
           evaluateTargetHOL mc lab.ffi ticks machine = (.halt outcome,finalMachine,finalFfi) := by
+  have originalDef : originalState = concreteDeclOriginalState start name returned
+      (callEntryStateHOLFinite pan HolFiniteMapExact.empty) := by
+    rw [panDef]
+    exact concreteDecl_source_recovered start name returned originalState originalLocals originalGlobals originalCode
+  have panClock : pan.clock ≠ 0 := by simp [panDef,noGlobalsLoweredPreCall]
+  have panLocalsEmpty : pan.locals = HolFiniteMapExact.empty := by simpa [panDef,noGlobalsLoweredPreCall] using originalLocals
+  have panExceptionsEmpty : pan.eshapes = HolFiniteMapExact.empty := by simpa [panDef,noGlobalsLoweredPreCall] using originalExceptions
+  have panGlobalsEmpty : pan.globals = HolFiniteMapExact.empty := by simpa [panDef,noGlobalsLoweredPreCall] using originalGlobals
+  have panStructs : pan.structs = [] := by simpa [panDef,noGlobalsLoweredPreCall] using originalStructs
+  have panTopOutside : ¬ pan.memaddrs pan.topAddr := by simpa [panDef,noGlobalsLoweredPreCall] using originalTopOutside
+  have panAligned : panGlobalsByteAlignedHOL pan.topAddr := by simpa [panDef,noGlobalsLoweredPreCall] using originalAligned
+  have panCode : pan.code = HolFiniteMapExact.empty.updateList
+      (functionsHOL (compileTopExactHOL (concreteDeclProgram start name returned) start)).reverse := by
+    simp [panDef,noGlobalsLoweredPreCall]
   obtain ⟨countedResult,originalFinal,sourceExec,sourceRun,sourceBound,bs,n,bsPost,nPost,body,frame,frameSize,
     selected,frameDef,sizeDef,compilation,foundEntry,lengthBound,gapBound,bitmapPrefix,maxBound,labelCheck,alternatives⟩ :=
     concreteDecl_counted_riscv_with_frame arch start name returned pan originalState originalDef ffiState ffiRel
