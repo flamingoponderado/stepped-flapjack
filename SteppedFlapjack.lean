@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.WholeWordRiscV
 import SteppedFlapjack.PanToCrepSteps.ActualDeclsRiscV
 import SteppedFlapjack.PanToCrepSteps.ActualWordRiscV
 import SteppedFlapjack.PanToCrepSteps.OptimisedAllFramesRiscV
