@@ -32,6 +32,7 @@ import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopInvert
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopReturn
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopEntry
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopNative
+import SteppedFlapjack.PanToCrepSteps.SourceNativeInputs
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopWhole
 import SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoop
 import SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopEntry
@@ -531,6 +532,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopInvert`: Reconstruct assignment-loop paths from counted runs.
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopReturn`: Assignment loops followed by a source return and global entry.
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopEntry`: Assignment-loop source budgets through the compiled RISC-V entry.
+- `SteppedFlapjack.PanToCrepSteps.SourceNativeInputs`: Construct native inputs from source and Stack data.
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopNative`: Direct counted-source and native RISC-V bound.
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopWhole`: Whole-source execution to native RISC-V bound.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoop`: Declared assignment-loop source and global bounds.
