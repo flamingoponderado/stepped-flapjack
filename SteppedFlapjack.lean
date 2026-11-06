@@ -1,3 +1,5 @@
+import SteppedFlapjack.WordInstSteps.LoopStack
+import SteppedFlapjack.WordInstSteps.Loop
 import SteppedFlapjack.WordInstSteps.Expression
 import SteppedFlapjack.WordInstSteps.StackComposition
 import SteppedFlapjack.WordInstSteps.Simple
@@ -248,6 +250,8 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.LoopToWordSteps.Sequence`: Loop-to-Word step preservation for direct statements, sequences, and marks.
 - `SteppedFlapjack.LoopToWordSteps.StackReady`: common Loop-to-Stack fragment and composed bounded simulation.
 - `SteppedFlapjack.LoopToWordSteps.RiscVComposition`: bounded Loop execution composed through the RISC-V backend.
+- `SteppedFlapjack.WordInstSteps.LoopStack`: selected Word loops composed through Stack.
+- `SteppedFlapjack.WordInstSteps.Loop`: iteration-sensitive instruction-selection bounds.
 - `SteppedFlapjack.WordInstSteps.StackComposition`: bounded selected Word runs through Stack.
 - `SteppedFlapjack.WordInstSteps.Expression`: general selected-expression shape, conventions and cost.
 - `SteppedFlapjack.WordInstSteps.Simple`: quantitative instruction selection for Word expression statements.
