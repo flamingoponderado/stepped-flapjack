@@ -77,7 +77,10 @@ theorem to a countdown with a separately proved exact source cost. `labInit_coun
 the Lab and Stack initializer guards and the compiler's native code and bitmap
 outputs. `labInit_countdown_canonicalSource_riscv` also constructs the
 matching singleton source environments, code table and executable FFI state.
-The concrete machine initialization guards remain to be proved for an application.
+`labInit_countdown_riscvConfig_riscv` specializes the compiler to the real
+RISC-V configuration and proves its register, encoder, and compiled no-install
+conditions. The remaining concrete initialization guards must be proved for an
+application.
 
 The reusable concrete declaration example is kept in the library because it
 instantiates the actual global entry and serves as an end-to-end proof target.
