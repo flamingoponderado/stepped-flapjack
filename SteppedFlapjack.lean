@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordToStackSteps.WholeProgram
 import SteppedFlapjack.WordAllocSteps.WholeProgram
 import SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileWordAllocatedRiscV
 import SteppedFlapjack.CrepToLoopSteps.ConditionPrefixWordAllocated

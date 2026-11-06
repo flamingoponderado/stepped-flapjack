@@ -26,6 +26,27 @@ private theorem zip_member_of_left {α β : Type} (xs : List α) (ys : List β)
       · obtain ⟨y,hy⟩ := ih ys lengths member
         exact ⟨y,by simp only [List.zip_cons_cons, List.mem_cons]; exact Or.inr hy⟩
 
+private theorem zipped_compile_names (ac : AsmConfigExact width) (wc : Config)
+    (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (oracles : List (Option (Spt Nat))) (lengths : oracles.length = programs.length) :
+    ((programs.zip oracles).map (fullCompileSingle ac.twoRegArith
+      (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac)).map Prod.fst = programs.map Prod.fst := by
+  induction programs generalizing oracles with
+  | nil => cases oracles <;> simp_all
+  | cons p ps ih =>
+    cases oracles with
+    | nil => simp at lengths
+    | cons col cols =>
+      have tailLength : cols.length = ps.length := by simpa using lengths
+      have h := ih cols tailLength
+      simpa [fullCompileSingle,compileSingle] using congrArg (List.cons p.1) h
+
+/-- The whole Word compiler preserves function names without additional guards. -/
+theorem wholeCompile_names (wc : Config) (ac : AsmConfigExact width)
+    (programs : List (Nat × Nat × WordLangProgHOL (BitVec width))) :
+    (compile wc ac programs).2.map Prod.fst = programs.map Prod.fst := by
+  exact zipped_compile_names ac wc programs _ (compile_zip_length wc programs)
+
 /-- Every source function occurs in the actual whole-program Word output with
 its corresponding oracle entry. This includes short-oracle fallback. -/
 theorem wholeCompile_contains_single (wc : Config) (ac : AsmConfigExact width)
