@@ -69,6 +69,8 @@ import SteppedFlapjack.WordToStackSteps.DirectTailRiscV
 import SteppedFlapjack.LoopToWordSteps.TailEntryCompiledCode
 import SteppedFlapjack.LoopToWordSteps.TailEntryRiscV
 import SteppedFlapjack.LoopToWordSteps.TailRiscVSetup
+import SteppedFlapjack.LoopToWordSteps.NativeTailRiscVReady
+import SteppedFlapjack.PanToCrepSteps.NativeTailOutcome
 import SteppedFlapjack.WordAllocSteps.CompiledCodeTail
 import SteppedFlapjack.WordToStackSteps.CompiledTail
 import SteppedFlapjack.WordToStackSteps.DirectTailLocal
@@ -512,6 +514,8 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopEntry`: Assignment-loop source budgets through the compiled RISC-V entry.
 - `SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep`: Countdown through generated entries to a packaged RISC-V backend.
 - `SteppedFlapjack.LoopToWordSteps.TailRiscVSetup`: Shared RISC-V backend initialization interface.
+- `SteppedFlapjack.LoopToWordSteps.NativeTailRiscVReady`: Native Loop/Word local initialization.
+- `SteppedFlapjack.PanToCrepSteps.NativeTailOutcome`: Returned source outcomes and event traces at the machine.
 - `SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample`: A constructed state-changing loop trace.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclList`: Counted/HOL bridge for nested scalar declarations.
 - `SteppedFlapjack.PanToCrepSteps.ReplayLimitMono`: Monotonic source-derived compiler replay budgets.

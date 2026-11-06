@@ -190,8 +190,7 @@ def TailRiscVReady {F : Type} (p : HolLoopProg 64)
     (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (limit : Nat) : Prop :=
   ∀ (setup : TailRiscVSetup p word limit),
     LoopToWord.localsRelHOL setup.ctxt source.locals word.locals →
-    sptLookup 0 word.locals = some (.loc 1 0) → goodDimindex 64 →
-    ¬ wordSemIsWordLoc (.loc 1 0 : WordLocW 64) = true →
+    sptLookup 0 word.locals = some (.loc 1 0) →
     (∀ k, sptMem k (accVarsHOL p .ln) → sptMem k setup.ctxt) →
     ∃ outcome ticks finalMachine finalFfi,
       ticks ≤ setup.tickLimit ∧
@@ -209,8 +208,8 @@ theorem tailRiscVReady_of_loop {F : Type} {loc : Nat} {p callee : HolLoopProg 64
     (notError : result ≠ some .error) (rel : loopToWordStateRelHOLExact source word)
     (complete : CompleteLoopResult result) (bound : LoopSteps.steps p source ≤ limit) :
     TailRiscVReady p source sourcePost result word limit := by
-  intro setup locals zero dim locWord used
+  intro setup locals zero used
   exact setup.run_bounded source sourcePost result word limit shape calleeShape lookup
-    ⟨run,notError,rel,locals,zero,dim,locWord,used⟩ complete bound
+    ⟨run,notError,rel,locals,zero,Or.inr rfl,by decide,used⟩ complete bound
 
 end SteppedFlapjack.LoopToWordSteps
