@@ -1,4 +1,4 @@
-import SteppedFlapjack.CrepToLoopSteps.RiscVComposition
+import SteppedFlapjack.CrepToLoopSteps.TailRiscVComposition
 import SteppedFlapjack.WordToStackSteps.TailEntryFrame
 import SteppedFlapjack.WordToStackSteps.WholeTailInitialization
 import SteppedFlapjack.CrepToLoopSteps.RiscVInputs
