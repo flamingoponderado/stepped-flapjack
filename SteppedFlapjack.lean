@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordToStackSteps.WholeTailInitialization
 import SteppedFlapjack.CrepToLoopSteps.RiscVInputs
 import SteppedFlapjack.WordAllocSteps.WholeTailCode
 import SteppedFlapjack.WordToStackSteps.DirectTailRiscV
