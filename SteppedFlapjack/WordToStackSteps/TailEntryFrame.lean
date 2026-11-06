@@ -1,6 +1,7 @@
 import SteppedFlapjack.WordToStackSteps.InitialFrame
 import SteppedFlapjack.WordToStackSteps.EntryComposition
 import SteppedFlapjack.WordToStackSteps.WholeTailInitialization
+import SteppedFlapjack.WordToStackSteps.FixedEntryFrame
 
 /-! The actual compiled initial entry either obtains its frame or hits the
 native Stack resource limit. -/
@@ -67,5 +68,32 @@ theorem wholeWordStack_tailEntryFrame_or_resource {C F : Type}
   · right
     obtain ⟨post,run,_,ffi,bound⟩ := allocationFailure_entry t name limit frameSize body foundBody ok.2.2.2.1 (by omega)
     exact ⟨post,run,ffi,bound⟩
+
+
+/-- The initialized frame gives the exact local-domain and state premises for
+simulating an original Word entry against the compiled code table. Replacing
+the code table does not alter entry locals or the frame relation once the
+compiled table is restored for the Stack simulation. -/
+theorem initializedTail_simulation_state {C F : Type}
+    (ac : AsmConfigExact 64) (k frameSize frame : Nat)
+    (stack : StackSemStateFiniteExact 64 C F)
+    (compiledCode originalCode : Spt (Nat × WordLangProgHOL (BitVec 64)))
+    (coracle : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (clock temp : Nat)
+    (related : stateRel ac k frameSize frame
+      (callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
+        (makeInit ac k stack compiledCode coracle))
+      {stack with stackSpace := stack.stackSpace-frameSize} [] 0) :
+    let word := {callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
+      (makeInit ac k stack compiledCode coracle) with code := originalCode}
+    let entry := {stack with clock := clock}
+    sptDomain word.locals = (fun key => key ∈ Flapjack.Compiler.Backend.WordAlloc.evenList 1) ∧
+    wordLocalsRel temp word.locals word.locals ∧
+    sptLookup 0 word.locals = some (.loc 1 0) ∧
+    stateRel ac k frameSize frame {word with code := compiledCode,locals := word.locals,clock := clock}
+      {entry with stackSpace := entry.stackSpace-frameSize} [] 0 := by
+  have localFacts := nativeEntry_locals (makeInit ac k stack compiledCode coracle) frameSize temp
+  have shifted := stateRel_setClocks ac k frameSize frame _ _ [] 0 clock related
+  exact ⟨localFacts.1,localFacts.2.1,localFacts.2.2,by simpa [WordSemStateFiniteExact.callEnv,makeInit] using shifted⟩
 
 end SteppedFlapjack.WordToStackSteps

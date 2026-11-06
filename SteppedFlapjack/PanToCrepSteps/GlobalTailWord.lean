@@ -408,7 +408,18 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
        Flapjack.WordToStackProofs.stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
         {(WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
           (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2) coracle)) with clock := limit}
-        {stack with stackSpace := stack.stackSpace-frameSize,clock := limit} [] 0 ∨
+        {stack with stackSpace := stack.stackSpace-frameSize,clock := limit} [] 0 ∧
+       (∀ temp,
+         let sourceWord := {WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
+           (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length))
+             stack (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2) coracle) with
+               code := sptFromAList programs}
+         sptDomain sourceWord.locals = (fun key => key ∈ Flapjack.Compiler.Backend.WordAlloc.evenList 1) ∧
+         wordLocalsRel temp sourceWord.locals sourceWord.locals ∧
+         sptLookup 0 sourceWord.locals = some (.loc 1 0) ∧
+         Flapjack.WordToStackProofs.stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
+           {sourceWord with code := (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2), locals := sourceWord.locals, clock := limit}
+           {stack with stackSpace := stack.stackSpace-frameSize,clock := limit} [] 0) ∨
        ∃ (ticks : Nat) (finalMachine : RiscV.L3.riscv_state) (finalFfi : HolFfiState F),
          ticks ≤ labTickBound 4 labCode lab.codeBuffer *
           (flattenStepFactor * (computedRunCost bounds (uniformFactor (width := 64) c * 3)
@@ -424,7 +435,14 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
   refine ⟨bs,n,bsPost,nPost,body,frame,frameSize,frameDef,sizeDef,compilation,foundEntry,
     lengthBound,gapBound,bitmapPrefix,?_⟩
   rcases caseResult with success | ⟨post,run,ffi,stepBound⟩
-  · exact Or.inl success
+  · left
+    refine ⟨success.1,success.2,?_⟩
+    intro temp
+    exact SteppedFlapjack.WordToStackSteps.initializedTail_simulation_state ac _ frameSize frame stack
+      (sptFromAList (Compiler.Backend.WordToWord.compile wc ac
+        (loopToWordCompileHOL (compileProgHOLExact arch (compileProgDeclsHOLW (compileTopExactHOL declarations start))))).2)
+      (sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch
+        (compileProgDeclsHOLW (compileTopExactHOL declarations start))))) coracle limit temp success.1
   · right
     have classification : stackEntryClass (some (.halt (.word 2)) : Option (StackSemResult 64)) =
         .CompleteResult HolOutcome.resourceLimitHit := by simp [stackEntryClass]
