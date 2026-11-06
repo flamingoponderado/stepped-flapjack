@@ -1,6 +1,8 @@
 import SteppedFlapjack.PanToCrepSteps.SourceNativeInputs
 import SteppedFlapjack.PanToCrepSteps.FullInitAssignLoopInputs
 import SteppedFlapjack.LoopToWordSteps.FullInitNativeValidity
+import Flapjack.Compiler.Backend.BackendProof.MachineInit
+import Flapjack.Compiler.Backend.Semantics.TargetSem.InitializationContracts
 
 /-! Build source compiler inputs using full initialization. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -343,6 +345,52 @@ theorem labInitializedOriginal_top_outside {σ : Type}
   simp only [show (2 : BitVec 64).toNat = 2 by decide] at eqNat
   norm_num at *
   omega
+
+/-- Every accessible source heap address is word aligned. -/
+theorem labInitializedOriginal_heap_aligned {σ : Type}
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack) (address : BitVec 64)
+    (member : (labInitializedOriginal template stack backend).memaddrs address) :
+    holByteAlign address = address := by
+  have mem := backend.initAssumptions.2.2.2.2.1
+  obtain ⟨base,_,_,_,read,_,_,_,_,_,_,_,_,_,baseAligned,_⟩ := mem
+  simp only [labInitializedOriginal,labInitializedSource,read,wordSemTheWord] at member
+  rw [Flapjack.Compiler.Backend.StackRemove.mem_addresses] at member
+  obtain ⟨i,_,eq⟩ := member
+  rw [eq,BitVec.mul_comm]
+  have aligned := Flapjack.Compiler.Backend.BackendProof.byteAlignedMult (width := 64)
+    (by simp [goodDimindex]) base i
+  rw [baseAligned] at aligned
+  simpa [holByteAligned,holAligned,holByteAlign,Flapjack.Compiler.Backend.StackRemove.bytesInWord] using aligned
+
+/-- Word-valued aligned Lab memory supplies all source heap cells. -/
+theorem labInitializedOriginal_wordMemory {σ : Type}
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack)
+    (alignedWords : ∀ address, ∃ word, backend.lab.memory (holByteAlign address) = .word word) :
+    ∀ address, (labInitializedOriginal template stack backend).memaddrs address →
+      ∃ word, backend.lab.memory address = .word word := by
+  intro address member
+  simpa [labInitializedOriginal_heap_aligned template stack backend address member] using alignedWords address
+
+/-- The standard machine initialization contract supplies the source heap's
+word-valued memory when its memory function is the Lab input. -/
+theorem labInitializedOriginal_wordMemory_of_goodInit {σ S Q : Type}
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack)
+    (mc : MachineConfig 64 S Q) (ms : S) (bytes : List (BitVec 8)) (cbspace : Nat)
+    (asm : AsmState 64) (memory : BitVec 64 → WordLocW 64) (dm sdm : BitVec 64 → Bool)
+    (initial : goodInitState mc ms bytes cbspace asm memory dm sdm)
+    (memoryEq : backend.lab.memory = memory) :
+    ∀ address, (labInitializedOriginal template stack backend).memaddrs address →
+      ∃ word, backend.lab.memory address = .word word := by
+  apply labInitializedOriginal_wordMemory template stack backend
+  intro address
+  obtain ⟨word,read⟩ := goodInitState_wordMemory initial address
+  exact ⟨word,by simpa [memoryEq] using read⟩
 
 /-- The counted source theorem's actual no-globals pre-call state has the
 required memory relation when Lab heap cells contain words. -/

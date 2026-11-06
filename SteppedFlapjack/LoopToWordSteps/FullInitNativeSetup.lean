@@ -46,6 +46,54 @@ structure FullInitMachineContext {F : Type} (stack : StackSemStateFiniteExact 64
   tie : LabToTarget.oracleTie mc machine lab
   machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) lab asm machine
 
+/-- Reset the Lab clock while retaining the same machine state and all
+initialization relations. This permits a clock-zero machine initializer to
+serve as the entry for a source run with an arbitrary clock. -/
+noncomputable def FullInitMachineContext.withClock {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F}
+    (backend : FullInitMachineContext stack) (clock : Nat) :
+    FullInitMachineContext
+      (fullMakeInit backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset backend.bitmaps
+        backend.inputCode {backend.lab with clock := clock} backend.saveRegs backend.dataSp backend.coracle).1 where
+  stackConf := backend.stackConf
+  dataConf := backend.dataConf
+  maxHeap := backend.maxHeap
+  sp := backend.sp
+  offset := backend.offset
+  bitmaps := backend.bitmaps
+  inputCode := backend.inputCode
+  lab := {backend.lab with clock := clock}
+  saveRegs := backend.saveRegs
+  dataSp := backend.dataSp
+  coracle := backend.coracle
+  initAssumptions := by simpa [Assumptions,StackToLab.Proofs.MakeInit.memoryAssumption] using backend.initAssumptions
+  stackEq := rfl
+  pc := backend.pc
+  mc := backend.mc
+  labCode := backend.labCode
+  labs := backend.labs
+  asm := backend.asm
+  machine := backend.machine
+  hmc := backend.hmc
+  tie := by simpa [LabToTarget.oracleTie] using backend.tie
+  machineRel := LabToTarget.stateRelClock _ backend.lab backend.asm backend.machine clock backend.machineRel
+
+/-- Clock adjustment retains the original machine, compiler inputs and Lab
+data, while setting exactly the requested evaluation clock. -/
+theorem FullInitMachineContext.withClock_fields {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F}
+    (backend : FullInitMachineContext stack) (clock : Nat) :
+    (backend.withClock clock).lab.clock = clock ∧
+    (backend.withClock clock).lab.regs = backend.lab.regs ∧
+    (backend.withClock clock).lab.memory = backend.lab.memory ∧
+    (backend.withClock clock).lab.ffi = backend.lab.ffi ∧
+    (backend.withClock clock).bitmaps = backend.bitmaps ∧
+    (backend.withClock clock).inputCode = backend.inputCode ∧
+    (backend.withClock clock).coracle = backend.coracle ∧
+    (backend.withClock clock).mc = backend.mc ∧
+    (backend.withClock clock).machine = backend.machine := by
+  exact ⟨rfl,rfl,rfl,rfl,rfl,rfl,rfl,rfl,rfl⟩
+
 /-- Full initialization preserves the Lab state's FFI state. -/
 theorem FullInitMachineContext.ffi_eq {F : Type}
     {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
