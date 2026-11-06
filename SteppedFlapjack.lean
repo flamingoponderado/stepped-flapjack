@@ -3,6 +3,7 @@ import SteppedFlapjack.CrepSteps.BranchClock
 import SteppedFlapjack.CrepToLoopSteps.WhileClock
 import SteppedFlapjack.LoopSteps.IterationClock
 import SteppedFlapjack.CrepToLoopSteps.BranchRiscV
+import SteppedFlapjack.CrepToLoopSteps.WhileZero
 import SteppedFlapjack.CrepToLoopSteps.BranchExtraClock
 import SteppedFlapjack.CrepToLoopSteps.Branch
 import SteppedFlapjack.LoopSteps.BranchedStatic
@@ -285,6 +286,8 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.CrepSteps.BranchClock`: source branch-program clock consumption bounded by visits.
 - `SteppedFlapjack.CrepToLoopSteps.WhileClock`: compiled while loops bounded by clock consumption.
 - `SteppedFlapjack.CrepToLoopSteps.BranchRiscV`: Crep conditional programs through RISC-V.
+- `SteppedFlapjack.CrepToLoopSteps.WhileZero`: actual compiled loop execution for a false direct guard.
+- `SteppedFlapjack.CrepToLoopSteps.DirectExpressionEval`: direct condition evaluation with no extra clock.
 - `SteppedFlapjack.CrepToLoopSteps.BranchExtraClock`: syntax bound on compiler extra clock for Crep branch programs.
 - `SteppedFlapjack.CrepToLoopSteps.Branch`: Crep conditional compilation and source-step bounds.
 - `SteppedFlapjack.LoopSteps.IterationClock`: loop visits bounded by consumed clock and body size.
