@@ -4,6 +4,29 @@ import SteppedFlapjack.PanToCrepSteps.CountedAssign
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang
 
+/-- A related word-valued condition has the same value in HOL and in the
+counted executable evaluator, with its exact expression cost. -/
+theorem counted_condition_word {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (source : PanSemStateFiniteExact 64 σ) [DecidablePred source.memaddrs]
+    (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
+    (condition : Exp (RiscV.Word 64)) (conditionRanged : ExpByteRanged condition) (word : BitVec 64)
+    (conditionRun : evalPanSemStateExp production condition = some (.word word)) :
+    panValueIteCondition production.structs production.baseAddress production.topAddress panSemBitVec64BytesInWord
+      production.locals production.globals production.memory condition
+      (some (panSemBitVec64MemoryAccess production)) = some (word,panValueExpStepCost condition) ∧
+    @evalHOLExact 64 σ _ source.toExact (fun address => Classical.propDecidable (source.memaddrs address))
+      (expToHOL condition) = some (.val (.word word)) := by
+  have previous : evalPanValueExp production.structs production.locals production.globals production.memory
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord condition
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (.word word) := by
+    simpa only [evalPanSemStateExp_64_eq_previous] using conditionRun
+  have valueAgree := evalPanSemStateExp_agree production source rel ranged condition conditionRanged
+  constructor
+  · simp [panValueIteCondition,evalPanValueExpCounted,previous]
+  · rw [evalHOLFinite_eq_classical,← valueAgree,conditionRun]
+    simp
+
 /-- The condition is evaluated by both semantics and the selected branch is
 executed once. The child bound and expression-node cost bound the entire
 conditional, for either zero or nonzero conditions. -/
@@ -33,19 +56,8 @@ theorem counted_ite_word {σ : Type}
         some (result,panValueExpStepCost condition+branchCost+1) ∧
     source.evaluateHOLFiniteState (.ite (expToHOL condition) thenHOL elseHOL) = (holResult,final) ∧
     controlSteps (.ite (expToHOL condition) thenHOL elseHOL) source ≤ panValueExpStepCost condition+branchCost+1 := by
-  have previous : evalPanValueExp production.structs production.locals production.globals production.memory
-      production.baseAddress production.topAddress panSemBitVec64BytesInWord condition
-      (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (.word word) := by
-    simpa only [evalPanSemStateExp_64_eq_previous] using conditionRun
-  have counted : evalPanValueExpCounted production.structs production.locals production.globals production.memory
-      production.baseAddress production.topAddress panSemBitVec64BytesInWord condition
-      (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
-        some (.word word,panValueExpStepCost condition) := by simp [evalPanValueExpCounted,previous]
-  have valueAgree := evalPanSemStateExp_agree production source rel ranged condition conditionRanged
-  have exactEval : @evalHOLExact 64 σ _ source.toExact
-      (fun address => Classical.propDecidable (source.memaddrs address)) (expToHOL condition) = some (.val (.word word)) := by
-    rw [evalHOLFinite_eq_classical,← valueAgree,conditionRun]
-    simp
+  obtain ⟨conditionCounted,exactEval⟩ :=
+    counted_condition_word production source rel ranged condition conditionRanged word conditionRun
   have smallerThen : Prod.Lex (fun x y : Nat => x < y) (fun x y : Nat => x < y)
       (source.clock,sizeOf thenHOL) (source.clock,sizeOf (.ite (expToHOL condition) thenHOL elseHOL : ProgHOL 64)) := by
     apply Prod.Lex.right
@@ -60,7 +72,7 @@ theorem counted_ite_word {σ : Type}
     simp only [if_true] at branchExec branchRun branchBound
     constructor
     · rw [evalPanValueFfiProgSteps]
-      simp [panValueIteCondition,counted,branchExec]
+      simp [conditionCounted,branchExec]
     · constructor
       · rw [PanSemStateFiniteExact.evaluateHOLFiniteState_ite,exactEval]
         simpa using branchRun
@@ -72,7 +84,7 @@ theorem counted_ite_word {σ : Type}
     have zeroBits : word ≠ (0#64) := by simpa using zero
     constructor
     · rw [evalPanValueFfiProgSteps]
-      simp [panValueIteCondition,counted,zeroBits,branchExec]
+      simp [conditionCounted,zeroBits,branchExec]
     · constructor
       · rw [PanSemStateFiniteExact.evaluateHOLFiniteState_ite,exactEval]
         simpa [zeroBits] using branchRun

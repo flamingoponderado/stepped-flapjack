@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.CountedWhile
 import SteppedFlapjack.PanToCrepSteps.CountedIte
 import SteppedFlapjack.PanToCrepSteps.CountedSequence
 import SteppedFlapjack.PanToCrepSteps.CountedAssign
@@ -453,6 +454,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.GlobalWhile`: Global lowering and Crep visit bounds for initialized loops.
 - `SteppedFlapjack.PanToCrepSteps.GlobalInitializers`: Supported scalar global declarations and generated initializer stores.
 - `SteppedFlapjack.PanToCrepSteps.GlobalShapes`: Supported global-lowering shapes and branch bounds.
+- `SteppedFlapjack.PanToCrepSteps.CountedWhile`: Counted loop zero, iteration, and break composition.
 - `SteppedFlapjack.PanToCrepSteps.CountedIte`: Counted conditional and selected HOL branch composition.
 - `SteppedFlapjack.PanToCrepSteps.CountedSequence`: Counted and HOL sequence composition for normal and early exits.
 - `SteppedFlapjack.PanToCrepSteps.CountedAssign`: Counted local assignment and related HOL post-state.
