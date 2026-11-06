@@ -46,7 +46,8 @@ theorem counted_singleEntry_countdown_fullInit_riscv {σ : Type}
       (functionsHOL (compileTopExactHOL declarations start)).reverse))
     (middleDef : middle = pan)
     (crepDef : crep = concreteDeclCrepState pan (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
-    (targetDef : target = concreteDeclLoopState arch crep (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+    (targetDef : target = {concreteDeclLoopState arch crep (compileProgDeclsHOLW (compileTopExactHOL declarations start)) with memory := target.memory})
+    (memoryRel : crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs)
     (native : FullInitAssignLoopInputs declarations start caller loopCtxt (assignLoopEntryProgram declarations initializers caller loopCtxt .ln)
       (declaredAssignLoopLimit declarations initializers globals caller (.var .local name : Exp (RiscV.Word 64)) (.op .sub [.var .local name,.const 1] : Exp (RiscV.Word 64)) name (BitVec.ofNat 64 count) returned pan budget loopCtxt .ln) target) :
     let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
@@ -87,6 +88,6 @@ theorem counted_singleEntry_countdown_fullInit_riscv {σ : Type}
     (restorePanValueLocal (fun _ => none) name (production.locals name)) production.globals production.memory production.ffi
     [.word returned] (by simpa [countdownBody] using exec) conditionShape bodyShape loopCtxt target arch
     initializersEmpty globalsEmpty sourceLocals sourceGlobals sourceExceptions sourceStructs topOutside aligned singleDef sourceCode
-    panDef middleDef crepDef targetDef native
+    panDef middleDef crepDef targetDef memoryRel native
 
 end SteppedFlapjack.PanToCrepSteps

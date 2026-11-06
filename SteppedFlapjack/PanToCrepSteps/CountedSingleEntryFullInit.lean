@@ -61,7 +61,8 @@ theorem counted_singleEntry_declared_fullInit_riscv {σ : Type}
       (functionsHOL (compileTopExactHOL declarations start)).reverse))
     (middleDef : middle = pan)
     (crepDef : crep = concreteDeclCrepState pan (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
-    (targetDef : target = concreteDeclLoopState arch crep (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+    (targetDef : target = {concreteDeclLoopState arch crep (compileProgDeclsHOLW (compileTopExactHOL declarations start)) with memory := target.memory})
+    (memoryRel : crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs)
     (native : FullInitAssignLoopInputs declarations start caller loopCtxt (assignLoopEntryProgram declarations initializers caller loopCtxt .ln)
       (declaredAssignLoopLimit declarations initializers globals caller condition assignment name initial returned pan budget loopCtxt .ln) target) :
     let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
@@ -146,6 +147,6 @@ theorem counted_singleEntry_declared_fullInit_riscv {σ : Type}
     production source pan middle crep rel ranged cost budget returned clock budgetBound returnLocals returnGlobals
     returnMemory returnFfi returnValues wholeRun conditionShape bodyShape sourceFound globalFound funs [] globalCompiled
     unique localised preShapes noTail loopCtxt target arch initializersEmpty globalsEmpty sourceLocals sourceGlobals
-    sourceExceptions sourceStructs topOutside aligned callerExceptions codeCompiled panDef middleDef crepDef targetDef native
+    sourceExceptions sourceStructs topOutside aligned callerExceptions codeCompiled panDef middleDef crepDef targetDef memoryRel native
 
 end SteppedFlapjack.PanToCrepSteps

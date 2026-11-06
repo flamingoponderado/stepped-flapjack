@@ -75,7 +75,8 @@ theorem counted_declared_noGlobals_source_fullInit_riscv {σ : Type}
       (functionsHOL (compileTopExactHOL declarations start)).reverse))
     (middleDef : middle = pan)
     (crepDef : crep = concreteDeclCrepState pan (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
-    (targetDef : target = concreteDeclLoopState arch crep (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+    (targetDef : target = {concreteDeclLoopState arch crep (compileProgDeclsHOLW (compileTopExactHOL declarations start)) with memory := target.memory})
+    (memoryRel : crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs)
     (native : FullInitAssignLoopInputs declarations start caller loopCtxt (assignLoopEntryProgram declarations initializers caller loopCtxt .ln)
       (declaredAssignLoopLimit declarations initializers globals caller condition assignment name initial returned pan budget loopCtxt .ln) target) :
     let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
@@ -108,9 +109,18 @@ theorem counted_declared_noGlobals_source_fullInit_riscv {σ : Type}
     (compileProgDeclsHOLW (compileTopExactHOL declarations start)) arch caller loopCtxt
     sourceLocals sourceGlobals sourceExceptions sourceStructs topOutside aligned callerVars callerExceptions loopVars codeCompiled
   dsimp only at frontend
-  rw [← panDef, ← crepDef, ← targetDef] at frontend
+  rw [← panDef, ← crepDef] at frontend
   obtain ⟨initRun,entryClock,globalRel,panStateRel,crepCode,panExcpRel,panLocalsRel,
-    crepRel,memRel,globalsRel,localsRel,_⟩ := frontend
+    baseRel,_,baseGlobals,baseLocals,_⟩ := frontend
+  have crepRel : crepToLoopStateRelExact crep target := by
+    rw [targetDef]
+    simpa [crepToLoopStateRelExact] using baseRel
+  have globalsRel : crepToLoopGlobalsRelHOLExact crep.globals target.globals := by
+    rw [targetDef]
+    simpa using baseGlobals
+  have localsRel : crepToLoopLocalsRelExact loopCtxt .ln crep.locals target.locals := by
+    rw [targetDef]
+    simpa using baseLocals
   have panCode : pan.code = HolFiniteMapExact.empty.updateList
       (functionsHOL (compileTopExactHOL declarations start)).reverse := by
     simp [panDef,noGlobalsLoweredPreCall]
@@ -125,6 +135,6 @@ theorem counted_declared_noGlobals_source_fullInit_riscv {σ : Type}
     returnMemory returnFfi returnValues wholeRun conditionShape bodyShape panCode initRun' sourceFound
     (by simpa [middleDef] using entryClock) globalFound funs exns globalCompiled globalRel' panStateRel crepCode
     unique localised preShapes noTail panExcpRel panLocalsRel initLocalised initShape loopCtxt target
-    crepRel memRel globalsRel localsRel native
+    crepRel memoryRel globalsRel localsRel native
 
 end SteppedFlapjack.PanToCrepSteps
