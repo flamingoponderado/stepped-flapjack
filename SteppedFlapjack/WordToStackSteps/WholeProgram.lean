@@ -145,6 +145,32 @@ theorem wholeWordStack_entry_bitmaps (wc : Flapjack.Compiler.Backend.WordToWord.
     compileNative_entry_bitmaps ac _ name count _ hmember outputNodup notRaise notStore
   exact ⟨col,_,bs,n,bsPost,nPost,body,frame,rfl,bodyCompiled,lookup,lengthBound,gapBound,bitmapPrefix⟩
 
+/-- The Stack entry and bitmap witnesses correspond to the explicitly
+selected oracle colour, so clients can name the actual compiled Word body. -/
+theorem wholeWordStack_entryColour_bitmaps (wc : Flapjack.Compiler.Backend.WordToWord.Config)
+    (ac : AsmConfigExact width) (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (name count : Nat) (p : WordLangProgHOL (BitVec width)) (member : (name,count,p) ∈ programs)
+    (nodup : (programs.map Prod.fst).Nodup)
+    (notRaise : name ≠ raiseStubLocation) (notStore : name ≠ storeConstsStubLocation) :
+    let q := (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+      ((name,count,p),entryColour wc programs name)).2.2
+    ∃ bs n bsPost nPost body frame,
+      compileProgNative ac false q count (ac.regCount-(5+ac.avoidRegs.length)) (bs,n) = (body,frame,bsPost,nPost) ∧
+      sptLookup name (sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2) = some body ∧
+      (appListAppend bs).length ≤ n ∧
+      n-(appListAppend bs).length ≤ (compileNative ac false (compile wc ac programs).2).1.length ∧
+      (appListAppend bsPost).IsPrefix ((compileNative ac false (compile wc ac programs).2).1.drop (n-(appListAppend bs).length)) := by
+  have outputMember := wholeCompile_contains_entryColour wc ac programs name count p member nodup
+  have eq : fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+      ((name,count,p),entryColour wc programs name) =
+      (name,count,(fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+        ((name,count,p),entryColour wc programs name)).2.2) := by simp [fullCompileSingle,compileSingle]
+  rw [eq] at outputMember
+  have outputNodup : ((compile wc ac programs).2.map Prod.fst).Nodup := by
+    rw [wholeCompile_names wc ac programs]
+    exact nodup
+  exact compileNative_entry_bitmaps ac _ name count _ outputMember outputNodup notRaise notStore
+
 /-- The compiler-selected entry exposes the exact frame formula, body
 compilation and bitmap conditions needed by the Word-to-RISC-V simulation. -/
 theorem wholeWordStack_simulation_inputs (wc : Flapjack.Compiler.Backend.WordToWord.Config)
@@ -189,6 +215,53 @@ theorem wholeWordStack_simulation_inputs (wc : Flapjack.Compiler.Backend.WordToW
     rw [hp]
     exact lookup
   exact ⟨col,q,bs,n,after,afterN,body,frame,size,qDef,ready.1,ready.2.1,ready.2.2.1,ready.2.2.2,
+    rfl,rfl,h,lookup,found,lengthBound,gapBound,bitmapPrefix⟩
+
+/-- Fixed oracle selection exposes the exact compiler-generated Stack simulation inputs. -/
+theorem wholeWordStack_entryColour_simulation_inputs (wc : Flapjack.Compiler.Backend.WordToWord.Config)
+    (ac : AsmConfigExact width) (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (name count : Nat) (p : WordLangProgHOL (BitVec width)) (member : (name,count,p) ∈ programs)
+    (nodup : (programs.map Prod.fst).Nodup)
+    (notRaise : name ≠ raiseStubLocation) (notStore : name ≠ storeConstsStubLocation)
+    (shape : LoopSequence p) :
+    let q := (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+      ((name,count,p),entryColour wc programs name)).2.2
+    ∃ bs n bsPost nPost body frame frameSize,
+      LoopBlock q ∧ noInstallSubprogsHOL q = true ∧ flatExpConventions q = true ∧
+      postAllocConventionsHOL (ac.regCount-(5+ac.avoidRegs.length)) q = true ∧
+      frame = max (maxVarHOL q / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (count-(ac.regCount-(5+ac.avoidRegs.length))) ∧
+      frameSize = (if frame = 0 then 0 else frame+1) ∧
+      compNative ac false q (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
+      sptLookup name (sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2) =
+        some (.seq (.stackAlloc (frameSize-(count-(ac.regCount-(5+ac.avoidRegs.length))))) body) ∧
+      sptLookup name (sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2) =
+        some (compileProgNative ac false q count (ac.regCount-(5+ac.avoidRegs.length)) (bs,n)).1 ∧
+      (appListAppend bs).length ≤ n ∧
+      n-(appListAppend bs).length ≤ (compileNative ac false (compile wc ac programs).2).1.length ∧
+      (appListAppend bsPost).IsPrefix ((compileNative ac false (compile wc ac programs).2).1.drop (n-(appListAppend bs).length)) := by
+  let col := entryColour wc programs name
+  let q := (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac ((name,count,p),col)).2.2
+  obtain ⟨bs,n,bsPost,nPost,entry,frameSize,programCompiled,lookup,lengthBound,gapBound,bitmapPrefix⟩ :=
+    wholeWordStack_entryColour_bitmaps wc ac programs name count p member nodup notRaise notStore
+  let k := ac.regCount-(5+ac.avoidRegs.length)
+  let frame := max (maxVarHOL q / 2 + 1 - k) (count-k)
+  let size := if frame = 0 then 0 else frame+1
+  rcases h : compNative ac false q (bs,n) (k,size,frame) with ⟨body,bm⟩
+  rcases bm with ⟨after,afterN⟩
+  have hp : compileProgNative ac false q count k (bs,n) =
+      (.seq (.stackAlloc (size-(count-k))) body,size,after,afterN) := by
+    change (Flapjack.Compiler.Backend.StackLang.Prog.seq (.stackAlloc (size-(count-k))) (compNative ac false q (bs,n) (k,size,frame)).1,
+      size,(compNative ac false q (bs,n) (k,size,frame)).2) = _
+    rw [h]
+  rw [hp] at programCompiled
+  simp only [Prod.mk.injEq] at programCompiled
+  obtain ⟨rfl,rfl,rfl,rfl⟩ := programCompiled
+  have ready := fullCompileSingle_stackReady ac ac.twoRegArith count name wc.regAlg k col shape
+  have found : sptLookup name (sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2) =
+      some (compileProgNative ac false q count k (bs,n)).1 := by
+    rw [hp]
+    exact lookup
+  exact ⟨bs,n,after,afterN,body,frame,size,ready.1,ready.2.1,ready.2.2.1,ready.2.2.2,
     rfl,rfl,h,lookup,found,lengthBound,gapBound,bitmapPrefix⟩
 
 /-- A Stack state initialized with the compiler output inherits the entry

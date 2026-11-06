@@ -1,5 +1,6 @@
 import SteppedFlapjack.WordAllocSteps.StackReady
 import Flapjack.Compiler.Backend.WordToWord.ExecutableCompile
+import Flapjack.Compiler.Backend.WordToWord.Proofs.Syntactic
 
 /-! Connect the proven single-function pipeline to the whole Word compiler. -/
 namespace SteppedFlapjack.WordAllocSteps
@@ -46,6 +47,57 @@ theorem wholeCompile_names (wc : Config) (ac : AsmConfigExact width)
     (programs : List (Nat × Nat × WordLangProgHOL (BitVec width))) :
     (compile wc ac programs).2.map Prod.fst = programs.map Prod.fst := by
   exact zipped_compile_names ac wc programs _ (compile_zip_length wc programs)
+
+/-- The colour actually paired with a function name by the Word compiler.
+The outer lookup defaults to no colour only when the name is absent. -/
+def entryColour (wc : Config) (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (name : Nat) : Option (Spt Nat) :=
+  (sptAListLookup name ((programs.zip (nextNOracle programs.length wc.colOracle).1).map
+    (fun pair => (pair.1.1,pair.2)))).getD none
+
+omit [NeZero width] in
+private theorem zipped_names (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (oracles : List (Option (Spt Nat))) (lengths : oracles.length = programs.length) :
+    ((programs.zip oracles).map (fun pair => (pair.1.1,pair.2))).map Prod.fst = programs.map Prod.fst := by
+  induction programs generalizing oracles with
+  | nil => cases oracles <;> simp_all
+  | cons p ps ih =>
+    cases oracles with
+    | nil => simp at lengths
+    | cons col cols =>
+      have tailLength : cols.length = ps.length := by simpa using lengths
+      simpa only [List.zip_cons_cons,List.map_cons] using congrArg (List.cons p.1) (ih cols tailLength)
+
+/-- With distinct input names, `entryColour` is exactly the oracle paired
+with the named function, including the compiler’s short-oracle fallback. -/
+theorem entryColour_paired (wc : Config)
+    (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (name count : Nat) (p : WordLangProgHOL (BitVec width)) (member : (name,count,p) ∈ programs)
+    (nodup : (programs.map Prod.fst).Nodup) :
+    ((name,count,p),entryColour wc programs name) ∈ programs.zip (nextNOracle programs.length wc.colOracle).1 := by
+  obtain ⟨col,hcol⟩ := zip_member_of_left programs (nextNOracle programs.length wc.colOracle).1
+    (compile_zip_length wc programs).symm member
+  have mapped : (name,col) ∈ (programs.zip (nextNOracle programs.length wc.colOracle).1).map
+      (fun pair => (pair.1.1,pair.2)) := List.mem_map.mpr ⟨_,hcol,rfl⟩
+  have names : (((programs.zip (nextNOracle programs.length wc.colOracle).1).map
+      (fun pair => (pair.1.1,pair.2))).map Prod.fst).Nodup := by
+    rw [zipped_names programs _ (compile_zip_length wc programs)]
+    exact nodup
+  have lookup := sptAListLookup_of_mem_nodup _ name col names mapped
+  have chosen : entryColour wc programs name = col := by simp only [entryColour,lookup,Option.getD_some]
+  simpa only [chosen] using hcol
+
+/-- The explicit selected colour produces the function in the actual whole
+Word output. -/
+theorem wholeCompile_contains_entryColour (wc : Config) (ac : AsmConfigExact width)
+    (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (name count : Nat) (p : WordLangProgHOL (BitVec width)) (member : (name,count,p) ∈ programs)
+    (nodup : (programs.map Prod.fst).Nodup) :
+    fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+      ((name,count,p),entryColour wc programs name) ∈ (compile wc ac programs).2 := by
+  change _ ∈ ((programs.zip (nextNOracle programs.length wc.colOracle).1).map
+    (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac))
+  exact List.mem_map.mpr ⟨_,entryColour_paired wc programs name count p member nodup,rfl⟩
 
 /-- Every source function occurs in the actual whole-program Word output with
 its corresponding oracle entry. This includes short-oracle fallback. -/
