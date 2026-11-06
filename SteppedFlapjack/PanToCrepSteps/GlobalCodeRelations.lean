@@ -59,6 +59,47 @@ theorem globalEntry_nonInline_frontend_codeRelations {width : Nat} [NeZero width
     LoopToWordSteps.wholeCrepLoopWord_codeRel arch code,
     WordAllocSteps.wholeCrep_word_shapes arch code shapes⟩
 
+/-- The actual global wrapper is the first lookup in the compiled Crep table. -/
+theorem globalEntry_nonInline_crep_lookup {width : Nat} [NeZero width] {F : Type}
+    (declarations : List (DeclHOL width)) (start : MlString)
+    (initializers : List (ProgHOL width)) (returnShape : ShapeHOL) (original : ProgHOL width)
+    (found : (functionsHOL declarations).lookup start = some ([],original,returnShape))
+    (funs exns : List (DeclHOL width)) (context : PanGlobalsContextExact width)
+    (compiled :
+      let renamed := fpermDecsHOL start (newMainNameHOL declarations) (resortDeclsHOL declarations)
+      let initial : PanGlobalsContextExact width :=
+        { globals := HolFiniteMapExact.empty, globalsSize := 0,
+          maxGlobalsSize := cakeBytesInWord width * BitVec.ofNat width ((decShapesHOL renamed).map sizeOfShapeHOL).sum }
+      compileDecsExactHOL initial renamed = (initializers,funs,exns,context))
+    (initShape : CrepToLoopSteps.BranchProgram (compileProgExactHOLW
+      (mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
+        (makeFuncsExactHOL (functionsHOL (compileTopExactHOL declarations start))) (sizeOfShapeHOL (.comb [])-1)
+        (getEidsFromDeclsHOL (compileTopExactHOL declarations start))) (nestedSeqHOL initializers)))
+    (notInline : newMainNameHOL declarations ∉
+      (functionsHOL ((compileTopExactHOL declarations start).filter inlinableHOL)).map Prod.fst)
+    (state : CrepSemHOLState width F)
+ :
+    let lowered := compileTopExactHOL declarations start
+    let code := compileProgDeclsHOLW lowered
+    let sourceContext : PanToCrepContextExact width := mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
+      (makeFuncsExactHOL (functionsHOL lowered)) (sizeOfShapeHOL (.comb [])-1) (getEidsFromDeclsHOL lowered)
+    let init := compileProgExactHOLW sourceContext (nestedSeqHOL initializers)
+    holAlookup code start = some ([],.seq init (.call none (newMainNameHOL declarations) [])) := by
+  obtain ⟨bound,entry,_⟩ := globalEntry_nonInline_preserved declarations start initializers returnShape original found
+    funs exns context compiled initShape notInline state
+  let code := compileProgDeclsHOLW (compileTopExactHOL declarations start)
+  let sourceContext : PanToCrepContextExact width := mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
+    (makeFuncsExactHOL (functionsHOL (compileTopExactHOL declarations start))) (sizeOfShapeHOL (.comb [])-1)
+    (getEidsFromDeclsHOL (compileTopExactHOL declarations start))
+  let init := compileProgExactHOLW sourceContext (nestedSeqHOL initializers)
+  change holAlookup code start = some ([],.seq init (.call none (newMainNameHOL declarations) []))
+  cases h : code with
+  | nil => simp [code,h] at bound
+  | cons first rest =>
+    have firstEq : first = (start,[],.seq init (.call none (newMainNameHOL declarations) [])) := by
+      simpa [code,h,init,sourceContext] using entry
+    simp [holAlookup,firstEq]
+
 /-- Actual global-program code tables complete both frontend state relations. -/
 theorem globalEntry_nonInline_frontend_stateRelations {width : Nat} [NeZero width] {C F : Type}
     (arch : Compiler.Encoders.Asm.AsmArchitecture)
