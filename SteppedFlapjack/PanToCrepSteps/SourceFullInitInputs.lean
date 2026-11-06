@@ -113,10 +113,10 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
     (domain : stack.mdomain = (concreteDeclLoopState arch (concreteDeclCrepState source
       (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
       (compileProgDeclsHOLW (compileTopExactHOL declarations start))).mdomain)
-    (shared : stack.shMdomain = (concreteDeclLoopState arch (concreteDeclCrepState source
+    (shared : backend.lab.sharedMemDomain = (concreteDeclLoopState arch (concreteDeclCrepState source
       (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
       (compileProgDeclsHOLW (compileTopExactHOL declarations start))).shMdomain)
-    (clock : stack.clock = source.clock) (endian : stack.be = source.be) (ffi : backend.lab.ffi = source.ffi)
+    (clock : backend.lab.clock = source.clock) (endian : backend.lab.be = source.be) (ffi : backend.lab.ffi = source.ffi)
     (current : stack.store.lookup .currHeap = some (.word source.baseAddr))
     (length : stack.store.lookup .heapLength = some (.word heapLength))
     (heap : source.topAddr = source.baseAddr + 2 * heapLength)
@@ -129,6 +129,7 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
   exact sourceFullInitInputs declarations start caller loopCtxt entry limit arch source wc ac stack
     (emptyNativeWordOracle backend.bitmaps.length cfg) heapLength callerEq loopContextEq programs programsEq
     backend inputCodeEq bitmapPrefix registers compat.1 (stackOracle.trans compat.2.symm)
-    memory domain shared clock endian (backend.ffi_eq.trans ffi) current length heap
+    memory domain (backend.ambient_eq.2.2.trans shared) (backend.ambient_eq.1.trans clock)
+    (backend.ambient_eq.2.1.trans endian) (backend.ffi_eq.trans ffi) current length heap
 
 end SteppedFlapjack.PanToCrepSteps

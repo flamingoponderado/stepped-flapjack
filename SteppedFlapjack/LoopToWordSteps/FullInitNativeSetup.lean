@@ -3,6 +3,7 @@ import SteppedFlapjack.LoopToWordSteps.NativeTailCompilerFacts
 import SteppedFlapjack.StackToLabSteps.FullInitRiscVSteps
 import Flapjack.Compiler.Backend.DataToWord.Proofs.Gc.GcFunConstOk
 import Flapjack.Compiler.Backend.StackRemove.Proofs.InitFfi
+import Flapjack.Compiler.Backend.StackProps.EvaluateConsts
 
 /-! Construct a full-initialization backend from the actual native compiler. -/
 namespace SteppedFlapjack.LoopToWordSteps
@@ -58,6 +59,54 @@ theorem FullInitMachineContext.ffi_eq {F : Type}
       simp only [StackAlloc.makeInit]
       rw [StackRemove.Proofs.InitFfi.makeInitAnyFfi]
       rfl
+
+/-- The StackRemove initializer preserves the ambient clock, byte order and
+shared-memory domain, including when initialization falls back. -/
+theorem initAny_ambient {width : Nat} [NeZero width] {C F : Type}
+    (generateGc : Bool) (maxHeap : Nat) (bitmaps : List (BitVec width)) (dataSpace : Nat)
+    (oracle : Nat → C × List (Nat × HolProg width) × List (BitVec width))
+    (jump : Bool) (bounds : BitVec width × BitVec width) (pointer : Nat)
+    (code : Spt (HolProg width)) (s : StackSemStateFiniteExact width C F) :
+    let t := InitMake.makeInitAny generateGc maxHeap bitmaps dataSpace oracle jump bounds pointer code s
+    t.clock = s.clock ∧ t.be = s.be ∧ t.shMdomain = s.shMdomain := by
+  dsimp only
+  unfold InitMake.makeInitAny
+  cases opt : InitMake.makeInitOpt generateGc maxHeap bitmaps dataSpace oracle jump bounds pointer code s with
+  | none => simp
+  | some t =>
+    simp only
+    unfold InitMake.makeInitOpt at opt
+    cases run : StackSemEvaluate.evaluate (initCode generateGc maxHeap pointer, s) with
+    | mk result post =>
+      cases result with
+      | some r => simp [run] at opt
+      | none =>
+        simp only [run] at opt
+        split at opt
+        · cases opt
+          have constants := StackProps.evaluateConsts _ s none post run
+          have same := InitClock.evaluateInitCodeClock generateGc maxHeap pointer s post none s.clock run
+          have selfUpdate : ({s with clock := s.clock} : StackSemStateFiniteExact width C F) = s := rfl
+          rw [selfUpdate, run] at same
+          have clock := congrArg (fun x => x.2.clock) same
+          exact ⟨by simpa [InitReduce.initReduce] using clock, by simpa [InitReduce.initReduce] using constants.2.2.2.1,
+            by simpa [InitReduce.initReduce] using constants.2.2.2.2.2.2.1⟩
+        · simp at opt
+
+/-- Full initialization preserves the Lab clock, byte order and shared domain. -/
+theorem FullInitMachineContext.ambient_eq {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
+    stack.clock = backend.lab.clock ∧ stack.be = backend.lab.be ∧ stack.shMdomain = backend.lab.sharedMemDomain := by
+  have h := initAny_ambient (StackToLab.isGenGc backend.dataConf.gcKind) backend.maxHeap backend.bitmaps backend.dataSp
+    (coracle1 backend.coracle) backend.stackConf.jump backend.offset backend.sp (sptFromAList (code1 backend.dataConf backend.inputCode))
+    (s2 backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset backend.inputCode backend.lab backend.saveRegs backend.coracle)
+  have eq := backend.stackEq
+  rw [fullMakeInit_eq] at eq
+  constructor
+  · exact (congrArg (fun s => s.clock) eq).trans (by simpa [StackAlloc.makeInit, s2, s3, StackNames.makeInit, StackToLab.Proofs.MakeInit.makeInit] using h.1)
+  constructor
+  · exact (congrArg (fun s => s.be) eq).trans (by simpa [StackAlloc.makeInit, s2, s3, StackNames.makeInit, StackToLab.Proofs.MakeInit.makeInit] using h.2.1)
+  · exact (congrArg (fun s => s.shMdomain) eq).trans (by simpa [StackAlloc.makeInit, s2, s3, StackNames.makeInit, StackToLab.Proofs.MakeInit.makeInit] using h.2.2)
 
 /-- The full initializer's three-Stack-step resource bound. -/
 noncomputable def FullInitMachineContext.resourceTickLimit {F : Type}
