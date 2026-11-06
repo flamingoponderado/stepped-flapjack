@@ -23,7 +23,9 @@ theorem supportedCodeBody_inline_fixed {width : Nat} [NeZero width]
     simp [inlineProgHOLCoreExact,branchConditionWhileBranch_inline_fixed inl keys support _ hi _ _ _ hb ht]
 
 /-- The real top-level inliner preserves a supported program list when no
-supported direct tail call targets a name selected for inlining. -/
+supported direct tail call targets a name selected for inlining. This
+condition is stronger than necessary for self tail calls: the inliner removes
+the current function from its inline map. -/
 theorem compileInlTop_supported_fixed {width : Nat} [NeZero width]
     (names : List CrepInlineMapHOLName)
     (code : List (CrepInlineMapHOLName × List Nat × CrepProgHOL width))

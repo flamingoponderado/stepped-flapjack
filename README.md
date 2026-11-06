@@ -56,12 +56,29 @@ keep their names in the `Flapjack` namespace.
   fixtures.
 
 The `*Steps` directories also contain the quantitative compiler chain:
-Pancake → Crep → Loop → Word passes → Stack → Lab → RISC-V. The global-entry
-composition is `PanToCrepSteps.panTailEntry_globalWord_riscvWithin`; it covers
-a supported initialized loop and retains frontend, native-entry, and backend
-initialization premises. Its machine bound can depend on an execution-selected
-oracle prefix and other limit-dependent backend costs; a full-compiler bound
-with all initialization premises discharged is still in progress.
+Pancake → Crep → Loop → Word passes → Stack → Lab → RISC-V. The
+`PanToCrepSteps` modules connect counted source execution to global lowering,
+including a scalar declaration around an initialized loop. The general
+`panOriginalDeclEntry_riscvWithin` theorem carries a source control-step bound
+through this chain under the stated state and compilation conditions.
+
+The reusable concrete declaration example is kept in the library because it
+instantiates the actual global entry and serves as an end-to-end proof target.
+`concreteDecl_counted_riscv_bounded` gives its 13-step source execution a common
+machine-step bound covering both successful entry and a resource-limit
+outcome. The bound still depends on compiler-selected witnesses and oracle
+prefix costs, and the theorem assumes matching source, native Stack, Lab and
+RISC-V initial states, native initialization and backend relations. It does
+not yet construct a concrete machine state or prove a general bridge from
+arbitrary counted source runs to `controlSteps`. The example constructs its
+original source state from a lowered entry state.
+
+The declaration chain currently duplicates much of the earlier tail-entry
+chain, including backend premises. Factoring the chain over supported callee
+shapes and a proved shape-specific limit remains work in progress. The counted
+loop and declaration examples are imported as reusable proofs for the
+concrete result; standalone compile-time fixtures remain in
+`SteppedFlapjack/Test/`.
 
 Code shared with the clocked evaluator stays in Flapjack, in
 `Flapjack.PanValueFfiCore` and `Flapjack.PanExpressionEvaluatorBase`.

@@ -2,7 +2,11 @@ import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
 import SteppedFlapjack.PanToCrepSteps.GlobalDecl
 import SteppedFlapjack.PanToCrepSteps.GlobalInitializers
 
-/-! Original Pancake loop visits through the actual global entry to RISC-V. -/
+/-! Original Pancake loop visits through the actual global entry to RISC-V. 
+
+This module is a reusable proof component for the concrete source-to-machine
+example, so it is imported by the library.
+-/
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack.Basis.Pure.MlString Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open Flapjack Flapjack.LoopSemStateFiniteExact Flapjack.WordAlloc

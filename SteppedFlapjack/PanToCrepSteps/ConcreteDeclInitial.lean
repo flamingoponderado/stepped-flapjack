@@ -1,6 +1,10 @@
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram
 
-/-! Concrete global-entry source state and relation. -/
+/-! Concrete global-entry source state and relation. 
+
+This module is a reusable proof component for the concrete source-to-machine
+example, so it is imported by the library.
+-/
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.PanSemStateFiniteExact
 open SteppedFlapjack.CrepToLoopSteps
@@ -13,7 +17,9 @@ theorem concreteDeclGlobalContext_empty (start : MlString) (name : VarName) (ret
     isDeclHOL,isFunctionHOL,List.filter,fpermDecsHOL,decShapesHOL]
 
 /-- A concrete original source state can be recovered from the lowered entry
-by changing only its code and clearing its global map. -/
+by changing only its code and clearing its global map. This example starts
+from the lowered entry; it does not construct that entry from an arbitrary
+original initial state. -/
 def concreteDeclOriginalState {σ : Type} (start : MlString) (name : VarName) (returned : BitVec 64)
     (lowered : PanSemStateFiniteExact 64 σ) : PanSemStateFiniteExact 64 σ :=
   { lowered with globals := HolFiniteMapExact.empty, code := HolFiniteMapExact.empty.update (newMainNameHOL (concreteDeclProgram start name returned),([],concreteDeclBody name returned,.one)) }
