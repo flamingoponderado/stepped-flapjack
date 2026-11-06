@@ -1,0 +1,49 @@
+import SteppedFlapjack.CrepToLoopSteps.InlineEntry
+import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
+
+/-! Inliner fixed points for the supported whole-program fragment. -/
+namespace SteppedFlapjack.CrepToLoopSteps
+open Flapjack Flapjack.CrepInlineCanonical Flapjack.Pancake.PanLang
+open Flapjack.Basis.Pure.MlString
+
+/-- Every supported body is unchanged when its direct tail callee is absent
+from the inline map. Branch and loop bodies need no restriction on the map. -/
+theorem supportedCodeBody_inline_fixed {width : Nat} [NeZero width]
+    (inl : HolFiniteMapExact CrepInlineMapHOLName (List Nat × CrepProgHOL width))
+    (keys : List CrepInlineMapHOLName) (support : ∀ k, inl.lookup k ≠ none → k ∈ keys)
+    {p : CrepProgHOL width} (shape : SupportedCodeBody p)
+    (noTail : ∀ init name, p = .seq init (.call none name []) → inl.lookup name = none) :
+    inlineProgHOLCoreExact inl keys support p = p := by
+  cases shape with
+  | branch h => exact branchProgram_inline_fixed inl keys support h
+  | tail h name => exact inline_tailEntry_fixed inl keys support _ h name [] (noTail _ name rfl)
+  | loop hi _ hb ht => exact branchConditionWhileBranch_inline_fixed inl keys support _ hi _ _ _ hb ht
+
+/-- The real top-level inliner preserves a supported program list when no
+supported direct tail call targets a name selected for inlining. -/
+theorem compileInlTop_supported_fixed {width : Nat} [NeZero width]
+    (names : List CrepInlineMapHOLName)
+    (code : List (CrepInlineMapHOLName × List Nat × CrepProgHOL width))
+    (shapes : ∀ name params p, (name,params,p) ∈ code → SupportedCodeBody p)
+    (noTail : ∀ name params init callee,
+      (name,params,.seq init (.call none callee [])) ∈ code → callee ∉ names) :
+    compileInlTopHOLExact names code = code := by
+  unfold compileInlTopHOLExact compileInlProgHOLExactWithSupport
+  conv_rhs => rw [← List.map_id code]
+  apply List.map_congr_left
+  intro entry member
+  rcases entry with ⟨name,params,p⟩
+  apply congrArg (fun q => (name,params,q))
+  apply supportedCodeBody_inline_fixed _ _ _ (shapes name params p member)
+  intro init callee eq
+  subst p
+  by_contra h
+  have hmem := HolFiniteMapExact.erase_support _ _ (supportKeys_alistToFmapHOLExact _) name callee h
+  simp only [List.mem_filter,List.mem_map] at hmem
+  obtain ⟨⟨candidate,hcandidate,hkey⟩,_⟩ := hmem
+  have hname : callee ∈ names := by
+    have : candidate.1 ∈ names := List.contains_iff_mem.mp hcandidate.2
+    simpa only [hkey] using this
+  exact noTail name params init callee member hname
+
+end SteppedFlapjack.CrepToLoopSteps
