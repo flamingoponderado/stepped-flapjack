@@ -1,3 +1,6 @@
+import SteppedFlapjack.LoopToWordSteps.SelectedRiscV
+import SteppedFlapjack.LoopToWordSteps.SelectedComposition
+import SteppedFlapjack.LoopToWordSteps.SelectedShape
 import SteppedFlapjack.WordInstSteps.ProgramRiscV
 import SteppedFlapjack.WordInstSteps.ProgramStack
 import SteppedFlapjack.WordInstSteps.Compositional
@@ -245,6 +248,9 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.LoopToWordSteps.LoopSetup`: derived loop cut and timeout setup.
 - `SteppedFlapjack.LoopToWordSteps.LoopBound`: quantitative loop induction.
 - `SteppedFlapjack.LoopToWordSteps.LoopProgram`: nested-loop fragment and Word compilation shape.
+- `SteppedFlapjack.LoopToWordSteps.SelectedRiscV`: Loop runs through instruction selection and RISC-V.
+- `SteppedFlapjack.LoopToWordSteps.SelectedComposition`: Loop-to-selected-Word semantic and step composition.
+- `SteppedFlapjack.LoopToWordSteps.SelectedShape`: Loop compiler output accepted by instruction-selection bounds.
 - `SteppedFlapjack.LoopToWordSteps.LoopRiscV`: nested-loop executions composed through RISC-V.
 - `SteppedFlapjack.LoopToWordSteps.Outcome`: source-to-machine outcome and trace correspondence.
 - `SteppedFlapjack.LoopToWordSteps.LoopCost`: cost of the compiled loop wrapper and continuing iterations.

@@ -12,6 +12,14 @@ inductive SimpleProgram {width : Nat} [NeZero width] : WordLangProgHOL (BitVec w
   | assign (dst expr) : SimpleProgram (.assign dst expr)
   | set (name expr) : SimpleProgram (.set name expr)
   | store (expr src) : SimpleProgram (.store expr src)
+  | inst (i) : SimpleProgram (.inst i)
+  | move (priority moves) : SimpleProgram (.move priority moves)
+  | get (dst name) : SimpleProgram (.get dst name)
+  | opCurrHeap (op dst src) : SimpleProgram (.opCurrHeap op dst src)
+  | locValue (dst label) : SimpleProgram (.locValue dst label)
+  | codeBufferWrite (a b) : SimpleProgram (.codeBufferWrite a b)
+  | dataBufferWrite (a b) : SimpleProgram (.dataBufferWrite a b)
+  | ffi (index ptr len ptr2 len2 names) : SimpleProgram (.ffi index ptr len ptr2 len2 names)
   | skip : SimpleProgram .skip
   | tick : SimpleProgram .tick
   | ret (r vs) : SimpleProgram (.return r vs)
@@ -32,6 +40,14 @@ theorem simple_selected_block {width : Nat} [NeZero width]
     simp only [instSelect]
     exact .seq (selectExp_block ac temp temp (flattenExp (pullExp expr))) (.set _ _)
   | store expr src => exact straight_block (selectStore_straight ac temp src expr)
+  | inst i => exact .inst _
+  | move priority moves => exact .move _ _
+  | get dst name => exact .get _ _
+  | opCurrHeap op dst src => exact .opCurrHeap _ _ _
+  | locValue dst label => exact .locValue _ _
+  | codeBufferWrite a b => exact .codeBufferWrite _ _
+  | dataBufferWrite a b => exact .dataBufferWrite _ _
+  | ffi index ptr len ptr2 len2 names => exact .ffi _ _ _ _ _ _
   | skip => exact .skip
   | tick => exact .tick
   | ret r vs => exact .ret _ _
@@ -54,6 +70,14 @@ theorem simple_selected_flat {width : Nat} [NeZero width]
     simp only [instSelect,flatExpConventions,Bool.and_eq_true]
     exact ⟨(straight_flat_noInstall (selectExp_straight ac temp temp (flattenExp (pullExp expr)))).1,True.intro⟩
   | store expr src => exact (straight_flat_noInstall (selectStore_straight ac temp src expr)).1
+  | inst i => rfl
+  | move priority moves => rfl
+  | get dst name => rfl
+  | opCurrHeap op dst src => rfl
+  | locValue dst label => rfl
+  | codeBufferWrite a b => rfl
+  | dataBufferWrite a b => rfl
+  | ffi index ptr len ptr2 len2 names => rfl
   | skip => rfl
   | tick => rfl
   | ret r vs => rfl
@@ -75,6 +99,14 @@ theorem simple_selected_noInstall {width : Nat} [NeZero width]
     simp only [instSelect,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp,Bool.and_true]
     exact (straight_flat_noInstall (selectExp_straight ac temp temp (flattenExp (pullExp expr)))).2
   | store expr src => exact (straight_flat_noInstall (selectStore_straight ac temp src expr)).2
+  | inst i => simp [instSelect,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp]
+  | move priority moves => simp [instSelect,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp]
+  | get dst name => simp [instSelect,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp]
+  | opCurrHeap op dst src => simp [instSelect,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp]
+  | locValue dst label => simp [instSelect,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp]
+  | codeBufferWrite a b => simp [instSelect,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp]
+  | dataBufferWrite a b => simp [instSelect,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp]
+  | ffi index ptr len ptr2 len2 names => simp [instSelect,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp]
   | skip => simp [instSelect,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp]
   | tick => simp [instSelect,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp]
   | ret r vs => simp [instSelect,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp]
@@ -103,6 +135,14 @@ theorem simple_selected_static_bound {width : Nat} [NeZero width] {C F : Type}
     simp only [instSelect]
     exact straight_steps_bound (.seq (selectExp_straight ac temp temp (flattenExp (pullExp expr))) (.setVar name temp)) s
   | store expr src => exact straight_steps_bound (selectStore_straight ac temp src expr) s
+  | inst i => simp only [instSelect]; rw [WordSteps.steps_leaf _ _ rfl]; simp_wf
+  | move priority moves => simp only [instSelect]; rw [WordSteps.steps_leaf _ _ rfl]; simp_wf; omega
+  | get dst name => simp only [instSelect]; rw [WordSteps.steps_leaf _ _ rfl]; simp_wf; omega
+  | opCurrHeap op dst src => simp only [instSelect]; rw [WordSteps.steps_leaf _ _ rfl]; simp_wf; omega
+  | locValue dst label => simp only [instSelect]; rw [WordSteps.steps_leaf _ _ rfl]; simp_wf; omega
+  | codeBufferWrite a b => simp only [instSelect]; rw [WordSteps.steps_leaf _ _ rfl]; simp_wf; omega
+  | dataBufferWrite a b => simp only [instSelect]; rw [WordSteps.steps_leaf _ _ rfl]; simp_wf; omega
+  | ffi index ptr len ptr2 len2 names => simp only [instSelect]; rw [WordSteps.steps_leaf _ _ rfl]; simp_wf; omega
   | skip => simp only [instSelect]; rw [WordSteps.steps_leaf _ _ rfl]; simp_wf
   | tick => simp only [instSelect]; rw [WordSteps.steps_leaf _ _ rfl]; simp_wf
   | ret r vs => simp only [instSelect]; rw [WordSteps.steps_leaf _ _ rfl]; simp_wf; omega
