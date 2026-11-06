@@ -1,5 +1,6 @@
 import SteppedFlapjack.PanToCrepSteps.CountdownLabInit
 import SteppedFlapjack.PanToCrepSteps.SingleEntrySourceEnvironment
+import SteppedFlapjack.PanToCrepSteps.CanonicalFfi
 
 /-! Construct the countdown's matching source environments from an arbitrary template. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -36,7 +37,6 @@ theorem labInit_countdown_canonicalSource_riscv {σ : Type}
     (hmc : mc.target = riscvTarget)
     (guards : LabMachineInitGuards mc machine code code2 labs labelClock i cbspace asm memory dm sdm
       labOracle newFfiNames shmemInfo newShmemInfo)
-    (ffiRel : FfiStateRel production.ffi ffi)
     (nameRanged : NameRanged name) (wordRange : count < 2^64)
     (budgetBound : 6*count+9 ≤ budget)
     (registers : 4 < ac.regCount-(5+ac.avoidRegs.length))
@@ -55,7 +55,8 @@ theorem labInit_countdown_canonicalSource_riscv {σ : Type}
     let start := ofString "main"
     let declarations := singleEntryProgram start body
     let sourceTemplate := singleEntrySourceTemplate template (newMainNameHOL declarations) body
-    let sourceProduction := singleEntrySourceProduction production (newMainNameHOL declarations) body
+    let productionFfi := {production with ffi := sourceFfiState ffi}
+    let sourceProduction := singleEntrySourceProduction productionFfi (newMainNameHOL declarations) body
     let caller := mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
       (makeFuncsExactHOL (functionsHOL (compileTopExactHOL declarations start))) (sizeOfShapeHOL (.comb [])-1)
       (getEidsFromDeclsHOL (compileTopExactHOL declarations start))
@@ -101,15 +102,16 @@ theorem labInit_countdown_canonicalSource_riscv {σ : Type}
   let start := ofString "main"
   let declarations := singleEntryProgram start body
   let sourceTemplate := singleEntrySourceTemplate template (newMainNameHOL declarations) body
-  let sourceProduction := singleEntrySourceProduction production (newMainNameHOL declarations) body
+  let productionFfi := {production with ffi := sourceFfiState ffi}
+  let sourceProduction := singleEntrySourceProduction productionFfi (newMainNameHOL declarations) body
   have result := labInit_countdown_fromGeneral_riscv declarations start arch name count budget returned
     context primitive handler functions fuel sourceProduction sourceTemplate wc ac stackConf dataConf maxHeap sp offset
     saveRegs dataSp cfg mc machine ffi code code2 labs labelClock i cbspace labClock asm memory dm sdm labOracle
     newFfiNames shmemInfo newShmemInfo hmc guards
-    (singleEntrySource_environment production template (newMainNameHOL declarations) body)
-    (singleEntrySource_ranged production (newMainNameHOL declarations) body)
-    (by simpa [sourceProduction,singleEntrySourceProduction] using ffiRel) nameRanged wordRange budgetBound
+    (singleEntrySource_environment productionFfi template (newMainNameHOL declarations) body)
+    (singleEntrySource_ranged productionFfi (newMainNameHOL declarations) body)
+    (by simpa [sourceProduction,singleEntrySourceProduction,productionFfi] using sourceFfiState_rel ffi) nameRanged wordRange budgetBound
     rfl rfl rfl rfl rfl rfl (by rfl) registers stackInit
-  simpa only [sourceTemplate,sourceProduction,body,start,declarations] using result
+  simpa only [sourceTemplate,sourceProduction,productionFfi,body,start,declarations] using result
 
 end SteppedFlapjack.PanToCrepSteps

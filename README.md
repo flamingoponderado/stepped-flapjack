@@ -76,8 +76,8 @@ source budget without changing the counted run or RISC-V machine.
 theorem to a countdown with a separately proved exact source cost. `labInit_countdown_fromGeneral_riscv` constructs the backend directly from
 the Lab and Stack initializer guards and the compiler's native code and bitmap
 outputs. `labInit_countdown_canonicalSource_riscv` also constructs the
-matching singleton source environments and code table. The concrete guards
-remain to be proved for an application.
+matching singleton source environments, code table and executable FFI state.
+The concrete machine initialization guards remain to be proved for an application.
 
 The reusable concrete declaration example is kept in the library because it
 instantiates the actual global entry and serves as an end-to-end proof target.
