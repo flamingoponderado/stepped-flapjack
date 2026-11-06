@@ -1,12 +1,19 @@
 import SteppedFlapjack.PanToCrepSteps.CountedCountdown
 import SteppedFlapjack.PanToCrepSteps.TailEntryDeclBound
 import SteppedFlapjack.CrepToLoopSteps.DeclRiscVInputs
+import SteppedFlapjack.LoopToWordSteps.TailRiscVSetup
 
-/-! The counted countdown through the actual global Crep entry wrapper. -/
+/-! The counted countdown through the actual global Crep entry wrapper.
+
+The Loop theorem also supplies a bounded machine execution for each compatible
+`TailRiscVSetup`. It does not construct such a setup from a concrete machine
+initial state, and the machine result retains the resource-failure alternative. -/
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.PanSemStateFiniteExact
 open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps
 open Flapjack.LoopSemStateFiniteExact Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
+open Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
+open SteppedFlapjack.LabToTargetSteps
 
 /-- The generated entry's Crep execution and visit bound for the actual
 counted countdown. The initial global and frontend state relations remain
@@ -110,7 +117,7 @@ theorem countdown_globalEntry_crep {σ : Type} (count : Nat)
   omega
 
 /-- The counted countdown reaches the optimized Loop entry within the source-derived limit. -/
-theorem countdown_globalEntry_loop {σ C : Type} (count : Nat)
+theorem countdown_globalEntry_loop {σ : Type} (count : Nat)
     (declarations : List (DeclHOL 64)) (start : MlString) (initializers : List (ProgHOL 64))
     (globals : PanGlobalsContextExact 64) (caller : PanToCrepContextExact 64)
     (production : PanSemState (RiscV.Word 64) (FfiState σ))
@@ -134,7 +141,7 @@ theorem countdown_globalEntry_loop {σ C : Type} (count : Nat)
     (initLocalised : localisedProgHOL (nestedSeqHOL initializers) = true)
     (initShape : BranchProgram caller (nestedSeqHOL initializers))
     (loopCtxt : CrepToLoopContextExact) (live : NumSet)
-    (target : LoopSemStateFiniteExact 64 σ) (word : WordSemStateFiniteExact 64 C σ)
+    (target : LoopSemStateFiniteExact 64 σ) (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) σ)
     (crepRel : crepToLoopStateRelExact crep target)
     (memRel : crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs)
     (globalsRel : crepToLoopGlobalsRelHOLExact crep.globals target.globals)
@@ -196,7 +203,9 @@ theorem countdown_globalEntry_loop {σ C : Type} (count : Nat)
         evaluate loopEntry {target with clock := target.clock+extra} = (resultToLoop crepResult,loopPost) ∧
         resultToLoop crepResult ≠ some .error ∧ CompleteLoopResult (resultToLoop crepResult) ∧
         crepToLoopStateRelExact crepPost loopPost ∧
-        SteppedFlapjack.LoopSteps.steps loopEntry {target with clock := target.clock+extra} ≤ loopLimit := by
+        SteppedFlapjack.LoopSteps.steps loopEntry {target with clock := target.clock+extra} ≤ loopLimit ∧
+        TailRiscVReady loopEntry {target with clock := target.clock+extra} loopPost (resultToLoop crepResult)
+          {word with clock := word.clock+extra} loopLimit := by
   obtain ⟨sourceResult,sourceFinal,panPost,crepMiddle,crepPost,crepResult,sourceExec,sourceRun,postRel,crepInitRun,
     crepFound,crepClock,crepRun,complete,finalRel,resultRel,crepBound⟩ :=
     countdown_globalEntry_crep count declarations start initializers globals caller production source pan middle crep
@@ -231,7 +240,9 @@ theorem countdown_globalEntry_loop {σ C : Type} (count : Nat)
       calleeInitShape conditionShape bodyCrepShape tailCrepShape crep crepMiddle crepPost crepResult target word _
       crepInitRun (by simpa only [compileProgExactHOL] using found') crepClock
       (by simpa only [compileProgExactHOL] using run') complete crepRel memRel globalsRel codeRel localsRel loopWordRel crepBound
-  exact ⟨value,condition,extra,loopPost,valueEq,conditionEq,entryShape,calleeShape,calleeLookup,shiftedRel,
-    loopRun,notError,loopComplete,postLoopRel,loopBound⟩
+  refine ⟨value,condition,extra,loopPost,valueEq,conditionEq,entryShape,calleeShape,calleeLookup,shiftedRel,
+    loopRun,notError,loopComplete,postLoopRel,loopBound,?_⟩
+  exact tailRiscVReady_of_loop _ loopPost _ _ _ entryShape calleeShape calleeLookup
+    loopRun notError shiftedRel loopComplete loopBound
 
 end SteppedFlapjack.PanToCrepSteps

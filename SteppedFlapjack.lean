@@ -63,6 +63,7 @@ import SteppedFlapjack.WordAllocSteps.WholeTailCode
 import SteppedFlapjack.WordToStackSteps.DirectTailRiscV
 import SteppedFlapjack.LoopToWordSteps.TailEntryCompiledCode
 import SteppedFlapjack.LoopToWordSteps.TailEntryRiscV
+import SteppedFlapjack.LoopToWordSteps.TailRiscVSetup
 import SteppedFlapjack.WordAllocSteps.CompiledCodeTail
 import SteppedFlapjack.WordToStackSteps.CompiledTail
 import SteppedFlapjack.WordToStackSteps.DirectTailLocal
@@ -499,7 +500,8 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.StackRemoveSteps.CostMono`: Monotone bitmap and finite-oracle cost factors.
 - `SteppedFlapjack.PanToCrepSteps.CountedWhileTrace`: Finite counted/HOL loop traces.
 - `SteppedFlapjack.PanToCrepSteps.CountedCountdown`: Arbitrary-count countdown with nested declarations.
-- `SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep`: Countdown through generated Crep and Loop entries.
+- `SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep`: Countdown through generated entries to a packaged RISC-V backend.
+- `SteppedFlapjack.LoopToWordSteps.TailRiscVSetup`: Shared RISC-V backend initialization interface.
 - `SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample`: A constructed state-changing loop trace.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclList`: Counted/HOL bridge for nested scalar declarations.
 - `SteppedFlapjack.PanToCrepSteps.ReplayLimitMono`: Monotonic source-derived compiler replay budgets.
