@@ -133,6 +133,32 @@ theorem global_lowered_start_return {width : Nat} [NeZero width] {F : Type}
   exact evaluateHOLFiniteState_call_return_none pan value start [] [] _
     HolFiniteMapExact.empty returnShape post (by rfl) lookup clock run shape
 
+/-- A final FFI result propagates through the actual lowered start call. -/
+theorem global_lowered_start_ffi {width : Nat} [NeZero width] {F : Type}
+    (declarations : List (DeclHOL width)) (start : MlString)
+    (original : ProgHOL width) (returnShape : ShapeHOL)
+    (found : (functionsHOL declarations).lookup start = some ([],original,returnShape))
+    (initializers : List (ProgHOL width)) (funs exns : List (DeclHOL width))
+    (context : PanGlobalsContextExact width)
+    (compiled :
+      let renamed := fpermDecsHOL start (newMainNameHOL declarations) (resortDeclsHOL declarations)
+      let initial : PanGlobalsContextExact width :=
+        { globals := HolFiniteMapExact.empty, globalsSize := 0,
+          maxGlobalsSize := cakeBytesInWord width * BitVec.ofNat width ((decShapesHOL renamed).map sizeOfShapeHOL).sum }
+      compileDecsExactHOL initial renamed = (initializers,funs,exns,context))
+    (pan post : PanSemStateFiniteExact width F) (event : HolFinalEvent)
+    (panCode : pan.code = HolFiniteMapExact.empty.updateList
+      (functionsHOL (compileTopExactHOL declarations start)).reverse)
+    (clock : pan.clock ≠ 0)
+    (run : (PanSemStateFiniteExact.callEntryStateHOLFinite pan HolFiniteMapExact.empty).evaluateHOLFiniteState
+      (.seq (nestedSeqHOL initializers) (.call none (newMainNameHOL declarations) [])) = (some (.finalFfi event),post))
+    :
+    pan.evaluateHOLFiniteState (.call none start []) =
+      (some (.finalFfi event),PanSemStateFiniteExact.emptyLocalsHOLFinite post) := by
+  have lookup := global_lowered_start_lookup declarations start original returnShape found initializers funs exns context compiled pan panCode
+  exact evaluateHOLFiniteState_call_body_fallback pan none start [] [] _
+    HolFiniteMapExact.empty returnShape (.finalFfi event) post (by rfl) lookup clock run (Or.inr (Or.inr ⟨event,rfl⟩))
+
 /-- A successful initializer preserves the actual lowered source code table.
 Consequently a zero-argument function found in that table is available at the
 callee entry with empty locals. -/
@@ -203,6 +229,53 @@ theorem global_lowered_start_return_with_steps {width : Nat} [NeZero width] {F :
   constructor
   · have run := global_lowered_start_return declarations start original returnShape found initializers funs exns context compiled
       pan (PanSemStateFiniteExact.emptyLocalsHOLFinite final) value panCode outerClock wrapperRun outerShapeMatch
+    simpa [PanSemStateFiniteExact.emptyLocalsHOLFinite] using run
+  · dsimp only [entry] at wrapperBound
+    omega
+
+/-- The same source wrapper bound holds when the callee ends in a final FFI event. -/
+theorem global_lowered_start_ffi_with_steps {width : Nat} [NeZero width] {F : Type}
+    (declarations : List (DeclHOL width)) (start : MlString)
+    (original : ProgHOL width) (returnShape : ShapeHOL)
+    (found : (functionsHOL declarations).lookup start = some ([],original,returnShape))
+    (initializers : List (ProgHOL width)) (funs exns : List (DeclHOL width))
+    (context : PanGlobalsContextExact width)
+    (compiled :
+      let renamed := fpermDecsHOL start (newMainNameHOL declarations) (resortDeclsHOL declarations)
+      let initial : PanGlobalsContextExact width :=
+        { globals := HolFiniteMapExact.empty, globalsSize := 0,
+          maxGlobalsSize := cakeBytesInWord width * BitVec.ofNat width ((decShapesHOL renamed).map sizeOfShapeHOL).sum }
+      compileDecsExactHOL initial renamed = (initializers,funs,exns,context))
+    (pan middle final : PanSemStateFiniteExact width F) (callee : ProgHOL width) (calleeShape : ShapeHOL)
+    (event : HolFinalEvent) (limit : Nat)
+    (panCode : pan.code = HolFiniteMapExact.empty.updateList
+      (functionsHOL (compileTopExactHOL declarations start)).reverse)
+    (outerClock : pan.clock ≠ 0)
+    (initRun : (PanSemStateFiniteExact.callEntryStateHOLFinite pan HolFiniteMapExact.empty).evaluateHOLFiniteState
+      (nestedSeqHOL initializers) = (none,middle))
+    (calleeFound : (functionsHOL (compileTopExactHOL declarations start)).lookup (newMainNameHOL declarations) =
+      some ([],callee,calleeShape))
+    (calleeClock : middle.clock ≠ 0)
+    (calleeRun : (PanSemStateFiniteExact.callEntryStateHOLFinite middle HolFiniteMapExact.empty).evaluateHOLFiniteState
+      callee = (some (.finalFfi event),final))
+    (calleeBound : controlSteps callee (PanSemStateFiniteExact.callEntryStateHOLFinite middle HolFiniteMapExact.empty) ≤ limit) :
+    pan.evaluateHOLFiniteState (.call none start []) =
+      (some (.finalFfi event),PanSemStateFiniteExact.emptyLocalsHOLFinite final) ∧
+    1 + globalEntrySteps (nestedSeqHOL initializers) (newMainNameHOL declarations) []
+      (PanSemStateFiniteExact.callEntryStateHOLFinite pan HolFiniteMapExact.empty) ≤
+      controlSteps (nestedSeqHOL initializers) (PanSemStateFiniteExact.callEntryStateHOLFinite pan HolFiniteMapExact.empty) + limit + 3 := by
+  let entry := PanSemStateFiniteExact.callEntryStateHOLFinite pan HolFiniteMapExact.empty
+  have entryCode : entry.code = HolFiniteMapExact.empty.updateList
+      (functionsHOL (compileTopExactHOL declarations start)).reverse := by
+    simpa [entry,PanSemStateFiniteExact.callEntryStateHOLFinite,PanSemStateFiniteExact.decClockHOLFinite] using panCode
+  have lookup := global_lowered_lookup_after_init declarations start (newMainNameHOL declarations)
+    entry middle (nestedSeqHOL initializers) callee calleeShape entryCode initRun calleeFound
+  obtain ⟨wrapperRun,wrapperBound⟩ := globalEntry_ffi_with_steps
+    (nestedSeqHOL initializers) (newMainNameHOL declarations) [] entry middle final [] callee
+    HolFiniteMapExact.empty calleeShape event limit initRun (by rfl) lookup calleeClock calleeRun calleeBound
+  constructor
+  · have run := global_lowered_start_ffi declarations start original returnShape found initializers funs exns context compiled
+      pan (PanSemStateFiniteExact.emptyLocalsHOLFinite final) event panCode outerClock wrapperRun
     simpa [PanSemStateFiniteExact.emptyLocalsHOLFinite] using run
   · dsimp only [entry] at wrapperBound
     omega
