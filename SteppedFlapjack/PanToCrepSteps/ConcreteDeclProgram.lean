@@ -2,7 +2,7 @@ import SteppedFlapjack.PanToCrepSteps.CountedDeclExample
 import SteppedFlapjack.PanToCrepSteps.OriginalDeclEntryRiscV
 import Flapjack.Pancake.Proofs.PanToCrep.FirstCompileProgAllDistinct
 
-/-! Concrete original source and its machine-theorem inputs. 
+/-! Concrete original source and its machine-theorem inputs.
 
 This module is a reusable proof component for the concrete source-to-machine
 example, so it is imported by the library.

@@ -1,7 +1,7 @@
 import Flapjack.Pancake.Proofs.PanToCrep
 import SteppedFlapjack.PanToCrepSteps.CountedWhile
 
-/-! A state-changing loop checked across counted and HOL semantics. 
+/-! A state-changing loop checked across counted and HOL semantics.
 
 This module is a reusable proof component for the concrete source-to-machine
 example, so it is imported by the library.

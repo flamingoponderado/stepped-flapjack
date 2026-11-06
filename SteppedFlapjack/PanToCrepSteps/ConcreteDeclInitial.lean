@@ -1,6 +1,6 @@
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram
 
-/-! Concrete global-entry source state and relation. 
+/-! Concrete global-entry source state and relation.
 
 This module is a reusable proof component for the concrete source-to-machine
 example, so it is imported by the library.
