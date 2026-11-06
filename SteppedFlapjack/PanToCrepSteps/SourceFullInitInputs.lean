@@ -117,7 +117,7 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
       (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
       (compileProgDeclsHOLW (compileTopExactHOL declarations start))).shMdomain)
     (clock : backend.lab.clock = source.clock) (endian : backend.lab.be = source.be) (ffi : backend.lab.ffi = source.ffi)
-    (current : stack.store.lookup .currHeap = some (.word source.baseAddr))
+    (baseReg : backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 2) = .word source.baseAddr)
     (endHeap : stack.store.lookup .endOfHeap = some (.word heapEnd))
     (heap : source.topAddr = source.baseAddr + 2 * (heapEnd - source.baseAddr))
  :
@@ -126,6 +126,10 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
         (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
         (compileProgDeclsHOLW (compileTopExactHOL declarations start))) := by
   have compat := emptyNativeWordOracle_compatible ac backend.bitmaps.length cfg
+  have current : stack.store.lookup .currHeap = some (.word source.baseAddr) := by
+    obtain ⟨base,labBase,heapBase⟩ := backend.heap_base_lab
+    have baseEq : base = source.baseAddr := by simpa [baseReg,eq_comm] using labBase
+    simpa [baseEq] using heapBase
   exact sourceFullInitInputs declarations start caller loopCtxt entry limit arch source wc ac stack
     (emptyNativeWordOracle backend.bitmaps.length cfg) (heapEnd - source.baseAddr) callerEq loopContextEq programs programsEq
     backend inputCodeEq bitmapPrefix registers compat.1 (stackOracle.trans compat.2.symm)
