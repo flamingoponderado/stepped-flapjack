@@ -109,8 +109,6 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
       (compiledCode : Spt (Nat × WordLangProgHOL (BitVec 64))) (locals : Spt (WordLocW 64))
       (_wordLocals : LoopToWord.localsRelHOL wordCtxt target.locals word.locals)
       (_retLookup : sptLookup 0 word.locals = some (.loc 1 0))
-      (_dim : goodDimindex 64) (_retLabel : ¬ wordSemIsWordLoc (.loc 1 0 : WordLocW 64) = true)
-      (_vars : ∀ k, sptMem k (accVarsHOL loopEntry .ln) → sptMem k wordCtxt)
       (_gc : gcFunConstOk word.gcFun)
     (wc : Flapjack.Compiler.Backend.WordToWord.Config)
     (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
@@ -121,7 +119,6 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
     (_labelsDef : labels = (firstLoopName,2))
     (_algorithm : alg = wc.regAlg) (_registers : regCount = ac.regCount-(5+ac.avoidRegs.length))
     (_colour : col = entryColour wc programs entryName)
-    (_wordCode : shiftedWord.code = sptFromAList programs)
     (_compiledCodeEq : compiledCode = sptFromAList (Flapjack.Compiler.Backend.WordToWord.compile wc ac programs).2)
     (_localsRel : wordLocalsRel (maxVarHOL (compileExp (LoopToWord.compHOL wordCtxt loopEntry labels).1)+1) shiftedWord.locals locals)
     (_domain : sptDomain locals = (fun key => key ∈ evenList count))
@@ -207,8 +204,8 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
       initLocalised initialPanRel initialCodeRel initialExcpRel initialLocalsRel panBound
   refine ⟨wordShapes,condition,post,result,postRel,resultRel,extra,loopPost,loopRel,?_⟩
   dsimp only
-  intro ac count wordEntryName alg regCount col wordCtxt labels compiledCode locals wordLocals retLookup dim retLabel vars gc
-    wc programs programsEq wordEntryNameDef countDef wordCtxtDef labelsDef algorithm registers colour wordCode compiledCodeEq
+  intro ac count wordEntryName alg regCount col wordCtxt labels compiledCode locals wordLocals retLookup gc
+    wc programs programsEq wordEntryNameDef countDef wordCtxtDef labelsDef algorithm registers colour compiledCodeEq
     localsRelWord domain stackEntry frameSize frame lens bs bsPost n nPost compiled start argumentCount stackRel native lengthBound
     bitmapBound bitmapPrefix labelCheck maxBound frameDef frameSizeDef space foundEntry inputCode anything cr c jump bounds pointer f
     gen maxHeap a b removeInput oracle renamed lab pc mc labCode labs asm machine distinct sourceCode pre relation ha hs hk hf
@@ -217,6 +214,14 @@ theorem panTailEntry_globalWord_riscvWithin {F : Type}
       (optimiseHOL (compileHOLExact ctxt live (.seq (compileProgExactHOLW callerContext panInit) (.call none name [])))) labels).1) ∈ programs := by
     rw [programsEq,wordEntryNameDef,countDef,wordCtxtDef,labelsDef,programsDef,ctxtEq,liveDef,callerDef,initDef,nameDef]
     simpa [programsDef,compFuncHOLExact,listToNumSetHOLExact] using globalMember
+  have dim : goodDimindex 64 := Or.inr rfl
+  have retLabel : ¬ wordSemIsWordLoc (.loc 1 0 : WordLocW 64) = true := by decide
+  have vars : ∀ k, sptMem k (accVarsHOL (optimiseHOL (compileHOLExact ctxt live
+      (.seq (compileProgExactHOLW callerContext panInit) (.call none name [])))) .ln) → sptMem k wordCtxt := by
+    rw [wordCtxtDef]
+    exact (SteppedFlapjack.WordToStackSteps.nativeTailEntry_loopLocals _ word 0).2
+  have wordCode : ({word with clock := word.clock + extra} : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F).code = sptFromAList programs := by
+    simpa only [programsEq] using wordCodeEq
   exact backend ac count wordEntryName alg regCount col wordCtxt labels compiledCode locals wordLocals retLookup dim retLabel vars gc
     wc programs programsEq member algorithm registers colour wordCode compiledCodeEq localsRelWord domain
     stackEntry frameSize frame lens bs bsPost n nPost compiled start argumentCount stackRel native lengthBound bitmapBound
