@@ -215,4 +215,45 @@ theorem singleEntry_declaredWhile_localised (start name : MlString) (initial ret
     localisedExpHOL,everyExpHOL,everyExpListHOL] at hc ha ⊢
   exact ⟨hc,ha⟩
 
+/-- Struct lowering preserves every supported scalar expression. -/
+theorem scalarExpression_structs_fixed {width : Nat} [NeZero width]
+    {ctxt : PanToCrepContextExact width} {e : ExpHOL width} (shape : ScalarExpression ctxt e)
+    (structCtxt : Pancake.PanStructs.CompileShapeExact.ContextExact) :
+    Pancake.PanStructs.CompileShapeExact.compileExpExact structCtxt e = e := by
+  induction shape with
+  | const v => simp [Pancake.PanStructs.CompileShapeExact.compileExpExact]
+  | «local» name n found => simp [Pancake.PanStructs.CompileShapeExact.compileExpExact]
+  | baseAddr => simp [Pancake.PanStructs.CompileShapeExact.compileExpExact]
+  | topAddr => simp [Pancake.PanStructs.CompileShapeExact.compileExpExact]
+  | bytesInWord => simp [Pancake.PanStructs.CompileShapeExact.compileExpExact]
+  | shift op ha hb iha ihb => simp [Pancake.PanStructs.CompileShapeExact.compileExpExact,iha,ihb]
+  | op operator ha hb iha ihb =>
+    simp [Pancake.PanStructs.CompileShapeExact.compileExpExact,
+      Pancake.PanStructs.CompileShapeExact.compileExpsExact,iha,ihb]
+
+/-- Both pre-global passes preserve a supported scalar assignment loop, apart
+from removing its leading skip. -/
+theorem singleEntry_declaredWhile_panToWord (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture)
+    (name : MlString) (initial returned : BitVec 64) (condition assignment : ExpHOL 64)
+    (ctxt : PanToCrepContextExact 64) (conditionShape : ScalarExpression ctxt condition)
+    (assignmentShape : ScalarExpression ctxt assignment) :
+    let start := ofString "main"
+    let body : ProgHOL 64 := .dec name .one (.const initial)
+      (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))
+    panToWordCompileProgHOL arch (singleEntryProgram start (.dec name .one (.const initial) (.seq .skip
+      (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))))) =
+      loopToWordCompileHOL (compileProgHOLExact arch
+        (compileProgDeclsHOLW (compileTopExactHOL (singleEntryProgram start body) start))) := by
+  simp only [panToWordCompileProgHOL,singleEntry_declared_panSimp]
+  have fixed : Pancake.PanStructs.CompileShapeExact.compileTopExact
+      (singleEntryProgram (ofString "main") (.dec name .one (.const initial)
+        (.seq (.while condition (.assign .local name assignment)) (.return (.const returned))))) =
+      singleEntryProgram (ofString "main") (.dec name .one (.const initial)
+        (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))) := by
+    simp [singleEntryProgram,Pancake.PanStructs.CompileShapeExact.compileTopExact,
+      Pancake.PanStructs.CompileShapeExact.getNamesExact,Pancake.PanStructs.CompileShapeExact.compileDeclsExact,
+      Pancake.PanStructs.CompileShapeExact.compileProgExact,Pancake.PanStructs.CompileShapeExact.compileShapeExact,
+      Pancake.PanStructs.CompileShapeExact.compileExpExact,scalarExpression_structs_fixed conditionShape,scalarExpression_structs_fixed assignmentShape]
+  rw [fixed]
+
 end SteppedFlapjack.PanToCrepSteps

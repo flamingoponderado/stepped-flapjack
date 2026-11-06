@@ -123,4 +123,107 @@ theorem declWhile_singleEntry_source_fullInit_riscv {σ : Type}
     loopCtxt target arch initializersEmpty globalsEmpty sourceLocals sourceGlobals sourceExceptions sourceStructs topOutside aligned
     callerExceptions codeCompiled panDef middleDef crepDef targetDef memoryRel native
 
+/-- Removing the leading skip preserves execution and subtracts its two
+control visits from a scalar declaration. -/
+theorem scalarDecl_skip_execution_steps {σ : Type} (name : MlString) (initial : BitVec 64)
+    (body : ProgHOL 64) (source : PanSemStateFiniteExact 64 σ) :
+    source.evaluateHOLFiniteState (.dec name .one (.const initial) (.seq .skip body)) =
+      source.evaluateHOLFiniteState (.dec name .one (.const initial) body) ∧
+    controlSteps (.dec name .one (.const initial) (.seq .skip body)) source =
+      controlSteps (.dec name .one (.const initial) body) source + 2 := by
+  constructor
+  · rw [evaluateHOLFiniteState_dec_total,evaluateHOLFiniteState_dec_total]
+    simp only [evaluateHOLFiniteState_seq_line780,evaluateHOLFiniteState_skip]
+  · have evaluated : @evalHOLExact 64 σ _ source.toExact
+        (fun address => Classical.propDecidable (source.memaddrs address)) (.const initial) =
+          some (.val (.word initial)) := by simp [evalHOLExact]
+    have valid : shapeEqHOL .one (shapeOfHOLExact (.val (.word initial) : ValueHOL 64)) = true := by simp [shapeEqHOL,shapeOfHOLExact]
+    rw [controlSteps_dec name .one (.const initial) (.seq .skip body) source _ evaluated valid,
+      controlSteps_dec name .one (.const initial) body source _ evaluated valid,controlSteps_seq,
+      evaluateHOLFiniteState_skip]
+    have skipCount : controlSteps (.skip : ProgHOL 64) (setVarHOLFinite name (.val (.word initial)) source) = 1 := by
+      rw [controlSteps.eq_def]; rfl
+    rw [skipCount]
+    simp only
+    omega
+
+/-- A separately bounded supported scalar assignment loop yields a RISC-V
+bound using the original program's full compiler output. -/
+theorem declWhile_singleEntry_fullCompiler_riscv {σ : Type}
+    (declarations : List (DeclHOL 64)) (start : MlString) (initializers : List (ProgHOL 64))
+    (globals : PanGlobalsContextExact 64) (caller : PanToCrepContextExact 64)
+    (name : MlString) (initial returned : BitVec 64) (condition assignment : ExpHOL 64)
+    (source sourceFinal pan middle : PanSemStateFiniteExact 64 σ) (crep : CrepSemHOLState 64 σ)
+    (budget : Nat)
+    (run : source.evaluateHOLFiniteState (.dec name .one (.const initial) (.seq .skip (.seq (.while condition (.assign .local name assignment)) (.return (.const returned))))) =
+      (some (.returned (.val (.word returned))),sourceFinal))
+    (sourceBound : controlSteps (.dec name .one (.const initial) (.seq .skip (.seq (.while condition (.assign .local name assignment)) (.return (.const returned))))) source ≤ budget)
+    (conditionShape : ScalarExpression (scalarDeclContext (ctxtFcExactHOL caller.funcs caller.eids [] [] []) name) condition)
+    (bodyShape : BranchProgram (scalarDeclContext (ctxtFcExactHOL caller.funcs caller.eids [] [] []) name) (.assign .local name assignment))
+    (loopCtxt : CrepToLoopContextExact) (target : LoopSemStateFiniteExact 64 σ)
+    (arch : AsmArchitecture)
+    (initializersEmpty : initializers = []) (globalsEmpty : globals = emptyGlobalsContext)
+    (sourceLocals : source.locals = HolFiniteMapExact.empty)
+    (sourceGlobals : source.globals = HolFiniteMapExact.empty)
+    (sourceExceptions : source.eshapes = HolFiniteMapExact.empty)
+    (sourceStructs : source.structs = [])
+    (topOutside : ¬ source.memaddrs source.topAddr)
+    (aligned : panGlobalsByteAlignedHOL source.topAddr)
+    (startDef : start = ofString "main")
+    (singleDef : declarations = singleEntryProgram start (.dec name .one (.const initial)
+      (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))))
+    (sourceCode : source.code = HolFiniteMapExact.empty.update (newMainNameHOL declarations,
+      ([],.dec name .one (.const initial) (.seq (.while condition (.assign .local name assignment))
+        (.return (.const returned))),.one)))
+    (panDef : pan = noGlobalsLoweredPreCall source (HolFiniteMapExact.empty.updateList
+      (functionsHOL (compileTopExactHOL declarations start)).reverse))
+    (middleDef : middle = pan)
+    (crepDef : crep = concreteDeclCrepState pan (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+    (targetDef : target = {concreteDeclLoopState arch crep (compileProgDeclsHOLW (compileTopExactHOL declarations start)) with memory := target.memory})
+    (memoryRel : crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs)
+    (native : FullInitAssignLoopInputs declarations start caller loopCtxt (assignLoopEntryProgram declarations initializers caller loopCtxt .ln)
+      (declWhileSourceLoopLimit declarations initializers globals caller name (.const initial) condition (.assign .local name assignment) (.return (.const returned)) budget pan loopCtxt .ln) target) :
+    let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
+    ∃ outcome ticks finalMachine finalFfi,
+      ticks ≤ max (native.backend.successTickLimit native.wc native.ac
+          (panToWordCompileProgHOL native.arch (singleEntryProgram (ofString "main")
+            (.dec name .one (.const initial) (.seq .skip
+              (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))))))
+          entry (assignLoopEntryWordContext entry) (firstLoopName,2)
+          (declWhileSourceLoopLimit declarations initializers globals caller name (.const initial) condition (.assign .local name assignment) (.return (.const returned)) budget pan loopCtxt .ln)) native.backend.resourceTickLimit ∧
+      evaluateTargetHOL native.backend.mc native.backend.lab.ffi ticks native.backend.machine =
+          (.halt outcome,finalMachine,finalFfi) ∧
+      ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
+          (outcome = .resourceLimitHit ∧
+            (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = native.stack.ffi.ioEvents))) := by
+  have skipFacts := scalarDecl_skip_execution_steps name initial
+    (.seq (.while condition (.assign .local name assignment)) (.return (.const returned))) source
+  have simplifiedRun : source.evaluateHOLFiniteState (.dec name .one (.const initial)
+      (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))) =
+      (some (.returned (.val (.word returned))),sourceFinal) := by
+    rw [← skipFacts.1]
+    exact run
+  have simplifiedBound : controlSteps (.dec name .one (.const initial)
+      (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))) source ≤ budget := by
+    rw [skipFacts.2] at sourceBound
+    omega
+  obtain ⟨outcome,ticks,finalMachine,finalFfi,ticksBound,machineRun,events⟩ :=
+    declWhile_singleEntry_source_fullInit_riscv declarations start initializers globals caller name initial returned condition assignment
+      source sourceFinal pan middle crep budget simplifiedRun simplifiedBound conditionShape bodyShape loopCtxt target arch
+      initializersEmpty globalsEmpty sourceLocals sourceGlobals sourceExceptions sourceStructs topOutside aligned singleDef sourceCode
+      panDef middleDef crepDef targetDef memoryRel native
+  have assignmentShape : ScalarExpression
+      (scalarDeclContext (ctxtFcExactHOL caller.funcs caller.eids [] [] []) name) assignment := by
+    cases bodyShape with
+    | assign _ _ _ shape => exact shape
+  have compilerEq := singleEntry_declaredWhile_panToWord native.arch name initial returned condition assignment _
+    conditionShape assignmentShape
+  have programEq : loopToWordCompileHOL (compileProgHOLExact native.arch native.crepPrograms) =
+      panToWordCompileProgHOL native.arch (singleEntryProgram (ofString "main")
+        (.dec name .one (.const initial) (.seq .skip
+          (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))))) := by
+    rw [native.programsEq]
+    simpa only [singleDef,startDef] using compilerEq.symm
+  exact ⟨outcome,ticks,finalMachine,finalFfi,by simpa only [programEq] using ticksBound,machineRun,events⟩
+
 end SteppedFlapjack.PanToCrepSteps

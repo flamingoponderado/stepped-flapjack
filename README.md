@@ -62,6 +62,17 @@ including a scalar declaration around an initialized loop. The general
 `panOriginalDeclEntry_riscvWithin` theorem carries a source control-step bound
 through this chain under the stated state and compilation conditions.
 
+`counted_singleEntry_declared_fullCompiler_riscv` takes a separately bounded,
+successful fine-grained Pancake execution of a supported scalar assignment loop
+and gives a RISC-V halt bound for the original singleton program's full compiler
+output. The bound depends on the program and backend configuration; the result
+covers successful return and resource exhaustion. The theorem assumes the
+stated source clock, source layout, compiler input, and full-initialization
+machine relations. `labInitialized_countdown_fullCompiler_riscv` applies the
+chain to a countdown and constructs the source and native inputs from a Lab
+initialization context. Concrete initialization guards remain to be proved for
+an application.
+
 The reusable concrete declaration example is kept in the library because it
 instantiates the actual global entry and serves as an end-to-end proof target.
 `concreteDecl_counted_riscv_bounded` gives its 13-step source execution a common
