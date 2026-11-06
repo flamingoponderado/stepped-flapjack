@@ -59,4 +59,82 @@ theorem concreteDecl_lowered_lookup {σ : Type} (start : MlString) (name : VarNa
   rw [codeEq,concreteDecl_compileTop]
   simp [functionsHOL,HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,Ne.symm fresh]
 
+/-- Empty source locals and an empty Pancake compiler variable map satisfy the
+Pancake-to-Crep local relation for any target locals. -/
+theorem empty_panCrep_locals {width : Nat} [NeZero width]
+    (ctxt : PanToCrepContextExact width) (target : HolFiniteMapExact Nat (HolWordLab width))
+    (vars : ctxt.vars = HolFiniteMapExact.empty) :
+    panToCrepLocalsRelFiniteExact ctxt HolFiniteMapExact.empty target := by
+  simp [panToCrepLocalsRelFiniteExact,noOverlapFiniteExact,ctxtMaxFiniteExact,vars,
+    HolFiniteMapExact.lookup_empty]
+
+/-- The empty source-local map and empty variable context satisfy the
+Crep-to-Loop relation at an empty live set, independent of Loop locals. -/
+theorem empty_crepLoop_locals {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (target : Spt (WordLocW width))
+    (vars : ctxt.vars = HolFiniteMapExact.empty) :
+    crepToLoopLocalsRelExact ctxt .ln (HolFiniteMapExact.empty : HolFiniteMapExact Nat (HolWordLab width)) target := by
+  simp [crepToLoopLocalsRelExact,crepToLoopDistinctVarsExact,crepToLoopCtxtMaxExact,vars,
+    HolFiniteMapExact.lookup_empty,sptMem,sptDomain]
+
+/-- Empty exception-shape and compiler-code maps are related. -/
+theorem empty_panCrep_exceptions {width : Nat} [NeZero width] :
+    panToCrepExcpRelFiniteExact (HolFiniteMapExact.empty : HolFiniteMapExact MlS (BitVec width))
+      HolFiniteMapExact.empty := by
+  simp [panToCrepExcpRelFiniteExact,HolFiniteMapExact.lookup_empty]
+
+/-- Construct the Crep entry state from the Pancake data and the actual
+compiled function list. No local or Crep global bindings are present. -/
+def concreteDeclCrepState {σ : Type} (pan : PanSemStateFiniteExact 64 σ)
+    (programs : List (MlString × List Nat × CrepProgHOL 64)) : CrepSemHOLState 64 σ where
+  locals := HolFiniteMapExact.empty
+  globals := HolFiniteMapExact.empty
+  code := alistToFmapCodeExact programs
+  memory := pan.memory
+  memaddrs := pan.memaddrs
+  shMemaddrs := pan.shMemaddrs
+  clock := pan.clock
+  be := pan.be
+  ffi := pan.ffi
+  baseAddr := pan.baseAddr
+  topAddr := pan.topAddr
+
+/-- The constructed Crep state satisfies the Pancake-to-Crep data relation
+when the source has no structures or Pancake globals. -/
+theorem concreteDecl_panCrep_stateRel {σ : Type} (pan : PanSemStateFiniteExact 64 σ)
+    (programs : List (MlString × List Nat × CrepProgHOL 64))
+    (structs : pan.structs = []) (globals : pan.globals = HolFiniteMapExact.empty) :
+    panToCrepStateRelFiniteExact pan (concreteDeclCrepState pan programs) := by
+  simp [panToCrepStateRelFiniteExact,concreteDeclCrepState,structs,globals,HolFiniteMapExact.empty]
+
+open Classical in
+/-- Construct the Loop entry by translating the Crep memory and using the
+actual compiled Loop code table. -/
+noncomputable def concreteDeclLoopState {σ : Type} (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture)
+    (source : CrepSemHOLState 64 σ) (programs : List (MlString × List Nat × CrepProgHOL 64)) :
+    LoopSemStateFiniteExact 64 σ where
+  locals := .ln
+  globals := HolFiniteMapExact.empty
+  memory := fun address => wlabWlocExact (source.memory address)
+  mdomain := fun address => decide (source.memaddrs address)
+  shMdomain := fun address => decide (source.shMemaddrs address)
+  clock := source.clock
+  code := sptFromAList (compileProgHOLExact arch programs)
+  be := source.be
+  ffi := source.ffi
+  baseAddr := source.baseAddr
+  topAddr := source.topAddr
+
+/-- The constructed Loop entry satisfies the Crep-to-Loop state, memory,
+and global relations when the Crep global map is empty. -/
+theorem concreteDecl_crepLoop_relations {σ : Type} (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture)
+    (source : CrepSemHOLState 64 σ) (programs : List (MlString × List Nat × CrepProgHOL 64))
+    (globals : source.globals = HolFiniteMapExact.empty) :
+    crepToLoopStateRelExact source (concreteDeclLoopState arch source programs) ∧
+    crepToLoopMemRelHOLExact source.memory (concreteDeclLoopState arch source programs).memory source.memaddrs ∧
+    crepToLoopGlobalsRelHOLExact source.globals (concreteDeclLoopState arch source programs).globals := by
+  classical
+  simp [crepToLoopStateRelExact,crepToLoopMemRelHOLExact,crepToLoopGlobalsRelHOLExact,
+    concreteDeclLoopState,globals,HolFiniteMapExact.lookup_empty]
+
 end SteppedFlapjack.PanToCrepSteps

@@ -28,15 +28,9 @@ theorem concreteDecl_riscvWithin {F : Type}
     (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
     (source : CrepSemHOLState 64 F)
     (target : LoopSemStateFiniteExact 64 F) (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
-    (crepRel : crepToLoopStateRelExact source target)
-    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
-    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
-    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
     (arch : AsmArchitecture) (crepPrograms : List (MlString × List Nat × CrepProgHOL 64))
     (entryName : MlString) (entryBody : CrepProgHOL 64)
     (ctxtEq : ctxt = mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable crepPrograms) 0)
-    (sourceCodeEq : source.code = alistToFmapCodeExact crepPrograms)
-    (loopCodeEq : target.code = sptFromAList (compileProgHOLExact arch crepPrograms))
     (wordCodeEq : word.code = sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)))
     (wordData : LoopWordDataRel target word)
     (localName : VarName) (returned : BitVec 64)
@@ -51,12 +45,14 @@ theorem concreteDecl_riscvWithin {F : Type}
     (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel : Nat)
     (pan : PanSemStateFiniteExact 64 F)
     (panClock : pan.clock ≠ 0)
-    (initialPanRel : panToCrepStateRelFiniteExact pan source)
-    (initialExcpRel : panToCrepExcpRelFiniteExact callerContext.eids pan.eshapes)
-    (initialLocalsRel : panToCrepLocalsRelFiniteExact callerContext pan.locals source.locals)
     (startName : MlString)
     (stateDef : originalState = concreteDeclOriginalState startName localName returned
       (callEntryStateHOLFinite pan HolFiniteMapExact.empty))
+    (panLocalsEmpty : pan.locals = HolFiniteMapExact.empty)
+    (panExceptionsEmpty : pan.eshapes = HolFiniteMapExact.empty)
+    (sourceDef : source = concreteDeclCrepState pan crepPrograms)
+    (targetDef : target = concreteDeclLoopState arch source crepPrograms)
+    (panGlobalsEmpty : pan.globals = HolFiniteMapExact.empty)
     (panStructs : pan.structs = []) (panTopOutside : ¬ pan.memaddrs pan.topAddr)
     (panAligned : panGlobalsByteAlignedHOL pan.topAddr)
     (programsDef : crepPrograms = compileProgDeclsHOLW (compileTopExactHOL (concreteDeclProgram startName localName returned) startName))
@@ -213,6 +209,44 @@ theorem concreteDecl_riscvWithin {F : Type}
     (by simpa [callEntryStateHOLFinite,decClockHOLFinite] using panTopOutside)
     (by simpa [callEntryStateHOLFinite,decClockHOLFinite] using panAligned) loweredLookup
   rw [← stateDef] at globalRel
+  have sourceGlobalsEmpty : source.globals = HolFiniteMapExact.empty := by
+    simp [sourceDef,concreteDeclCrepState]
+  have ⟨crepRel,memRel,globalsRel⟩ := concreteDecl_crepLoop_relations arch source crepPrograms sourceGlobalsEmpty
+  rw [← targetDef] at crepRel memRel globalsRel
+  have loopCodeEq : target.code = sptFromAList (compileProgHOLExact arch crepPrograms) := by
+    simp [targetDef,concreteDeclLoopState]
+  have sourceCodeEq : source.code = alistToFmapCodeExact crepPrograms := by
+    simp [sourceDef,concreteDeclCrepState]
+  have crepLocalsEmpty : source.locals = HolFiniteMapExact.empty := by
+    simp [sourceDef,concreteDeclCrepState]
+  have initialPanRel : panToCrepStateRelFiniteExact pan source := by
+    rw [sourceDef]
+    exact concreteDecl_panCrep_stateRel pan crepPrograms panStructs panGlobalsEmpty
+  have callerVars : callerContext.vars = HolFiniteMapExact.empty := by
+    rw [callerDef]
+    apply HolFiniteMapExact.ext_lookup
+    intro key
+    simp [mkCtxtExactHOL,panToCrepMakeVmapHOLExact,HolFiniteMapExact.lookup_updateList,FUPDATE_LIST]
+  have initialLocalsRel : panToCrepLocalsRelFiniteExact callerContext pan.locals source.locals := by
+    rw [panLocalsEmpty]
+    exact empty_panCrep_locals callerContext source.locals callerVars
+  have loopVars : ctxt.vars = HolFiniteMapExact.empty := by
+    rw [ctxtEq]
+    apply HolFiniteMapExact.ext_lookup
+    intro key
+    simp [mkCtxtExact,makeVmapExact,HolFiniteMapExact.lookup_updateListEq,FUPDATE_LIST_HOL]
+  have localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals := by
+    rw [liveDef,crepLocalsEmpty]
+    exact empty_crepLoop_locals ctxt target.locals loopVars
+  have callerEids : callerContext.eids = HolFiniteMapExact.empty := by
+    rw [callerDef,concreteDecl_compileTop]
+    apply HolFiniteMapExact.ext_lookup
+    intro key
+    simp [mkCtxtExactHOL,getEidsFromDeclsHOL,getEidsEntriesHOL,exceptionsHOL,sizeOfEidsHOL,
+      HolFiniteMapExact.lookup_empty,alistToFmap,FEMPTY]
+  have initialExcpRel : panToCrepExcpRelFiniteExact callerContext.eids pan.eshapes := by
+    rw [callerEids,panExceptionsEmpty]
+    exact empty_panCrep_exceptions
   have initSupported : BranchProgram callerContext (.skip : ProgHOL 64) ∨ ∀ shape globalName value,
       DeclHOL.decl shape globalName value ∈
         fpermDecsHOL startName (newMainNameHOL (concreteDeclProgram startName localName returned))
