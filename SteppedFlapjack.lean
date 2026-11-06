@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordInstSteps.Expression
 import SteppedFlapjack.WordInstSteps.StackComposition
 import SteppedFlapjack.WordInstSteps.Simple
 import SteppedFlapjack.CrepToLoopSteps.RiscVComposition
@@ -248,7 +249,8 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.LoopToWordSteps.StackReady`: common Loop-to-Stack fragment and composed bounded simulation.
 - `SteppedFlapjack.LoopToWordSteps.RiscVComposition`: bounded Loop execution composed through the RISC-V backend.
 - `SteppedFlapjack.WordInstSteps.StackComposition`: bounded selected Word runs through Stack.
-- `SteppedFlapjack.WordInstSteps.Simple`: quantitative instruction selection for simple Word expressions.
+- `SteppedFlapjack.WordInstSteps.Expression`: general selected-expression shape, conventions and cost.
+- `SteppedFlapjack.WordInstSteps.Simple`: quantitative instruction selection for Word expression statements.
 - `SteppedFlapjack.CrepToLoopSteps.RiscVComposition`: completed Crep runs through the bounded RISC-V backend.
 - `SteppedFlapjack.CrepToLoopSteps.BackendReady`: compiled fragment and completed outcome bridge to the backend.
 - `SteppedFlapjack.CrepToLoopSteps.WordComposition`: Crep-to-Word bounded execution for direct sequences.

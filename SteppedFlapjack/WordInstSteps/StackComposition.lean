@@ -34,19 +34,19 @@ theorem simple_selected_stack_bounded {C F : Type}
     ∃ localsPost targetPost targetResult,
       evaluate (instSelect ac temp p) {source with locals := locals} =
         (result,{sourcePost with locals := localsPost}) ∧
-      StackSemEvaluate.evaluate (compiled,{target with clock := sizeOf p * limit}) = (targetResult,targetPost) ∧
-      compCorrectResult ac k f frame {source with locals := locals, clock := sizeOf p * limit}
-        {sourcePost with locals := localsPost, clock := sizeOf p * limit - (source.clock-sourcePost.clock)} targetPost result targetResult lens ∧
-      StackSteps.steps (compiled,{target with clock := sizeOf p * limit}) ≤
-        callSequenceCost ac (sizeOf p * limit) target.code (instSelect ac temp p) (bs,n) (k,f,frame) := by
+      StackSemEvaluate.evaluate (compiled,{target with clock := sizeOf (instSelect ac temp p) * limit}) = (targetResult,targetPost) ∧
+      compCorrectResult ac k f frame {source with locals := locals, clock := sizeOf (instSelect ac temp p) * limit}
+        {sourcePost with locals := localsPost, clock := sizeOf (instSelect ac temp p) * limit - (source.clock-sourcePost.clock)} targetPost result targetResult lens ∧
+      StackSteps.steps (compiled,{target with clock := sizeOf (instSelect ac temp p) * limit}) ≤
+        callSequenceCost ac (sizeOf (instSelect ac temp p) * limit) target.code (instSelect ac temp p) (bs,n) (k,f,frame) := by
   obtain ⟨localsPost,selectedRun,_,block,selectedBound⟩ :=
     simple_selected_correct_with_steps p shape ac temp source sourcePost result locals run vars nonerror localRel
-  have bound : WordSteps.steps (instSelect ac temp p) {source with locals := locals} ≤ sizeOf p * limit := by
+  have bound : WordSteps.steps (instSelect ac temp p) {source with locals := locals} ≤ sizeOf (instSelect ac temp p) * limit := by
     exact Nat.le_trans selectedBound (Nat.mul_le_mul_left _ sourceBound)
   have callShape : CallSequence (instSelect ac temp p) := .block block
   obtain ⟨targetPost,targetResult,targetRun,targetRelation,targetBound⟩ :=
     callSequence_bounded ac _ callShape {source with locals := locals} {sourcePost with locals := localsPost}
-      target result k f frame bs bsPost n nPost (sizeOf p * limit) compiled lens
+      target result k f frame bs bsPost n nPost (sizeOf (instSelect ac temp p) * limit) compiled lens
       (simple_selected_noInstall shape ac temp) noInstallCode code notTimeout bound
       ⟨selectedRun,nonerror,stackPremises.1,stackPremises.2.1,
         simple_selected_flat shape ac temp,stackPremises.2.2⟩
