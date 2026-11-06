@@ -336,6 +336,7 @@ import SteppedFlapjack.StackRemoveSteps.CodeOrigin
 import SteppedFlapjack.StackRemoveSteps.LeafCode
 import SteppedFlapjack.StackRemoveSteps.CodeOriginEvaluate
 import SteppedFlapjack.StackRemoveSteps.RunBudget
+import SteppedFlapjack.StackRemoveSteps.CostMono
 import SteppedFlapjack.StackRemoveSteps.CompCorrect.Leaf
 
 /-!
@@ -490,6 +491,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrame`: Concrete native frame and RISC-V resource alternative.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrameRiscV`: Counted source and bounded machine execution for the selected frame.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclCommonBound`: A single bound for both concrete native entry outcomes.
+- `SteppedFlapjack.StackRemoveSteps.CostMono`: Monotone bitmap and finite-oracle cost factors.
 - `SteppedFlapjack.PanToCrepSteps.ReplayLimitMono`: Monotonic source-derived compiler replay budgets.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram`: Concrete zero-argument source and global-entry bounds.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclExample`: Exact counted declaration-loop execution and supported shape.
