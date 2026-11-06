@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordToStackSteps.DirectTailLocal
 import SteppedFlapjack.WordAllocSteps.TailEntry
 import SteppedFlapjack.LoopToWordSteps.TailEntryWordAllocated
 import SteppedFlapjack.WordTwoRegSteps.TailEntry

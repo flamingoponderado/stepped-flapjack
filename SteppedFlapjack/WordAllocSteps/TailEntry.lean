@@ -328,7 +328,7 @@ theorem fullCompileSingle_tailEntry_correct
     (localRel : wordLocalsRel (maxVarHOL (Flapjack.Compiler.Backend.WordSimp.compileExp p)+1) s.locals locals)
     (domain : sptDomain locals = (fun key => key ∈ evenList count)) :
     let out := (Flapjack.Compiler.Backend.WordToWord.fullCompileSingle flag k alg ac ((fc,count,p),col)).2.2
-    SteppedFlapjack.WordToStackSteps.CallSequence out ∧ noInstallSubprogsHOL out = true ∧
+    RegTailShape out ∧ SteppedFlapjack.WordToStackSteps.CallSequence out ∧ noInstallSubprogsHOL out = true ∧
     flatExpConventions out = true ∧ postAllocConventionsHOL k out = true ∧
     ∃ selectedLocals targetPost,
       evaluate out {s with locals := locals,clock := limit} = (res,targetPost) ∧
@@ -345,7 +345,7 @@ theorem fullCompileSingle_tailEntry_correct
   have conventions := fullCompileSingle_stackConventions ac flag count fc alg k p col
   rw [eq] at conventions
   rw [eq]
-  exact ⟨flat_regTail_callSequence outShape conventions.1,regTail_noInstall outShape,
+  exact ⟨outShape,flat_regTail_callSequence outShape conventions.1,regTail_noInstall outShape,
     conventions.1,conventions.2,selectedLocals,targetPost,targetRun,targetRel,outCode,bound⟩
 
 end SteppedFlapjack.WordAllocSteps
