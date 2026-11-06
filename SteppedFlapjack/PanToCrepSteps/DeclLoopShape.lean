@@ -45,4 +45,36 @@ theorem scalarDeclLoop_set_zero_supported {width : Nat} [NeZero width]
     .skip (.assign .local name (.const 0)) (.return (.const returned)) (.const 1)
     .skip (.scalar (.local name _ localFound)) (.assign name _ localFound (.const 0)) (.return (.const returned))
 
+/-- Actual compiler output and all frontend shapes for a scalar declaration
+around an initialized loop with a direct scalar condition. -/
+theorem scalarDeclLoop_compiled_shapes {width : Nat} [NeZero width]
+    (ctxt : PanToCrepContextExact width) (name : MlS) (initializer condition : ExpHOL width)
+    (init body tail : ProgHOL width) (initializerShape : ScalarExpression ctxt initializer)
+    (initShape : PanToCrepSteps.BranchProgram (scalarDeclContext ctxt name) init)
+    (conditionShape : ScalarExpression (scalarDeclContext ctxt name) condition)
+    (bodyShape : PanToCrepSteps.BranchProgram (scalarDeclContext ctxt name) body)
+    (tailShape : PanToCrepSteps.BranchProgram (scalarDeclContext ctxt name) tail) :
+    ∃ value test,
+      compileExpExactHOLW ctxt initializer = ([value],.one) ∧ DirectExpression value ∧
+      compileExpExactHOLW (scalarDeclContext ctxt name) condition = ([test],.one) ∧ DirectExpression test ∧
+      CrepToLoopSteps.BranchProgram (compileProgExactHOLW (scalarDeclContext ctxt name) init) ∧
+      CrepToLoopSteps.BranchProgram (compileProgExactHOLW (scalarDeclContext ctxt name) body) ∧
+      CrepToLoopSteps.BranchProgram (compileProgExactHOLW (scalarDeclContext ctxt name) tail) ∧
+      compileProgExactHOLW ctxt (.dec name .one initializer (.seq init (.seq (.while condition body) tail))) =
+        .dec (ctxt.vmax+1) value (.seq (compileProgExactHOLW (scalarDeclContext ctxt name) init)
+          (.seq (.while test (compileProgExactHOLW (scalarDeclContext ctxt name) body))
+            (compileProgExactHOLW (scalarDeclContext ctxt name) tail))) := by
+  obtain ⟨value,compiledValue,directValue⟩ := scalar_compile initializerShape
+  obtain ⟨test,compiledTest,directTest⟩ := scalar_compile conditionShape
+  refine ⟨value,test,compiledValue,directValue,compiledTest,directTest,
+    branch_compile initShape,branch_compile bodyShape,branch_compile tailShape,?_⟩
+  obtain ⟨v,_,declCompiled⟩ := scalarDecl_compile ctxt name initializer
+    (.seq init (.seq (.while condition body) tail)) initializerShape
+  have valueEq : v = value := by
+    simp [compileProgExactHOLW,compileDecExactHOLW,compiledValue,nestedDecsHOL,scalarDeclContext] at declCompiled
+    exact declCompiled.symm
+  subst v
+  rw [declCompiled]
+  simp [compileProgExactHOLW,compileWhileExactHOLW,compiledTest]
+
 end SteppedFlapjack.PanToCrepSteps

@@ -1,5 +1,6 @@
 import SteppedFlapjack.PanToCrepSteps.DeclLoopShape
 import SteppedFlapjack.PanToCrepSteps.CountedDecl
+import SteppedFlapjack.PanToCrepSteps.TailEntryDeclCompiledRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryDeclFrontendRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryDeclRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryDeclBound
@@ -472,6 +473,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.CountedLoopExample`: State-changing counted loop with a repeated condition.
 - `SteppedFlapjack.PanToCrepSteps.CountedDecl`: Counted scalar declarations and local restoration.
 - `SteppedFlapjack.PanToCrepSteps.DeclLoopShape`: Supported compiler output for local declarations around loops.
+- `SteppedFlapjack.PanToCrepSteps.TailEntryDeclCompiledRiscV`: Derived declaration compiler shapes through RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.TailEntryDeclFrontendRiscV`: Declaration entry frontend execution through RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.TailEntryDeclRiscV`: Pancake declaration entry cost through RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.TailEntryDeclBound`: Pancake-to-Crep declaration entry visit bound.
