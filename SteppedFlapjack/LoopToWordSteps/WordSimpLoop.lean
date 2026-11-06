@@ -13,6 +13,8 @@ inductive LoopBranch {width : Nat} [NeZero width] : HolLoopProg width → Prop
   | tick : LoopBranch .tick
   | assign (v e) : LoopBranch (.assign v e)
   | store (e v) : LoopBranch (.store e v)
+  | setGlobal (v e) : LoopBranch (.setGlobal v e)
+  | ret (vs) : LoopBranch (.return vs)
   | break (n) : LoopBranch (.break n)
   | continue (n) : LoopBranch (.continue n)
   | seq {a b} : LoopBranch a → LoopBranch b → LoopBranch (.seq a b)
@@ -26,6 +28,8 @@ theorem loopBranch_select {width : Nat} [NeZero width] {p : HolLoopProg width}
   | tick => exact .leaf .tick
   | assign v e => exact .assign v e
   | store e v => exact .store e v
+  | setGlobal v e => exact .leaf (.setGlobal v e)
+  | ret vs => exact .leaf (.ret vs)
   | «break» n => exact .leaf (.break n)
   | «continue» n => exact .leaf (.continue n)
   | seq ha hb iha ihb => exact .seq iha ihb
@@ -41,6 +45,8 @@ theorem loopBranch_word {width : Nat} [NeZero width] {p : HolLoopProg width}
   | tick => intro labels; cases labels; simp only [LoopToWord.compHOL]; exact .tick
   | assign v e => intro labels; cases labels; simp only [LoopToWord.compHOL]; exact .assign _ _
   | store e v => intro labels; cases labels; simp only [LoopToWord.compHOL]; exact .store _ _
+  | setGlobal v e => intro labels; cases labels; simp only [LoopToWord.compHOL]; exact .set _ _
+  | ret vs => intro labels; cases labels; simp only [LoopToWord.compHOL]; exact .ret _ _
   | «break» n => intro labels; cases labels; simp only [LoopToWord.compHOL]; exact .break _
   | «continue» n => intro labels; cases labels; simp only [LoopToWord.compHOL]; exact .continue _
   | seq ha hb iha ihb =>
