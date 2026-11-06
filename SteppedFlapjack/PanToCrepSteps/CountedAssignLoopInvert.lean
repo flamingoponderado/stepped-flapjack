@@ -158,8 +158,49 @@ theorem counted_assignLoop_condition {σ : Type}
   | none => simp [cond] at run
   | some value => cases value <;> simp_all
 
+/-- Every normally terminating assignment loop counts at least the final
+condition evaluation and loop visit. -/
+theorem counted_assignLoop_minCost {σ : Type}
+    (condition assignment : Exp (RiscV.Word 64)) (name : VarName)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) :
+    ∀ (fuel : Nat) (production : PanSemState (RiscV.Word 64) (FfiState σ))
+      (finalLocals : VarName → Option (PanValue (RiscV.Word 64))) (cost : Nat),
+      evalPanValueFfiProgSteps context primitive handler production.structs functions
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+        production.locals production.globals production.memory production.ffi (.while condition (.assign .local name assignment))
+        (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
+          some (.normal finalLocals production.globals production.memory production.ffi,cost) →
+      panValueExpStepCost condition+1 ≤ cost := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro production finalLocals cost run
+    simp [evalPanValueFfiProgSteps] at run
+  | succ fuel ih =>
+    intro production finalLocals cost run
+    obtain ⟨word,cond⟩ := counted_assignLoop_condition condition assignment name context primitive handler functions
+      fuel production finalLocals cost run
+    by_cases zero : word = 0
+    · subst word
+      simp [evalPanValueFfiProgSteps,counted_condition_eq,cond] at run
+      omega
+    · cases fuel with
+      | zero =>
+        rw [evalPanValueFfiProgSteps,counted_condition_eq,cond] at run
+        simp [evalPanValueFfiProgSteps] at run
+        exact (zero (by simpa using run.1)).elim
+      | succ fuel =>
+        obtain ⟨value,restCost,_,_,restRun,costEq⟩ :=
+          counted_assignLoop_unroll condition assignment name context primitive handler functions fuel production word cond zero
+            finalLocals cost (by simpa [Nat.add_assoc] using run)
+        let next := {production with locals := updatePanValueMap production.locals name value}
+        have restMin := ih next finalLocals restCost (by simpa [next,panSemBitVec64MemoryAccess] using restRun)
+        omega
+
 /-- A normally terminating counted assignment loop yields its finite path
-when the HOL clock is large enough for the evaluator fuel. -/
+when the HOL clock covers the counted cost at the exact cost per iteration. -/
 theorem assignLoopPath_of_counted {σ : Type}
     (condition assignment : Exp (RiscV.Word 64)) (name : VarName)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
@@ -170,7 +211,9 @@ theorem assignLoopPath_of_counted {σ : Type}
     ∀ (fuel : Nat) (production : PanSemState (RiscV.Word 64) (FfiState σ))
       (source : PanSemStateFiniteExact 64 σ),
       PanSemStateRelExec production source.toExact → PanSemStateRelExecRanged production →
-      fuel ≤ source.clock+1 → ∀ (finalLocals : VarName → Option (PanValue (RiscV.Word 64))) (cost : Nat),
+      ∀ (finalLocals : VarName → Option (PanValue (RiscV.Word 64))) (cost : Nat),
+      cost ≤ source.clock*(panValueExpStepCost condition+panValueExpStepCost assignment+2) +
+        (panValueExpStepCost condition+1) →
       evalPanValueFfiProgSteps context primitive handler production.structs functions
         production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
         production.locals production.globals production.memory production.ffi (.while condition (.assign .local name assignment))
@@ -181,10 +224,10 @@ theorem assignLoopPath_of_counted {σ : Type}
   intro fuel
   induction fuel with
   | zero =>
-    intro production source rel ranged clock finalLocals cost run
+    intro production source rel ranged finalLocals cost clock run
     simp [evalPanValueFfiProgSteps] at run
   | succ fuel ih =>
-    intro production source rel ranged clock finalLocals cost run
+    intro production source rel ranged finalLocals cost clock run
     obtain ⟨word,cond⟩ := counted_assignLoop_condition condition assignment name context primitive handler functions
       fuel production finalLocals cost run
     by_cases zero : word = 0
@@ -225,13 +268,29 @@ theorem assignLoopPath_of_counted {σ : Type}
           simp_all [next,pEntry]
         have nextRel : PanSemStateRelExec next post.toExact := by rw [nextEq]; simpa [post] using postRel
         have nextRanged : PanSemStateRelExecRanged next := by rw [nextEq]; exact postRanged
-        have nextClock : fuel+1 ≤ post.clock+1 := by simp [post,entry,setVarHOLFinite,decClockHOLFinite]; omega
-        obtain ⟨final,rest⟩ := ih next post nextRel nextRanged nextClock finalLocals restCost
+        have restMin := counted_assignLoop_minCost condition assignment name context primitive handler functions
+          (fuel+1) next finalLocals restCost (by simpa [next,panSemBitVec64MemoryAccess] using restRun)
+        have sourceClock : source.clock ≠ 0 := by
+          intro zeroClock
+          rw [zeroClock] at clock
+          simp only [Nat.zero_mul,Nat.zero_add] at clock
+          omega
+        have clockSucc : source.clock = (source.clock-1)+1 := by omega
+        have clockMul : source.clock*(panValueExpStepCost condition+panValueExpStepCost assignment+2) =
+            (source.clock-1)*(panValueExpStepCost condition+panValueExpStepCost assignment+2) +
+              (panValueExpStepCost condition+panValueExpStepCost assignment+2) := by
+          conv_lhs => rw [clockSucc]
+          simp [Nat.add_mul]
+        have nextClock : restCost ≤ post.clock*(panValueExpStepCost condition+panValueExpStepCost assignment+2) +
+            (panValueExpStepCost condition+1) := by
+          simp [post,entry,setVarHOLFinite,decClockHOLFinite]
+          omega
+        obtain ⟨final,rest⟩ := ih next post nextRel nextRanged finalLocals restCost nextClock
           (by simpa [next,panSemBitVec64MemoryAccess] using restRun)
         refine ⟨final,?_⟩
         subst cost
         exact AssignLoopPath.step fuel production source final conditionRanged assignmentRanged nameRanged word cond zero
-          (by omega) value (by simpa [pEntry] using assignmentRun) (by simpa [entry] using valid)
+          sourceClock value (by simpa [pEntry] using assignmentRun) (by simpa [entry] using valid)
           finalLocals restCost (by simpa [next,post,entry] using rest)
 
 /-- A successful counted assignment loop has a matching HOL execution whose
@@ -246,7 +305,9 @@ theorem counted_assignLoop_source_bound {σ : Type}
     (fuel : Nat) (production : PanSemState (RiscV.Word 64) (FfiState σ))
     (source : PanSemStateFiniteExact 64 σ)
     (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
-    (clock : fuel ≤ source.clock+1) (finalLocals : VarName → Option (PanValue (RiscV.Word 64))) (cost : Nat)
+    (finalLocals : VarName → Option (PanValue (RiscV.Word 64))) (cost : Nat)
+    (clock : cost ≤ source.clock*(panValueExpStepCost condition+panValueExpStepCost assignment+2) +
+        (panValueExpStepCost condition+1))
     (run : evalPanValueFfiProgSteps context primitive handler production.structs functions
       production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
       production.locals production.globals production.memory production.ffi (.while condition (.assign .local name assignment))
@@ -256,7 +317,7 @@ theorem counted_assignLoop_source_bound {σ : Type}
         (none,final) ∧
       controlSteps (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment))) source ≤ cost := by
   obtain ⟨final,path⟩ := assignLoopPath_of_counted condition assignment name context primitive handler functions
-    conditionRanged assignmentRanged nameRanged fuel production source rel ranged clock finalLocals cost run
+    conditionRanged assignmentRanged nameRanged fuel production source rel ranged finalLocals cost clock run
   obtain ⟨_,holRun,bound⟩ := assignLoopPath_counted condition assignment name context primitive handler functions path rel ranged
   exact ⟨final,holRun,bound⟩
 
@@ -271,7 +332,8 @@ theorem counted_assignLoop_crep_steps {σ : Type}
     {source : PanSemStateFiniteExact 64 σ}
     {finalLocals : VarName → Option (PanValue (RiscV.Word 64))} {cost : Nat}
     (conditionRanged : ExpByteRanged condition) (assignmentRanged : ExpByteRanged assignment)
-    (nameRanged : NameRanged name) (clock : fuel ≤ source.clock+1)
+    (nameRanged : NameRanged name) (clock : cost ≤ source.clock*(panValueExpStepCost condition+panValueExpStepCost assignment+2) +
+        (panValueExpStepCost condition+1))
     (countedRun : evalPanValueFfiProgSteps context primitive handler production.structs functions
       production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
       production.locals production.globals production.memory production.ffi (.while condition (.assign .local name assignment))
@@ -304,7 +366,7 @@ theorem counted_assignLoop_crep_steps {σ : Type}
       SteppedFlapjack.CrepSteps.steps (compileProgExactHOLW ctxt loweredLoop) crep ≤
         (1 + sizeOf (compileProgExactHOLW ctxt loweredBody)) * (1 + sizeOf loweredBody) * budget := by
   obtain ⟨final,path⟩ := assignLoopPath_of_counted condition assignment name context primitive handler functions
-    conditionRanged assignmentRanged nameRanged fuel production source rel ranged clock finalLocals cost countedRun
+    conditionRanged assignmentRanged nameRanged fuel production source rel ranged finalLocals cost clock countedRun
   obtain ⟨_,sourceRun,loweredFinal,crepResult,crepFinal,loweredRun,finalRel,crepRun,crepRel,resultRel,crepBound⟩ :=
     assignLoopPath_crep_steps condition assignment name context primitive handler functions path rel ranged budget budgetBound
       globals ctxt conditionShape shape lowered globalRel crep stateRel codeRel excpRel localsRel localised

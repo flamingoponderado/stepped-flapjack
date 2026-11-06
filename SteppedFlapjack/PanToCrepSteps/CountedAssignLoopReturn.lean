@@ -62,8 +62,9 @@ theorem counted_assignLoop_with_return {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ))
     (source : PanSemStateFiniteExact 64 σ)
     (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
-    (clock : fuel+1 ≤ source.clock+1)
     (finalLocals : VarName → Option (PanValue (RiscV.Word 64))) (loopCost : Nat) (returned : BitVec 64)
+    (clock : loopCost ≤ source.clock*(panValueExpStepCost condition+panValueExpStepCost assignment+2) +
+      (panValueExpStepCost condition+1))
     (loopExec : evalPanValueFfiProgSteps context primitive handler production.structs functions
       production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+1)
       production.locals production.globals production.memory production.ffi (.while condition (.assign .local name assignment))
@@ -82,7 +83,7 @@ theorem counted_assignLoop_with_return {σ : Type}
         (.assign .local (ofString name) (expToHOL assignment))) (.return (.const returned)))) source ≤ loopCost+5 := by
   classical
   obtain ⟨middle,path⟩ := assignLoopPath_of_counted condition assignment name context primitive handler functions
-    conditionRanged assignmentRanged nameRanged (fuel+1) production source rel ranged clock finalLocals loopCost loopExec
+    conditionRanged assignmentRanged nameRanged (fuel+1) production source rel ranged finalLocals loopCost clock loopExec
   obtain ⟨_,loopRun,loopBound⟩ := assignLoopPath_counted condition assignment name context primitive handler functions path rel ranged
   obtain ⟨middleRel,middleRanged⟩ := assignLoopPath_final_rel condition assignment name context primitive handler functions path rel ranged
   let middleProduction := {production with locals := finalLocals, clock := middle.clock}
@@ -142,8 +143,9 @@ theorem counted_assignLoop_globalEntry {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ))
     (source pan middle : PanSemStateFiniteExact 64 σ)
     (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
-    (clock : fuel+1 ≤ source.clock+1)
     (finalLocals : VarName → Option (PanValue (RiscV.Word 64))) (loopCost budget : Nat) (returned : BitVec 64)
+    (clock : loopCost ≤ source.clock*(panValueExpStepCost condition+panValueExpStepCost assignment+2) +
+      (panValueExpStepCost condition+1))
     (budgetBound : loopCost+5 ≤ budget)
     (loopExec : evalPanValueFfiProgSteps context primitive handler production.structs functions
       production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+1)
@@ -178,7 +180,7 @@ theorem counted_assignLoop_globalEntry {σ : Type}
             sizeOf (compileProgExactHOL globals body) +
             sizeOf (compileProgExactHOL globals (.return (.const returned)))) * budget + 2 := by
   obtain ⟨result,sourceFinal,exec,run,bound⟩ := counted_assignLoop_with_return condition assignment name context primitive handler
-    functions conditionRanged assignmentRanged nameRanged fuel production source rel ranged clock finalLocals loopCost returned loopExec
+    functions conditionRanged assignmentRanged nameRanged fuel production source rel ranged finalLocals loopCost returned clock loopExec
   obtain ⟨loweredFinal,_,_,_,_,_,loweredRun,postRel,entryBound⟩ := globalEntry_originalLoop_with_steps
     declarations start initializers globals caller .skip (expToHOL condition)
     (.assign .local (ofString name) (expToHOL assignment)) (.return (.const returned))

@@ -37,6 +37,51 @@ inductive AssignLoopPath {σ : Type}
       AssignLoopPath condition assignment name context primitive handler functions (fuel+2) production source
         finalLocals final (panValueExpStepCost condition+(panValueExpStepCost assignment+1)+restCost+1)
 
+/-- The counted cost and HOL clock decrease of an assignment-loop path
+are both determined by the same number of loop iterations. -/
+theorem assignLoopPath_cost_clock {σ : Type}
+    (condition assignment : Exp (RiscV.Word 64)) (name : VarName)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64)))
+    {fuel : Nat} {production : PanSemState (RiscV.Word 64) (FfiState σ)}
+    {source final : PanSemStateFiniteExact 64 σ}
+    {finalLocals : VarName → Option (PanValue (RiscV.Word 64))} {cost : Nat}
+    (path : AssignLoopPath condition assignment name context primitive handler functions fuel production source finalLocals final cost) :
+    ∃ iterations,
+      cost = (panValueExpStepCost condition+1) +
+        iterations*(panValueExpStepCost condition+panValueExpStepCost assignment+2) ∧
+      source.clock = final.clock+iterations := by
+  induction path with
+  | zero => exact ⟨0,by simp,by simp⟩
+  | step fuel production source final conditionRanged assignmentRanged nameRanged word conditionRun nonzero clock
+      value assignmentRun valid finalLocals restCost rest ih =>
+    obtain ⟨iterations,costEq,clockEq⟩ := ih
+    refine ⟨iterations+1,?_,?_⟩
+    · rw [Nat.add_mul]
+      simp only [Nat.one_mul]
+      omega
+    · simp [setVarHOLFinite,decClockHOLFinite] at clockEq
+      omega
+
+/-- The iteration-based clock condition is necessary for every complete
+assignment-loop path. -/
+theorem assignLoopPath_clock_bound {σ : Type}
+    (condition assignment : Exp (RiscV.Word 64)) (name : VarName)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64)))
+    {fuel : Nat} {production : PanSemState (RiscV.Word 64) (FfiState σ)}
+    {source final : PanSemStateFiniteExact 64 σ}
+    {finalLocals : VarName → Option (PanValue (RiscV.Word 64))} {cost : Nat}
+    (path : AssignLoopPath condition assignment name context primitive handler functions fuel production source finalLocals final cost) :
+    cost ≤ source.clock*(panValueExpStepCost condition+panValueExpStepCost assignment+2) +
+      (panValueExpStepCost condition+1) := by
+  obtain ⟨iterations,costEq,clockEq⟩ := assignLoopPath_cost_clock condition assignment name context primitive handler functions path
+  have iterationsBound : iterations ≤ source.clock := by omega
+  have scaled := Nat.mul_le_mul_right (panValueExpStepCost condition+panValueExpStepCost assignment+2) iterationsBound
+  omega
+
 /-- Assignment-loop paths produce the actual counted and HOL loop executions,
 with the HOL control visits bounded by the counted source steps. -/
 theorem assignLoopPath_counted {σ : Type}

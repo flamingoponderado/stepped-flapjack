@@ -77,8 +77,9 @@ theorem counted_assignLoop_globalEntry_riscv {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ))
     (source pan middle : PanSemStateFiniteExact 64 σ) (crep : CrepSemHOLState 64 σ)
     (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
-    (clock : fuel+1 ≤ source.clock+1)
     (finalLocals : VarName → Option (PanValue (RiscV.Word 64))) (loopCost budget : Nat) (returned : BitVec 64)
+    (clock : loopCost ≤ source.clock*(panValueExpStepCost condition+panValueExpStepCost assignment+2) +
+      (panValueExpStepCost condition+1))
     (budgetBound : loopCost+5 ≤ budget)
     (loopExec : evalPanValueFfiProgSteps context primitive handler production.structs functions
       production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+1)
@@ -168,8 +169,8 @@ theorem counted_assignLoop_globalEntry_riscv {σ : Type}
   let calleeContext := ctxtFcExactHOL caller.funcs caller.eids [] [] []
   obtain ⟨sourceResult,sourceFinal,panPost,sourceExec,sourceRun,panRun,postRel,globalBound⟩ :=
     counted_assignLoop_globalEntry declarations start initializers globals calleeContext condition assignment name context primitive handler
-      functions conditionRanged assignmentRanged nameRanged fuel production source pan middle rel ranged clock finalLocals loopCost budget
-      returned budgetBound loopExec conditionShape bodyShape panCode initRun sourceFound entryClock globalRel
+      functions conditionRanged assignmentRanged nameRanged fuel production source pan middle rel ranged finalLocals loopCost budget
+      returned clock budgetBound loopExec conditionShape bodyShape panCode initRun sourceFound entryClock globalRel
   have found := globalEntry_lowered_callee_lookup declarations start (nestedSeqHOL initializers) globals pan middle source
     original .one panCode initRun sourceFound globalRel
   have lookup := global_lowered_lookup_after_init declarations start (newMainNameHOL declarations) pan middle

@@ -62,8 +62,9 @@ theorem counted_assignLoop_native_riscv {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ))
     (source pan middle : PanSemStateFiniteExact 64 σ) (crep : CrepSemHOLState 64 σ)
     (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
-    (clock : fuel+1 ≤ source.clock+1)
     (finalLocals : VarName → Option (PanValue (RiscV.Word 64))) (loopCost budget : Nat) (returned : BitVec 64)
+    (clock : loopCost ≤ source.clock*(panValueExpStepCost condition+panValueExpStepCost assignment+2) +
+      (panValueExpStepCost condition+1))
     (budgetBound : loopCost+5 ≤ budget)
     (loopExec : evalPanValueFfiProgSteps context primitive handler production.structs functions
       production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+1)
@@ -128,7 +129,7 @@ theorem counted_assignLoop_native_riscv {σ : Type}
   let limit := assignLoopEntryLimit declarations initializers globals caller condition assignment name returned pan budget loopCtxt .ln
   obtain ⟨sourceResult,sourceFinal,sourceExec,sourceRun,_⟩ :=
     counted_assignLoop_with_return condition assignment name context primitive handler functions
-      conditionRanged assignmentRanged nameRanged fuel production source rel ranged clock finalLocals loopCost returned loopExec
+      conditionRanged assignmentRanged nameRanged fuel production source rel ranged finalLocals loopCost returned clock loopExec
   refine ⟨sourceResult,sourceFinal,sourceExec,sourceRun,?_⟩
   obtain ⟨panCodeRelCanonical,programShapesCanonical⟩ := global_supported_panCrep_codeAndShapes
     declarations start pan crep panCode crepCode unique localised preShapes noTail
@@ -188,8 +189,8 @@ theorem counted_assignLoop_native_riscv {σ : Type}
   · obtain ⟨word,setup,contextEq,machineEq,mcEq,labEq,tickEq,wordRel,base,frameSize,wordLocals⟩ := success
     obtain ⟨_,sourceFinal',_,_,_,_,_,sourceRun',_,_,_,_,_,_,_,_,_,extra,loopPost,_,_,_,_,_,_,_,_,_,_,_,nativeReady⟩ :=
       counted_assignLoop_globalEntry_riscv declarations start initializers globals caller condition assignment name context primitive handler
-        functions conditionRanged assignmentRanged nameRanged fuel production source pan middle crep rel ranged clock finalLocals loopCost budget
-        returned budgetBound loopExec conditionShape bodyShape panCode initRun sourceFound entryClock globalRel panStateRel panCodeRel
+        functions conditionRanged assignmentRanged nameRanged fuel production source pan middle crep rel ranged finalLocals loopCost budget
+        returned clock budgetBound loopExec conditionShape bodyShape panCode initRun sourceFound entryClock globalRel panStateRel panCodeRel
         panExcpRel panLocalsRel initLocalised initShape loopCtxt .ln initial word normalized.1 normalized.2.1 normalized.2.2.1
         (by simpa [initial] using codeRel) normalized.2.2.2.1 wordRel
     have finalEq : sourceFinal = sourceFinal' := (Prod.mk.inj (sourceRun.symm.trans sourceRun')).2
