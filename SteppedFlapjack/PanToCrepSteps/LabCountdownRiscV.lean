@@ -35,8 +35,6 @@ theorem labInitialized_countdown_fullInit_riscv {σ : Type}
     (templateGlobals : template.globals = HolFiniteMapExact.empty)
     (templateExceptions : template.eshapes = HolFiniteMapExact.empty)
     (templateStructs : template.structs = [])
-    (topOutside : ¬ (labInitializedOriginal template stack backend).memaddrs (labInitializedOriginal template stack backend).topAddr)
-    (aligned : panGlobalsByteAlignedHOL (labInitializedOriginal template stack backend).topAddr)
     (singleDef : declarations = singleEntryProgram start (.dec (ofString name) .one (.const (BitVec.ofNat 64 count)) (.seq .skip (.seq
       (.while (expToHOL (.var .local name : Exp (RiscV.Word 64))) (.assign .local (ofString name) (expToHOL (.op .sub [.var .local name,.const 1] : Exp (RiscV.Word 64))))) (.return (.const returned))))))
     (sourceCode : template.code = HolFiniteMapExact.empty.update
@@ -126,7 +124,8 @@ theorem labInitialized_countdown_fullInit_riscv {σ : Type}
     (by simpa [source,labInitializedOriginal,labInitializedSource] using templateGlobals)
     (by simpa [source,labInitializedOriginal,labInitializedSource] using templateExceptions)
     (by simpa [source,labInitializedOriginal,labInitializedSource] using templateStructs)
-    topOutside aligned singleDef (by simpa [source,labInitializedOriginal,labInitializedSource] using sourceCode)
+    (labInitializedOriginal_top_outside template stack backend)
+    (labInitializedOriginal_top_aligned template stack backend) singleDef (by simpa [source,labInitializedOriginal,labInitializedSource] using sourceCode)
     rfl rfl rfl rfl memRel native
   obtain ⟨sourceResult,_,sourceExec,_,_,_⟩ := labInitialized_countdown count production template stack backend
     environment ranged ffiRel name nameRanged wordRange sourceClock returned

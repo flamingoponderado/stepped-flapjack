@@ -254,6 +254,96 @@ theorem labInitializedSource_memoryRel {σ : Type}
   obtain ⟨word,read⟩ := wordMemory address inHeap
   simp [labInitializedSource,read,wordSemTheWord,wlabWlocExact]
 
+/-- The Lab-derived source top address is word aligned. -/
+theorem labInitializedOriginal_top_aligned {σ : Type}
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack) :
+    panGlobalsByteAlignedHOL (labInitializedOriginal template stack backend).topAddr := by
+  have mem := backend.initAssumptions.2.2.2.2.1
+  obtain ⟨base,_,_,_,read,_,_,_,_,_,_,_,_,_,baseAligned,_⟩ := mem
+  have baseMod : base.toNat % 8 = 0 :=
+    (Flapjack.Compiler.Backend.StackRemove.Proofs.InitCodeThm.byteAligned_iff (width := 64) (by simp [goodDimindex]) base).mp baseAligned
+  obtain ⟨_,_,length,_,_,lengthStore,_,_,_⟩ := backend.heap_domain
+  have lenEq : backend.labHeapLength = BitVec.ofNat 64 length *
+      Flapjack.Compiler.Backend.StackRemove.bytesInWord 64 := by
+    simpa [backend.heap_length_lab] using lengthStore
+  have alignedOfMod (word : BitVec 64) (h : word.toNat % 8 = 0) : panGlobalsByteAlignedHOL word := by
+    change BitVec.ofNat 64 ((word.toNat / 8) * 8) = word
+    apply BitVec.eq_of_toNat_eq
+    simp only [BitVec.toNat_ofNat]
+    have hlt := word.isLt
+    omega
+  apply alignedOfMod
+  simp only [labInitializedOriginal,labInitializedSource,read,wordSemTheWord,lenEq]
+  simp only [BitVec.toNat_add,BitVec.toNat_mul,BitVec.toNat_ofNat,
+    Flapjack.Compiler.Backend.StackRemove.bytesInWord]
+  have baseLt := base.isLt
+  simp only [show (2 : BitVec 64).toNat = 2 by decide]
+  norm_num [Flapjack.Compiler.Backend.StackRemove.bytesInWord] at *
+  omega
+
+/-- The initialized heap ends before the separately reserved stack area,
+so the canonical source top is not an accessible heap word. -/
+theorem labInitializedOriginal_top_outside {σ : Type}
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack) :
+    ¬ (labInitializedOriginal template stack backend).memaddrs (labInitializedOriginal template stack backend).topAddr := by
+  let bytes := Flapjack.Compiler.Backend.StackRemove.bytesInWord 64
+  have good : goodDimindex 64 := by simp [goodDimindex]
+  have mem := backend.initAssumptions.2.2.2.2.1
+  obtain ⟨p2,p3,p4,_,r2,r3,r4,_,_,_,_,_,_,le,a2,a4,_,big,_⟩ := mem
+  have leNat : p2.toNat ≤ p4.toNat := BitVec.le_def.mp le
+  have a2Nat : p2.toNat % 8 = 0 := (Flapjack.Compiler.Backend.StackRemove.Proofs.InitCodeThm.byteAligned_iff good p2).mp a2
+  have a4Nat : p4.toNat % 8 = 0 := (Flapjack.Compiler.Backend.StackRemove.Proofs.InitCodeThm.byteAligned_iff good p4).mp a4
+  have bigNat : 1024 * 8 ≤ p4.toNat - p2.toNat := by
+    have h := BitVec.le_def.mp big
+    rw [BitVec.toNat_sub_of_le le] at h
+    norm_num [Flapjack.Compiler.Backend.StackRemove.bytesInWord] at h ⊢
+    exact h
+  have maxOk := backend.initAssumptions.2.2.2.2.2.1
+  obtain ⟨_,_,heapWords,stackWords,heapEnd,stackEnd,even,_,_,stackMin⟩ :=
+    Flapjack.Compiler.Backend.StackRemove.Proofs.InitCodeThm.initLayout good backend.maxHeap maxOk p2 p3 p4 leNat bigNat a2Nat a4Nat
+  have limits := Flapjack.Compiler.Backend.StackRemove.Proofs.InitCodeCorrect.getStackHeapLimit_eq backend.maxHeap p2 p3 p4
+  have limitValue : (Flapjack.Compiler.Backend.StackRemove.Proofs.InitLimits.getStackHeapLimit backend.maxHeap (p2,p3,p4)).2 = heapWords / 2 := by
+    rw [limits]
+    simp only [Flapjack.Compiler.Backend.StackRemove.Proofs.InitLimitsDouble.getStackHeapLimitDouble]
+    rw [heapEnd]
+    omega
+  have lenEq : backend.labHeapLength = BitVec.ofNat 64 (heapWords / 2) * bytes := by
+    simp only [FullInitMachineContext.labHeapLength,r2,r3,r4,wordSemTheWord,limitValue,bytes]
+  have halfBound : (heapWords / 2) * 8 < 2^64 := by
+    have := p4.isLt
+    simp only [Flapjack.Compiler.Backend.StackRemove.maxStackAlloc] at stackMin
+    omega
+  have totalBound : heapWords * 8 < 2^64 := by
+    have := p4.isLt
+    simp only [Flapjack.Compiler.Backend.StackRemove.maxStackAlloc] at stackMin
+    omega
+  have divEven : heapWords / 2 + heapWords / 2 = heapWords := by omega
+  intro member
+  simp only [labInitializedOriginal,labInitializedSource,r2,wordSemTheWord,lenEq] at member
+  have count : (BitVec.ofNat 64 (heapWords / 2) * bytes).toNat / 8 = heapWords / 2 := by
+    simp only [BitVec.toNat_mul,BitVec.toNat_ofNat,bytes,Flapjack.Compiler.Backend.StackRemove.bytesInWord]
+    have small : heapWords / 2 < 2^64 := by omega
+    rw [Nat.mod_eq_of_lt small]
+    norm_num at *
+    omega
+  rw [count,divEven,Flapjack.Compiler.Backend.StackRemove.mem_addresses] at member
+  obtain ⟨i,hi,equal⟩ := member
+  have eqNat := congrArg BitVec.toNat equal
+  simp only [BitVec.toNat_add,BitVec.toNat_mul,BitVec.toNat_ofNat,bytes,
+    Flapjack.Compiler.Backend.StackRemove.bytesInWord] at eqNat
+  have p4Bound := p4.isLt
+  have indexBound : i * 8 < 2^64 := by omega
+  have halfSmall : heapWords / 2 < 2^64 := by omega
+  have indexSmall : i < 2^64 := by omega
+  rw [Nat.mod_eq_of_lt halfSmall,Nat.mod_eq_of_lt indexSmall] at eqNat
+  simp only [show (2 : BitVec 64).toNat = 2 by decide] at eqNat
+  norm_num at *
+  omega
+
 /-- The counted source theorem's actual no-globals pre-call state has the
 required memory relation when Lab heap cells contain words. -/
 theorem labInitializedOriginal_preCall_memoryRel {σ : Type}
