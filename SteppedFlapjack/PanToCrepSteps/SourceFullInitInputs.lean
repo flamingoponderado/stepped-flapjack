@@ -107,9 +107,14 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
       programs).1.IsPrefix backend.bitmaps)
     (registers : 4 < ac.regCount-(5+ac.avoidRegs.length))
     (stackOracle : backend.coracle = fun _ => (cfg, [], []))
-    (memory : stack.memory = (concreteDeclLoopState arch (concreteDeclCrepState source
-      (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
-      (compileProgDeclsHOLW (compileTopExactHOL declarations start))).memory)
+    (heapMemory : ∀ address, stack.mdomain address = true → backend.lab.memory address =
+      (concreteDeclLoopState arch (concreteDeclCrepState source
+        (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+        (compileProgDeclsHOLW (compileTopExactHOL declarations start))).memory address)
+    (otherMemory : ∀ address, stack.mdomain address = false → stack.memory address =
+      (concreteDeclLoopState arch (concreteDeclCrepState source
+        (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+        (compileProgDeclsHOLW (compileTopExactHOL declarations start))).memory address)
     (domain : stack.mdomain = (concreteDeclLoopState arch (concreteDeclCrepState source
       (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
       (compileProgDeclsHOLW (compileTopExactHOL declarations start))).mdomain)
@@ -127,9 +132,20 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
         (compileProgDeclsHOLW (compileTopExactHOL declarations start))) := by
   have compat := emptyNativeWordOracle_compatible ac backend.bitmaps.length cfg
   have current : stack.store.lookup .currHeap = some (.word source.baseAddr) := by
-    obtain ⟨base,labBase,heapBase⟩ := backend.heap_base_lab
+    obtain ⟨base,labBase,heapBase,_⟩ := backend.heap_base_and_memory_lab
     have baseEq : base = source.baseAddr := by simpa [baseReg,eq_comm] using labBase
     simpa [baseEq] using heapBase
+  have memory : stack.memory = (concreteDeclLoopState arch (concreteDeclCrepState source
+      (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+      (compileProgDeclsHOLW (compileTopExactHOL declarations start))).memory := by
+    funext address
+    cases domainEq : stack.mdomain address with
+    | false => exact otherMemory address domainEq
+    | true =>
+      have preserved : stack.memory address = backend.lab.memory address := by
+        obtain ⟨_,_,_,preserved⟩ := backend.heap_base_and_memory_lab
+        exact preserved address domainEq
+      exact preserved.trans (heapMemory address domainEq)
   exact sourceFullInitInputs declarations start caller loopCtxt entry limit arch source wc ac stack
     (emptyNativeWordOracle backend.bitmaps.length cfg) (heapEnd - source.baseAddr) callerEq loopContextEq programs programsEq
     backend inputCodeEq bitmapPrefix registers compat.1 (stackOracle.trans compat.2.symm)

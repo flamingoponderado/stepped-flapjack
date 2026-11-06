@@ -27,8 +27,9 @@ theorem FullInitMachineContext.initializer_succeeds {F : Type}
       backend.lab backend.saveRegs backend.coracle) backend.bitmaps backend.dataSp bundles
   exact ⟨initialized,by simpa only [fullMakeInit_eq] using opt⟩
 
-/-- The initializer's current heap pointer is the incoming register 2 value. -/
-theorem initOpt_current_from_reg2 {width : Nat} [NeZero width] {C F : Type}
+/-- The initializer takes its heap base from register 2 and preserves input
+memory on the initialized heap domain. -/
+theorem initOpt_heap_data {width : Nat} [NeZero width] {C F : Type}
     (jump : Bool) (bounds : BitVec width × BitVec width) (generateGc : Bool)
     (maxHeap pointer start : Nat)
     (oracle : Nat → C × List (Nat × HolProg width) × List (BitVec width))
@@ -40,7 +41,8 @@ theorem initOpt_current_from_reg2 {width : Nat} [NeZero width] {C F : Type}
     (opt : InitMake.makeInitOpt generateGc maxHeap bitmaps dataSpace oracle jump bounds pointer
       (sptFromAList code) s = some initialized) :
     ∃ current, s.regs.lookup 2 = some (.word current) ∧
-      initialized.store.lookup .currHeap = some (.word current) := by
+      initialized.store.lookup .currHeap = some (.word current) ∧
+      ∀ address, initialized.mdomain address = true → initialized.memory address = s.memory address := by
   obtain ⟨⟨every, oracleBound, oracleEq, codeEq, k8, entry1, save, noStack, noStore, noAlloc,
     maxOk⟩, good, ptr2, ptr3, ptr4, bp, r2, r3, r4, m0, m1, m2, m3, m4, cbEmpty, le, al2, al4,
     albp, big, heap⟩ := hyp
@@ -62,7 +64,7 @@ theorem initOpt_current_from_reg2 {width : Nat} [NeZero width] {C F : Type}
     | some r => simp [run] at main
     | none =>
       simp only [run] at main
-      obtain ⟨⟨current,_,_,hread,_,hpost,_⟩,rel,_,prop,_⟩ := main
+      obtain ⟨⟨current,_,_,hread,_,hpost,_⟩,rel,_,prop,_,_,memEq⟩ := main
       have opt' : InitMake.makeInitOpt generateGc maxHeap bitmaps dataSpace oracle jump bounds pointer
           (sptFromAList code) s = some (InitReduce.initReduce generateGc jump bounds pointer
             (sptFromAList code) bitmaps dataSpace oracle post) := by
@@ -72,18 +74,28 @@ theorem initOpt_current_from_reg2 {width : Nat} [NeZero width] {C F : Type}
       have relcur : post.regs.lookup (pointer + 2) =
           (InitReduce.initReduce generateGc jump bounds pointer (sptFromAList code) bitmaps dataSpace oracle post).store.lookup .currHeap := by
         exact rel.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
-      exact ⟨current,hread,by rw [eq,← relcur,hpost]⟩
+      refine ⟨current,hread,by rw [eq,← relcur,hpost],?_⟩
+      intro address domain
+      rw [eq] at domain ⊢
+      have member : SetSep.fun2Set (s.memory, fun a =>
+          (InitReduce.initReduce generateGc jump bounds pointer (sptFromAList code) bitmaps dataSpace oracle post).mdomain a = true)
+          (address,s.memory address) := (SetSep.fun2SetThm _ _ _ _).mpr ⟨rfl,domain⟩
+      rw [memEq] at member
+      have value := (SetSep.fun2SetThm _ _ _ _).mp member
+      exact value.1
 
-/-- Full initialization takes the current heap pointer from the Lab register
-corresponding to Stack register 2. -/
-theorem FullInitMachineContext.heap_base_lab {F : Type}
+
+/-- Full initialization takes the heap base from the Lab register corresponding
+to Stack register 2 and preserves Lab memory on the initialized heap domain. -/
+theorem FullInitMachineContext.heap_base_and_memory_lab {F : Type}
     {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
     ∃ current, backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 2) = .word current ∧
-      stack.store.lookup .currHeap = some (.word current) := by
+      stack.store.lookup .currHeap = some (.word current) ∧
+      ∀ address, stack.mdomain address = true → stack.memory address = backend.lab.memory address := by
   obtain ⟨initialized,fullOpt⟩ := backend.initializer_succeeds
   simp only [fullMakeInit_eq] at fullOpt
   have bundles := And.intro (dischargeThese_s2 backend.initAssumptions) (propagateThese_s2 backend.initAssumptions)
-  obtain ⟨current,read,store⟩ := initOpt_current_from_reg2 backend.stackConf.jump backend.offset
+  obtain ⟨current,read,store,memory⟩ := initOpt_heap_data backend.stackConf.jump backend.offset
     (StackToLab.isGenGc backend.dataConf.gcKind) backend.maxHeap backend.sp BvlToBvi.initGlobalsLocation
     (coracle1 backend.coracle) (code1 backend.dataConf backend.inputCode)
     (s2 backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset backend.inputCode
@@ -96,10 +108,14 @@ theorem FullInitMachineContext.heap_base_lab {F : Type}
   rw [fullMakeInit_eq] at stateEq
   have stateEq' : stack = StackAlloc.makeInit backend.dataConf (sptFromAList backend.inputCode) backend.coracle initialized := by
     simpa [InitMake.makeInitAny,fullOpt] using stateEq
-  refine ⟨current,?_,?_⟩
+  refine ⟨current,?_,?_,?_⟩
   · rw [labRead] at read
     exact Option.some.inj read
   · simpa [stateEq',StackAlloc.makeInit] using store
+  · intro address domain
+    have domain' : initialized.mdomain address = true := by simpa [stateEq',StackAlloc.makeInit] using domain
+    have fact := memory address domain'
+    simpa [stateEq',StackAlloc.makeInit,s2,s3,StackNames.makeInit,StackToLab.Proofs.MakeInit.makeInit] using fact
 
 /-- Successful full initialization provides the two contiguous, separated
 heap regions and the corresponding Stack store entries. -/
