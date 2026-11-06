@@ -1,5 +1,9 @@
 import SteppedFlapjack.PanToCrepSteps.DeclLoopShape
 import SteppedFlapjack.PanToCrepSteps.CountedDecl
+import SteppedFlapjack.PanToCrepSteps.OriginalDeclEntryRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryDeclSupportedGlobalRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryDeclGlobalWordRiscV
+import SteppedFlapjack.PanToCrepSteps.TailEntryDeclTablesRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryDeclCompiledRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryDeclFrontendRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryDeclRiscV
@@ -473,6 +477,10 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.CountedLoopExample`: State-changing counted loop with a repeated condition.
 - `SteppedFlapjack.PanToCrepSteps.CountedDecl`: Counted scalar declarations and local restoration.
 - `SteppedFlapjack.PanToCrepSteps.DeclLoopShape`: Supported compiler output for local declarations around loops.
+- `SteppedFlapjack.PanToCrepSteps.OriginalDeclEntryRiscV`: Original declaration-loop control bound through RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.TailEntryDeclSupportedGlobalRiscV`: Supported global declaration entry through RISC-V.
+- `SteppedFlapjack.PanToCrepSteps.TailEntryDeclGlobalWordRiscV`: Global Word initialization for declaration entries.
+- `SteppedFlapjack.PanToCrepSteps.TailEntryDeclTablesRiscV`: Compiler-table relations for declaration entries.
 - `SteppedFlapjack.PanToCrepSteps.TailEntryDeclCompiledRiscV`: Derived declaration compiler shapes through RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.TailEntryDeclFrontendRiscV`: Declaration entry frontend execution through RISC-V.
 - `SteppedFlapjack.PanToCrepSteps.TailEntryDeclRiscV`: Pancake declaration entry cost through RISC-V.
