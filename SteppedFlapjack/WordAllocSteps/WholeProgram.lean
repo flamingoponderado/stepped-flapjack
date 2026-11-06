@@ -91,6 +91,20 @@ theorem wholeCompile_contains_stackReady (wc : Config) (ac : AsmConfigExact widt
   exact ⟨col,_,hcol,rfl,fullCompileSingle_stackReady ac ac.twoRegArith count name wc.regAlg
     (ac.regCount-(5+ac.avoidRegs.length)) col shape⟩
 
+/-- Every function produced by the whole Word compiler satisfies the Stack
+compiler’s flat-expression and post-allocation conventions. -/
+theorem wholeCompile_conventions (wc : Config) (ac : AsmConfigExact width)
+    (programs : List (Nat × Nat × WordLangProgHOL (BitVec width))) :
+    ∀ entry ∈ (compile wc ac programs).2,
+      flatExpConventions entry.2.2 = true ∧
+      postAllocConventionsHOL (ac.regCount-(5+ac.avoidRegs.length)) entry.2.2 = true := by
+  intro entry member
+  change entry ∈ ((programs.zip (nextNOracle programs.length wc.colOracle).1).map
+    (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac)) at member
+  obtain ⟨⟨⟨name,count,p⟩,col⟩,_,rfl⟩ := List.mem_map.mp member
+  exact fullCompileSingle_stackConventions ac ac.twoRegArith count name wc.regAlg
+    (ac.regCount-(5+ac.avoidRegs.length)) p col
+
 /-- A non-error source function run has a corresponding run of its actual
 whole-program-compiled body, with a source-limit-dependent visit bound. -/
 theorem wholeCompile_sourceBound {C F : Type} (wc : Config) (ac : AsmConfigExact width)
