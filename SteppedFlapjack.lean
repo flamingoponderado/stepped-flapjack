@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordSimpSteps.TailEntry
 import SteppedFlapjack.LoopToWordSteps.TailCall
 import SteppedFlapjack.LoopLiveSteps.TailEntryCode
 import SteppedFlapjack.LoopLiveSteps.TailEntryGlobalBound
