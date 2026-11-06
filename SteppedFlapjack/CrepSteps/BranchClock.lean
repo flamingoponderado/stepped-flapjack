@@ -72,6 +72,22 @@ theorem branchProgram_clock_consumed {width : Nat} [NeZero width] {σ : Type}
     source.clock - final.clock ≤ steps p source := by
   induction shape generalizing source final result with
   | expr shape => exact exprProgram_clock_consumed shape source final result run
+  | @dec name value body hv hb ih =>
+    rw [steps_dec,evalCrepSemHOLProgExact_dec_holShape] at *
+    rcases evalValue : evalCrepSemHOLExp source value with _ | v
+    · simp only [evalValue,Prod.mk.injEq] at run
+      obtain ⟨_,rfl⟩ := run
+      simp only
+      omega
+    · simp only [evalValue] at run ⊢
+      rcases bodyRun : evalCrepSemHOLProgExact (CrepSemHOLState.setVar name v source) body with ⟨bodyResult,post⟩
+      change evalCrepSemHOLProgExact {source with locals := source.locals.updateEq (name,v)} body = _ at bodyRun
+      simp only [bodyRun,Prod.mk.injEq] at run
+      obtain ⟨rfl,rfl⟩ := run
+      have bound := ih (CrepSemHOLState.setVar name v source) post bodyResult (by simpa [CrepSemHOLState.setVar] using bodyRun)
+      change source.clock - post.clock ≤ 1 + steps body (CrepSemHOLState.setVar name v source)
+      change source.clock - post.clock ≤ steps body (CrepSemHOLState.setVar name v source) at bound
+      omega
   | @seq a b ha hb iha ihb =>
     rw [steps_seq]
     rw [evalCrepSemHOLProgExact_seq_holShape] at run

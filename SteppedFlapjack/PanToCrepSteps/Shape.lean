@@ -36,7 +36,7 @@ theorem scalar_compile {width : Nat} [NeZero width] {context : PanToCrepContextE
     obtain ⟨b,cb,db⟩ := ihb
     exact ⟨_,by simp [compileExpExactHOLW,compileExpExactHOLWList,ca,cb,cexpHeads],.op operator da db⟩
 
-/-- A loop-free source fragment with scalar expressions and direct assignments. -/
+/-- A loop-free source fragment with scalar expressions and local assignments. -/
 inductive BranchProgram {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) : ProgHOL width → Prop
   | skip : BranchProgram context .skip
@@ -45,10 +45,7 @@ inductive BranchProgram {width : Nat} [NeZero width]
   | tick : BranchProgram context .tick
   | return {e} : ScalarExpression context e → BranchProgram context (.return e)
   | assign (name n) {e} : context.vars.lookup name = some (.one,[n]) →
-      ScalarExpression context e →
-      (∀ value, compileExpExactHOLW context e = ([value],.one) →
-        distinctListsHol [n] (crepExpVarsW (crepExpOfHOL value)) = true) →
-      BranchProgram context (.assign .local name e)
+      ScalarExpression context e → BranchProgram context (.assign .local name e)
   | seq {a b} : BranchProgram context a → BranchProgram context b → BranchProgram context (.seq a b)
   | ite {e a b} : ScalarExpression context e → BranchProgram context a → BranchProgram context b →
       BranchProgram context (.ite e a b)
@@ -66,15 +63,27 @@ theorem branch_compile {width : Nat} [NeZero width] {context : PanToCrepContextE
     obtain ⟨value,compiled,direct⟩ := scalar_compile he
     simpa [compileProgExactHOLW,compileReturnExactHOLW,compiled,sizeOfShapeHOL] using
       (CrepToLoopSteps.BranchProgram.expr (ExprProgram.returnOne direct))
-  | @assign name n e found he disjoint =>
+  | @assign name n e found he =>
     obtain ⟨value,compiled,direct⟩ := scalar_compile he
-    have hd := disjoint value compiled
-    simp [compileProgExactHOLW,compileLocalAssignExactHOLW,compiled,found,hd,crepNestedSeqHOL]
-    exact .seq (.expr (.assign n direct)) (.expr (.leaf .skip))
+    by_cases disjoint : distinctListsHol [n] (crepExpVarsW (crepExpOfHOL value)) = true
+    · simp [compileProgExactHOLW,compileLocalAssignExactHOLW,compiled,found,disjoint,crepNestedSeqHOL]
+      exact .seq (.expr (.assign n direct)) (.expr (.leaf .skip))
+    · have overlap : distinctListsHol [n] (crepExpVarsW (crepExpOfHOL value)) = false := by
+        cases h : distinctListsHol [n] (crepExpVarsW (crepExpOfHOL value)) <;> simp_all
+      simp [compileProgExactHOLW,compileLocalAssignExactHOLW,compiled,found,overlap,nestedDecsHOL,crepNestedSeqHOL]
+      exact .dec direct (.seq (.expr (.assign n (.var _))) (.expr (.leaf .skip)))
   | seq ha hb iha ihb => simpa only [compileProgExactHOLW] using CrepToLoopSteps.BranchProgram.seq iha ihb
   | ite he ha hb iha ihb =>
     obtain ⟨value,compiled,direct⟩ := scalar_compile he
     simpa [compileProgExactHOLW,compileIfExactHOLW,compiled] using CrepToLoopSteps.BranchProgram.ite direct iha ihb
+
+/-- A counter decrement that reads its own destination is accepted. The
+frontend's temporary declaration preserves the original value during assignment. -/
+theorem decrement_branch {width : Nat} [NeZero width]
+    (context : PanToCrepContextExact width) (name : MlS) (n : Nat)
+    (found : context.vars.lookup name = some (.one,[n])) :
+    BranchProgram context (.assign .local name (.op .sub [.var .local name,.const (1 : BitVec width)])) :=
+  .assign name n found (.op .sub (.local name n found) (.const _))
 
 /-- A scalar-condition Pancake while lowers to a direct-condition Crep loop
 with a body in the established branch fragment. -/

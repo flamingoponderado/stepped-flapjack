@@ -32,6 +32,13 @@ theorem branchProgram_static {width : Nat} [NeZero width] {σ : Type}
     steps p source ≤ sizeOf p := by
   induction shape generalizing source with
   | expr shape => exact exprProgram_static shape source
+  | @dec name value body hv hb ih =>
+    rw [steps_dec]
+    rcases evalCrepSemHOLExp source value with _ | v
+    · simp_wf; omega
+    · have bound := ih (CrepSemHOLState.setVar name v source)
+      simp_wf
+      omega
   | @seq a b ha hb iha ihb =>
     rw [steps_seq]
     have first := iha source
