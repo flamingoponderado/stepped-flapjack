@@ -98,4 +98,33 @@ theorem scalarDeclLoop_compiled_shapes {width : Nat} [NeZero width]
   rw [declCompiled]
   simp [compileProgExactHOLW,compileWhileExactHOLW,compiledTest]
 
+/-- Actual compiler output and all frontend shapes for a scalar declaration
+around an initialized loop with a direct scalar condition. -/
+theorem scalarDeclWhile_compiled_shapes {width : Nat} [NeZero width]
+    (ctxt : PanToCrepContextExact width) (name : MlS) (initializer condition : ExpHOL width)
+    (body tail : ProgHOL width) (initializerShape : ScalarExpression ctxt initializer)
+    (conditionShape : ScalarExpression (scalarDeclContext ctxt name) condition)
+    (bodyShape : PanToCrepSteps.BranchProgram (scalarDeclContext ctxt name) body)
+    (tailShape : PanToCrepSteps.BranchProgram (scalarDeclContext ctxt name) tail) :
+    ∃ value test,
+      compileExpExactHOLW ctxt initializer = ([value],.one) ∧ DirectExpression value ∧
+      compileExpExactHOLW (scalarDeclContext ctxt name) condition = ([test],.one) ∧ DirectExpression test ∧
+      CrepToLoopSteps.BranchProgram (compileProgExactHOLW (scalarDeclContext ctxt name) body) ∧
+      CrepToLoopSteps.BranchProgram (compileProgExactHOLW (scalarDeclContext ctxt name) tail) ∧
+      compileProgExactHOLW ctxt (.dec name .one initializer (.seq (.while condition body) tail)) =
+        .dec (ctxt.vmax+1) value (.seq (.while test (compileProgExactHOLW (scalarDeclContext ctxt name) body))
+            (compileProgExactHOLW (scalarDeclContext ctxt name) tail)) := by
+  obtain ⟨value,compiledValue,directValue⟩ := scalar_compile initializerShape
+  obtain ⟨test,compiledTest,directTest⟩ := scalar_compile conditionShape
+  refine ⟨value,test,compiledValue,directValue,compiledTest,directTest,
+    branch_compile bodyShape,branch_compile tailShape,?_⟩
+  obtain ⟨v,_,declCompiled⟩ := scalarDecl_compile ctxt name initializer
+    (.seq (.while condition body) tail) initializerShape
+  have valueEq : v = value := by
+    simp [compileProgExactHOLW,compileDecExactHOLW,compiledValue,nestedDecsHOL,scalarDeclContext] at declCompiled
+    exact declCompiled.symm
+  subst v
+  rw [declCompiled]
+  simp [compileProgExactHOLW,compileWhileExactHOLW,compiledTest]
+
 end SteppedFlapjack.PanToCrepSteps
