@@ -70,7 +70,9 @@ covers successful return and resource exhaustion. The theorem assumes the
 stated source clock, source layout, compiler input, and full-initialization
 machine relations. `labInitialized_counted_declared_fullCompiler_riscv` constructs the
 source and native inputs for this supported fragment from a Lab initialization
-context. `labInitialized_countdown_fullCompiler_riscv` applies the chain to a
+context. Its `withClock` variant derives a sufficient proof clock from the
+source budget without changing the counted run or RISC-V machine.
+`labInitialized_countdown_fullCompiler_riscv` applies the chain to a
 countdown. Concrete initialization guards remain to be proved for
 an application.
 

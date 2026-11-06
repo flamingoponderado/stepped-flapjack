@@ -168,6 +168,41 @@ noncomputable def labInitializedProduction {σ : Type}
     baseAddress := source.baseAddr
     topAddress := source.topAddr}
 
+/-- Changing only the proof clock preserves all executable source data. -/
+theorem labInitializedProduction_withClock {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack) (clock : Nat) :
+    labInitializedProduction production template _ (backend.withClock clock) =
+      {labInitializedProduction production template stack backend with clock := clock-1} := by
+  simp [labInitializedProduction,labInitializedOriginal,labInitializedSource,
+    FullInitMachineContext.withClock,FullInitMachineContext.labHeapLength]
+  funext address
+  exact decide_eq_decide.mpr Iff.rfl
+
+/-- A counted execution is unaffected by the proof clock chosen for Lab. -/
+theorem labInitializedProduction_counted_withClock {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack) (clock fuel : Nat)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (program : Prog (RiscV.Word 64)) :
+    let adjusted := labInitializedProduction production template _ (backend.withClock clock)
+    let original := labInitializedProduction production template stack backend
+    evalPanValueFfiProgSteps context primitive handler adjusted.structs functions
+      adjusted.baseAddress adjusted.topAddress panSemBitVec64BytesInWord fuel
+      adjusted.locals adjusted.globals adjusted.memory adjusted.ffi program
+      (memoryAccess := some (panSemBitVec64MemoryAccess adjusted)) =
+    evalPanValueFfiProgSteps context primitive handler original.structs functions
+      original.baseAddress original.topAddress panSemBitVec64BytesInWord fuel
+      original.locals original.globals original.memory original.ffi program
+      (memoryAccess := some (panSemBitVec64MemoryAccess original)) := by
+  rw [labInitializedProduction_withClock]
+  rfl
+
 /-- The executable and HOL templates agree on their code and environments. -/
 def PanSemEnvironmentRel {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ))
