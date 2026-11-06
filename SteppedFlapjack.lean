@@ -72,6 +72,9 @@ import SteppedFlapjack.LoopToWordSteps.TailRiscVSetup
 import SteppedFlapjack.LoopToWordSteps.NativeTailRiscVReady
 import SteppedFlapjack.LoopToWordSteps.NativeTailCompilerFacts
 import SteppedFlapjack.LoopToWordSteps.NativeTailSetup
+import SteppedFlapjack.CrepToLoopSteps.NativeTailFrontendSetup
+import SteppedFlapjack.LoopToWordSteps.TailRiscVClock
+import SteppedFlapjack.PanToCrepSteps.NativeTailClockOutcome
 import SteppedFlapjack.PanToCrepSteps.NativeTailOutcome
 import SteppedFlapjack.WordAllocSteps.CompiledCodeTail
 import SteppedFlapjack.WordToStackSteps.CompiledTail
@@ -519,6 +522,9 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.LoopToWordSteps.NativeTailRiscVReady`: Native Loop/Word local initialization.
 - `SteppedFlapjack.LoopToWordSteps.NativeTailCompilerFacts`: Compiler-derived Word and Stack entry facts.
 - `SteppedFlapjack.LoopToWordSteps.NativeTailSetup`: Constructed native setup or bounded RISC-V resource outcome.
+- `SteppedFlapjack.CrepToLoopSteps.NativeTailFrontendSetup`: Join the native setup to the whole frontend state.
+- `SteppedFlapjack.LoopToWordSteps.TailRiscVClock`: Reuse backend setups at shifted Word clocks.
+- `SteppedFlapjack.PanToCrepSteps.NativeTailClockOutcome`: Source outcome from a shifted-clock backend setup.
 - `SteppedFlapjack.PanToCrepSteps.NativeTailOutcome`: Returned source outcomes and event traces at the machine.
 - `SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample`: A constructed state-changing loop trace.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclList`: Counted/HOL bridge for nested scalar declarations.
