@@ -2,6 +2,7 @@ import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
 import SteppedFlapjack.LoopToWordSteps.WholeCodeRel
 import SteppedFlapjack.WordAllocSteps.WholeFrontendShapes
 import Flapjack.Compiler.Backend.WordToStack.Proofs.Initialization
+import SteppedFlapjack.WordToStackSteps.TailEntryFrame
 
 /-! Initialize frontend code relations from actual whole-program outputs. -/
 namespace SteppedFlapjack.CrepToLoopSteps
@@ -42,6 +43,41 @@ theorem nativeEntry_loopWordDataRel_iff {width : Nat} [NeZero width] {C F : Type
   simp [LoopWordDataRel, WordSemStateFiniteExact.callEnv,
     Compiler.Backend.WordToStack.Native.Initialization.makeInit, loopToWordGlobalsRelHOLExact,
     HolFiniteMapExact.lookup_eraseEq, FDOMSUB_HOL]
+
+/-- Once the Stack data match a Loop state, every frame size yields the same
+frontend data relation and the native zero-argument Word entry has the locals
+required by Loop-to-Word. This lets the frame be chosen after establishing
+the frontend data relation. -/
+theorem nativeEntry_frontend_facts {C F : Type}
+    (ac : AsmConfigExact 64) (k firstFrame : Nat)
+    (stack : StackSemStateFiniteExact 64 C F)
+    (compiledCode originalCode : Spt (Nat × WordLangProgHOL (BitVec 64)))
+    (coracle : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (loop : LoopSemStateFiniteExact 64 F) (program : HolLoopProg 64)
+    (data : LoopWordDataRel loop
+      {WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some firstFrame)
+        (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac k stack compiledCode coracle) with
+          code := originalCode})
+    (gc : Compiler.Backend.WordSimp.gcFunConstOk stack.gcFun) :
+    ∀ frameSize,
+      let word := {WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
+        (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac k stack compiledCode coracle) with
+          code := originalCode}
+      let ctxt := makeCtxtHOL 2 (LoopToWord.fromNumSetHOL
+        (sptDifference (accVarsHOL program .ln) (LoopToWord.toNumSetHOL []))) .ln
+      LoopWordDataRel loop word ∧ word.code = originalCode ∧
+      Compiler.Backend.WordSimp.gcFunConstOk word.gcFun ∧
+      LoopToWord.localsRelHOL ctxt .ln word.locals ∧
+      sptLookup 0 word.locals = some (.loc 1 0) := by
+  have stackData := (nativeEntry_loopWordDataRel_iff ac k firstFrame stack compiledCode originalCode coracle loop).mp data
+  intro frameSize
+  refine ⟨(nativeEntry_loopWordDataRel_iff ac k frameSize stack compiledCode originalCode coracle loop).mpr stackData,
+    rfl,?_,?_,?_⟩
+  · exact gc
+  · exact (SteppedFlapjack.WordToStackSteps.nativeTailEntry_loopLocals program
+      (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac k stack compiledCode coracle) frameSize).1
+  · exact (SteppedFlapjack.WordToStackSteps.nativeEntry_locals
+      (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac k stack compiledCode coracle) frameSize 0).2.2
 
 /-- At the zero-argument entry, no Loop variable is live. Replace the Loop
 locals by the empty tree without changing any data or state relation; this
