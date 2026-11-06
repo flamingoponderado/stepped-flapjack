@@ -150,6 +150,7 @@ theorem directWhile_bounded_steps {width : Nat} [NeZero width] {F : Type}
     (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
     (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
     ∃ value extra post,
+      compileHOLExact ctxt live (.while condition body) = .loop live (directWhileBody ctxt live value body) live ∧
       evaluate (compileHOLExact ctxt live (.while condition body)) {target with clock := target.clock+extra} =
         (resultToLoop result,post) ∧
       crepToLoopStateRelExact sourceFinal post ∧
@@ -164,7 +165,7 @@ theorem directWhile_bounded_steps {width : Nat} [NeZero width] {F : Type}
   obtain ⟨extra,post,clockBound,targetRun,hs,hm,hg,hc,hl⟩ :=
     directWhile_bounded_clock condition conditionShape body bodyShape source sourceFinal result target ctxt live
       run nonerror stateRel memRel globalsRel codeRel localsRel
-  refine ⟨value,extra,post,targetRun,hs,hm,hg,hc,hl,?_⟩
+  refine ⟨value,extra,post,compiled,targetRun,hs,hm,hg,hc,hl,?_⟩
   have loopRun : evaluate (.loop live (directWhileBody ctxt live value body) live)
       {target with clock := target.clock+extra} = (resultToLoop result,post) := by
     simpa [compiled] using targetRun
