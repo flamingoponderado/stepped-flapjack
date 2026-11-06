@@ -1,3 +1,5 @@
+import SteppedFlapjack.PanToCrepSteps.CountedDecl
+import SteppedFlapjack.PanToCrepSteps.DeclShape
 import SteppedFlapjack.PanToCrepSteps.CountedLoopExample
 import SteppedFlapjack.PanToCrepSteps.CountedWhile
 import SteppedFlapjack.PanToCrepSteps.CountedIte
@@ -456,6 +458,8 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.GlobalInitializers`: Supported scalar global declarations and generated initializer stores.
 - `SteppedFlapjack.PanToCrepSteps.GlobalShapes`: Supported global-lowering shapes and branch bounds.
 - `SteppedFlapjack.PanToCrepSteps.CountedLoopExample`: State-changing counted loop with a repeated condition.
+- `SteppedFlapjack.PanToCrepSteps.CountedDecl`: Counted scalar declarations and local restoration.
+- `SteppedFlapjack.PanToCrepSteps.DeclShape`: Scalar declaration compiler context and shape.
 - `SteppedFlapjack.PanToCrepSteps.CountedWhile`: Counted loop zero, iteration, and break composition.
 - `SteppedFlapjack.PanToCrepSteps.CountedIte`: Counted conditional and selected HOL branch composition.
 - `SteppedFlapjack.PanToCrepSteps.CountedSequence`: Counted and HOL sequence composition for normal and early exits.
