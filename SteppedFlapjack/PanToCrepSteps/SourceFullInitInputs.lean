@@ -148,6 +148,78 @@ theorem labInitializedOriginal_preCall {σ : Type}
   simp [noGlobalsLoweredPreCall,labInitializedOriginal,labInitializedSource]
   omega
 
+open Classical in
+/-- Build the executable source data from the same Lab state as the HOL
+source, retaining the production template's code, environments and FFI. -/
+noncomputable def labInitializedProduction {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack) : PanSemState (RiscV.Word 64) (FfiState σ) :=
+  let source := labInitializedOriginal template stack backend
+  {production with
+    memory := fun address => some (.word (wordSemTheWord (backend.lab.memory address)))
+    memaddrs := fun address => decide (source.memaddrs address)
+    sharedMemaddrs := backend.lab.sharedMemDomain
+    clock := source.clock
+    be := source.be
+    baseAddress := source.baseAddr
+    topAddress := source.topAddr}
+
+/-- The executable and HOL templates agree on their code and environments. -/
+def PanSemEnvironmentRel {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (template : PanSemStateFiniteExact 64 σ) : Prop :=
+  (∀ name, NameRanged name → Option.map panValueToHOL (production.locals name) = template.locals.lookup (ofString name)) ∧
+  (∀ name, NameRanged name → Option.map panValueToHOL (production.globals name) = template.globals.lookup (ofString name)) ∧
+  panStructContextToHOL production.structs = template.structs ∧
+  (∀ name, NameRanged name → Option.map panLangEntryToHOL (panSemCodeLookup production.code name) = template.code.lookup (ofString name)) ∧
+  (∀ name, NameRanged name → Option.map shapeToHOL (production.exceptionShapes name) = template.eshapes.lookup (ofString name))
+
+/-- Updating production data from Lab preserves the source execution bridge;
+the template supplies the code/environment relation and the FFI relation. -/
+theorem labInitializedProduction_rel {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack)
+    (templateRel : PanSemEnvironmentRel production template)
+    (ffiRel : FfiStateRel production.ffi backend.lab.ffi) :
+    PanSemStateRelExec (labInitializedProduction production template stack backend)
+      (labInitializedOriginal template stack backend).toExact := by
+  classical
+  obtain ⟨locals,globals,structs,code,exceptions⟩ := templateRel
+  refine ⟨?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_⟩
+  · simpa [labInitializedProduction,labInitializedOriginal,labInitializedSource] using locals
+  · simpa [labInitializedProduction,labInitializedOriginal,labInitializedSource] using globals
+  · simpa [labInitializedProduction,labInitializedOriginal,labInitializedSource] using structs
+  · simpa [labInitializedProduction,labInitializedOriginal,labInitializedSource] using code
+  · simpa [labInitializedProduction,labInitializedOriginal,labInitializedSource] using exceptions
+  · intro address _
+    simp [labInitializedProduction,labInitializedOriginal,labInitializedSource,holWordLabBits]
+  · intro address
+    change decide ((labInitializedOriginal template stack backend).memaddrs address) = true ↔
+      (labInitializedOriginal template stack backend).memaddrs address
+    exact @decide_eq_true_iff _ _
+  · intro address
+    simp [labInitializedProduction,labInitializedOriginal,labInitializedSource]
+  · rfl
+  · rfl
+  · simpa [labInitializedProduction,labInitializedOriginal,labInitializedSource] using ffiRel
+  · rfl
+  · rfl
+
+/-- Lab data updates do not affect the executable representation's ranged
+locals, globals or structure context. -/
+theorem labInitializedProduction_ranged {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (template : PanSemStateFiniteExact 64 σ)
+    (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ)
+    (backend : FullInitMachineContext stack)
+    (ranged : PanSemStateRelExecRanged production) :
+    PanSemStateRelExecRanged (labInitializedProduction production template stack backend) := by
+  simpa [PanSemStateRelExecRanged,labInitializedProduction] using ranged
+
 /-- The canonical source has the heap, register and ambient fields required
 by the initializer construction. -/
 theorem labInitializedSource_fields {σ : Type}
