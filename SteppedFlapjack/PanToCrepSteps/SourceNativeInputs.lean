@@ -70,6 +70,6 @@ noncomputable def sourceNativeInputs {σ : Type}
     (by simpa [crep,concreteDeclCrepState] using ffi)
     (by simpa [crep,concreteDeclCrepState] using current) length
     (by simpa [crep,concreteDeclCrepState] using heap)).1
-  exact ⟨arch,programs,rfl,callerEq,loopContextEq,wc,ac,rfl,stack,coracle,codeEq,bitmapsPrefix,ok,data,backend⟩
+  exact ⟨⟨arch,programs,rfl,callerEq,loopContextEq,wc,ac,rfl,stack,coracle,codeEq,bitmapsPrefix,ok,data⟩,backend⟩
 
 end SteppedFlapjack.PanToCrepSteps

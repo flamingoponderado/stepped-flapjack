@@ -17,7 +17,7 @@ open SteppedFlapjack.WordAllocSteps SteppedFlapjack.LabToTargetSteps
 
 /-- Whole-compiler and native-machine inputs for a zero-argument Loop entry.
 The frame, Word state, code relations, and resource outcome are derived. -/
-structure AssignLoopNativeInputs {F : Type}
+structure AssignLoopCompilerInputs {F : Type}
     (declarations : List (DeclHOL 64)) (start : MlString) (caller : PanToCrepContextExact 64)
     (loopCtxt : CrepToLoopContextExact) (entry : HolLoopProg 64) (limit : Nat)
     (loop : LoopSemStateFiniteExact 64 F) where
@@ -43,6 +43,13 @@ structure AssignLoopNativeInputs {F : Type}
       (Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack
         (sptFromAList (compile wc ac (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms))).2) coracle)
       with code := sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms))}
+
+/-- Compiler inputs together with the direct-entry machine setup. -/
+structure AssignLoopNativeInputs {F : Type}
+    (declarations : List (DeclHOL 64)) (start : MlString) (caller : PanToCrepContextExact 64)
+    (loopCtxt : CrepToLoopContextExact) (entry : HolLoopProg 64) (limit : Nat)
+    (loop : LoopSemStateFiniteExact 64 F)
+    extends AssignLoopCompilerInputs declarations start caller loopCtxt entry limit loop where
   backend : NativeTailMachineSetup stack firstLoopName (tailStackReplayLimit ac 1 firstLoopName wc.regAlg
     (ac.regCount-(5+ac.avoidRegs.length)) (entryColour wc (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)) firstLoopName)
     entry (assignLoopEntryWordContext entry) (firstLoopName,2)
@@ -50,12 +57,12 @@ structure AssignLoopNativeInputs {F : Type}
 
 /-- Derive the source/Crep/Loop code relations and selected Word entry once
 for any supported source main body. -/
-theorem AssignLoopNativeInputs.frontendFacts {σ : Type}
+theorem AssignLoopCompilerInputs.frontendFacts {σ : Type}
     (declarations : List (DeclHOL 64)) (start : MlString) (initializers : List (ProgHOL 64))
     (globals : PanGlobalsContextExact 64) (caller : PanToCrepContextExact 64)
     (loopCtxt : CrepToLoopContextExact) (entry : HolLoopProg 64) (limit : Nat)
     (pan : PanSemStateFiniteExact 64 σ) (crep : CrepSemHOLState 64 σ) (target : LoopSemStateFiniteExact 64 σ)
-    (native : AssignLoopNativeInputs declarations start caller loopCtxt entry limit target)
+    (native : AssignLoopCompilerInputs declarations start caller loopCtxt entry limit target)
     (entryDef : entry = assignLoopEntryProgram declarations initializers caller loopCtxt .ln)
     (original : ProgHOL 64) (returnShape : ShapeHOL)
     (globalFound : (functionsHOL declarations).lookup start = some ([],original,returnShape))
@@ -247,7 +254,7 @@ theorem counted_assignLoop_native_riscv {σ : Type}
     counted_assignLoop_with_return condition assignment name context primitive handler functions
       conditionRanged assignmentRanged nameRanged fuel production source rel ranged finalLocals loopCost returned clock loopExec
   refine ⟨sourceResult,sourceFinal,sourceExec,sourceRun,?_⟩
-  obtain ⟨panCodeRel,programShapes,codeRel,entryMember⟩ := native.frontendFacts declarations start initializers globals caller
+  obtain ⟨panCodeRel,programShapes,codeRel,entryMember⟩ := native.toAssignLoopCompilerInputs.frontendFacts declarations start initializers globals caller
     loopCtxt entry limit pan crep target rfl
     (.seq .skip (.seq (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment)))
       (.return (.const returned)))) .one globalFound funs exns globalCompiled panCode crepCode unique localised preShapes noTail initShape

@@ -200,7 +200,7 @@ theorem counted_declared_assignLoop_native_riscv {σ : Type}
       conditionRanged assignmentRanged nameRanged fuel production source rel ranged finalLocals loopCost clock loopExec
       (ctxtFcExactHOL caller.funcs caller.eids [] [] []) conditionShape bodyShape
   refine ⟨sourceResult,sourceFinal,sourceExec,sourceRun,?_⟩
-  obtain ⟨panCodeRel,programShapes,codeRel,entryMember⟩ := native.frontendFacts declarations start initializers globals caller
+  obtain ⟨panCodeRel,programShapes,codeRel,entryMember⟩ := native.toAssignLoopCompilerInputs.frontendFacts declarations start initializers globals caller
     loopCtxt entry limit pan crep target rfl
     (.dec (ofString name) .one (.const initial) (.seq .skip (.seq
       (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment))) (.return (.const returned)))))
