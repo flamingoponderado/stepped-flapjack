@@ -2,6 +2,7 @@ import SteppedFlapjack.WordToStackSteps.InitialFrame
 import SteppedFlapjack.WordToStackSteps.EntryComposition
 import SteppedFlapjack.WordToStackSteps.WholeTailInitialization
 import SteppedFlapjack.WordToStackSteps.FixedEntryFrame
+import Flapjack.Pancake.LoopToWord.Proofs.CompileCorrect.Call.Support
 
 /-! The actual compiled initial entry either obtains its frame or hits the
 native Stack resource limit. -/
@@ -95,5 +96,19 @@ theorem initializedTail_simulation_state {C F : Type}
   have localFacts := nativeEntry_locals (makeInit ac k stack compiledCode coracle) frameSize temp
   have shifted := stateRel_setClocks ac k frameSize frame _ _ [] 0 clock related
   exact ⟨localFacts.1,localFacts.2.1,localFacts.2.2,by simpa [WordSemStateFiniteExact.callEnv,makeInit] using shifted⟩
+
+
+/-- For the compiler-generated zero-argument context, the native Word entry
+locals represent the empty Loop locals and every used Loop variable has a
+context entry. -/
+theorem nativeTailEntry_loopLocals {C F : Type} (p : HolLoopProg 64)
+    (source : WordSemStateFiniteExact 64 C F) (frameSize : Nat) :
+    let ctxt := makeCtxtHOL 2 (LoopToWord.fromNumSetHOL
+      (sptDifference (accVarsHOL p .ln) (LoopToWord.toNumSetHOL []))) .ln
+    let word := callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize) source
+    LoopToWord.localsRelHOL ctxt .ln word.locals ∧
+      ∀ k, sptMem k (accVarsHOL p .ln) → sptMem k ctxt := by
+  have h := LoopToWord.CompileCorrect.compFunc_ctxt [] p [] (.loc 1 0 : WordLocW 64) (by simp) (by simp)
+  simpa [WordSemStateFiniteExact.callEnv,sptFromAList] using h
 
 end SteppedFlapjack.WordToStackSteps
