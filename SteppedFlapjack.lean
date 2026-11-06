@@ -38,6 +38,7 @@ import SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopEntry
 import SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopRiscV
 import SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopNative
 import SteppedFlapjack.PanToCrepSteps.CountedDeclaredSourceInitialNative
+import SteppedFlapjack.PanToCrepSteps.CountedSingleEntryNative
 import SteppedFlapjack.PanToCrepSteps.CountedCountdown
 import SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep
 import SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample
@@ -537,6 +538,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopRiscV`: Declared assignment-loop Loop and backend bounds.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopNative`: Whole declared source to native RISC-V bound.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclaredSourceInitialNative`: Source-first no-global declared-loop native bound.
+- `SteppedFlapjack.PanToCrepSteps.CountedSingleEntryNative`: Single-entry declared-loop native bound.
 - `SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep`: Countdown through generated entries to a packaged RISC-V backend.
 - `SteppedFlapjack.LoopToWordSteps.TailRiscVSetup`: Shared RISC-V backend initialization interface.
 - `SteppedFlapjack.LoopToWordSteps.NativeTailRiscVReady`: Native Loop/Word local initialization.
