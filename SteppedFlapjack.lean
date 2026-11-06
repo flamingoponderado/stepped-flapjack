@@ -1,3 +1,4 @@
+import SteppedFlapjack.LoopLiveSteps.Consumption
 import SteppedFlapjack.LoopLiveSteps.FrontendMember
 import SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileAllFramesRiscV
 import SteppedFlapjack.PanToCrepSteps.ConditionBranchWhileFixedEntryRiscV
