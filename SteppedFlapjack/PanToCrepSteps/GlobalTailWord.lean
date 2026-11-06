@@ -413,7 +413,7 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
         {(WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
           (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2) coracle)) with clock := limit}
         {stack with stackSpace := stack.stackSpace-frameSize,clock := limit} [] 0 ∧
-       (∀ temp,
+       (∀ temp replayClock,
          let sourceWord := {WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
            (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length))
              stack (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2) coracle) with
@@ -422,8 +422,8 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
          wordLocalsRel temp sourceWord.locals sourceWord.locals ∧
          sptLookup 0 sourceWord.locals = some (.loc 1 0) ∧
          Flapjack.WordToStackProofs.stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
-           {sourceWord with code := (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2), locals := sourceWord.locals, clock := limit}
-           {stack with stackSpace := stack.stackSpace-frameSize,clock := limit} [] 0 ∧
+           {sourceWord with code := (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2), locals := sourceWord.locals, clock := replayClock}
+           {stack with stackSpace := stack.stackSpace-frameSize,clock := replayClock} [] 0 ∧
          LoopToWord.localsRelHOL ctxt .ln sourceWord.locals ∧
          ∀ k, sptMem k (accVarsHOL loop .ln) → sptMem k ctxt) ∨
        ∃ (ticks : Nat) (finalMachine : RiscV.L3.riscv_state) (finalFfi : HolFfiState F),
@@ -446,12 +446,12 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
   rcases caseResult with success | ⟨post,run,ffi,stepBound⟩
   · left
     refine ⟨success.1,success.2.1,success.2.2,?_⟩
-    intro temp
+    intro temp replayClock
     have facts := SteppedFlapjack.WordToStackSteps.initializedTail_simulation_state ac _ frameSize frame stack
       (sptFromAList (Compiler.Backend.WordToWord.compile wc ac
         (loopToWordCompileHOL (compileProgHOLExact arch (compileProgDeclsHOLW (compileTopExactHOL declarations start))))).2)
       (sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch
-        (compileProgDeclsHOLW (compileTopExactHOL declarations start))))) coracle limit temp success.2.1
+        (compileProgDeclsHOLW (compileTopExactHOL declarations start))))) coracle replayClock temp success.2.1
     refine ⟨facts.1,facts.2.1,facts.2.2.1,facts.2.2.2,?_,?_⟩
     · simpa using (SteppedFlapjack.WordToStackSteps.nativeTailEntry_loopLocals _
         (Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack
