@@ -1,5 +1,6 @@
 import SteppedFlapjack.CrepToLoopSteps.InlineEntry
 import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
+import Flapjack.Pancake.Proofs.PanToCrep.CodeRelExact
 
 /-! Inliner fixed points for the supported whole-program fragment. -/
 namespace SteppedFlapjack.CrepToLoopSteps
@@ -45,5 +46,33 @@ theorem compileInlTop_supported_fixed {width : Nat} [NeZero width]
     have : candidate.1 ∈ names := List.contains_iff_mem.mp hcandidate.2
     simpa only [hkey] using this
   exact noTail name params init callee member hname
+
+/-- The original Pancake-to-Crep code relation holds for the actual
+post-inlining compiler output when its pre-inline bodies belong to the
+supported fragment and its direct tail callees are not selected to inline. -/
+theorem supported_compileProgDecls_codeRel {width : Nat} [NeZero width]
+    (declarations : List (DeclHOL width))
+    (unique : ((compileProgDeclsHOLW declarations).map Prod.fst).Nodup)
+    (localised : ∀ entry ∈ functionsHOL declarations, localisedProgHOL entry.2.2.1 = true)
+    (shapes : ∀ name params p, (name,params,p) ∈ compileToCrepExactHOLW declarations → SupportedCodeBody p)
+    (noTail : ∀ name params init callee,
+      (name,params,.seq init (.call none callee [])) ∈ compileToCrepExactHOLW declarations →
+        callee ∉ (functionsHOL (declarations.filter inlinableHOL)).map Prod.fst) :
+    codeRelExactHOLW
+      (mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+        (getEidsFromDeclsHOL declarations))
+      (HolFiniteMapExact.empty.updateList (functionsHOL declarations).reverse)
+      (alistToFmapCodeExact (compileProgDeclsHOLW declarations)) := by
+  have fixed := compileInlTop_supported_fixed
+    ((functionsHOL (declarations.filter inlinableHOL)).map Prod.fst)
+    (compileToCrepExactHOLW declarations) shapes noTail
+  have sourceUnique : ((functionsHOL declarations).map Prod.fst).Nodup := by
+    change ((compileInlTopHOLExact _ (compileToCrepExactHOLW declarations)).map Prod.fst).Nodup at unique
+    rw [fixed] at unique
+    simpa [compileToCrepExactHOLW, List.map_map, Function.comp_def] using unique
+  change codeRelExactHOLW _ _
+    (HolFiniteMapExact.empty.updateList (compileInlTopHOLExact _ _).reverse)
+  rw [fixed]
+  exact mkCtxtCodeImpCodeRelExactHOLW declarations sourceUnique localised
 
 end SteppedFlapjack.CrepToLoopSteps
