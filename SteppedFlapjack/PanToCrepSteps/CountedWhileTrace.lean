@@ -85,7 +85,7 @@ inductive CountedWhileTrace {σ : Type}
         (if continued then some .continue else none,middle))
       (bodyBound : controlSteps bodyHOL source.decClockHOLFinite ≤ bodyCost)
       (rest : CountedWhileTrace condition body bodyHOL context primitive handler functions fuel
-        {production with locals := localsPost, globals := globalsPost, memory := memoryPost, ffi := ffiPost}
+        {production with locals := localsPost, globals := globalsPost, memory := memoryPost, ffi := ffiPost, clock := middle.clock}
         middle result holResult final restCost) :
       CountedWhileTrace condition body bodyHOL context primitive handler functions (fuel+1) production source
         result holResult final (panValueExpStepCost condition+bodyCost+restCost+1)

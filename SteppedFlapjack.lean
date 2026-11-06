@@ -24,6 +24,7 @@ import SteppedFlapjack.PanToCrepSteps.CountedDeclExample
 import SteppedFlapjack.PanToCrepSteps.CountedLoopExample
 import SteppedFlapjack.PanToCrepSteps.CountedWhile
 import SteppedFlapjack.PanToCrepSteps.CountedWhileTrace
+import SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample
 import SteppedFlapjack.PanToCrepSteps.CountedIte
 import SteppedFlapjack.PanToCrepSteps.CountedSequence
 import SteppedFlapjack.PanToCrepSteps.CountedAssign
@@ -495,6 +496,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclCommonBound`: A single bound for both concrete native entry outcomes.
 - `SteppedFlapjack.StackRemoveSteps.CostMono`: Monotone bitmap and finite-oracle cost factors.
 - `SteppedFlapjack.PanToCrepSteps.CountedWhileTrace`: Finite counted/HOL loop traces.
+- `SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample`: A constructed state-changing loop trace.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclList`: Counted/HOL bridge for nested scalar declarations.
 - `SteppedFlapjack.PanToCrepSteps.ReplayLimitMono`: Monotonic source-derived compiler replay budgets.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram`: Concrete zero-argument source and global-entry bounds.
