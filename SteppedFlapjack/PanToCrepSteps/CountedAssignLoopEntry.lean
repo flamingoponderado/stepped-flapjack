@@ -2,7 +2,7 @@ import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopReturn
 import SteppedFlapjack.PanToCrepSteps.TailEntryCrepBound
 import SteppedFlapjack.PanToCrepSteps.TailEntryRelations
 import SteppedFlapjack.CrepToLoopSteps.RiscVInputs
-import SteppedFlapjack.LoopToWordSteps.TailRiscVSetup
+import SteppedFlapjack.PanToCrepSteps.NativeTailOutcome
 
 /-! Counted assignment-loop programs through the generated entry to RISC-V.
 
@@ -110,7 +110,9 @@ theorem counted_assignLoop_globalEntry_riscv {σ : Type}
         crepToLoopStateRelExact crepPost loopPost ∧
         SteppedFlapjack.LoopSteps.steps loopEntry {target with clock := target.clock+extra} ≤ loopLimit ∧
         TailRiscVReady loopEntry {target with clock := target.clock+extra} loopPost (resultToLoop crepResult)
-          {word with clock := word.clock+extra} loopLimit := by
+          {word with clock := word.clock+extra} loopLimit ∧
+        NativeReturnedReady loopEntry {target with clock := target.clock+extra}
+          {word with clock := word.clock+extra} loopLimit sourceFinal := by
   let original : ProgHOL 64 := .seq .skip (.seq (.while (expToHOL condition)
     (.assign .local (ofString name) (expToHOL assignment))) (.return (.const returned)))
   let lowered := compileProgExactHOL globals original
@@ -181,7 +183,10 @@ theorem counted_assignLoop_globalEntry_riscv {σ : Type}
       (by simpa only [compileProgExactHOL] using run') complete crepRel memRel globalsRel codeRel localsRel loopWordRel boundedCrep
   refine ⟨crepCondition,extra,loopPost,conditionEq,entryShape,calleeShape,calleeLookup,shiftedRel,
     loopRun,notError,loopComplete,postLoopRel,loopBound,?_⟩
-  exact tailRiscVReady_of_loop _ loopPost _ _ _ entryShape calleeShape calleeLookup
+  have ready := tailRiscVReady_of_loop _ loopPost _ _ _ entryShape calleeShape calleeLookup
     loopRun notError shiftedRel loopComplete loopBound
+  refine ⟨ready,?_⟩
+  exact nativeReturnedReady_of_return globals calleeContext sourceFinal panPost crepPost _ loopPost crepResult returned
+    postRel finalRel resultRel postLoopRel _ _ _ ready
 
 end SteppedFlapjack.PanToCrepSteps

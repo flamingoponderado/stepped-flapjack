@@ -1,5 +1,5 @@
 import SteppedFlapjack.LoopToWordSteps.NativeTailRiscVReady
-import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopEntry
+import SteppedFlapjack.PanToCrepSteps.GlobalSourceEntry
 
 /-! Source return outcomes and traces at the native RISC-V entry. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -50,5 +50,38 @@ theorem returned_nativeTail_outcome {F : Type}
     cases matched
     exact Or.inl ⟨rfl,by simpa only [traceEq] using events⟩
   · exact Or.inr ⟨resource,by simpa only [traceEq] using events⟩
+
+/-- A native entry outcome stated against the original source's final trace. -/
+def NativeReturnedReady {F : Type} (p : HolLoopProg 64)
+    (loopSource : LoopSemStateFiniteExact 64 F) (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
+    (limit : Nat) (sourceFinal : PanSemStateFiniteExact 64 F) : Prop :=
+  ∀ (setup : TailRiscVSetup p word limit)
+    (base : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (frameSize : Nat),
+    loopSource.locals = .ln →
+    setup.ctxt = makeCtxtHOL 2 (LoopToWord.fromNumSetHOL
+      (sptDifference (accVarsHOL p .ln) (LoopToWord.toNumSetHOL []))) .ln →
+    word.locals = (callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize) base).locals →
+    ∃ outcome ticks finalMachine finalFfi,
+      ticks ≤ setup.tickLimit ∧
+      evaluateTargetHOL setup.mc setup.lab.ffi ticks setup.machine = (.halt outcome,finalMachine,finalFfi) ∧
+      ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
+        (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents))
+
+/-- Relate the generic backend-ready result to a returned Pancake word. -/
+theorem nativeReturnedReady_of_return {F : Type}
+    (globals : PanGlobalsContextExact 64) (ctxt : PanToCrepContextExact 64)
+    (sourceFinal panPost : PanSemStateFiniteExact 64 F) (crepPost : CrepSemHOLState 64 F)
+    (loopSource loopPost : LoopSemStateFiniteExact 64 F) (crepResult : Option (CrepResultHOLExact 64))
+    (returned : BitVec 64)
+    (globalRel : panGlobalsStateRelHOLExact (goodResHOL (some (.returned (.val (.word returned))))) globals sourceFinal panPost)
+    (panCrepRel : panToCrepStateRelFiniteExact panPost crepPost)
+    (resultRel : pcCompileCorrectResultRel ctxt panPost crepPost (some (.returned (.val (.word returned)))) crepResult)
+    (crepLoopRel : crepToLoopStateRelExact crepPost loopPost)
+    (p : HolLoopProg 64) (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (limit : Nat)
+    (ready : TailRiscVReady p loopSource loopPost (resultToLoop crepResult) word limit) :
+    NativeReturnedReady p loopSource word limit sourceFinal := by
+  intro setup base frameSize sourceEmpty contextEq wordLocals
+  exact returned_nativeTail_outcome globals ctxt sourceFinal panPost crepPost loopSource loopPost crepResult returned
+    globalRel panCrepRel resultRel crepLoopRel p word limit ready setup base frameSize sourceEmpty contextEq wordLocals
 
 end SteppedFlapjack.PanToCrepSteps
