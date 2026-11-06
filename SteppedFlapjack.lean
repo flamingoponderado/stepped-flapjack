@@ -1,3 +1,7 @@
+import SteppedFlapjack.WordDeadSteps.TailEntry
+import SteppedFlapjack.WordCseSteps.TailEntry
+import SteppedFlapjack.WordCopySteps.TailEntry
+import SteppedFlapjack.LoopToWordSteps.TailEntryWordCopy
 import SteppedFlapjack.WordSsaSteps.TailEntry
 import SteppedFlapjack.WordInstSteps.TailEntry
 import SteppedFlapjack.WordSimpSteps.TailTargets
