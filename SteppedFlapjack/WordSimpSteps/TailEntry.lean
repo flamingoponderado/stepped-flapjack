@@ -12,7 +12,7 @@ theorem smartSeq_tailEntry {a b : WordLangProgHOL (BitVec width)}
     WordTailEntryShape (Compiler.Backend.WordSimp.smartSeqHOL a b) := by
   cases a <;> simp only [Compiler.Backend.WordSimp.smartSeqHOL] <;> first | exact hb | exact .seq ha hb
 
-/-- Sequence reassociation keeps the direct call and all branch preludees. -/
+/-- Sequence reassociation keeps the direct call and all branch prefixes. -/
 theorem seqAssoc_tailEntry {p : WordLangProgHOL (BitVec width)} (hp : WordTailEntryShape p) :
     ∀ {prelude}, WordTailEntryShape prelude → WordTailEntryShape (Compiler.Backend.WordSimp.seqAssoc prelude p) := by
   induction hp with
