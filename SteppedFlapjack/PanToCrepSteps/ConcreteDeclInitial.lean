@@ -3,6 +3,7 @@ import SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram
 /-! Concrete global-entry source state and relation. -/
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.PanSemStateFiniteExact
+open SteppedFlapjack.CrepToLoopSteps
 
 /-- With no globals, the actual initial global context has zero size. -/
 theorem concreteDeclGlobalContext_empty (start : MlString) (name : VarName) (returned : BitVec 64) :
@@ -136,5 +137,43 @@ theorem concreteDecl_crepLoop_relations {σ : Type} (arch : Flapjack.Compiler.En
   classical
   simp [crepToLoopStateRelExact,crepToLoopMemRelHOLExact,crepToLoopGlobalsRelHOLExact,
     concreteDeclLoopState,globals,HolFiniteMapExact.lookup_empty]
+
+/-- The constructed original source code has only the renamed main key. -/
+theorem concreteDeclOriginalState_code_support {σ : Type} (start : MlString) (name : VarName)
+    (returned : BitVec 64) (lowered : PanSemStateFiniteExact 64 σ) :
+    ∀ key, (concreteDeclOriginalState start name returned lowered).code.lookup key ≠ none →
+      key ∈ [newMainNameHOL (concreteDeclProgram start name returned)] := by
+  intro key found
+  simp [concreteDeclOriginalState,HolFiniteMapExact.lookup_update,FUPDATE,HolFiniteMapExact.lookup_empty] at found ⊢
+  exact found.symm
+
+/-- Equip a Word-state template with the concrete Loop entry data, heap
+metadata, and actual compiled Word code. -/
+noncomputable def concreteDeclWordState {C σ : Type} (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture)
+    (source : CrepSemHOLState 64 σ) (programs : List (MlString × List Nat × CrepProgHOL 64))
+    (template : WordSemStateFiniteExact 64 C σ) (heapLength : BitVec 64) : WordSemStateFiniteExact 64 C σ :=
+  { template with
+    memory := (concreteDeclLoopState arch source programs).memory
+    mdomain := (concreteDeclLoopState arch source programs).mdomain
+    shMdomain := (concreteDeclLoopState arch source programs).shMdomain
+    clock := source.clock
+    be := source.be
+    ffi := source.ffi
+    store := (template.store.updateEq (.currHeap,.word source.baseAddr)).updateEq (.heapLength,.word heapLength)
+    code := sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch programs)) }
+
+/-- When the heap endpoints agree, the constructed Word state satisfies the
+Loop-to-Word data relation and has the actual compiled code table. -/
+theorem concreteDecl_word_data {C σ : Type} (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture)
+    (source : CrepSemHOLState 64 σ) (programs : List (MlString × List Nat × CrepProgHOL 64))
+    (template : WordSemStateFiniteExact 64 C σ) (heapLength : BitVec 64)
+    (heap : source.topAddr = source.baseAddr + 2 * heapLength) :
+    LoopWordDataRel (concreteDeclLoopState arch source programs)
+      (concreteDeclWordState arch source programs template heapLength) ∧
+    (concreteDeclWordState arch source programs template heapLength).code =
+      sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch programs)) := by
+  refine ⟨⟨heapLength,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_⟩,rfl⟩
+  all_goals simp [concreteDeclWordState,concreteDeclLoopState,HolFiniteMapExact.lookup_updateEq,
+    FUPDATE_HOL,loopToWordGlobalsRelHOLExact,HolFiniteMapExact.lookup_empty,heap]
 
 end SteppedFlapjack.PanToCrepSteps

@@ -31,27 +31,26 @@ theorem concreteDecl_riscvWithin {F : Type}
     (arch : AsmArchitecture) (crepPrograms : List (MlString × List Nat × CrepProgHOL 64))
     (entryName : MlString) (entryBody : CrepProgHOL 64)
     (ctxtEq : ctxt = mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable crepPrograms) 0)
-    (wordCodeEq : word.code = sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)))
-    (wordData : LoopWordDataRel target word)
     (localName : VarName) (returned : BitVec 64)
     (callerContext : PanToCrepContextExact 64)
-    (production : PanSemState (RiscV.Word 64) (FfiState F))
-    (originalState : PanSemStateFiniteExact 64 F) [DecidablePred originalState.memaddrs]
-    (execRel : PanSemStateRelExec production originalState.toExact)
-    (execRanged : PanSemStateRelExecRanged production)
+    (startName : MlString)
+    (originalState : PanSemStateFiniteExact 64 F) [DecidablePred originalState.memaddrs] [DecidablePred originalState.shMemaddrs]
+    (ffi : FfiState F) (ffiRel : FfiStateRel ffi originalState.ffi)
     (nameRanged : NameRanged localName) (sourceClock : originalState.clock ≠ 0)
     (execContext : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) F)
     (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel : Nat)
     (pan : PanSemStateFiniteExact 64 F)
     (panClock : pan.clock ≠ 0)
-    (startName : MlString)
     (stateDef : originalState = concreteDeclOriginalState startName localName returned
       (callEntryStateHOLFinite pan HolFiniteMapExact.empty))
     (panLocalsEmpty : pan.locals = HolFiniteMapExact.empty)
     (panExceptionsEmpty : pan.eshapes = HolFiniteMapExact.empty)
     (sourceDef : source = concreteDeclCrepState pan crepPrograms)
     (targetDef : target = concreteDeclLoopState arch source crepPrograms)
+    (wordTemplate : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (heapLength : BitVec 64)
+    (wordDef : word = concreteDeclWordState arch source crepPrograms wordTemplate heapLength)
+    (heapGeometry : source.topAddr = source.baseAddr + 2 * heapLength)
     (panGlobalsEmpty : pan.globals = HolFiniteMapExact.empty)
     (panStructs : pan.structs = []) (panTopOutside : ¬ pan.memaddrs pan.topAddr)
     (panAligned : panGlobalsByteAlignedHOL pan.topAddr)
@@ -65,6 +64,8 @@ theorem concreteDecl_riscvWithin {F : Type}
     (entryNameDef : entryName = startName)
     (entryBodyDef : entryBody = .seq (compileProgExactHOLW callerContext (.skip : ProgHOL 64)) (.call none name []))
     (liveDef : live = .ln) :
+    let production := panSemExecStateOfHOLWithKeys originalState ffi
+      [newMainNameHOL (concreteDeclProgram startName localName returned)]
     ∃ countedResult originalFinal,
       evalPanValueFfiProgSteps execContext primitive handler production.structs functions
         production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+7)
@@ -179,6 +180,16 @@ theorem concreteDecl_riscvWithin {F : Type}
         ((LoopMachineOutcome (resultToLoop result) outcome ∧ finalFfi.ioEvents = originalFinal.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: originalFinal.ffi.ioEvents ∧
             targetPost.stackMax.getD (targetPost.stackLimit+1) > targetPost.stackLimit)) := by
+  let production := panSemExecStateOfHOLWithKeys originalState ffi
+    [newMainNameHOL (concreteDeclProgram startName localName returned)]
+  have keySupport : ∀ key, originalState.code.lookup key ≠ none →
+      key ∈ [newMainNameHOL (concreteDeclProgram startName localName returned)] := by
+    rw [stateDef]
+    exact concreteDeclOriginalState_code_support startName localName returned _
+  have execRel := panSemExecStateOfHOLWithKeys_rel originalState ffi ffiRel
+    [newMainNameHOL (concreteDeclProgram startName localName returned)] keySupport
+  have execRanged := panSemExecStateOfHOLWithKeys_ranged originalState ffi
+    [newMainNameHOL (concreteDeclProgram startName localName returned)]
   obtain ⟨countedResult,countedFinal,countedExec,countedRun,sourceBound,initializerShape,initShape,conditionShape,bodyShape,tailShape,_,_⟩ :=
     concreteDecl_source_inputs production originalState execRel execRanged localName nameRanged sourceClock returned
       callerContext startName execContext primitive handler functions fuel
@@ -209,6 +220,9 @@ theorem concreteDecl_riscvWithin {F : Type}
     (by simpa [callEntryStateHOLFinite,decClockHOLFinite] using panTopOutside)
     (by simpa [callEntryStateHOLFinite,decClockHOLFinite] using panAligned) loweredLookup
   rw [← stateDef] at globalRel
+  have ⟨wordData,wordCodeEq⟩ := concreteDecl_word_data arch source crepPrograms wordTemplate heapLength heapGeometry
+  rw [← targetDef,← wordDef] at wordData
+  rw [← wordDef] at wordCodeEq
   have sourceGlobalsEmpty : source.globals = HolFiniteMapExact.empty := by
     simp [sourceDef,concreteDeclCrepState]
   have ⟨crepRel,memRel,globalsRel⟩ := concreteDecl_crepLoop_relations arch source crepPrograms sourceGlobalsEmpty
