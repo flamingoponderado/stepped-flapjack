@@ -68,9 +68,10 @@ and gives a RISC-V halt bound for the original singleton program's full compiler
 output. The bound depends on the program and backend configuration; the result
 covers successful return and resource exhaustion. The theorem assumes the
 stated source clock, source layout, compiler input, and full-initialization
-machine relations. `labInitialized_countdown_fullCompiler_riscv` applies the
-chain to a countdown and constructs the source and native inputs from a Lab
-initialization context. Concrete initialization guards remain to be proved for
+machine relations. `labInitialized_counted_declared_fullCompiler_riscv` constructs the
+source and native inputs for this supported fragment from a Lab initialization
+context. `labInitialized_countdown_fullCompiler_riscv` applies the chain to a
+countdown. Concrete initialization guards remain to be proved for
 an application.
 
 The reusable concrete declaration example is kept in the library because it
