@@ -2,6 +2,8 @@ import SteppedFlapjack.WordAllocSteps.WholeProgram
 import Flapjack.Compiler.Backend.WordToStack.NativeTopCompile
 import Flapjack.Compiler.Backend.WordToStack.Proofs.CompileKeys
 import Flapjack.Compiler.Backend.WordToWord.Proofs.Syntactic
+import Flapjack.Compiler.Backend.WordToStack.Proofs.CompileLookup
+import Flapjack.Compiler.Backend.WordToStack.Proofs.CompCorrect.Install
 
 /-! Whole-program Word-to-Stack entry identification. -/
 namespace SteppedFlapjack.WordToStackSteps
@@ -61,6 +63,40 @@ theorem compileNative_entry (ac : AsmConfigExact width)
   simp only [sptAListLookup,if_neg notRaise,if_neg notStore]
   exact lookup
 
+/-- The real Stack compiler supplies the bitmap accounting and prefix facts
+for the selected entry, using its actual final bitmap table. -/
+theorem compileNative_entry_bitmaps (ac : AsmConfigExact width)
+    (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (name count : Nat) (p : WordLangProgHOL (BitVec width)) (member : (name,count,p) ∈ programs)
+    (nodup : (programs.map Prod.fst).Nodup)
+    (notRaise : name ≠ raiseStubLocation) (notStore : name ≠ storeConstsStubLocation) :
+    ∃ bs n bsPost nPost body frame,
+      compileProgNative ac false p count (ac.regCount-(5+ac.avoidRegs.length)) (bs,n) = (body,frame,bsPost,nPost) ∧
+      sptLookup name (sptFromAList (compileNative ac false programs).2.2.2) = some body ∧
+      (appListAppend bs).length ≤ n ∧
+      n-(appListAppend bs).length ≤ (compileNative ac false programs).1.length ∧
+      (appListAppend bsPost).IsPrefix ((compileNative ac false programs).1.drop (n-(appListAppend bs).length)) := by
+  let k := ac.regCount-(5+ac.avoidRegs.length)
+  have sourceLookup : panPropsALookupEq name programs = some (count,p) := by
+    rw [← Flapjack.WordToStackProofs.CompCorrect.Install.sptAListLookup_eq_panPropsALookupEq]
+    exact sptAListLookup_of_mem_nodup programs name (count,p) nodup member
+  rcases compiled : compileWordToStackNative ac false k programs (.list [4],1) with ⟨bodies,frames,output,next⟩
+  obtain ⟨bs,n,bsPost,nPost,frame,body,bodyCompiled,lengthBound,gapBound,bitmapPrefix,bodyLookup⟩ :=
+    compileWordToStackImpALookup ac false k programs (.list [4]) 1 bodies frames output next name count p
+      (appListAppend output) compiled sourceLookup (by simp [appListAppend,appendAux])
+      (by simp [appListAppend,appendAux]) (by simp [appListAppend,appendAux])
+  dsimp only [k] at compiled
+  simp only [compileNative, Bool.false_eq_true, if_false, compiled]
+  refine ⟨bs,n,bsPost,nPost,body,frame,bodyCompiled,?_,lengthBound,?_,?_⟩
+  · rw [sptLookup_sptFromAList]
+    change sptAListLookup name ((raiseStubLocation,raiseStubNative false k) ::
+      (storeConstsStubLocation,storeConstsStubNative k) :: bodies) = _
+    simp only [sptAListLookup,if_neg notRaise,if_neg notStore]
+    rw [Flapjack.WordToStackProofs.CompCorrect.Install.sptAListLookup_eq_panPropsALookupEq]
+    exact bodyLookup
+  · exact gapBound
+  · exact bitmapPrefix
+
 /-- The native Stack output contains the fully allocated Word body selected by
 the whole Word pass, at the bitmap state reached during list compilation. -/
 theorem wholeWordStack_entry (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact width)
@@ -82,6 +118,32 @@ theorem wholeWordStack_entry (wc : Flapjack.Compiler.Backend.WordToWord.Config) 
     exact nodup
   obtain ⟨bitmaps,lookup⟩ := compileNative_entry ac _ name count _ hmember outputNodup notRaise notStore
   exact ⟨col,_,bitmaps,rfl,lookup⟩
+
+/-- The actual Word and Stack pipelines jointly choose the allocated function
+and bitmap segment satisfying the stack simulation accounting. -/
+theorem wholeWordStack_entry_bitmaps (wc : Flapjack.Compiler.Backend.WordToWord.Config)
+    (ac : AsmConfigExact width) (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (name count : Nat) (p : WordLangProgHOL (BitVec width)) (member : (name,count,p) ∈ programs)
+    (nodup : (programs.map Prod.fst).Nodup)
+    (notRaise : name ≠ raiseStubLocation) (notStore : name ≠ storeConstsStubLocation) :
+    ∃ col q bs n bsPost nPost body frame,
+      q = (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac ((name,count,p),col)).2.2 ∧
+      compileProgNative ac false q count (ac.regCount-(5+ac.avoidRegs.length)) (bs,n) = (body,frame,bsPost,nPost) ∧
+      sptLookup name (sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2) = some body ∧
+      (appListAppend bs).length ≤ n ∧
+      n-(appListAppend bs).length ≤ (compileNative ac false (compile wc ac programs).2).1.length ∧
+      (appListAppend bsPost).IsPrefix ((compileNative ac false (compile wc ac programs).2).1.drop (n-(appListAppend bs).length)) := by
+  obtain ⟨col,hmember⟩ := wholeCompile_contains_single wc ac programs name count p member
+  have eq : fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac ((name,count,p),col) =
+      (name,count,(fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac ((name,count,p),col)).2.2) := by
+    simp [fullCompileSingle,compileSingle]
+  rw [eq] at hmember
+  have outputNodup : ((compile wc ac programs).2.map Prod.fst).Nodup := by
+    rw [wholeCompile_names wc ac programs]
+    exact nodup
+  obtain ⟨bs,n,bsPost,nPost,body,frame,bodyCompiled,lookup,lengthBound,gapBound,bitmapPrefix⟩ :=
+    compileNative_entry_bitmaps ac _ name count _ hmember outputNodup notRaise notStore
+  exact ⟨col,_,bs,n,bsPost,nPost,body,frame,rfl,bodyCompiled,lookup,lengthBound,gapBound,bitmapPrefix⟩
 
 /-- The Word body at the native Stack entry has a source-related execution and
 visit bound, with the actual oracle and accumulated bitmap state chosen by the

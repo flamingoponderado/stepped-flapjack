@@ -80,8 +80,7 @@ theorem panBranchConditionWhileBranch_wordAllocated_riscvWithin {F : Type}
       Flapjack.Compiler.Backend.WordToStack.Native.compNative ac false q (bs,n) (k,frameSize,frame) = (compiled,(bsPost,nPost)) ∧
       (appListAppend bs).length ≤ n ∧ n - (appListAppend bs).length ≤ entry.bitmaps.length ∧
       List.IsPrefix (appListAppend bsPost) (entry.bitmaps.drop (n - (appListAppend bs).length)) ∧
-      (∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact entry.code loc) ∧
-      maxVarHOL q < 2 * frame + 2 * k)
+      (∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact entry.code loc))
     (frameDef : frame = max (maxVarHOL q / 2 + 1 - k) (argumentCount-k))
     (frameSizeDef : frameSize = if frame = 0 then 0 else frame+1)
     (space : frameSize - (argumentCount-k) ≤ entry.stackSpace)

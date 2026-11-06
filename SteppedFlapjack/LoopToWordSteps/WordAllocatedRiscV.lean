@@ -44,8 +44,7 @@ theorem loopSequence_wordAllocated_riscvWithin {F : Type}
       Flapjack.Compiler.Backend.WordToStack.Native.compNative ac false q (bs,n) (k,frameSize,frame) = (compiled,(bsPost,nPost)) ∧
       (appListAppend bs).length ≤ n ∧ n - (appListAppend bs).length ≤ entry.bitmaps.length ∧
       List.IsPrefix (appListAppend bsPost) (entry.bitmaps.drop (n - (appListAppend bs).length)) ∧
-      (∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact entry.code loc) ∧
-      maxVarHOL q < 2 * frame + 2 * k)
+      (∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact entry.code loc))
     (frameDef : frame = max (maxVarHOL q / 2 + 1 - k) (argumentCount-k))
     (frameSizeDef : frameSize = if frame = 0 then 0 else frame+1)
     (space : frameSize - (argumentCount-k) ≤ entry.stackSpace)
@@ -95,13 +94,19 @@ theorem loopSequence_wordAllocated_riscvWithin {F : Type}
     exact h.trans wordFfi
   have shiftedRel : stateRel ac k frameSize frame {word with locals := locals,clock := 6*limit}
       {{entry with clock := 6*limit} with stackSpace := entry.stackSpace - (frameSize - (argumentCount-k))} lens 0 := by
-    unfold stateRel at wordPremises ⊢
-    exact ⟨rfl,wordPremises.1.2⟩
+    have original := wordPremises.1
+    unfold stateRel at original ⊢
+    exact ⟨rfl,original.2⟩
+  have frameBound : maxVarHOL q < 2 * frame + 2 * k := by
+    rw [frameDef]
+    have lower := Nat.le_max_left (maxVarHOL q / 2 + 1 - k) (argumentCount-k)
+    omega
+  obtain ⟨compiles,bitmapLength,bitmapBound,bitmapPrefix,labelChecks⟩ := wordPremises.2
   obtain ⟨outcome,ticks,finalMachine,finalFfi,stackPost,stackResult,tickBound,machineRun,events,classification,stackRel⟩ :=
     allocatedWordSequenceRiscVWithin ac q (.block block) {word with locals := locals,clock := 6*limit} targetPost wordResult
       {entry with clock := 6*limit} k frameSize frame (sizeOf q * (6*limit+1)) lens bs bsPost n nPost compiled start argumentCount
       noInstall (by simpa using noInstallCode) (by simpa using wordCode) wordComplete notTimeout targetBound
-      ⟨targetRun,wordNonerror,shiftedRel,postAlloc,flat,wordPremises.2⟩ frameDef frameSizeDef space found
+      ⟨targetRun,wordNonerror,shiftedRel,postAlloc,flat,compiles,bitmapLength,bitmapBound,bitmapPrefix,labelChecks,frameBound⟩ frameDef frameSizeDef space found
       inputCode anything cr c jump bounds pointer f gen maxHeap a b removeInput oracle renamed lab pc mc labCode labs asm machine
       distinct sourceCode pre relation ha hs hk hf hcode hor rel hpc hmc tie machineRel
   have wordOutcome := loopWordOutcome_of_resultCase ctxt word wordPost sourcePost result wordResult complete wordRel
