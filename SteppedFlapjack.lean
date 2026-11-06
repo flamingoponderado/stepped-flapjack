@@ -11,6 +11,7 @@ import SteppedFlapjack.PanToCrepSteps.TailEntryDeclBound
 import SteppedFlapjack.PanToCrepSteps.GlobalDecl
 import SteppedFlapjack.PanToCrepSteps.DeclSteps
 import SteppedFlapjack.PanToCrepSteps.DeclShape
+import SteppedFlapjack.PanToCrepSteps.ConcreteDeclRiscV
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram
 import SteppedFlapjack.PanToCrepSteps.CountedDeclExample
 import SteppedFlapjack.PanToCrepSteps.CountedLoopExample
@@ -476,6 +477,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.GlobalWhile`: Global lowering and Crep visit bounds for initialized loops.
 - `SteppedFlapjack.PanToCrepSteps.GlobalInitializers`: Supported scalar global declarations and generated initializer stores.
 - `SteppedFlapjack.PanToCrepSteps.GlobalShapes`: Supported global-lowering shapes and branch bounds.
+- `SteppedFlapjack.PanToCrepSteps.ConcreteDeclRiscV`: Counted concrete source execution through the RISC-V bound.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram`: Concrete zero-argument source and global-entry bounds.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclExample`: Exact counted declaration-loop execution and supported shape.
 - `SteppedFlapjack.PanToCrepSteps.CountedLoopExample`: State-changing counted loop with a repeated condition.
