@@ -1,6 +1,8 @@
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopEntry
 import SteppedFlapjack.PanToCrepSteps.NativeTailClockOutcome
 import SteppedFlapjack.CrepToLoopSteps.NativeTailFrontendSetup
+import SteppedFlapjack.PanToCrepSteps.GlobalTailWord
+import SteppedFlapjack.PanToCrepSteps.GlobalPanCodeRel
 
 /-! Native initialization for the counted assignment-loop entry. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -26,13 +28,9 @@ structure AssignLoopNativeInputs {F : Type}
     (makeFuncsExactHOL (functionsHOL (compileTopExactHOL declarations start))) (sizeOfShapeHOL (.comb [])-1)
     (getEidsFromDeclsHOL (compileTopExactHOL declarations start))
   loopContextEq : loopCtxt = mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable crepPrograms) 0
-  programShapes : ∀ name params body, (name,params,body) ∈ crepPrograms → SupportedCodeBody body
   wc : Flapjack.Compiler.Backend.WordToWord.Config
   ac : AsmConfigExact 64
-  member : (firstLoopName,1,(LoopToWord.compHOL (assignLoopEntryWordContext entry) entry (firstLoopName,2)).1) ∈
-    loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)
   loopCode : loop.code = sptFromAList (compileProgHOLExact arch crepPrograms)
-  loopEmpty : loop.locals = .ln
   stack : StackSemStateFiniteExact 64 LabToTarget.Config F
   coracle : Nat → (Nat × LabToTarget.Config) × List (Nat × Nat × WordLangProgHOL (BitVec 64))
   codeEq : stack.code = sptFromAList (Flapjack.Compiler.Backend.WordToStack.Native.compileNative ac false
@@ -82,9 +80,20 @@ theorem counted_assignLoop_native_riscv {σ : Type}
       .seq .skip (.seq (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment)))
         (.return (.const returned))),.one))
     (entryClock : middle.clock ≠ 0)
+    (globalFound : (functionsHOL declarations).lookup start = some ([],
+      .seq .skip (.seq (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment)))
+        (.return (.const returned))),.one))
+    (funs exns : List (DeclHOL 64))
+    (globalCompiled : globalLoweredDecs declarations start = (initializers,funs,exns,globals))
     (globalRel : panGlobalsStateRelHOLExact true globals source (callEntryStateHOLFinite middle HolFiniteMapExact.empty))
     (panStateRel : panToCrepStateRelFiniteExact pan crep)
-    (panCodeRel : codeRelExactHOLW caller pan.code crep.code)
+    (crepCode : crep.code = alistToFmapCodeExact (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
+    (unique : ((compileProgDeclsHOLW (compileTopExactHOL declarations start)).map Prod.fst).Nodup)
+    (localised : ∀ entry ∈ functionsHOL (compileTopExactHOL declarations start), localisedProgHOL entry.2.2.1 = true)
+    (preShapes : ∀ n ps p, (n,ps,p) ∈ compileToCrepExactHOLW (compileTopExactHOL declarations start) → SupportedCodeBody p)
+    (noTail : ∀ n ps init callee, (n,ps,.seq init (.call none callee [])) ∈
+      compileToCrepExactHOLW (compileTopExactHOL declarations start) →
+      callee ∉ (functionsHOL ((compileTopExactHOL declarations start).filter inlinableHOL)).map Prod.fst)
     (panExcpRel : panToCrepExcpRelFiniteExact caller.eids pan.eshapes)
     (panLocalsRel : panToCrepLocalsRelFiniteExact caller pan.locals crep.locals)
     (initLocalised : localisedProgHOL (nestedSeqHOL initializers) = true)
@@ -93,7 +102,6 @@ theorem counted_assignLoop_native_riscv {σ : Type}
     (crepRel : crepToLoopStateRelExact crep target)
     (memRel : crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs)
     (globalsRel : crepToLoopGlobalsRelHOLExact crep.globals target.globals)
-    (codeRel : crepToLoopCodeRelExact loopCtxt crep.code target.code)
     (localsRel : crepToLoopLocalsRelExact loopCtxt .ln crep.locals target.locals)
     (native : AssignLoopNativeInputs declarations start caller loopCtxt (assignLoopEntryProgram declarations initializers caller loopCtxt .ln)
       (assignLoopEntryLimit declarations initializers globals caller condition assignment name returned pan budget loopCtxt .ln) target) :
@@ -122,20 +130,72 @@ theorem counted_assignLoop_native_riscv {σ : Type}
     counted_assignLoop_with_return condition assignment name context primitive handler functions
       conditionRanged assignmentRanged nameRanged fuel production source rel ranged clock finalLocals loopCost returned loopExec
   refine ⟨sourceResult,sourceFinal,sourceExec,sourceRun,?_⟩
-  rcases wholeNativeTail_frontend_setup_or_resource native.arch native.crepPrograms native.programShapes
-      native.wc native.ac entry (assignLoopEntryWordContext entry) (firstLoopName,2) firstLoopName native.member
-      target native.loopCode native.stack native.coracle native.codeEq native.bitmapsPrefix native.ok limit native.data native.backend with
+  obtain ⟨panCodeRelCanonical,programShapesCanonical⟩ := global_supported_panCrep_codeAndShapes
+    declarations start pan crep panCode crepCode unique localised preShapes noTail
+  have panCodeRel : codeRelExactHOLW caller pan.code crep.code := by
+    simpa only [native.callerEq] using panCodeRelCanonical
+  have programShapes : ∀ n ps body, (n,ps,body) ∈ native.crepPrograms → SupportedCodeBody body := by
+    simpa only [native.programsEq] using programShapesCanonical
+  obtain ⟨preInitializers,preRest,preEntry⟩ := globalEntry_preInline declarations start
+    (.seq .skip (.seq (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment)))
+      (.return (.const returned)))) .one globalFound
+  have preMember : (start,[],.seq (compileProgExactHOLW
+      (mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
+        (makeFuncsExactHOL (functionsHOL (compileTopExactHOL declarations start))) (sizeOfShapeHOL (.comb [])-1)
+        (getEidsFromDeclsHOL (compileTopExactHOL declarations start))) (nestedSeqHOL preInitializers))
+      (.call none (newMainNameHOL declarations) [])) ∈
+      compileToCrepExactHOLW (compileTopExactHOL declarations start) := by
+    rw [preEntry]
+    simp
+  have notInline : newMainNameHOL declarations ∉
+      (functionsHOL ((compileTopExactHOL declarations start).filter inlinableHOL)).map Prod.fst :=
+    noTail start [] _ (newMainNameHOL declarations) preMember
+  have compiledInitShape : CrepToLoopSteps.BranchProgram (compileProgExactHOLW
+      (mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
+        (makeFuncsExactHOL (functionsHOL (compileTopExactHOL declarations start))) (sizeOfShapeHOL (.comb [])-1)
+        (getEidsFromDeclsHOL (compileTopExactHOL declarations start))) (nestedSeqHOL initializers)) := by
+    rw [← native.callerEq]
+    exact branch_compile initShape
+  have actualLookup := globalEntry_nonInline_crep_lookup declarations start initializers .one
+    (.seq .skip (.seq (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment)))
+      (.return (.const returned)))) globalFound funs exns globals (by simpa [globalLoweredDecs] using globalCompiled)
+    compiledInitShape notInline crep
+  have nativeLookup : holAlookup native.crepPrograms start = some ([],
+      .seq (compileProgExactHOLW caller (nestedSeqHOL initializers)) (.call none (newMainNameHOL declarations) [])) := by
+    simpa only [native.programsEq,native.callerEq] using actualLookup
+  have nativeUnique : (native.crepPrograms.map Prod.fst).Nodup := by
+    simpa only [native.programsEq] using unique
+  have compiledCodeRel := wholeCrep_supported_executable_codeRel native.arch native.crepPrograms start
+    (.seq (compileProgExactHOLW caller (nestedSeqHOL initializers)) (.call none (newMainNameHOL declarations) []))
+    nativeUnique nativeLookup programShapes
+  have codeRel : crepToLoopCodeRelExact loopCtxt crep.code target.code := by
+    simpa only [native.loopContextEq,crepCode,← native.programsEq,native.loopCode] using compiledCodeRel
+  have actualMember := globalEntry_nonInline_word_member native.arch declarations start initializers .one
+    (.seq .skip (.seq (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment)))
+      (.return (.const returned)))) globalFound funs exns globals (by simpa [globalLoweredDecs] using globalCompiled)
+    compiledInitShape notInline crep
+  have entryMember : (firstLoopName,1,(LoopToWord.compHOL (assignLoopEntryWordContext entry) entry (firstLoopName,2)).1) ∈
+      loopToWordCompileHOL (compileProgHOLExact native.arch native.crepPrograms) := by
+    simpa [entry,assignLoopEntryProgram,assignLoopEntryWordContext,native.programsEq,native.loopContextEq,native.callerEq,
+      compFuncHOLExact,listToNumSetHOLExact] using actualMember
+  let initial := {target with locals := .ln}
+  have normalized := emptyLive_initial_relations loopCtxt crep target _ crepRel memRel globalsRel localsRel native.data
+  rcases wholeNativeTail_frontend_setup_or_resource native.arch native.crepPrograms programShapes
+      native.wc native.ac entry (assignLoopEntryWordContext entry) (firstLoopName,2) firstLoopName entryMember
+      initial (by simpa [initial] using native.loopCode) native.stack native.coracle native.codeEq native.bitmapsPrefix native.ok limit
+      normalized.2.2.2.2 native.backend with
     success | resource
   · obtain ⟨word,setup,contextEq,machineEq,mcEq,labEq,tickEq,wordRel,base,frameSize,wordLocals⟩ := success
     obtain ⟨_,sourceFinal',_,_,_,_,_,sourceRun',_,_,_,_,_,_,_,_,_,extra,loopPost,_,_,_,_,_,_,_,_,_,_,_,nativeReady⟩ :=
       counted_assignLoop_globalEntry_riscv declarations start initializers globals caller condition assignment name context primitive handler
         functions conditionRanged assignmentRanged nameRanged fuel production source pan middle crep rel ranged clock finalLocals loopCost budget
         returned budgetBound loopExec conditionShape bodyShape panCode initRun sourceFound entryClock globalRel panStateRel panCodeRel
-        panExcpRel panLocalsRel initLocalised initShape loopCtxt .ln target word crepRel memRel globalsRel codeRel localsRel wordRel
+        panExcpRel panLocalsRel initLocalised initShape loopCtxt .ln initial word normalized.1 normalized.2.1 normalized.2.2.1
+        (by simpa [initial] using codeRel) normalized.2.2.2.1 wordRel
     have finalEq : sourceFinal = sourceFinal' := (Prod.mk.inj (sourceRun.symm.trans sourceRun')).2
     subst sourceFinal'
     obtain ⟨outcome,ticks,finalMachine,finalFfi,bound,run,correspondence⟩ :=
-      nativeReady.run_shifted extra setup base frameSize native.loopEmpty (by simpa [assignLoopEntryWordContext] using contextEq) wordLocals
+      nativeReady.run_shifted extra setup base frameSize (by rfl) (by simpa [assignLoopEntryWordContext] using contextEq) wordLocals
     refine ⟨outcome,ticks,finalMachine,finalFfi,?_,?_,?_⟩
     · rw [tickEq] at bound
       exact bound.trans (Nat.le_max_left _ _)
