@@ -191,6 +191,34 @@ theorem wholeWordStack_simulation_inputs (wc : Flapjack.Compiler.Backend.WordToW
   exact ⟨col,q,bs,n,after,afterN,body,frame,size,qDef,ready.1,ready.2.1,ready.2.2.1,ready.2.2.2,
     rfl,rfl,h,lookup,found,lengthBound,gapBound,bitmapPrefix⟩
 
+/-- A Stack state initialized with the compiler output inherits the entry
+lookup and bitmap conditions for the compiler-selected body. -/
+theorem wholeWordStack_initialized_inputs {C F : Type} (wc : Flapjack.Compiler.Backend.WordToWord.Config)
+    (ac : AsmConfigExact width) (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (name count : Nat) (p : WordLangProgHOL (BitVec width)) (member : (name,count,p) ∈ programs)
+    (nodup : (programs.map Prod.fst).Nodup)
+    (notRaise : name ≠ raiseStubLocation) (notStore : name ≠ storeConstsStubLocation)
+    (shape : LoopSequence p) (entry : StackSemStateFiniteExact width C F)
+    (code : entry.code = sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2)
+    (bitmaps : (compileNative ac false (compile wc ac programs).2).1.IsPrefix entry.bitmaps) :
+    ∃ col q bs n bsPost nPost body frame frameSize,
+      q = (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac ((name,count,p),col)).2.2 ∧
+      LoopBlock q ∧ noInstallSubprogsHOL q = true ∧ flatExpConventions q = true ∧
+      postAllocConventionsHOL (ac.regCount-(5+ac.avoidRegs.length)) q = true ∧
+      frame = max (maxVarHOL q / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (count-(ac.regCount-(5+ac.avoidRegs.length))) ∧
+      frameSize = (if frame = 0 then 0 else frame+1) ∧
+      compNative ac false q (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
+      sptLookup name entry.code = some (compileProgNative ac false q count (ac.regCount-(5+ac.avoidRegs.length)) (bs,n)).1 ∧
+      (appListAppend bs).length ≤ n ∧ n-(appListAppend bs).length ≤ entry.bitmaps.length ∧
+      (appListAppend bsPost).IsPrefix (entry.bitmaps.drop (n-(appListAppend bs).length)) := by
+  obtain ⟨col,q,bs,n,bsPost,nPost,body,frame,frameSize,qDef,block,noInstall,flat,postAlloc,
+    frameDef,sizeDef,compilation,_,found,lengthBound,gapBound,bitmapPrefix⟩ :=
+    wholeWordStack_simulation_inputs wc ac programs name count p member nodup notRaise notStore shape
+  refine ⟨col,q,bs,n,bsPost,nPost,body,frame,frameSize,qDef,block,noInstall,flat,postAlloc,
+    frameDef,sizeDef,compilation,?_,lengthBound,gapBound.trans bitmaps.length_le,?_⟩
+  · simpa only [code] using found
+  · exact bitmapPrefix.trans (bitmaps.drop _)
+
 /-- One set of actual compiler witnesses provides both the source-related Word
 run and all syntactic, frame and bitmap inputs for its Stack simulation. -/
 theorem wholeWordStack_simulation_bound {C F : Type} (wc : Flapjack.Compiler.Backend.WordToWord.Config)
