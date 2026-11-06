@@ -77,6 +77,34 @@ theorem supported_crepToWord_member {width : Nat} [NeZero width]
   unfold compFuncHOLExact
   exact branchConditionWhileBranch_wordSimpShape init initShape condition conditionShape body tail bodyShape tailShape _ _
 
+/-- At a known list index, the actual frontend puts the supported function at
+its exact generated location, even when source function names are duplicated. -/
+theorem supported_crepToWord_member_at {width : Nat} [NeZero width]
+    (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture)
+    (code : List (Basis.Pure.MlString.MlString × List Nat × CrepProgHOL width))
+    (index : Nat) (hi : index < code.length) (name : Basis.Pure.MlString.MlString)
+    (init : CrepProgHOL width) (initShape : BranchProgram init)
+    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
+    (entry : code[index] = (name,[],.seq init (.seq (.while condition body) tail))) :
+    let p := .seq init (.seq (.while condition body) tail)
+    let loop := optimiseHOL (compFuncHOLExact arch (crepToLoopMakeFuncsExactExecutable code) [] p)
+    let location := index + firstLoopName
+    let ctxt := makeCtxtHOL 2 (fromNumSetHOL (sptDifference (accVarsHOL loop .ln) (toNumSetHOL []))) .ln
+    (location,1,(LoopToWord.compHOL ctxt loop (location,2)).1) ∈
+      loopToWordCompileHOL (compileProgHOLExact arch code) := by
+  have fixed := branchConditionWhileBranch_simp_fixed init initShape condition conditionShape body tail bodyShape tailShape
+  have member : (index+firstLoopName,[],
+      optimiseHOL (compFuncHOLExact arch (crepToLoopMakeFuncsExactExecutable code) []
+        (.seq init (.seq (.while condition body) tail)))) ∈ compileProgHOLExact arch code := by
+    apply List.mem_iff_getElem.mpr
+    refine ⟨index,?_,?_⟩
+    · simp only [compileProgHOLExact,List.length_zipWith,List.length_map,List.length_range,Nat.min_self]
+      exact hi
+    · simp only [compileProgHOLExact,List.getElem_zipWith,List.getElem_map,List.getElem_range,entry,fixed]
+      rfl
+  exact LoopLiveSteps.loopToWord_zeroArg_member _ _ _ member
+
 /-- A completed supported Crep run has a bounded execution of the exact
 simplify/compile/optimize pipeline, measured against Crep source visits. -/
 theorem supported_optimised_loop_bound {F : Type}

@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.OptimisedAllFramesRiscV
 import SteppedFlapjack.CrepToLoopSteps.SimpFixed
 import SteppedFlapjack.LoopLiveSteps.Consumption
 import SteppedFlapjack.LoopLiveSteps.FrontendMember
