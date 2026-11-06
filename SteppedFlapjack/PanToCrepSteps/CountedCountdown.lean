@@ -2,6 +2,7 @@ import SteppedFlapjack.PanToCrepSteps.CountedWhileTrace
 import SteppedFlapjack.PanToCrepSteps.CountedDeclList
 import SteppedFlapjack.PanToCrepSteps.DeclLoopShape
 import SteppedFlapjack.PanToCrepSteps.GlobalDecl
+import SteppedFlapjack.PanToCrepSteps.TailEntryRelations
 import Flapjack.Pancake.Proofs.PanToCrep
 
 /-! Counted/HOL correspondence for an arbitrary finite countdown. -/
@@ -374,5 +375,79 @@ theorem countdown_globalEntry_inputs {σ : Type} (count : Nat)
       sizeOf (compileProgExactHOL globals (countdownBodyHOL name)) +
       sizeOf (compileProgExactHOL globals (.return (.const returned)))) bound
   omega
+
+/-- The actual counted countdown bounds the visits of its globally lowered,
+compiled Crep body by a factor determined by the program's compiled shape. -/
+theorem countdown_globalCrep_steps {σ : Type} (count : Nat)
+    (globals : PanGlobalsContextExact 64) (ctxt : PanToCrepContextExact 64)
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (source lowered : PanSemStateFiniteExact 64 σ) [DecidablePred source.memaddrs]
+    (crep : CrepSemHOLState 64 σ)
+    (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
+    (name : VarName) (nameRanged : NameRanged name) (wordRange : count < 2^64)
+    (sourceClock : count ≤ source.clock) (returned : BitVec 64)
+    (globalRel : panGlobalsStateRelHOLExact true globals source lowered)
+    (stateRel : panToCrepStateRelFiniteExact lowered crep)
+    (codeRel : codeRelExactHOLW ctxt lowered.code crep.code)
+    (excpRel : panToCrepExcpRelFiniteExact ctxt.eids lowered.eshapes)
+    (localsRel : panToCrepLocalsRelFiniteExact ctxt lowered.locals crep.locals)
+    (localised : localisedProgHOL (compileProgExactHOL globals
+      (.dec (ofString name) .one (.const (BitVec.ofNat 64 count))
+        (.seq .skip (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))))) = true)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel : Nat) :
+    let body : ProgHOL 64 := .dec (ofString name) .one (.const (BitVec.ofNat 64 count))
+      (.seq .skip (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned))))
+    let inner := scalarDeclContext ctxt (ofString name)
+    let factor := (4 + sizeOf (compileProgExactHOLW inner (compileProgExactHOL globals (.skip))) +
+      sizeOf (compileProgExactHOLW inner (compileProgExactHOL globals (countdownBodyHOL name))) +
+      sizeOf (compileProgExactHOLW inner (compileProgExactHOL globals (.return (.const returned))))) *
+      (4 + sizeOf (compileProgExactHOL globals (.skip : ProgHOL 64)) +
+        sizeOf (compileProgExactHOL globals (countdownBodyHOL name)) +
+        sizeOf (compileProgExactHOL globals (.return (.const returned))))
+    ∃ result sourceFinal loweredFinal crepResult crepFinal,
+      evalPanValueFfiProgSteps context primitive handler production.structs functions
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+count+4)
+        production.locals production.globals production.memory production.ffi
+        (.dec name .one (.const (BitVec.ofNat 64 count))
+          (.seq .skip (.seq (.while (.var .local name) (countdownBody name)) (.return (.const returned)))))
+        (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (result,6*count+9) ∧
+      source.evaluateHOLFiniteState body = (some (.returned (.val (.word returned))),sourceFinal) ∧
+      lowered.evaluateHOLFiniteState (compileProgExactHOL globals body) =
+        (some (.returned (.val (.word returned))),loweredFinal) ∧
+      panGlobalsStateRelHOLExact (goodResHOL (some (.returned (.val (.word returned))))) globals sourceFinal loweredFinal ∧
+      evalCrepSemHOLProgExact crep (compileProgExactHOLW ctxt (compileProgExactHOL globals body)) = (crepResult,crepFinal) ∧
+      panToCrepStateRelFiniteExact loweredFinal crepFinal ∧
+      SteppedFlapjack.CrepToLoopSteps.CompleteCrepResult crepResult ∧
+      pcCompileCorrectResultRel ctxt loweredFinal crepFinal (some (.returned (.val (.word returned)))) crepResult ∧
+      SteppedFlapjack.CrepSteps.steps (compileProgExactHOLW ctxt (compileProgExactHOL globals body)) crep ≤
+        factor * (6*count+9) := by
+  obtain ⟨result,sourceFinal,exec,run,bound,_⟩ := counted_decl_countdown_return count production source rel ranged
+    name nameRanged wordRange sourceClock returned ctxt context primitive handler functions fuel
+  let inner := scalarDeclContext ctxt (ofString name)
+  have found := scalarDeclContext_local ctxt (ofString name)
+  have bodyShape : BranchProgram inner (countdownBodyHOL name) := by
+    exact .assign _ _ found (.op .sub (.local _ _ found) (.const _))
+  have crepBound := globalCompile_declLoop_crep_steps globals ctxt (ofString name) (.const (BitVec.ofNat 64 count))
+    .skip (.var .local (ofString name)) (countdownBodyHOL name) (.return (.const returned))
+    (.const _) .skip (.local _ _ found) bodyShape (.return (.const _)) source sourceFinal lowered
+    (some (.returned (.val (.word returned)))) crep run (by simp) globalRel stateRel codeRel excpRel localsRel localised
+  let body : ProgHOL 64 := .dec (ofString name) .one (.const (BitVec.ofNat 64 count))
+    (.seq .skip (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned))))
+  obtain ⟨loweredFinal,loweredRun,postRel⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL
+    body source (some (.returned (.val (.word returned)))) globals lowered sourceFinal ⟨globalRel,run,by simp⟩
+  have correct : pcCompileCorrectAt (compileProgExactHOL globals body) lowered :=
+    (pcCompileCorrectAt_iff_HOL _ _).mpr (pcCompileCorrect_all _ _)
+  obtain ⟨crepResult,crepFinal,crepRun,finalRel,_,_,resultRel⟩ := correct
+    (some (.returned (.val (.word returned)))) loweredFinal crep ctxt loweredRun (by simp)
+    stateRel codeRel excpRel localsRel localised
+  have complete : SteppedFlapjack.CrepToLoopSteps.CompleteCrepResult crepResult := by
+    have resultEq := resultRel
+    simp only [pcCompileCorrectResultRel] at resultEq
+    rw [resultEq]
+    exact .return _
+  exact ⟨result,sourceFinal,loweredFinal,crepResult,crepFinal,exec,run,loweredRun,postRel,crepRun,finalRel,complete,resultRel,
+    crepBound.trans (Nat.mul_le_mul_left _ bound)⟩
 
 end SteppedFlapjack.PanToCrepSteps
