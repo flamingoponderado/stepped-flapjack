@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordAllocSteps.WholeTailCode
 import SteppedFlapjack.WordToStackSteps.DirectTailRiscV
 import SteppedFlapjack.LoopToWordSteps.TailEntryCompiledCode
 import SteppedFlapjack.LoopToWordSteps.TailEntryRiscV
@@ -641,3 +642,4 @@ Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
 `SteppedFlapjackTests` library, rooted at `SteppedFlapjack.Tests`.
 -/
+
