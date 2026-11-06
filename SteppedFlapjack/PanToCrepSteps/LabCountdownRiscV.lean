@@ -13,7 +13,9 @@ open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps
 open SteppedFlapjack.WordAllocSteps SteppedFlapjack.LabToTargetSteps
 
 /-- A Lab-derived countdown source has the explicit full-initialization
-RISC-V tick bound, with successful return or entry resource exhaustion. -/
+RISC-V tick bound, with successful return or entry resource exhaustion. The
+compiler input starts at the globals pass; the full Pancake compiler first
+simplifies this body, as shown by `singleEntry_countdown_panToWord`. -/
 theorem labInitialized_countdown_fullInit_riscv {σ : Type}
     (declarations : List (DeclHOL 64)) (start : MlString)
     (caller : PanToCrepContextExact 64) (loopCtxt : CrepToLoopContextExact)

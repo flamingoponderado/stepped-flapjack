@@ -9,6 +9,44 @@ open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.Pan
 def singleEntryProgram (start : MlString) (body : ProgHOL 64) : List (DeclHOL 64) :=
   [.function ⟨start,false,false,[],body,.one⟩]
 
+/-- The actual simplifier removes the initial skip from a scalar countdown
+entry before the globals pass. -/
+theorem singleEntry_declared_panSimp (start name : MlString) (initial returned : BitVec 64)
+    (condition assignment : ExpHOL 64) :
+    panSimpDeclsHOL (singleEntryProgram start (.dec name .one (.const initial) (.seq .skip
+      (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))))) =
+    singleEntryProgram start (.dec name .one (.const initial)
+      (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))) := by
+  simp [singleEntryProgram,panSimpDeclsHOL,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL,seqCallRetHOL]
+
+/-- The full compiler's structure pass leaves the simplified scalar
+countdown unchanged. -/
+theorem singleEntry_countdown_structs (start name : MlString) (initial returned : BitVec 64) :
+    let body : ProgHOL 64 := .dec name .one (.const initial)
+      (.seq (.while (.var .local name) (.assign .local name (.op .sub [.var .local name,.const 1])))
+        (.return (.const returned)))
+    Pancake.PanStructs.CompileShapeExact.compileTopExact (singleEntryProgram start body) =
+      singleEntryProgram start body := by
+  simp [singleEntryProgram,Pancake.PanStructs.CompileShapeExact.compileTopExact,
+    Pancake.PanStructs.CompileShapeExact.getNamesExact,Pancake.PanStructs.CompileShapeExact.compileDeclsExact,
+    Pancake.PanStructs.CompileShapeExact.compileProgExact,Pancake.PanStructs.CompileShapeExact.compileExpExact,
+    Pancake.PanStructs.CompileShapeExact.compileExpsExact,Pancake.PanStructs.CompileShapeExact.compileShapeExact]
+
+/-- The actual Pancake-to-Word compiler first removes the leading skip, then
+compiles the resulting scalar countdown through the globals and backend passes. -/
+theorem singleEntry_countdown_panToWord (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture)
+    (name : MlString) (initial returned : BitVec 64) :
+    let start := ofString "main"
+    let body : ProgHOL 64 := .dec name .one (.const initial)
+      (.seq (.while (.var .local name) (.assign .local name (.op .sub [.var .local name,.const 1])))
+        (.return (.const returned)))
+    panToWordCompileProgHOL arch (singleEntryProgram start (.dec name .one (.const initial) (.seq .skip
+      (.seq (.while (.var .local name) (.assign .local name (.op .sub [.var .local name,.const 1])))
+        (.return (.const returned)))))) =
+      loopToWordCompileHOL (compileProgHOLExact arch
+        (compileProgDeclsHOLW (compileTopExactHOL (singleEntryProgram start body) start))) := by
+  simp only [panToWordCompileProgHOL,singleEntry_declared_panSimp,singleEntry_countdown_structs]
+
 /-- The actual global compiler creates the wrapper and a renamed, lowered
 callee; no property of the body is assumed. -/
 theorem singleEntry_compileTop (start : MlString) (body : ProgHOL 64) :

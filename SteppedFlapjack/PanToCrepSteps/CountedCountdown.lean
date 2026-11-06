@@ -183,6 +183,57 @@ theorem counted_declList_countdown {σ : Type} (declarations : List (VarName × 
     production source rel ranged names (fuel+count+1) (6*count+2)
     (.normal finalLocals entry.globals entry.memory entry.ffi) none final bodyExec bodyRun bodyBound
 
+/-- The simplified countdown loop followed by a constant return has the
+exact cost of the source form emitted by the simplifier. -/
+theorem counted_countdown_seq_return {σ : Type} (count : Nat)
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (source : PanSemStateFiniteExact 64 σ) [DecidablePred source.memaddrs]
+    (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
+    (name : VarName) (nameRanged : NameRanged name)
+    (initial : production.locals name = some (.word (BitVec.ofNat 64 count)))
+    (wordRange : count < 2^64) (clock : count ≤ source.clock) (returned : BitVec 64)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel : Nat) :
+    ∃ result final,
+      evalPanValueFfiProgSteps context primitive handler production.structs functions
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+count+2)
+        production.locals production.globals production.memory production.ffi
+        (.seq (.while (.var .local name) (countdownBody name)) (.return (.const returned)))
+        (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (result,6*count+5) ∧
+      source.evaluateHOLFiniteState
+        (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned))) =
+          (some (.returned (.val (.word returned))),final) ∧
+      controlSteps (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))
+        source ≤ 6*count+5 ∧
+      result = .returned (fun _ => none) production.globals production.memory production.ffi [.word returned] := by
+  classical
+  obtain ⟨finalLocals,middle,loopExec,loopRun,loopBound,middleRel,middleRanged⟩ :=
+    counted_countdown count production source rel ranged name nameRanged initial wordRange clock context primitive handler functions fuel
+  let middleProduction := {production with locals := finalLocals, clock := middle.clock}
+  obtain ⟨returnExec,returnRun,_,returnBound⟩ := counted_return_word_related middleProduction middle middleRel middleRanged
+    (.const returned) (by simp [ExpByteRanged]) returned (by simp [evalPanSemStateExp_64_eq_previous,evalPanValueExp])
+    context primitive handler functions (fuel+count)
+  have returnExec' : evalPanValueFfiProgSteps context primitive handler production.structs functions
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+count+1)
+      finalLocals production.globals production.memory production.ffi (.return (.const returned))
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
+        some (.returned (fun _ => none) production.globals production.memory production.ffi [.word returned],2) := by
+    simpa [middleProduction,panSemBitVec64MemoryAccess,panValueExpStepCost] using returnExec
+  obtain ⟨exec,run,bound⟩ := counted_seq_normal context primitive handler production.structs functions
+    production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+count+1)
+    production.locals production.globals production.memory production.ffi
+    finalLocals production.globals production.memory production.ffi
+    (.while (.var .local name) (countdownBody name)) (.return (.const returned))
+    (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned))
+    (some (panSemBitVec64MemoryAccess production)) none none
+    (.returned (fun _ => none) production.globals production.memory production.ffi [.word returned])
+    (6*count+2) 2 source middle (emptyLocalsHOLFinite middle) (some (.returned (.val (.word returned))))
+    loopExec returnExec' loopRun (by simpa [expToHOL] using returnRun) loopBound (by simpa [expToHOL,panValueExpStepCost] using returnBound)
+  refine ⟨_,_,?_,run,?_,rfl⟩
+  · simpa only [show 6*count+2+2+1 = 6*count+5 by omega, show fuel+count+1+1 = fuel+count+2 by omega] using exec
+  · simpa only [show 6*count+2+2+1 = 6*count+5 by omega] using bound
+
 /-- The countdown followed by a constant word return has an exact counted
 cost, a matching HOL return, and a control-visit bound. -/
 theorem counted_countdown_with_return {σ : Type} (count : Nat)
@@ -208,28 +259,10 @@ theorem counted_countdown_with_return {σ : Type} (count : Nat)
         source ≤ 6*count+7 ∧
       result = .returned (fun _ => none) production.globals production.memory production.ffi [.word returned] := by
   classical
-  obtain ⟨finalLocals,middle,loopExec,loopRun,loopBound,middleRel,middleRanged⟩ :=
-    counted_countdown count production source rel ranged name nameRanged initial wordRange clock context primitive handler functions fuel
-  let middleProduction := {production with locals := finalLocals, clock := middle.clock}
-  obtain ⟨returnExec,returnRun,_,returnBound⟩ := counted_return_word_related middleProduction middle middleRel middleRanged
-    (.const returned) (by simp [ExpByteRanged]) returned (by simp [evalPanSemStateExp_64_eq_previous,evalPanValueExp])
-    context primitive handler functions (fuel+count)
-  have returnExec' : evalPanValueFfiProgSteps context primitive handler production.structs functions
-      production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+count+1)
-      finalLocals production.globals production.memory production.ffi (.return (.const returned))
-      (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
-        some (.returned (fun _ => none) production.globals production.memory production.ffi [.word returned],2) := by
-    simpa [middleProduction,panSemBitVec64MemoryAccess,panValueExpStepCost] using returnExec
-  obtain ⟨innerExec,innerRun,innerBound⟩ := counted_seq_normal context primitive handler production.structs functions
-    production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+count+1)
-    production.locals production.globals production.memory production.ffi
-    finalLocals production.globals production.memory production.ffi
-    (.while (.var .local name) (countdownBody name)) (.return (.const returned))
-    (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned))
-    (some (panSemBitVec64MemoryAccess production)) none none
-    (.returned (fun _ => none) production.globals production.memory production.ffi [.word returned])
-    (6*count+2) 2 source middle (emptyLocalsHOLFinite middle) (some (.returned (.val (.word returned))))
-    loopExec returnExec' loopRun (by simpa [expToHOL] using returnRun) loopBound (by simpa [expToHOL,panValueExpStepCost] using returnBound)
+  obtain ⟨result,innerFinal,innerExec,innerRun,innerBound,resultEq⟩ :=
+    counted_countdown_seq_return count production source rel ranged name nameRanged initial wordRange clock returned
+      context primitive handler functions fuel
+  rw [resultEq] at innerExec
   have skipExec : evalPanValueFfiProgSteps context primitive handler production.structs functions
       production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+count+2)
       production.locals production.globals production.memory production.ffi .skip
@@ -245,13 +278,75 @@ theorem counted_countdown_with_return {σ : Type} (count : Nat)
     (.skip : ProgHOL 64) (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))
     (some (panSemBitVec64MemoryAccess production)) none none
     (.returned (fun _ => none) production.globals production.memory production.ffi [.word returned])
-    1 (6*count+2+2+1) source source (emptyLocalsHOLFinite middle) (some (.returned (.val (.word returned))))
+    1 (6*count+5) source source innerFinal (some (.returned (.val (.word returned))))
     skipExec innerExec (evaluateHOLFiniteState_skip source) innerRun skipBound innerBound
-  have costEq : 1+(6*count+2+2+1)+1 = 6*count+7 := by omega
+  have costEq : 1+(6*count+5)+1 = 6*count+7 := by omega
   have fuelEq : fuel+count+2+1 = fuel+count+3 := by omega
   rw [costEq,fuelEq] at exec
   rw [costEq] at bound
   exact ⟨_,_,exec,run,bound,rfl⟩
+
+/-- The simplified declared countdown produced by the first compiler pass
+has exact source cost `6 * count + 7`. -/
+theorem counted_decl_countdown_simplified {σ : Type} (count : Nat)
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (source : PanSemStateFiniteExact 64 σ) [DecidablePred source.memaddrs]
+    (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
+    (name : VarName) (nameRanged : NameRanged name) (wordRange : count < 2^64) (clock : count ≤ source.clock)
+    (returned : BitVec 64) (context : PanValueFfiContext (RiscV.Word 64))
+    (primitive : PanPrimitiveHandler (RiscV.Word 64)) (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel : Nat) :
+    let program : Prog (RiscV.Word 64) := .dec name .one (.const (BitVec.ofNat 64 count))
+      (.seq (.while (.var .local name) (countdownBody name)) (.return (.const returned)))
+    let holProgram : ProgHOL 64 := .dec (ofString name) .one (.const (BitVec.ofNat 64 count))
+      (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))
+    ∃ result final,
+      evalPanValueFfiProgSteps context primitive handler production.structs functions
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+count+3)
+        production.locals production.globals production.memory production.ffi program
+        (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (result,6*count+7) ∧
+      source.evaluateHOLFiniteState holProgram = (some (.returned (.val (.word returned))),final) ∧
+      controlSteps holProgram source ≤ 6*count+7 ∧
+      result = .returned (restorePanValueLocal (fun _ => none) name (production.locals name))
+        production.globals production.memory production.ffi [.word returned] := by
+  classical
+  let word := BitVec.ofNat 64 count
+  let entry := setVarHOLFinite (ofString name) (.val (.word word)) source
+  let productionEntry := {production with locals := updatePanValueMap production.locals name (.word word)}
+  let entryDec : DecidablePred entry.memaddrs := by change DecidablePred source.memaddrs; infer_instance
+  have entryRel : PanSemStateRelExec productionEntry entry.toExact := by
+    simpa [productionEntry,entry] using PanSemStateRelExec.updateLocals rel name nameRanged (.word word)
+  have entryRanged : PanSemStateRelExecRanged productionEntry := by
+    exact PanSemStateRelExecRanged.updateLocals ranged name (.word word) (by simp [PanValueByteRanged])
+  have initial : productionEntry.locals name = some (.word (BitVec.ofNat 64 count)) := by simp [productionEntry,word,updatePanValueMap]
+  have entryClock : count ≤ entry.clock := by simpa [entry,setVarHOLFinite] using clock
+  obtain ⟨result,final,bodyExec,bodyRun,bodyBound,resultEq⟩ := @counted_countdown_seq_return σ count productionEntry entry entryDec
+    entryRel entryRanged name nameRanged initial wordRange entryClock returned context primitive handler functions fuel
+  have bodyExec' : evalPanValueFfiProgSteps context primitive handler production.structs functions
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+count+2)
+      (updatePanValueMap production.locals name (.word word)) production.globals production.memory production.ffi
+      (.seq (.while (.var .local name) (countdownBody name)) (.return (.const returned)))
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (result,6*count+5) := by
+    simpa [productionEntry,panSemBitVec64MemoryAccess] using bodyExec
+  have initRun : evalPanSemStateExp production (.const word) = some (.word word) := by
+    simp [evalPanSemStateExp_64_eq_previous,evalPanValueExp]
+  obtain ⟨exec,run,bound⟩ := counted_decl_word production source final rel ranged name (.const word)
+    (by simp [ExpByteRanged]) word initRun context primitive handler functions (fuel+count+2)
+    (.seq (.while (.var .local name) (countdownBody name)) (.return (.const returned)))
+    (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))
+    result (some (.returned (.val (.word returned)))) (6*count+5) bodyExec' bodyRun bodyBound
+  have costEq : panValueExpStepCost (.const word : Exp (RiscV.Word 64)) + (6*count+5) + 1 = 6*count+7 := by
+    simp [panValueExpStepCost]; omega
+  have fuelEq : fuel+count+2+1 = fuel+count+3 := by omega
+  rw [costEq,fuelEq] at exec
+  rw [costEq] at bound
+  refine ⟨restorePanValueFfiLocal name (production.locals name) result,
+    {final with locals := HolFiniteMapExact.resVarEq final.locals (ofString name,source.locals.lookup (ofString name))},?_,?_,?_,?_⟩
+  · simpa [word] using exec
+  · simpa [word,expToHOL] using run
+  · simpa [word,expToHOL] using bound
+  · rw [resultEq]
+    simp [restorePanValueFfiLocal,productionEntry]
 
 /-- A fresh scalar declaration initializes the countdown local, and the
 resulting loop-and-return body has the compiler's supported shape. -/
