@@ -87,7 +87,10 @@ theorem singleTail_fullInit_riscvWithin {F : Type} {loc : Nat} {p callee : HolLo
           stackPost wordResult stackResult lens ∧
         ((LoopMachineOutcome result outcome ∧ finalFfi.ioEvents = sourcePost.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: sourcePost.ffi.ioEvents ∧
-            targetPost.stackMax.getD (targetPost.stackLimit+1) > targetPost.stackLimit)) := by
+            targetPost.stackMax.getD (targetPost.stackLimit+1) > targetPost.stackLimit)) ∧
+        WordSemStateFiniteExact.evaluate out
+          {word with code := compiledCode,locals := locals,clock := tailWordReplayLimit p ctxt labels compiledCode limit} =
+          (wordResult,targetPost) := by
   obtain ⟨outShape,localCode,outNoInstall,outFlat,outConvention,wordPost,wordResult,perm,selectedLocals,targetPost,
     wordRel,wordFfi,targetRel,targetRun,targetBound⟩ :=
     singleTail_compiledCode_word_bound ac count name alg regCount col shape calleeShape source sourcePost result
@@ -117,7 +120,8 @@ theorem singleTail_fullInit_riscvWithin {F : Type} {loc : Nat} {p callee : HolLo
       (tailWordReplayLimit p ctxt labels compiledCode limit-targetPost.clock)}
     sourcePost stackPost result wordResult stackResult outcome finalFfi targetFfi wordOutcome
     stackRelation classification events
-  exact ⟨outcome,ticks,finalMachine,finalFfi,stackPost,stackResult,tickBound,machineRun,events,classification,
-    wordPost,wordResult,perm,selectedLocals,targetPost,wordRel,wordFfi,targetRel,stackRelation,correspondence⟩
+  refine ⟨outcome,ticks,finalMachine,finalFfi,stackPost,stackResult,tickBound,machineRun,events,classification,
+    wordPost,wordResult,perm,selectedLocals,targetPost,wordRel,wordFfi,targetRel,stackRelation,correspondence,?_⟩
+  simpa only [tailWordReplayLimit] using targetRun
 
 end SteppedFlapjack.LoopToWordSteps

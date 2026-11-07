@@ -305,6 +305,7 @@ import SteppedFlapjack.StackToLabSteps.FullInitWordRiscV
 import SteppedFlapjack.StackToLabSteps.FullInitFilteredWordRiscV
 import SteppedFlapjack.LoopToWordSteps.FullInitTailRiscV
 import SteppedFlapjack.LoopToWordSteps.FullInitTailSetup
+import SteppedFlapjack.LoopToWordSteps.FullInitTailSafe
 import SteppedFlapjack.LoopToWordSteps.FullInitNativeSetup
 import SteppedFlapjack.LoopToWordSteps.FullInitMachineConstruct
 import SteppedFlapjack.LoopToWordSteps.FullInitNativeValidity

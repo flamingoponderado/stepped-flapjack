@@ -135,7 +135,7 @@ theorem FullInitTailSetup.run_bounded {F : Type} {loc : Nat} {p callee : HolLoop
     · have tie : LabToTarget.oracleTie setup.mc setup.machine setup.lab := by simpa only [same] using setup.tie
       have rel : LabToTarget.stateRel (setup.mc,setup.labCode,setup.labs,setup.pc) setup.lab setup.asm setup.machine := by
         simpa only [same] using setup.machineRel
-      obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,_,_,_,_,_,correspondence⟩ :=
+      obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,_,_,_,_,_,correspondence,_⟩ :=
         singleTail_fullInit_riscvWithin setup.ac setup.count setup.name setup.alg setup.regCount setup.col shape calleeShape
           source sourcePost result word setup.ctxt setup.labels setup.compiledCode setup.locals limit lookup premises complete
           setup.gc setup.noInstall setup.codeRel setup.codeDomain setup.localsRel setup.domain sourceBound setup.entry
@@ -150,7 +150,7 @@ theorem FullInitTailSetup.run_bounded {F : Type} {loc : Nat} {p callee : HolLoop
         · exact Or.inl good
         · exact Or.inr ⟨resource,events⟩
     · have buffer : setup.machineLab.codeBuffer = setup.lab.codeBuffer := filtered.codeBuffer
-      obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,_,_,_,_,_,correspondence⟩ :=
+      obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,_,_,_,_,_,correspondence,_⟩ :=
         singleTail_fullInit_filtered_riscvWithin setup.ac setup.count setup.name setup.alg setup.regCount setup.col shape calleeShape
           source sourcePost result word setup.ctxt setup.labels setup.compiledCode setup.locals limit lookup premises complete
           setup.gc setup.noInstall setup.codeRel setup.codeDomain setup.localsRel setup.domain sourceBound setup.entry
