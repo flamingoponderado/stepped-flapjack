@@ -92,14 +92,8 @@ theorem panTailDeclEntry_riscvWithin {F : Type}
       sizeOf init + 2 + (4 + sizeOf (compileProgExactHOLW (scalarDeclContext panContext panLocal) panCalleeInit) +
         sizeOf (compileProgExactHOLW (scalarDeclContext panContext panLocal) panBody) + sizeOf (compileProgExactHOLW (scalarDeclContext panContext panLocal) panTail)) * limit := by
     exact stepBound.trans (Nat.add_le_add_left (Nat.mul_le_mul_left _ panBound) _)
-  have correct : pcCompileCorrectAt (.dec panLocal .one panInitializer (.seq panCalleeInit (.seq (.while panCondition panBody) panTail)))
-      (callEntryStateHOLFinite panMiddle panLocals) :=
-    (pcCompileCorrectAt_iff_HOL _ _).mpr (pcCompileCorrect_all _ _)
-  obtain ⟨crepResult,crepPost,crepRun,postRel,_,_,resultRel⟩ :=
-    correct panResult panPost (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []})
-      panContext panRun panNonerror panStateRel panCodeRel panExcpRel panLocalsRel panLocalised
-  rw [calleeEq,calleeRun] at crepRun
-  obtain ⟨rfl,rfl⟩ := Prod.mk.inj crepRun
+  obtain ⟨postRel,resultRel⟩ := tailEntry_source_result _ _ _ _ _ _ _ _ _
+    panRun panNonerror panStateRel panCodeRel panExcpRel panLocalsRel panLocalised calleeEq calleeRun
   refine ⟨postRel,resultRel,?_⟩
   have machine := branchTailDecl_riscvWithin ctxt live name init initShape localName initializer initializerShape calleeInit calleeInitShape condition conditionShape
     body tail bodyShape tailShape source middle post result target word _ initRun found clock calleeRun complete
