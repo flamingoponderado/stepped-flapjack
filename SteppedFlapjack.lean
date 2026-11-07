@@ -59,6 +59,8 @@ import SteppedFlapjack.PanToCrepSteps.CountdownExecutableCompiler
 import SteppedFlapjack.PanToCrepSteps.ExecutableCountdownRiscV
 import SteppedFlapjack.PanToCrepSteps.ArtifactCountdownRiscV
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineConfig
+import SteppedFlapjack.PanToCrepSteps.CountdownMachineState
+import SteppedFlapjack.PanToCrepSteps.AlignedDomainIssue
 import SteppedFlapjack.PanToCrepSteps.ConcreteConfigCountdown
 import SteppedFlapjack.PanToCrepSteps.SingleEntrySourceEnvironment
 import SteppedFlapjack.PanToCrepSteps.CanonicalFfi
@@ -296,6 +298,7 @@ import SteppedFlapjack.StackToLabSteps.PipelineComposition
 import SteppedFlapjack.StackToLabSteps.RiscVPipeline
 import SteppedFlapjack.LabToTargetSteps.LabRiscVComposition
 import SteppedFlapjack.LabToTargetSteps.FilteredRiscV
+import SteppedFlapjack.LabToTargetSteps.DomainAlignmentBridge
 import SteppedFlapjack.StackRawCallSteps.LeafSteps
 import SteppedFlapjack.StackRawCallSteps.IfSteps
 import SteppedFlapjack.StackRawCallSteps.LoopSteps

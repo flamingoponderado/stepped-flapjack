@@ -19,7 +19,10 @@ open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps
 open SteppedFlapjack.WordAllocSteps SteppedFlapjack.LabToTargetSteps
 
 set_option maxHeartbeats 1000000 in
-/-- Actual filtered compilation and machine layout give the counted countdown bound. -/
+/-- Conditional countdown bound. The current byte-closure and aligned Stack
+layout premises are incompatible for a nonempty heap; see
+`countdown_goodInit_layout_incompatible`. The domain-alignment bridge must be
+integrated before this theorem can be instantiated. -/
 theorem filteredCompiled_countdown_riscv {σ : Type}
     (name : VarName) (count budget : Nat) (returned : BitVec 64)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
