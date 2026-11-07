@@ -1,5 +1,6 @@
 import Flapjack.Pancake.Proofs.PanToCrep.PcCompileCorrect.Assembly
 import SteppedFlapjack.PanToCrepSteps.ControlSteps
+import SteppedFlapjack.PanToCrepSteps.FrontendScalar
 
 /-! Quantitative correctness of Pancake while compilation. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -7,9 +8,10 @@ open Flapjack Flapjack.Pancake.PanLang
 
 /-- For a non-error source run, the actual compiled Crep while visits at most
 one plus the compiled body size per Pancake control visit. -/
-theorem while_compiled_steps {width : Nat} [NeZero width] {σ : Type}
+theorem while_compiled_steps_general {width : Nat} [NeZero width] {σ : Type}
     (condition : ExpHOL width) (body : ProgHOL width) (context : PanToCrepContextExact width)
-    (conditionShape : ScalarExpression context condition) (bodyShape : BranchProgram context body)
+    (conditionShape : FrontendScalar context condition)
+    (bodyShape : CrepSteps.StaticProgram (compileProgExactHOLW context body))
     (source sourceFinal : PanSemStateFiniteExact width σ) (result : Option (PanSemResultExact width))
     (target : CrepSemHOLState width σ)
     (run : source.evaluateHOLFiniteState (.while condition body) = (result,sourceFinal))
@@ -33,7 +35,7 @@ theorem while_compiled_steps {width : Nat} [NeZero width] {σ : Type}
     have hevalExact : @evalHOLExact width σ _ source.toExact
         (fun address => Classical.propDecidable (source.memaddrs address)) condition =
           some (.val (.word w)) := heval
-    obtain ⟨ce,compiled,direct⟩ := scalar_compile conditionShape
+    obtain ⟨ce,compiled⟩ := frontendScalar_compile conditionShape
     have hce : evalCrepSemHOLExp target ce = some (.word w) := by
       have h := @compileExpValRelHOL width σ _ source
         (fun address => Classical.propDecidable (source.memaddrs address)) context target
@@ -70,7 +72,7 @@ theorem while_compiled_steps {width : Nat} [NeZero width] {σ : Type}
           bodyCorrect bodyResult sourcePost (decClockCrepSemHOL target) context bodyRun bodyNonerror
             bodyState codeRel excpRel localsRel locs.2
         rw [targetRun]
-        have bodyBound := CrepSteps.branchProgram_static (branch_compile bodyShape) (decClockCrepSemHOL target)
+        have bodyBound := CrepSteps.staticProgram_steps bodyShape (decClockCrepSemHOL target)
         have bodyClock := evaluateHOLFiniteState_clock_le source.decClockHOLFinite body
         rw [bodyRun] at bodyClock
         have smaller : sourcePost.clock < clock := by
@@ -136,6 +138,26 @@ theorem while_compiled_steps {width : Nat} [NeZero width] {σ : Type}
       simp only [if_neg tz,Nat.add_zero]
       have positive := controlSteps_pos (.while condition body) source
       nlinarith
+
+
+/-- The direct-expression special case reuses the generalized while bound. -/
+theorem while_compiled_steps {width : Nat} [NeZero width] {σ : Type}
+    (condition : ExpHOL width) (body : ProgHOL width) (context : PanToCrepContextExact width)
+    (conditionShape : ScalarExpression context condition) (bodyShape : BranchProgram context body)
+    (source sourceFinal : PanSemStateFiniteExact width σ) (result : Option (PanSemResultExact width))
+    (target : CrepSemHOLState width σ)
+    (run : source.evaluateHOLFiniteState (.while condition body) = (result,sourceFinal))
+    (nonerror : result ≠ some .error)
+    (stateRel : panToCrepStateRelFiniteExact source target)
+    (codeRel : codeRelExactHOLW context source.code target.code)
+    (excpRel : panToCrepExcpRelFiniteExact context.eids source.eshapes)
+    (localsRel : panToCrepLocalsRelFiniteExact context source.locals target.locals)
+    (localised : localisedProgHOL (.while condition body) = true) :
+    CrepSteps.steps (compileProgExactHOLW context (.while condition body)) target ≤
+      (1 + sizeOf (compileProgExactHOLW context body)) * controlSteps (.while condition body) source := by
+  exact while_compiled_steps_general condition body context (frontendScalar_of_direct conditionShape)
+    (CrepSteps.branchProgram_staticShape (branch_compile bodyShape)) source sourceFinal result target
+    run nonerror stateRel codeRel excpRel localsRel localised
 
 
 /-- Frontend correctness supplies the related Crep run and the quantitative
