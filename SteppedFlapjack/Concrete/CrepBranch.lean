@@ -1,5 +1,6 @@
 import SteppedFlapjack.Concrete.CrepCode
 import SteppedFlapjack.CrepSteps.Defs
+import SteppedFlapjack.Concrete.SupportedSpan
 
 /-! The concrete comparison body executes at the Crep level. -/
 namespace SteppedFlapjack.Concrete
@@ -74,8 +75,84 @@ theorem branchCrepEntry_run :
   change (crepState branchingHOL).clock ≠ 0 at nonzero
   simp [lookupCodeFiniteHOL,branchCrepCode_lookup,crepReturnInfoNodupError,nonzero,branchCrepBody_run]
 
+/-- The comparison body has the same source run at the generated callee. -/
+theorem branching_callee_source :
+    (callEntryStateHOLFinite (loweredState branchingHOL) HolFiniteMapExact.empty).evaluateHOLFiniteState branchingHOL =
+      (some (.returned (.val (.word 7))),
+        (callEntryStateHOLFinite (loweredState branchingHOL) HolFiniteMapExact.empty).emptyLocalsHOLFinite) ∧
+    controlSteps branchingHOL (callEntryStateHOLFinite (loweredState branchingHOL) HolFiniteMapExact.empty) ≤ 6 := by
+  constructor
+  · rw [branchingHOL,PanSemStateFiniteExact.evaluateHOLFiniteState_ite]
+    simp [PanSemStateFiniteExact.evaluateHOLFiniteState_return,
+      evalHOLExact,shapeOfHOLExact,Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+  · simp [branchingHOL,controlSteps.eq_def,evalHOLExact,Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+    split <;> omega
+
+def branchCalleeContext : PanToCrepContextExact 64 :=
+  let caller := frontendContext branchingHOL
+  ctxtFcExactHOL caller.funcs caller.eids [] [] []
+
+def branchCrepCallee : CrepSemHOLState 64 Unit :=
+  decClockCrepSemHOL {crepState branchingHOL with locals := HolFiniteMapExact.empty.updateList []}
+
+/-- The general frontend span establishes the actual comparison callee run. -/
+theorem branching_callee_span :
+    ∃ targetResult targetFinal,
+      evalCrepSemHOLProgExact branchCrepCallee (compileProgExactHOLW branchCalleeContext branchingHOL) =
+        (targetResult,targetFinal) ∧
+      pcCompileCorrectResultRel branchCalleeContext
+        (callEntryStateHOLFinite (loweredState branchingHOL) HolFiniteMapExact.empty).emptyLocalsHOLFinite
+        targetFinal (some (.returned (.val (.word 7)))) targetResult ∧
+      SteppedFlapjack.CrepSteps.steps (compileProgExactHOLW branchCalleeContext branchingHOL) branchCrepCallee ≤
+        sizeOf (compileProgExactHOLW branchCalleeContext branchingHOL) * 6 := by
+  have relations := supported_callee_relations branching branching_supported
+  simp only [← branching_hol_eq] at relations
+  obtain ⟨_,_,stateRel,codeRel,excpRel,localsRel⟩ := relations
+  obtain ⟨sourceRun,sourceBound⟩ := branching_callee_source
+  have span := frontend_correct_with_steps branchCalleeContext branchingHOL (branching_frontend_shape _)
+    _ _ (some (.returned (.val (.word 7)))) branchCrepCallee 6
+    sourceRun (by simp) sourceBound stateRel codeRel excpRel localsRel
+  obtain ⟨targetResult,targetFinal,targetRun,_,_,_,resultRel,bound⟩ := span
+  exact ⟨targetResult,targetFinal,targetRun,resultRel,bound⟩
+
+/-- The generated comparison entry bound follows from the general span. -/
+theorem branching_entry_span :
+    ∃ targetFinal,
+      evalCrepSemHOLProgExact (crepState branchingHOL) branchCrepEntry =
+        (some (.return [.word 7]),targetFinal) ∧
+      SteppedFlapjack.CrepSteps.steps branchCrepEntry (crepState branchingHOL) ≤
+        3 + sizeOf (compileProgExactHOLW branchCalleeContext branchingHOL) * 6 := by
+  have relations := supported_callee_relations branching branching_supported
+  simp only [← branching_hol_eq] at relations
+  obtain ⟨lookup,_,_,_,_,_⟩ := relations
+  have lookup' : (crepState branchingHOL).code.lookup (entryName branchingHOL) =
+      some ([],compileProgExactHOLW branchCalleeContext branchingHOL) := lookup
+  have nonzero : (crepState branchingHOL).clock ≠ 0 := by
+    simp [crepState,concreteDeclCrepState,loweredState,noGlobalsLoweredPreCall,
+      exactState,singleEntrySourceTemplate,sourceTemplate]
+  obtain ⟨targetResult,targetFinal,targetRun,resultRel,bound⟩ := branching_callee_span
+  have returned : targetResult = some (.return [.word 7]) := by
+    simpa [pcCompileCorrectResultRel,flattenHOL] using resultRel
+  subst targetResult
+  refine ⟨targetFinal.emptyLocals,?_,?_⟩
+  · rw [branchCrepEntry,evalCrepSemHOLProgExact_seq_holShape,evalCrepSemHOLProgExact_skip]
+    simp only [if_true]
+    rw [evalCrepSemHOLProgExact_call_holShape]
+    simp [lookupCodeFiniteHOL,lookup',crepReturnInfoNodupError,nonzero,branchCrepCallee,decClockCrepSemHOL] at targetRun ⊢
+    rw [targetRun]
+    simp [flattenHOL]
+  · rw [branchCrepEntry,SteppedFlapjack.CrepSteps.steps_seq]
+    simp only [evalCrepSemHOLProgExact_skip]
+    rw [SteppedFlapjack.CrepSteps.steps_call_tail (entryName branchingHOL) [] _ [] [] _
+      (by simp) lookup' (by simp) (by simp) nonzero]
+    have one : SteppedFlapjack.CrepSteps.steps (.skip : CrepProgHOL 64) (crepState branchingHOL) = 1 :=
+      SteppedFlapjack.CrepSteps.steps_leaf _ _ rfl
+    rw [one]
+    simp only [branchCrepCallee, List.zip, List.zipWith] at bound ⊢
+    omega
+
 /-- Concrete source-to-Crep correspondence, obtained by directly checking
-both runs. The five-visit calculation is a cross-check for a future general span theorem. -/
+both runs. The five-visit calculation cross-checks the general span bound above. -/
 theorem branching_source_crep_correspondence
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :

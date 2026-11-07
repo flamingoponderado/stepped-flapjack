@@ -1,5 +1,5 @@
 import SteppedFlapjack.Concrete.SourceRuns
-import SteppedFlapjack.PanToCrepSteps.FrontendScalar
+import SteppedFlapjack.PanToCrepSteps.FrontendProgram
 
 /-! Connect source scalar syntax to the frontend's singleton-result expressions. -/
 namespace SteppedFlapjack.Concrete
@@ -38,39 +38,6 @@ theorem ScopeRelation.declare {scope : List VarName} {ctxt : PanToCrepContextExa
     · obtain ⟨reg,found⟩ := relation item member
       refine ⟨reg,?_⟩
       simpa [scalarDeclContext,HolFiniteMapExact.lookup_update,FUPDATE,same,Ne.symm same] using found
-
-/-- The generalized Pancake frontend fragment, tracking the compiler context
-through declarations and allowing nested control flow and comparisons. -/
-inductive FrontendProgram : PanToCrepContextExact 64 → ProgHOL 64 → Prop
-  | skip {ctxt} : FrontendProgram ctxt .skip
-  | break {ctxt} : FrontendProgram ctxt .break
-  | continue {ctxt} : FrontendProgram ctxt .continue
-  | tick {ctxt} : FrontendProgram ctxt .tick
-  | store {ctxt a v} : FrontendScalar ctxt a → FrontendScalar ctxt v → FrontendProgram ctxt (.store a v)
-  | assign {ctxt name e} (reg : Nat) : ctxt.vars.lookup name = some (.one,[reg]) →
-      FrontendScalar ctxt e → FrontendProgram ctxt (.assign .local name e)
-  | decl {ctxt name e body} : FrontendScalar ctxt e →
-      FrontendProgram (scalarDeclContext ctxt name) body → FrontendProgram ctxt (.dec name .one e body)
-  | seq {ctxt a b} : FrontendProgram ctxt a → FrontendProgram ctxt b → FrontendProgram ctxt (.seq a b)
-  | ite {ctxt e a b} : FrontendScalar ctxt e → FrontendProgram ctxt a → FrontendProgram ctxt b →
-      FrontendProgram ctxt (.ite e a b)
-  | while {ctxt e body} : FrontendScalar ctxt e → FrontendProgram ctxt body → FrontendProgram ctxt (.while e body)
-  | ret {ctxt e} : FrontendScalar ctxt e → FrontendProgram ctxt (.return e)
-
-/-- The previously established loop-free frontend shape is a subset of the
-generalized shape. Its direct-expression guarantees are retained separately. -/
-theorem frontendProgram_of_branch {ctxt : PanToCrepContextExact 64} {program : ProgHOL 64}
-    (shape : BranchProgram ctxt program) : FrontendProgram ctxt program := by
-  induction shape with
-  | skip => exact .skip
-  | «break» => exact .break
-  | «continue» => exact .continue
-  | tick => exact .tick
-  | «return» e => exact .ret (frontendScalar_of_direct e)
-  | assign name reg found e => exact .assign reg found (frontendScalar_of_direct e)
-  | store a v => exact .store (frontendScalar_of_direct a) (frontendScalar_of_direct v)
-  | seq a b iha ihb => exact .seq iha ihb
-  | ite e a b iha ihb => exact .ite (frontendScalar_of_direct e) iha ihb
 
 /-- All supported source programs have the generalized frontend shape. -/
 theorem supportedIn_frontend_shape {scope : List VarName} {program : Prog (RiscV.Word 64)}
@@ -112,6 +79,24 @@ theorem comparison_frontend_example (ctxt : PanToCrepContextExact 64) :
   constructor
   · exact .cmp .less (.const 0) (.const 1)
   · simp [compileExpExactHOLW]
+
+/-- Global lowering leaves the supported scalar expressions unchanged. -/
+theorem scalar_globals_fixed {scope : List VarName} {e : Exp (RiscV.Word 64)}
+    (scalar : Scalar scope e) (globals : PanGlobalsContextExact 64) :
+    compileExpExactHOL globals (expToHOL e) = expToHOL e := by
+  induction scalar <;> simp_all [expToHOL,compileExpExactHOL,compileExpExactHOLList]
+
+/-- Global lowering leaves every supported source body unchanged. -/
+theorem supportedIn_globals_fixed {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : SupportedIn scope program) (globals : PanGlobalsContextExact 64) :
+    compileProgExactHOL globals (progToHOL program) = progToHOL program := by
+  induction supported <;> simp_all [progToHOL,compileProgExactHOL,shapeToHOL] <;>
+    aesop (add safe scalar_globals_fixed)
+
+theorem supported_globals_fixed {program : Prog (RiscV.Word 64)}
+    (supported : Supported program) (globals : PanGlobalsContextExact 64) :
+    compileProgExactHOL globals (progToHOL program) = progToHOL program :=
+  supportedIn_globals_fixed supported globals
 
 /-- The phase-zero witnesses instantiate the generalized frontend shape. -/
 theorem countdown_frontend_shape (n : Nat) (ctxt : PanToCrepContextExact 64) :

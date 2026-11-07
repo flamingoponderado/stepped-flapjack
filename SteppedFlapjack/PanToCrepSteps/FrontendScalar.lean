@@ -29,6 +29,11 @@ theorem frontendScalar_of_direct {width : Nat} [NeZero width] {ctxt : PanToCrepC
   | op op a b iha ihb => exact .op op iha ihb
   | shift op a b iha ihb => exact .shift op iha ihb
 
+/-- General frontend scalars do not refer to global variables. -/
+theorem frontendScalar_localised {width : Nat} [NeZero width] {ctxt : PanToCrepContextExact width}
+    {e : ExpHOL width} (shape : FrontendScalar ctxt e) : localisedExpHOL e = true := by
+  induction shape <;> simp_all [localisedExpHOL,everyExpHOL,everyExpListHOL]
+
 /-- Every frontend scalar produces exactly one Crep expression. -/
 theorem frontendScalar_compile {width : Nat} [NeZero width] {ctxt : PanToCrepContextExact width} {e : ExpHOL width}
     (shape : FrontendScalar ctxt e) : ∃ value, compileExpExactHOLW ctxt e = ([value],.one) := by
