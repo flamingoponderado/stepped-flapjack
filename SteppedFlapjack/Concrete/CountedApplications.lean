@@ -46,18 +46,12 @@ theorem fixture_counted_span (program : Prog (RiscV.Word 64)) (supported : Suppo
   have words : WordLocals production.locals := by
     intro name value found
     simp [production,clockedFixtureProduction,executableState,singleEntrySourceProduction,sourceProduction] at found
-  have topOutside : ¬ source.memaddrs source.topAddr := by
-    simp [source,clockedFixtureSource,exactState,singleEntrySourceTemplate,sourceTemplate,ordinaryAddress,heapTop,heapEnd,
-      stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords,sourceBase]
-  have aligned : panGlobalsByteAlignedHOL source.topAddr := by
-    change BitVec.ofNat 64 ((heapTop.toNat / 8) * 8) = heapTop
-    decide
   have run' : evalPanValueFfiProgSteps context primitive handler production.structs [] production.baseAddress
       production.topAddress panSemBitVec64BytesInWord fuel production.locals production.globals production.memory production.ffi program
       (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
         some (.returned postLocals postGlobals postMemory postFfi [.word word],count) := by
     simpa [production,clockedFixtureProduction,panSemBitVec64MemoryAccess] using run
-  exact supported_counted_full_frontend program supported production source rel ranged words rfl rfl rfl rfl topOutside aligned rfl
+  exact supported_counted_full_frontend program supported production source rel ranged words rfl rfl rfl rfl
     context primitive handler [] fuel count n postLocals postGlobals postMemory postFfi word run' budget rfl
 private theorem natural_compiled_size (n : Nat) (range : n < 2^64) :
     sizeOf (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) = n+36 := by

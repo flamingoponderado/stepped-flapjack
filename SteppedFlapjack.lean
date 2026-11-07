@@ -1,3 +1,5 @@
+import SteppedFlapjack.Concrete.CrepErrorLeaf
+import SteppedFlapjack.Concrete.ScalarParity
 import SteppedFlapjack.Concrete.CountedApplications
 import SteppedFlapjack.Concrete.CountedShape
 import SteppedFlapjack.Concrete.CountedScalar

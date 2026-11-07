@@ -1,5 +1,6 @@
 import SteppedFlapjack.Concrete.SimpSupported
 import SteppedFlapjack.Concrete.FrontendState
+import SteppedFlapjack.Concrete.CodeIndependent
 import Flapjack.Pancake.Proofs.PanSimp.CompileCorrect
 import Flapjack.Pancake.Proofs.PanSimp.SeqAssocAssembly
 namespace SteppedFlapjack.Concrete
@@ -41,16 +42,18 @@ theorem supported_panSimp_same_state {σ : Type} (program : Prog (RiscV.Word 64)
     source.evaluateHOLFiniteState (progToHOL (panSimpProg program)) = source.evaluateHOLFiniteState (progToHOL program) := by
   rw [← supported_seqAssocHOL program supported,evaluateSeqAssocHOL]
   rw [evaluateHOLFiniteState_seq_line780,evaluateHOLFiniteState_skip]
+/-- Simplification preserves every supported result when its generated code
+is installed, including errors, and updates only the final code table. -/
 theorem supported_panSimp_run {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
- (source sourceFinal : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
- (sourceCode : source.code = HolFiniteMapExact.empty.update (entryName (progToHOL program),([],progToHOL program,.one)))
- (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal)) (nonerror : result ≠ some .error) :
- ∃ final, (panSimpSourceState program source).evaluateHOLFiniteState (progToHOL (panSimpProg program)) = (result,final) ∧
-   PanSimp.stateRel sourceFinal final final.code := by
-  have relation := supported_panSimp_state_rel program supported source sourceCode
-  have result := PanSimp.compileCorrectHOL (progToHOL program) source result sourceFinal (panSimpSourceState program source)
-    ⟨run,nonerror,relation⟩
-  simpa only [supported_seqAssocHOL program supported] using result
+    (source sourceFinal : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
+    (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal)) :
+    (panSimpSourceState program source).evaluateHOLFiniteState (progToHOL (panSimpProg program)) =
+      (result,{sourceFinal with code := (panSimpSourceState program source).code}) := by
+  have shape := (supported_panSimp program supported).1
+  have independent := supported_code_irrel shape source (panSimpSourceState program source).code
+  have same := supported_panSimp_same_state program supported source
+  rw [same,run] at independent
+  exact independent
 
 /-- The actual declaration-level simplifier installs exactly the supported
 simplified singleton body used by the later compiler passes. -/

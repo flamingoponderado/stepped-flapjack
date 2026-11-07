@@ -26,19 +26,13 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
   have words : WordLocals production.locals := by
     intro name value found
     simp [production,clockedFixtureProduction,executableState,singleEntrySourceProduction,sourceProduction] at found
-  have topOutside : ¬ source.memaddrs source.topAddr := by
-    simp [source,clockedFixtureSource,exactState,singleEntrySourceTemplate,sourceTemplate,ordinaryAddress,heapTop,heapEnd,
-      stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords,sourceBase]
-  have aligned : panGlobalsByteAlignedHOL source.topAddr := by
-    change BitVec.ofNat 64 ((heapTop.toNat / 8) * 8) = heapTop
-    decide
   have run : evalPanValueFfiProgSteps context primitive handler production.structs [] production.baseAddress production.topAddress
       panSemBitVec64BytesInWord 1 production.locals production.globals production.memory production.ffi program
       (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
         some (.normal production.locals production.globals production.memory production.ffi,1) := by
     simp [program,evalPanValueFfiProgSteps]
   obtain ⟨exit,final,outcome,target,bound⟩ := supported_counted_full_frontend_exit program supported production source rel ranged words
-    rfl rfl rfl rfl topOutside aligned rfl context primitive handler [] 1 1 1 _ run (by trivial) (by omega) rfl
+    rfl rfl rfl rfl context primitive handler [] 1 1 1 _ run (by trivial) (by omega) rfl
   cases outcome with
   | normal l g m f => exact ⟨final,target,bound⟩
 end SteppedFlapjack.Concrete
