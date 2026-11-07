@@ -73,33 +73,20 @@ source and native inputs for this supported fragment from a Lab initialization
 context. Its `withClock` variant derives a sufficient proof clock from the
 source budget without changing the counted run or RISC-V machine.
 `labInitialized_countdown_fromGeneral_withClock_riscv` applies that general
-theorem to a countdown with a separately proved exact source cost. `labInit_countdown_fromGeneral_riscv` constructs the backend directly from
-the Lab and Stack initializer guards and the compiler's native code and bitmap
-outputs. `labInit_countdown_canonicalSource_riscv` also constructs the
-matching singleton source environments, code table and executable FFI state.
-`labInit_countdown_riscvConfig_riscv` specializes the compiler to the real
-RISC-V configuration and proves its register, encoder, and compiled no-install
-conditions. `labInit_countdown_backendConfig_riscv` also derives the compiled
-Lab good-code guard from the original compiler proof and standard backend
-configuration. `labInit_countdown_memoryLayout_riscv` derives the Stack
-initializer from explicit register, bitmap and memory layout conditions using
-the original compiler proof. It derives the Lab compiler-oracle contract from the empty
-installation oracle and its label, position and FFI configuration. The remaining
-concrete initialization guards must be proved for an application.
+theorem to a countdown with a separately proved exact source cost.
+The aligned initialization construction keeps the byte-closed machine domain
+separate from the word-aligned Stack domain. The earlier results that required
+one nonempty domain to be both byte-closed and word-aligned have been removed;
+`unalignedLabInit_incompatible` proves why those assumptions conflict.
 
-The reusable concrete declaration example is kept in the library because it
-instantiates the actual global entry and serves as an end-to-end proof target.
-`concreteDecl_counted_riscv_bounded` gives its 13-step source execution a common
-machine-step bound covering both successful entry and a resource-limit
-outcome, parameterized by any supplied source budget of at least 13. The bound computes the entry bitmap, frame and source expressions
-from compiler output and still depends on oracle prefix costs. The theorem
-assumes matching source, native Stack, Lab and
-RISC-V initial states, native initialization and backend relations. It does
-not yet construct a concrete machine state or prove a general bridge from
-arbitrary counted source runs to `controlSteps`. The bounded theorem starts
-from an original state with empty locals, globals, exceptions and structures,
-and a concrete source code table; it constructs the lowered entry from that
-state. Earlier intermediate lemmas still use the reverse construction.
+The zero-count source has an independently proved nine-step execution and its
+actual compiler artifact has at most 1,040 bytes. A concrete RISC-V theorem
+with an explicit, independently fixed tick bound remains to be proved.
+
+The concrete declaration example includes an independently counted 13-step
+source execution. The previous machine theorem that selected part of its tick
+bound existentially has been removed; an independently fixed machine bound
+remains to be proved.
 
 The declaration chain currently duplicates much of the earlier tail-entry
 chain, including backend premises. Factoring the chain over supported callee

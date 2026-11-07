@@ -1,4 +1,8 @@
-import SteppedFlapjack.PanToCrepSteps.CountdownCanonicalSource
+import SteppedFlapjack.PanToCrepSteps.CountdownGeneralApplication
+import SteppedFlapjack.PanToCrepSteps.SourceFullInitInputs
+import SteppedFlapjack.LoopToWordSteps.FullInitMachineConstruct
+import SteppedFlapjack.PanToCrepSteps.SingleEntrySourceEnvironment
+import SteppedFlapjack.PanToCrepSteps.CanonicalFfi
 import Flapjack.Compiler.Encoders.RiscV.Target.Configuration
 import Flapjack.Pancake.Proofs.PanToTarget.AssemblyLabToTarget
 import Flapjack.RiscV.CorrectnessEncoding.Complete
