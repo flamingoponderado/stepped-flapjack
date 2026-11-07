@@ -3,7 +3,7 @@ import SteppedFlapjack.CrepSteps.Defs
 
 /-! The concrete comparison body executes at the Crep level. -/
 namespace SteppedFlapjack.Concrete
-open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
+open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
 
 def branchCrepBody : CrepProgHOL 64 :=
   .ite (.cmp .lower (.const 0) (.const 1)) (.return [.const 7]) (.return [.const 9])
@@ -73,5 +73,28 @@ theorem branchCrepEntry_run :
   rw [evalCrepSemHOLProgExact_call_holShape]
   change (crepState branchingHOL).clock ≠ 0 at nonzero
   simp [lookupCodeFiniteHOL,branchCrepCode_lookup,crepReturnInfoNodupError,nonzero,branchCrepBody_run]
+
+/-- Concrete source-to-Crep correspondence, obtained by directly checking
+both runs. The five-visit calculation is a cross-check for a future general span theorem. -/
+theorem branching_source_crep_correspondence
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
+    ∃ final,
+      panGlobalsStateRelHOLExact true emptyGlobalsContext (exactState branchingHOL)
+        (callEntryStateHOLFinite (loweredState branchingHOL) HolFiniteMapExact.empty) ∧
+      panToCrepStateRelFiniteExact (loweredState branchingHOL) (crepState branchingHOL) ∧
+      evalPanValueFfiProgSteps context primitive handler (executableState branchingHOL).structs []
+        (executableState branchingHOL).baseAddress (executableState branchingHOL).topAddress
+        panSemBitVec64BytesInWord 2 (executableState branchingHOL).locals
+        (executableState branchingHOL).globals (executableState branchingHOL).memory
+        (executableState branchingHOL).ffi branching
+        (memoryAccess := some (panSemBitVec64MemoryAccess (executableState branchingHOL))) =
+          some (.returned (executableState branchingHOL).locals (executableState branchingHOL).globals
+            (executableState branchingHOL).memory (executableState branchingHOL).ffi [.word 7],6) ∧
+      evalCrepSemHOLProgExact (crepState branchingHOL) branchCrepEntry = (some (.return [.word 7]),final) ∧
+      SteppedFlapjack.CrepSteps.steps branchCrepEntry (crepState branchingHOL) = 5 := by
+  obtain ⟨final,run⟩ := branchCrepEntry_run
+  exact ⟨final,branching_globals_related,crep_state_related _,branching_run context primitive handler,
+    run,branchCrepEntry_steps⟩
 
 end SteppedFlapjack.Concrete

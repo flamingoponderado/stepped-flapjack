@@ -2,11 +2,18 @@ import SteppedFlapjack.Concrete.FrontendState
 import Flapjack.Pancake.CrepInline.InlineRouteBridge
 
 /-! Kernel-checked frontend compiler outputs for the concrete witnesses. -/
-set_option linter.unusedSimpArgs false
-
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
 
+macro "simp_crep_code" : tactic => `(tactic| simp [compileToCrepExactHOLW,functionsHOL,compFuncExactHOLW,crepVarsHOL,
+    compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,
+    branchingHOL,countdownHOL,countdownBodyHOL,fpermHOL,compileProgExactHOL,compileExpExactHOL,
+    compileExpExactHOLList,compileExpExactHOLW,compileIfExactHOLW,compileReturnExactHOLW,
+    compileWhileExactHOLW,compileDecExactHOLW,compileLocalAssignExactHOLW,nestedDecsHOL,
+    panToCrepMakeVmapHOLExact,mkCtxtExactHOL,entryName,FUPDATE,cexpHeads,
+    distinctListsHol,crepExpVarsW,crepExpOfHOL,crepNestedSeqHOL,crepExpVars,crepExpVars.crepExpVarsList])
+
+set_option linter.unusedSimpArgs false in
 /-- The complete generated Crep function list for the comparison witness. -/
 theorem branching_crep_code : crepPrograms branchingHOL =
     [(ofString "main",[],.seq .skip (.call none (entryName branchingHOL) [])),
@@ -15,14 +22,9 @@ theorem branching_crep_code : crepPrograms branchingHOL =
   unfold crepPrograms declarations
   rw [compileProgDeclsHOLW, singleEntry_inline_selection_empty, CrepInlineRoute.compileInlTopHOLExact_nil,
     singleEntry_compileTop]
-  simp [compileToCrepExactHOLW,functionsHOL,compFuncExactHOLW,crepVarsHOL,
-    compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,
-    branchingHOL,countdownHOL,countdownBodyHOL,fpermHOL,compileProgExactHOL,compileExpExactHOL,
-    compileExpExactHOLList,compileExpExactHOLW,compileIfExactHOLW,compileReturnExactHOLW,
-    compileWhileExactHOLW,compileDecExactHOLW,compileLocalAssignExactHOLW,nestedDecsHOL,
-    panToCrepMakeVmapHOLExact,mkCtxtExactHOL,entryName,FUPDATE,cexpHeads,
-    distinctListsHol,crepExpVarsW,crepExpOfHOL,crepNestedSeqHOL,crepExpVars,crepExpVars.crepExpVarsList]
+  simp_crep_code
 
+set_option linter.unusedSimpArgs false in
 /-- The complete generated Crep function list for any countdown constant. -/
 theorem countdown_crep_code (n : Nat) : crepPrograms (countdownHOL n) =
     [(ofString "main",[],.seq .skip (.call none (entryName (countdownHOL n)) [])),
@@ -34,12 +36,6 @@ theorem countdown_crep_code (n : Nat) : crepPrograms (countdownHOL n) =
   unfold crepPrograms declarations
   rw [compileProgDeclsHOLW, singleEntry_inline_selection_empty, CrepInlineRoute.compileInlTopHOLExact_nil,
     singleEntry_compileTop]
-  simp [compileToCrepExactHOLW,functionsHOL,compFuncExactHOLW,crepVarsHOL,
-    compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,
-    branchingHOL,countdownHOL,countdownBodyHOL,fpermHOL,compileProgExactHOL,compileExpExactHOL,
-    compileExpExactHOLList,compileExpExactHOLW,compileIfExactHOLW,compileReturnExactHOLW,
-    compileWhileExactHOLW,compileDecExactHOLW,compileLocalAssignExactHOLW,nestedDecsHOL,
-    panToCrepMakeVmapHOLExact,mkCtxtExactHOL,entryName,FUPDATE,cexpHeads,
-    distinctListsHol,crepExpVarsW,crepExpOfHOL,crepNestedSeqHOL,crepExpVars,crepExpVars.crepExpVarsList]
+  simp_crep_code
 
 end SteppedFlapjack.Concrete
