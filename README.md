@@ -79,7 +79,9 @@ outputs. `labInit_countdown_canonicalSource_riscv` also constructs the
 matching singleton source environments, code table and executable FFI state.
 `labInit_countdown_riscvConfig_riscv` specializes the compiler to the real
 RISC-V configuration and proves its register, encoder, and compiled no-install
-conditions. It derives the Lab compiler-oracle contract from the empty
+conditions. `labInit_countdown_backendConfig_riscv` also derives the compiled
+Lab good-code guard from the original compiler proof and standard backend
+configuration. It derives the Lab compiler-oracle contract from the empty
 installation oracle and its label, position and FFI configuration. The remaining
 concrete initialization guards must be proved for an application.
 
