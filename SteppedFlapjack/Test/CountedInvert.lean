@@ -1,3 +1,5 @@
+import SteppedFlapjack.Concrete.CountedShape
+import SteppedFlapjack.Concrete.BranchingLoop
 import SteppedFlapjack.Concrete.CountedScalar
 import SteppedFlapjack.PanToCrepSteps.CountedInvert
 import SteppedFlapjack.Concrete.SourceRuns
@@ -82,4 +84,14 @@ example : ∃ word,
   have result := counted_scalar_initializer_invert p (exactState branchingHOL) (source_related _) (source_ranged _) words
     (.const 2) (Scalar.const (scope := []) _) (by simp [ExpByteRanged]) (.word 2) 1 run
   simpa [expToHOL] using result
+/-- The general outcome classification applies to the two-branch loop run. -/
+example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
+    BasicControl (.returned (executableState (progToHOL branchingLoop)).locals
+      (executableState (progToHOL branchingLoop)).globals (executableState (progToHOL branchingLoop)).memory
+      (executableState (progToHOL branchingLoop)).ffi [.word 7]) := by
+  exact supported_counted_basic context primitive handler (executableState (progToHOL branchingLoop)).structs []
+    (executableState (progToHOL branchingLoop)).baseAddress (executableState (progToHOL branchingLoop)).topAddress
+    (some (panSemBitVec64MemoryAccess (executableState (progToHOL branchingLoop)))) 7 branchingLoop_supported.1
+    _ _ _ _ _ 23 (branchingLoop_source_run context primitive handler)
 end SteppedFlapjack.Test
