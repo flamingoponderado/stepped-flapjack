@@ -43,9 +43,9 @@ def countdown (n : Nat) : Prog (RiscV.Word 64) :=
   .dec "x" .one (.const (BitVec.ofNat 64 n))
     (.seq .skip (.seq (.while (.var .local "x") (PanToCrepSteps.countdownBody "x")) (.return (.const 0))))
 
-/-- A parameter-free conditional that takes the first branch. -/
+/-- A parameter-free comparison whose conditional takes the first branch. -/
 def branching : Prog (RiscV.Word 64) :=
-  .ite (.const 1) (.return (.const 7)) (.return (.const 9))
+  .ite (.cmp .lower (.const 0) (.const 1)) (.return (.const 7)) (.return (.const 9))
 
 theorem countdown_supported (n : Nat) : Supported (countdown n) := by
   exact .decl "x" (.const _) (.seq .skip (.seq
@@ -53,6 +53,6 @@ theorem countdown_supported (n : Nat) : Supported (countdown n) := by
       (.op .sub (.local "x" (by simp)) (.const _)))) (.ret (.const _))))
 
 theorem branching_supported : Supported branching := by
-  exact .ite (.const _) (.ret (.const _)) (.ret (.const _))
+  exact .ite (.cmp .lower (.const _) (.const _)) (.ret (.const _)) (.ret (.const _))
 
 end SteppedFlapjack.Concrete

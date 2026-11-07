@@ -1,0 +1,7 @@
+# Phase-one fragment interface
+
+The phase-one span theorem will be stated for `Supported` source programs. Its compiler-context `FrontendProgram` and `FrontendScalar` shapes are internal proof interfaces: the fact that `FrontendProgram` also accepts stores, breaks, continues, and ticks does not extend the phase-one theorem to those constructors. The supported-fragment bridge determines the cases the span proof must handle.
+
+`ScalarExpression` and `BranchProgram` currently identify a narrower direct-expression fragment needed by the existing Crep-to-Loop and machine proofs. Their embedding in the frontend shapes permits reuse; it does not establish that comparison expressions compile without auxiliary Loop instructions. In phase two, prove the Crep-to-Loop bound for the generalized frontend output, including comparison-generated instructions. Once the downstream theorems and their concrete applications use that bound, migrate the existing consumers and delete the superseded branch-specific predicates and proofs in the same change. Do not retain parallel proof chains.
+
+The comparison-bearing conditional in the source witnesses exercises a comparison at phase zero. The stronger declared-variable loop with branching and the unprefixed countdown remain tracked in issue 21; their exact counted runs and applications must be proved before they are used as span witnesses. The initial phase-one witness set is not a claim of coverage for the full init-e guest.

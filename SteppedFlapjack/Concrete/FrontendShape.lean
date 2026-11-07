@@ -14,16 +14,36 @@ def ScopeRelation (scope : List VarName) (ctxt : PanToCrepContextExact 64) : Pro
 The direct subset also supports the existing no-auxiliary-code Loop proofs;
 comparisons may generate additional Loop code in a later pass. -/
 inductive FrontendScalar (ctxt : PanToCrepContextExact 64) : ExpHOL 64 → Prop
-  | direct {e} : ScalarExpression ctxt e → FrontendScalar ctxt e
+  | const (value) : FrontendScalar ctxt (.const value)
+  | local (name reg) : ctxt.vars.lookup name = some (.one,[reg]) → FrontendScalar ctxt (.var .local name)
+  | baseAddr : FrontendScalar ctxt .baseAddr
+  | topAddr : FrontendScalar ctxt .topAddr
+  | bytesInWord : FrontendScalar ctxt .bytesInWord
   | op (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.op operator [a,b])
   | cmp (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.cmp operator a b)
   | shift (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.shift operator a b)
+
+/-- The existing direct-expression fragment embeds into the full scalar grammar. -/
+theorem frontendScalar_of_direct {ctxt : PanToCrepContextExact 64} {e : ExpHOL 64}
+    (shape : ScalarExpression ctxt e) : FrontendScalar ctxt e := by
+  induction shape with
+  | const v => exact .const v
+  | «local» name reg found => exact .local name reg found
+  | baseAddr => exact .baseAddr
+  | topAddr => exact .topAddr
+  | bytesInWord => exact .bytesInWord
+  | op op a b iha ihb => exact .op op iha ihb
+  | shift op a b iha ihb => exact .shift op iha ihb
 
 /-- Every frontend scalar produces exactly one Crep expression. -/
 theorem frontendScalar_compile {ctxt : PanToCrepContextExact 64} {e : ExpHOL 64}
     (shape : FrontendScalar ctxt e) : ∃ value, compileExpExactHOLW ctxt e = ([value],.one) := by
   induction shape with
-  | direct h => obtain ⟨v,compiled,_⟩ := scalar_compile h; exact ⟨v,compiled⟩
+  | const v => exact ⟨.const v,by simp [compileExpExactHOLW]⟩
+  | «local» name reg found => exact ⟨.var reg,by simp [compileExpExactHOLW,found]⟩
+  | baseAddr => exact ⟨.baseAddr,by simp [compileExpExactHOLW]⟩
+  | topAddr => exact ⟨.topAddr,by simp [compileExpExactHOLW]⟩
+  | bytesInWord => exact ⟨.const 8,by simp [compileExpExactHOLW]⟩
   | op op ha hb iha ihb =>
     obtain ⟨a,ca⟩ := iha
     obtain ⟨b,cb⟩ := ihb
@@ -69,10 +89,10 @@ theorem scalar_frontend_shape {scope : List VarName} {ctxt : PanToCrepContextExa
     (relation : ScopeRelation scope ctxt) {e : Exp (RiscV.Word 64)} (scalar : Scalar scope e) :
     FrontendScalar ctxt (expToHOL e) := by
   induction scalar with
-  | const v => simpa [expToHOL] using (FrontendScalar.direct (ctxt := ctxt) (.const v))
+  | const v => simpa [expToHOL] using (FrontendScalar.const (ctxt := ctxt) v)
   | «local» name member =>
     obtain ⟨reg,found⟩ := relation name member
-    simpa [expToHOL] using (FrontendScalar.direct (.local (ofString name) reg found))
+    simpa [expToHOL] using (FrontendScalar.local (ofString name) reg found)
   | op op a b iha ihb => simpa [expToHOL] using (FrontendScalar.op op iha ihb)
   | cmp op a b iha ihb => simpa [expToHOL] using (FrontendScalar.cmp op iha ihb)
   | shift op a b iha ihb => simpa [expToHOL] using (FrontendScalar.shift op iha ihb)
@@ -119,11 +139,11 @@ theorem frontendProgram_of_branch {ctxt : PanToCrepContextExact 64} {program : P
   | «break» => exact .break
   | «continue» => exact .continue
   | tick => exact .tick
-  | «return» e => exact .ret (.direct e)
-  | assign name reg found e => exact .assign reg found (.direct e)
-  | store a v => exact .store (.direct a) (.direct v)
+  | «return» e => exact .ret (frontendScalar_of_direct e)
+  | assign name reg found e => exact .assign reg found (frontendScalar_of_direct e)
+  | store a v => exact .store (frontendScalar_of_direct a) (frontendScalar_of_direct v)
   | seq a b iha ihb => exact .seq iha ihb
-  | ite e a b iha ihb => exact .ite (.direct e) iha ihb
+  | ite e a b iha ihb => exact .ite (frontendScalar_of_direct e) iha ihb
 
 /-- All supported source programs have the generalized frontend shape. -/
 theorem supportedIn_frontend_shape {scope : List VarName} {program : Prog (RiscV.Word 64)}
@@ -163,7 +183,7 @@ theorem comparison_frontend_example (ctxt : PanToCrepContextExact 64) :
     compileExpExactHOLW ctxt (.cmp .less (.const 0) (.const 1) : ExpHOL 64) =
       ([.cmp .less (.const 0) (.const 1)],.one) := by
   constructor
-  · exact .cmp .less (.direct (.const 0)) (.direct (.const 1))
+  · exact .cmp .less (.const 0) (.const 1)
   · simp [compileExpExactHOLW]
 
 /-- The phase-zero witnesses instantiate the generalized frontend shape. -/
