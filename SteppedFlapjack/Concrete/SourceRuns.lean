@@ -37,14 +37,18 @@ theorem countdown_run (n : Nat) (range : n < 2^64)
           some (result,6*n+9) ∧
       (exactState (countdownHOL n)).evaluateHOLFiniteState (countdownHOL n) =
         (some (.returned (.val (.word 0))),final) ∧
-      controlSteps (countdownHOL n) (exactState (countdownHOL n)) ≤ 6*n+9 := by
+      controlSteps (countdownHOL n) (exactState (countdownHOL n)) ≤ 6*n+9 ∧
+      result = .returned (restorePanValueLocal (fun _ => none) "x"
+        ((executableState (countdownHOL n)).locals "x"))
+        (executableState (countdownHOL n)).globals (executableState (countdownHOL n)).memory
+        (executableState (countdownHOL n)).ffi [.word 0] := by
   have run := counted_decl_countdown_return n (executableState (countdownHOL n)) (exactState (countdownHOL n))
     (source_related _) (source_ranged _) "x" countdown_name_ranged range (by
       change n ≤ 2^64
       omega) 0 ctxt context primitive handler [] 0
-  obtain ⟨result,final,exec,hol,bound,_,_⟩ := run
+  obtain ⟨result,final,exec,hol,bound,_,resultEq⟩ := run
   exact ⟨result,final,by simpa [countdown] using exec,by simpa [countdownHOL] using hol,
-    by simpa [countdownHOL] using bound⟩
+    by simpa [countdownHOL] using bound,resultEq⟩
 
 /-- The constant conditional takes its first branch in four counted steps. -/
 theorem branching_run
