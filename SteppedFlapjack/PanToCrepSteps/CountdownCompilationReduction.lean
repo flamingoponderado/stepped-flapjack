@@ -51,4 +51,33 @@ theorem countdown_artifact_success_iff_removeLabels (name : MlString) (initial r
   | none => simp [Backend.attachBitmaps]
   | some result => cases result; simp [Backend.attachBitmaps]
 
+set_option maxHeartbeats 1000000 in
+/-- The artifact and its byte-size bound are equivalent to the concrete
+label-removal result and the size of its flattened program. -/
+theorem countdown_artifact_bounded_iff_removeLabels
+    (name : MlString) (initial returned : BitVec 64) (limit : Nat) :
+    (∃ bytes final, compileProgAsmFast countdownRiscVBackend riscvConfig
+      (singleEntryProgram (ofString "main") (.dec name .one (.const initial) (.seq .skip (.seq
+        (.while (.var .local name) (.assign .local name (.op .sub [.var .local name,.const 1])))
+        (.return (.const returned)))))) = some (bytes,[4],final) ∧ bytes.length ≤ limit) ↔
+    ∃ code labs, LabToTarget.removeLabels 5 riscvConfig 0 .ln []
+      (LabFilter.filterSkip (countdownStackLabCode name initial returned countdownRiscVBackend)) =
+        some (code,labs) ∧ (LabToTarget.progToBytes code).length ≤ limit := by
+  have hnames : LabToTarget.findFfiNames
+      (LabFilter.filterSkip (countdownStackLabCode name initial returned countdownRiscVBackend)) = [] := by
+    rw [LabToTarget.FilterSkip.findFfiNamesFilterSkip, countdown_lab_noFfi]
+  have hffi : countdownRiscVBackend.labConf.ffiNames = none := rfl
+  have hclock : countdownRiscVBackend.labConf.initClock = 5 := rfl
+  have hpos : countdownRiscVBackend.labConf.pos = 0 := rfl
+  have hlabels : countdownRiscVBackend.labConf.labels = .ln := rfl
+  rw [countdown_artifact_eq_lab]
+  simp only [LabToTarget.compile, LabToTarget.compileLab, hnames, hffi, hclock, hpos, hlabels]
+  cases h : LabToTarget.removeLabels 5 riscvConfig 0 .ln []
+      (LabFilter.filterSkip (countdownStackLabCode name initial returned countdownRiscVBackend)) with
+  | none => simp [Backend.attachBitmaps]
+  | some result =>
+    rcases result with ⟨code,labs⟩
+    cases hsh : LabToTarget.getShmemInfo code 0 [] [] with
+    | mk names memory => simp [Backend.attachBitmaps, hsh]
+
 end SteppedFlapjack.PanToCrepSteps
