@@ -1,4 +1,7 @@
 import SteppedFlapjack
+import SteppedFlapjack.Concrete.Fragment
+import SteppedFlapjack.Concrete.SourceState
+import SteppedFlapjack.Concrete.SourceRuns
 
 /-! Axiom audit: fails the build if any declaration in a `SteppedFlapjack`
 module depends on an axiom other than `propext`, `Classical.choice` and
