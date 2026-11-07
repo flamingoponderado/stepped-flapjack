@@ -101,4 +101,40 @@ example : ∃ final,
   refine ⟨final,?_,?_⟩
   · simpa [badShift_simp,badShift_simp_source,crepStateFrom,loweredStateFrom,crepState,loweredState] using run
   · simpa [badShift_simp,badShift_simp_source,crepStateFrom,loweredStateFrom,crepState,loweredState] using badShift_target_steps
+
+/-- The general all-outcomes theorem applies to an actual source error. -/
+example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
+    let source := clockedFixtureSource badShift 1
+    let body := progToHOL (panSimpProg badShift)
+    let entry : CrepProgHOL 64 := .seq .skip (.call none (entryName body) [])
+    ∃ final, evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState badShift source) body) entry = (some .error,final) ∧
+      CrepSteps.steps entry (crepStateFrom (panSimpSourceState badShift source) body) ≤ 34659 := by
+  let source := clockedFixtureSource badShift 1
+  let production := clockedFixtureProduction badShift 1
+  let _ : DecidablePred source.memaddrs := by change DecidablePred ordinaryAddress; infer_instance
+  have rel : PanSemStateRelExec production source.toExact := by
+    obtain ⟨a,b,c,d,e,f,g,h,_,j,k,l,m⟩ := source_related (progToHOL badShift)
+    exact ⟨a,b,c,d,e,f,g,h,rfl,j,k,l,m⟩
+  have ranged : PanSemStateRelExecRanged production :=
+    PanSemStateRelExecRanged.setClock (source_ranged (progToHOL badShift)) 1
+  have words : WordLocals production.locals := by
+    intro name value found
+    simp [production,clockedFixtureProduction,executableState,singleEntrySourceProduction,sourceProduction] at found
+  have run := badShift_source_run context primitive handler
+  have run' : evalPanValueFfiProgSteps context primitive handler production.structs [] production.baseAddress
+      production.topAddress panSemBitVec64BytesInWord 1 production.locals production.globals production.memory production.ffi badShift
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
+        some (.error production.locals production.globals production.memory production.ffi,0) := by
+    simpa [production,clockedFixtureProduction,panSemBitVec64MemoryAccess] using run
+  obtain ⟨exit,final,outcome,target,bound⟩ := supported_counted_full_frontend_uniform badShift badShift_supported production source
+    rel ranged words rfl rfl rfl rfl context primitive handler [] 1 0 1 _ run' (by omega) rfl
+  cases outcome with
+  | error l g m f =>
+    have size : sizeOf (compileProgExactHOLW
+        (ctxtFcExactHOL (frontendContext (progToHOL (panSimpProg badShift))).funcs
+          (frontendContext (progToHOL (panSimpProg badShift))).eids [] [] [])
+        (progToHOL (panSimpProg badShift))) = 76 := by decide +kernel
+    refine ⟨final,target,?_⟩
+    simpa [size] using bound
 end SteppedFlapjack.Concrete

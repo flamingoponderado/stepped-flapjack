@@ -32,7 +32,7 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
         some (.normal production.locals production.globals production.memory production.ffi,1) := by
     simp [program,evalPanValueFfiProgSteps]
   obtain ⟨exit,final,outcome,target,bound⟩ := supported_counted_full_frontend_exit program supported production source rel ranged words
-    rfl rfl rfl rfl context primitive handler [] 1 1 1 _ run (by trivial) (by omega) rfl
+    rfl rfl rfl rfl context primitive handler [] 1 1 1 _ run (by omega) rfl
   cases outcome with
-  | normal l g m f => exact ⟨final,target,bound⟩
+  | normal l g m f => exact ⟨final,target,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
 end SteppedFlapjack.Concrete

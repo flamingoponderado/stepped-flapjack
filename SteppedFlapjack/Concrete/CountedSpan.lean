@@ -59,8 +59,15 @@ inductive CountedEntryExit {σ : Type} : PanValueFfiControlResult (RiscV.Word 64
   | returned (locals globals : VarName → Option (PanValue (RiscV.Word 64)))
       (memory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (ffi : FfiState σ) (word : BitVec 64) :
       CountedEntryExit (.returned locals globals memory ffi [.word word]) (some word)
+  | error (locals globals : VarName → Option (PanValue (RiscV.Word 64)))
+      (memory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (ffi : FfiState σ) :
+      CountedEntryExit (.error locals globals memory ffi) none
 
-/-- Every non-error counted body run reaches the generated entry within a
+/-- Error runs may require up to three compiled visits per source visit. -/
+def countedFrontendFactor {σ : Type} (result : PanValueFfiControlResult (RiscV.Word 64) σ) : Nat :=
+  1 + 2 * countedErrorBonus result
+
+/-- Every counted body run reaches the generated entry within a
 concrete code-derived bound. The exit relation records whether the function
 returned a word or fell through; the generated call reports fallthrough as
 an error, just as the source function-call semantics does. -/
@@ -79,7 +86,7 @@ theorem supported_counted_full_frontend_exit {σ : Type}
       production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
       production.locals production.globals production.memory production.ffi program
       (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (result,count))
-    (nonerror : CountedNonError result) (countBound : count ≤ n) (clock : source.clock = n) :
+    (countBound : count ≤ n) (clock : source.clock = n) :
     let body := progToHOL (panSimpProg program)
     let caller := frontendContext body
     let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
@@ -89,7 +96,7 @@ theorem supported_counted_full_frontend_exit {σ : Type}
       evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState program source) body) entry =
         (bodyExitEntry exit,targetFinal) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program source) body) ≤
-        3 + sizeOf (compileProgExactHOLW callee body) *
+        3 + countedFrontendFactor result * sizeOf (compileProgExactHOLW callee body) *
           (sizeOf (compileProgExactHOLW callee body) * (n+1)) := by
   let simplified := panSimpProg program
   let body := progToHOL simplified
@@ -110,14 +117,63 @@ theorem supported_counted_full_frontend_exit {σ : Type}
     have span := supported_entry_crep_exit_from simplified shape simplifiedSource sourceLocals sourceGlobals sourceStructs sourceExceptions
       lowerFinal none (sizeOf (compileProgExactHOLW callee body) * (n+1)) lowerRun control
     obtain ⟨targetFinal,targetRun,bound⟩ := span
-    exact ⟨none,targetFinal,.normal l g m f,targetRun,bound⟩
+    exact ⟨none,targetFinal,.normal l g m f,targetRun,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
   | returned l g m f word final finalRel finalRanged finalWords =>
     have span := supported_entry_crep_exit_from simplified shape simplifiedSource sourceLocals sourceGlobals sourceStructs sourceExceptions
       lowerFinal (some word) (sizeOf (compileProgExactHOLW callee body) * (n+1)) lowerRun control
     obtain ⟨targetFinal,targetRun,bound⟩ := span
-    exact ⟨some word,targetFinal,.returned l g m f word,targetRun,bound⟩
+    exact ⟨some word,targetFinal,.returned l g m f word,targetRun,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
   | error l g m f final finalRel finalRanged finalWords =>
-    exact False.elim nonerror
+    have span := supported_entry_crep_error_from simplified shape simplifiedSource sourceLocals sourceGlobals sourceStructs sourceExceptions
+      lowerFinal (sizeOf (compileProgExactHOLW callee body) * (n+1)) lowerRun control
+    obtain ⟨targetFinal,targetRun,bound⟩ := span
+    exact ⟨none,targetFinal,.error l g m f,targetRun,by simpa [countedFrontendFactor,countedErrorBonus,bodyExitEntry] using bound⟩
+
+/-- A result-independent bound calculated from the generated code and source budget. -/
+theorem supported_counted_full_frontend_uniform {σ : Type}
+    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
+    [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
+    (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
+    (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
+    (structs : source.structs = []) (exceptions : source.eshapes = HolFiniteMapExact.empty)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel count n : Nat)
+    (result : PanValueFfiControlResult (RiscV.Word 64) σ)
+    (run : evalPanValueFfiProgSteps context primitive handler production.structs functions
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+      production.locals production.globals production.memory production.ffi program
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (result,count))
+    (countBound : count ≤ n) (clock : source.clock = n) :
+    let body := progToHOL (panSimpProg program)
+    let caller := frontendContext body
+    let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
+    let entry : CrepProgHOL 64 := .seq .skip (.call none (entryName body) [])
+    ∃ exit targetFinal,
+      CountedEntryExit result exit ∧
+      evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState program source) body) entry =
+        (bodyExitEntry exit,targetFinal) ∧
+      CrepSteps.steps entry (crepStateFrom (panSimpSourceState program source) body) ≤
+        3 + 3 * sizeOf (compileProgExactHOLW callee body) *
+          (sizeOf (compileProgExactHOLW callee body) * (n+1)) := by
+  obtain ⟨exit,targetFinal,outcome,targetRun,bound⟩ := supported_counted_full_frontend_exit
+    program supported production source rel ranged words locals globals structs exceptions context primitive handler
+    functions fuel count n result run countBound clock
+  refine ⟨exit,targetFinal,outcome,targetRun,?_⟩
+  have factorBound : countedFrontendFactor result ≤ 3 := by
+    cases result <;> simp [countedFrontendFactor,countedErrorBonus]
+  have scaled := Nat.mul_le_mul_right
+    (sizeOf (compileProgExactHOLW (ctxtFcExactHOL
+      (frontendContext (progToHOL (panSimpProg program))).funcs
+      (frontendContext (progToHOL (panSimpProg program))).eids [] [] []) (progToHOL (panSimpProg program))) *
+      (n+1))
+    (Nat.mul_le_mul_right
+      (sizeOf (compileProgExactHOLW (ctxtFcExactHOL
+        (frontendContext (progToHOL (panSimpProg program))).funcs
+        (frontendContext (progToHOL (panSimpProg program))).eids [] [] []) (progToHOL (panSimpProg program))))
+      factorBound)
+  exact bound.trans (Nat.add_le_add_left scaled 3)
 
 /-- A counted source run bounded by `n` reaches the actual generated entry
 point within a bound calculated from `n` and the generated function body. -/
@@ -151,9 +207,9 @@ theorem supported_counted_full_frontend {σ : Type}
           (sizeOf (compileProgExactHOLW callee body) * (n+1)) := by
   obtain ⟨exit,targetFinal,outcome,targetRun,bound⟩ := supported_counted_full_frontend_exit program supported production source
     rel ranged words locals globals structs exceptions context primitive handler functions fuel count n
-    (.returned postLocals postGlobals postMemory postFfi [.word word]) run (by trivial) countBound clock
+    (.returned postLocals postGlobals postMemory postFfi [.word word]) run countBound clock
   cases outcome with
   | returned l g m f value =>
-    exact ⟨targetFinal,targetRun,bound⟩
+    exact ⟨targetFinal,targetRun,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
 
 end SteppedFlapjack.Concrete
