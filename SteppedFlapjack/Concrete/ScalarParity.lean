@@ -196,6 +196,25 @@ theorem ScalarScopePresent.setVar {σ : Type} {scope : List VarName} {source : P
       refine ⟨old,?_⟩
       simpa [setVarHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE,same] using found
 
+/-- Restoring a declaration's saved local preserves the outer scope. -/
+theorem ScalarScopePresent.restore {σ : Type} {scope : List VarName}
+    (source final : PanSemStateFiniteExact 64 σ) (name : VarName)
+    (original : ScalarScopePresent scope source) (inner : ScalarScopePresent (name :: scope) final) :
+    ScalarScopePresent scope {final with locals := HolFiniteMapExact.resVarEq final.locals (ofString name,source.locals.lookup (ofString name))} := by
+  intro item member
+  by_cases same : ofString item = ofString name
+  · obtain ⟨word,found⟩ := original item member
+    have saved : source.locals.lookup (ofString name) = some (.val (.word word)) := by simpa [same] using found
+    refine ⟨word,?_⟩
+    simp [same,saved,HolFiniteMapExact.lookup_resVarEq_some,FUPDATE_HOL]
+  · obtain ⟨word,found⟩ := inner item (by simp [member])
+    refine ⟨word,?_⟩
+    cases saved : source.locals.lookup (ofString name) with
+    | none =>
+      simpa [saved,HolFiniteMapExact.lookup_resVarEq_none,FDOMSUB_HOL,same] using found
+    | some value =>
+      simpa [saved,HolFiniteMapExact.lookup_resVarEq_some,HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL,same] using found
+
 /-- For present scalar locals, the established compiler relation supplies two-way local agreement. -/
 theorem ScalarLocalsRel.of_existing {σ : Type} {scope : List VarName} {ctxt : PanToCrepContextExact 64}
     {source : PanSemStateFiniteExact 64 σ} {target : CrepSemHOLState 64 σ}
@@ -230,4 +249,29 @@ example {σ : Type} (ctxt : PanToCrepContextExact 64) (source : PanSemStateFinit
   · intro name member
     simp at member
   · simp [expToHOL,evalHOLExact,wordShiftHOL]
+/-- A successful scalar expression in a present scope has a word result. -/
+theorem scalar_hol_word {σ : Type} {scope : List VarName} {expression : Exp (RiscV.Word 64)}
+    (scalar : Scalar scope expression) (source : PanSemStateFiniteExact 64 σ)
+    (present : ScalarScopePresent scope source) (value : ValueHOL 64)
+    (evaluated : @evalHOLExact 64 σ _ source.toExact (fun a => Classical.propDecidable (source.memaddrs a))
+      (expToHOL expression) = some value) : ∃ word, value = .val (.word word) := by
+  induction scalar generalizing value with
+  | const n => simp [expToHOL,evalHOLExact] at evaluated; subst value; exact ⟨n,rfl⟩
+  | «local» name member =>
+    obtain ⟨word,found⟩ := present name member
+    simp [expToHOL,evalHOLExact,found] at evaluated
+    subst value
+    exact ⟨word,rfl⟩
+  | op operator a b iha ihb =>
+    simp only [expToHOL,List.map_cons,List.map_nil,evalHOLExact] at evaluated
+    split at evaluated <;> simp_all
+    aesop
+  | cmp operator a b iha ihb =>
+    simp only [expToHOL,evalHOLExact] at evaluated
+    split at evaluated <;> simp_all
+    aesop
+  | shift operator a b iha ihb =>
+    simp only [expToHOL,evalHOLExact] at evaluated
+    split at evaluated <;> simp_all
+    aesop
 end SteppedFlapjack.Concrete
