@@ -43,4 +43,44 @@ theorem alignedUnfilteredLabToRiscVWithin {F : Type}
     mc code labs asm machine hmc filterRel tie rel originalRun hbound
   exact ⟨ticks,finalMachine,hticks,by simpa only [ffi] using hrun⟩
 
+/-- The machine Lab state filters either the Stack-side Lab state itself or
+its byte-domain version before the Stack side restricts it to aligned words. -/
+def LabExecutionLink {F : Type} (filtered stackLab : LabSem.State 64 Config F) : Prop :=
+  LabFilter.Proofs.stateRel filtered stackLab ∨
+    ∃ raw, stackLab = alignDm raw ∧ LabFilter.Proofs.stateRel filtered raw
+
+/-- Both supported transformations preserve the code buffer. -/
+theorem LabExecutionLink.codeBuffer {F : Type} {filtered stackLab : LabSem.State 64 Config F}
+    (link : LabExecutionLink filtered stackLab) : filtered.codeBuffer = stackLab.codeBuffer := by
+  rcases link with h | ⟨raw,rfl,h⟩
+  · obtain ⟨⟨_,eq,_⟩,_⟩ := h
+    rw [eq]
+  · obtain ⟨⟨_,eq,_⟩,_⟩ := h
+    rw [eq]
+    rfl
+
+/-- Resetting both clocks preserves either execution link. -/
+theorem LabExecutionLink.withClock {F : Type} {filtered stackLab : LabSem.State 64 Config F}
+    (link : LabExecutionLink filtered stackLab) (clock : Nat) :
+    LabExecutionLink {filtered with clock := clock} {stackLab with clock := clock} := by
+  rcases link with h | ⟨raw,rfl,h⟩
+  · exact Or.inl (filterRel_withClock _ _ clock h)
+  · exact Or.inr ⟨{raw with clock := clock},rfl,filterRel_withClock _ _ clock h⟩
+
+/-- Either supported Lab execution link transfers a bounded Stack-side run to
+RISC-V with the same clock and FFI observation. -/
+theorem connectedLabToRiscVWithin {F : Type}
+    (p : BitVec 64) (filtered stackLab post : LabSem.State 64 Config F)
+    (outcome : HolOutcome) (clock bound : Nat)
+    (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
+    (code : LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
+    (hmc : mc.target = riscvTarget) (link : LabExecutionLink filtered stackLab)
+    (tie : oracleTie mc machine filtered) (rel : stateRel (mc,code,labs,p) filtered asm machine)
+    (run : evaluate {stackLab with clock := clock} = (.halt outcome,post)) (hbound : clock ≤ bound) :
+    ∃ ticks finalMachine, ticks ≤ labTickBound 4 code filtered.codeBuffer * bound ∧
+      evaluateTargetHOL mc stackLab.ffi ticks machine = (.halt outcome,finalMachine,post.ffi) := by
+  rcases link with h | ⟨raw,rfl,h⟩
+  · exact unfilteredLabToRiscVWithin p filtered stackLab post outcome clock bound mc code labs asm machine hmc h tie rel run hbound
+  · exact alignedUnfilteredLabToRiscVWithin p filtered raw post outcome clock bound mc code labs asm machine hmc h tie rel run hbound
+
 end SteppedFlapjack.LabToTargetSteps

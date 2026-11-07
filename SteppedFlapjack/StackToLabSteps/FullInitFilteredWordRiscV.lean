@@ -49,7 +49,7 @@ theorem fullInitAllocatedWordSequenceFilteredRiscVWithin {F : Type}
     (entryEq : entry = {(fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1 with clock := entry.clock})
     (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
-    (hmc : mc.target = riscvTarget) (filterRel : LabFilter.Proofs.stateRel machineLab lab)
+    (hmc : mc.target = riscvTarget) (filterRel : LabExecutionLink machineLab lab)
     (tie : LabToTarget.oracleTie mc machine machineLab)
     (machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) machineLab asm machine) :
     let base := InitMake.makeInitAny (StackToLab.isGenGc dataConf.gcKind) maxHeap bitmaps dataSp
@@ -123,7 +123,7 @@ theorem fullInitAllocatedRegTailFilteredRiscVWithin {F : Type}
     (entryEq : entry = {(fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1 with clock := entry.clock})
     (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
-    (hmc : mc.target = riscvTarget) (filterRel : LabFilter.Proofs.stateRel machineLab lab)
+    (hmc : mc.target = riscvTarget) (filterRel : LabExecutionLink machineLab lab)
     (tie : LabToTarget.oracleTie mc machine machineLab)
     (machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) machineLab asm machine) :
     let base := InitMake.makeInitAny (StackToLab.isGenGc dataConf.gcKind) maxHeap bitmaps dataSp

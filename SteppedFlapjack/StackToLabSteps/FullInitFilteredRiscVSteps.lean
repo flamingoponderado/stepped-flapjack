@@ -1,5 +1,5 @@
 import SteppedFlapjack.StackToLabSteps.FullInitStackLabSteps
-import SteppedFlapjack.LabToTargetSteps.FilteredRiscV
+import SteppedFlapjack.LabToTargetSteps.DomainAlignmentBridge
 import SteppedFlapjack.StackToLabSteps.EntryLocation
 import SteppedFlapjack.WordToStackSteps.EntryComposition
 namespace SteppedFlapjack.StackToLabSteps
@@ -23,7 +23,7 @@ theorem fullInitStackFilteredRiscVWithin {F : Type}
     (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle)
     (p : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
-    (hmc : mc.target = riscvTarget) (filterRel : LabFilter.Proofs.stateRel machineLab lab)
+    (hmc : mc.target = riscvTarget) (filterRel : LabExecutionLink machineLab lab)
     (tie : LabToTarget.oracleTie mc machine machineLab)
     (machineRel : LabToTarget.stateRel (mc, labCode, labs, p) machineLab asm machine) :
     let source := (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1
@@ -49,7 +49,7 @@ theorem fullInitStackFilteredRiscVWithin {F : Type}
     fullInitStackLabWithin stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle
       (by decide) hA k n res post outcome run nonError hsteps hres
   obtain ⟨ticks, finalMachine, hbound, machineRun⟩ :=
-    unfilteredLabToRiscVWithin p machineLab lab labPost outcome m _ mc labCode labs asm machine
+    connectedLabToRiscVWithin p machineLab lab labPost outcome m _ mc labCode labs asm machine
       hmc filterRel tie machineRel labRun hm
   exact ⟨ticks, finalMachine, labPost.ffi, hbound, machineRun, events⟩
 
@@ -65,7 +65,7 @@ theorem fullInitAllocatedBodyFilteredRiscVWithin {F : Type}
     (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle)
     (p : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
-    (hmc : mc.target = riscvTarget) (filterRel : LabFilter.Proofs.stateRel machineLab lab)
+    (hmc : mc.target = riscvTarget) (filterRel : LabExecutionLink machineLab lab)
     (tie : LabToTarget.oracleTie mc machine machineLab)
     (machineRel : LabToTarget.stateRel (mc,labCode,labs,p) machineLab asm machine)
     (limit allocation bound : Nat) (body : HolProg 64) (result : Option (StackSemResult 64))
@@ -107,7 +107,7 @@ theorem fullInitAllocationFailureFilteredRiscVWithin {F : Type}
     (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle)
     (p : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
-    (hmc : mc.target = riscvTarget) (filterRel : LabFilter.Proofs.stateRel machineLab lab)
+    (hmc : mc.target = riscvTarget) (filterRel : LabExecutionLink machineLab lab)
     (tie : LabToTarget.oracleTie mc machine machineLab)
     (machineRel : LabToTarget.stateRel (mc,labCode,labs,p) machineLab asm machine)
     (limit allocation : Nat) (body : HolProg 64) :

@@ -61,7 +61,7 @@ theorem singleTail_fullInit_filtered_riscvWithin {F : Type} {loc : Nat} {p calle
     (entryEq : entry = {(fullMakeInit stackConf dataConf maxHeap sp offset bitmaps inputCode lab saveRegs dataSp coracle).1 with clock := entry.clock})
     (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
-    (hmc : mc.target = riscvTarget) (filterRel : LabFilter.Proofs.stateRel machineLab lab)
+    (hmc : mc.target = riscvTarget) (filterRel : LabExecutionLink machineLab lab)
     (tie : LabToTarget.oracleTie mc machine machineLab)
     (machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) machineLab asm machine) :
     let out := (fullCompileSingle ac.twoRegArith regCount alg ac ((name,count,(LoopToWord.compHOL ctxt p labels).1),col)).2.2

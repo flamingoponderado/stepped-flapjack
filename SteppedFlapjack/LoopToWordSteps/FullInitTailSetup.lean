@@ -86,7 +86,7 @@ structure FullInitTailSetup {F : Type} (p : HolLoopProg 64)
   machine : RiscV.L3.riscv_state
   hmc : mc.target = riscvTarget
   machineLab : LabSem.State 64 LabToTarget.Config F := lab
-  labRelation : machineLab = lab ∨ LabFilter.Proofs.stateRel machineLab lab
+  labRelation : machineLab = lab ∨ LabExecutionLink machineLab lab
   tie : LabToTarget.oracleTie mc machine machineLab
   machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) machineLab asm machine
 
@@ -149,9 +149,7 @@ theorem FullInitTailSetup.run_bounded {F : Type} {loc : Nat} {p callee : HolLoop
       · rcases correspondence with good | ⟨resource,events,_⟩
         · exact Or.inl good
         · exact Or.inr ⟨resource,events⟩
-    · have buffer : setup.machineLab.codeBuffer = setup.lab.codeBuffer := by
-        obtain ⟨⟨_,h,_⟩,_⟩ := filtered
-        rw [h]
+    · have buffer : setup.machineLab.codeBuffer = setup.lab.codeBuffer := filtered.codeBuffer
       obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,_,_,_,_,_,correspondence⟩ :=
         singleTail_fullInit_filtered_riscvWithin setup.ac setup.count setup.name setup.alg setup.regCount setup.col shape calleeShape
           source sourcePost result word setup.ctxt setup.labels setup.compiledCode setup.locals limit lookup premises complete
