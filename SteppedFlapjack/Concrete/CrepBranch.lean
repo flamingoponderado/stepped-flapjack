@@ -28,14 +28,8 @@ theorem branchCrepBody_steps {σ : Type} (state : CrepSemHOLState 64 σ) :
 /-- The actual generated code table contains the comparison body. -/
 theorem branchCrepCode_lookup :
     (crepState branchingHOL).code.lookup (entryName branchingHOL) = some ([],branchCrepBody) := by
-  have fresh : entryName branchingHOL ≠ ofString "main" := by
-    intro same
-    have notMem := PanGlobalsDeclListExact.freshNameMlS_correct (ofString "main")
-      ((functionsHOL (singleEntryProgram (ofString "main") branchingHOL)).map Prod.fst)
-    apply notMem
-    simpa [entryName,newMainNameHOL,singleEntryProgram,functionsHOL] using same
-  simp [crepState,concreteDeclCrepState,branching_crep_code,alistToFmapCodeExact,
-    HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,branchCrepBody,Ne.symm fresh]
+  apply generated_callee_lookup branchingHOL branchCrepBody
+  simpa [branchCrepBody] using branching_crep_code
 
 /-- The generated entry wrapper makes a tail call to the comparison body. -/
 def branchCrepEntry : CrepProgHOL 64 := .seq .skip (.call none (entryName branchingHOL) [])

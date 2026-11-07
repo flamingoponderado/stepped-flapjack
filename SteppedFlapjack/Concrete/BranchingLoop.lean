@@ -58,14 +58,7 @@ theorem branchingLoop_crep_code : crepPrograms (progToHOL branchingLoop) =
 theorem branchingLoop_code_lookup :
     (crepState (progToHOL branchingLoop)).code.lookup (entryName (progToHOL branchingLoop)) =
       some ([],branchingLoopCrepBody) := by
-  have fresh : entryName (progToHOL branchingLoop) ≠ ofString "main" := by
-    intro same
-    have notMem := PanGlobalsDeclListExact.freshNameMlS_correct (ofString "main")
-      ((functionsHOL (singleEntryProgram (ofString "main") (progToHOL branchingLoop))).map Prod.fst)
-    apply notMem
-    simpa [entryName,newMainNameHOL,singleEntryProgram,functionsHOL] using same
-  simp [crepState,concreteDeclCrepState,branchingLoop_crep_code,alistToFmapCodeExact,
-    HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,Ne.symm fresh]
+  exact generated_callee_lookup (progToHOL branchingLoop) branchingLoopCrepBody branchingLoop_crep_code
 
 private def loopHOL : ProgHOL 64 := progToHOL branchingLoop
 

@@ -72,12 +72,30 @@ theorem countdown_entry_crep (n : Nat) (range : n < 2^64)
       evalCrepSemHOLProgExact (crepState (countdownHOL n)) (countdownCrepEntry n) =
         (some (.return [.word 0]),targetFinal) ∧
       SteppedFlapjack.CrepSteps.steps (countdownCrepEntry n) (crepState (countdownHOL n)) ≤
-        3 + sizeOf (compileProgExactHOLW (countdownCalleeContext n) (countdownHOL n)) * (6*n+9) := by
+        3 + (n+38) * (6*n+9) := by
   obtain ⟨sourceFinal,run,bound⟩ := countdown_callee_source n range context primitive handler
   have span := supported_entry_crep_return (countdown n) (countdown_supported n) sourceFinal 0 (6*n+9)
     (by simpa [← countdown_hol_eq,countdownPanEntry] using run)
     (by simpa [← countdown_hol_eq,countdownPanEntry] using bound)
-  simpa [← countdown_hol_eq,countdownCalleeContext,countdownCrepEntry] using span
+  have lookup := (supported_callee_relations (countdown n) (countdown_supported n)).1
+  simp only [← countdown_hol_eq] at lookup
+  have actual := generated_callee_lookup (countdownHOL n) (countdownCrepBody (BitVec.ofNat 64 n)) (countdown_crep_code n)
+  have codeEq : compileProgExactHOLW (countdownCalleeContext n) (countdownHOL n) =
+      countdownCrepBody (BitVec.ofNat 64 n) := by
+    rw [actual] at lookup
+    exact (Prod.mk.inj (Option.some.inj lookup)).2.symm
+  have size : sizeOf (countdownCrepBody (BitVec.ofNat 64 n)) = n+38 := by
+    have h := (countdownCrepBody_sizes (BitVec.ofNat 64 n)).1
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt range] at h
+    exact h
+  simp only [← countdown_hol_eq] at span
+  change ∃ final,
+    evalCrepSemHOLProgExact (crepState (countdownHOL n)) (countdownCrepEntry n) =
+      (some (.return [.word 0]),final) ∧
+    CrepSteps.steps (countdownCrepEntry n) (crepState (countdownHOL n)) ≤
+      3 + sizeOf (compileProgExactHOLW (countdownCalleeContext n) (countdownHOL n)) * (6*n+9) at span
+  rw [codeEq,size] at span
+  exact span
 
 /-- The natural unprefixed source countdown and its actual generated callee. -/
 def naturalPanEntry (n : Nat) : PanSemStateFiniteExact 64 Unit :=
@@ -144,10 +162,29 @@ theorem natural_countdown_entry_crep (n : Nat) (range : n < 2^64)
       evalCrepSemHOLProgExact (crepState (naturalCountdownHOL n)) (naturalCrepEntry n) =
         (some (.return [.word 0]),targetFinal) ∧
       CrepSteps.steps (naturalCrepEntry n) (crepState (naturalCountdownHOL n)) ≤
-        3 + sizeOf (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) * (6*n+7) := by
+        3 + (n+36) * (6*n+7) := by
   obtain ⟨_,sourceFinal,_,run,bound⟩ := natural_countdown_callee_source n range context primitive handler
   have span := supported_entry_crep_return (naturalCountdown n) (naturalCountdown_supported n)
     sourceFinal 0 (6*n+7) run bound
-  simpa [naturalCountdownHOL,naturalCalleeContext,naturalCrepEntry] using span
+  have lookup := (supported_callee_relations (naturalCountdown n) (naturalCountdown_supported n)).1
+  change (crepState (naturalCountdownHOL n)).code.lookup (entryName (naturalCountdownHOL n)) =
+    some ([],compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) at lookup
+  have actual := generated_callee_lookup (naturalCountdownHOL n) (naturalCountdownCrepBody (BitVec.ofNat 64 n))
+    (natural_countdown_crep_code n)
+  have codeEq : compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n) =
+      naturalCountdownCrepBody (BitVec.ofNat 64 n) := by
+    rw [actual] at lookup
+    exact (Prod.mk.inj (Option.some.inj lookup)).2.symm
+  have size : sizeOf (naturalCountdownCrepBody (BitVec.ofNat 64 n)) = n+36 := by
+    have h := (countdownCrepBody_sizes (BitVec.ofNat 64 n)).2
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt range] at h
+    exact h
+  change ∃ final,
+    evalCrepSemHOLProgExact (crepState (naturalCountdownHOL n)) (naturalCrepEntry n) =
+      (some (.return [.word 0]),final) ∧
+    CrepSteps.steps (naturalCrepEntry n) (crepState (naturalCountdownHOL n)) ≤
+      3 + sizeOf (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) * (6*n+7) at span
+  rw [codeEq,size] at span
+  exact span
 
 end SteppedFlapjack.Concrete

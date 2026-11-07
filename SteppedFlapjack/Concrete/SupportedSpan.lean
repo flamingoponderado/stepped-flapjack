@@ -41,6 +41,20 @@ theorem generated_entry_member (body : ProgHOL 64) :
     singleEntry_compileTop]
   simp_crep_code
 
+/-- For a computed two-function output, the generated table selects its callee. -/
+theorem generated_callee_lookup (body : ProgHOL 64) (target : CrepProgHOL 64)
+    (code : crepPrograms body =
+      [(ofString "main",[],.seq .skip (.call none (entryName body) [])),(entryName body,[],target)]) :
+    (crepState body).code.lookup (entryName body) = some ([],target) := by
+  have fresh : entryName body ≠ ofString "main" := by
+    intro same
+    have notMem := PanGlobalsDeclListExact.freshNameMlS_correct (ofString "main")
+      ((functionsHOL (singleEntryProgram (ofString "main") body)).map Prod.fst)
+    apply notMem
+    simpa [entryName,newMainNameHOL,singleEntryProgram,functionsHOL] using same
+  simp [crepState,concreteDeclCrepState,code,alistToFmapCodeExact,
+    HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,Ne.symm fresh]
+
 /-- Every supported, word-returning callee run lifts through the actual
 compiler-generated tail entry with a code-derived bound. The input source run
 is at the generated global-lowered callee; connecting it to the counted
