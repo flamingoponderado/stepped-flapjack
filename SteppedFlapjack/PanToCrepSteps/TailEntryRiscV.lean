@@ -20,61 +20,13 @@ open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.WordAllocSteps
 open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.CrepToLoopSteps
 open Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 
-/-- A Pancake global-entry visit bound supplies the limit for the actual
-Crep-to-RISC-V tail-entry simulation under its backend setup conditions. -/
-theorem panTailEntry_riscvWithin {F : Type}
-    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
-    (init : CrepProgHOL 64) (initShape : CrepToLoopSteps.BranchProgram init)
-    (calleeInit : CrepProgHOL 64) (calleeInitShape : CrepToLoopSteps.BranchProgram calleeInit)
-    (condition : CrepExpHOL 64) (conditionShape : CrepToLoopSteps.BranchCondition condition)
-    (body tail : CrepProgHOL 64) (bodyShape : CrepToLoopSteps.BranchProgram body) (tailShape : CrepToLoopSteps.BranchProgram tail)
-    (source middle post : CrepSemHOLState 64 F) (result : Option (CrepResultHOLExact 64))
-    (target : LoopSemStateFiniteExact 64 F) (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (limit : Nat)
-    (initRun : evalCrepSemHOLProgExact source init = (none,middle))
-    (found : middle.code.lookup name = some ([],.seq calleeInit (.seq (.while condition body) tail)))
-    (clock : middle.clock ≠ 0)
-    (calleeRun : evalCrepSemHOLProgExact
-      (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []})
-      (.seq calleeInit (.seq (.while condition body) tail)) = (result,post))
-    (complete : CompleteCrepResult result)
-    (crepRel : crepToLoopStateRelExact source target)
-    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
-    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
-    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
-    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
-    (loopWordRel : loopToWordStateRelHOLExact target word)
-    (panInit panCalleeInit : ProgHOL 64) (panCondition : ExpHOL 64) (panBody panTail : ProgHOL 64)
-    (panContext : PanToCrepContextExact 64)
-    (panInitShape : PanToCrepSteps.BranchProgram panContext panCalleeInit)
-    (panConditionShape : ScalarExpression panContext panCondition)
-    (panBodyShape : PanToCrepSteps.BranchProgram panContext panBody)
-    (panTailShape : PanToCrepSteps.BranchProgram panContext panTail)
-    (pan panMiddle panPost : PanSemStateFiniteExact 64 F) (panResult : Option (PanSemResultExact 64))
-    (panLocals : HolFiniteMapExact MlString (ValueHOL 64)) (panReturnShape : ShapeHOL)
-    (panInitRun : pan.evaluateHOLFiniteState panInit = (none,panMiddle))
-    (panLookup : lookupCodeHOLFinite panMiddle.code.lookup name [] =
-      some (.seq panCalleeInit (.seq (.while panCondition panBody) panTail),panLocals,panReturnShape))
-    (panClock : panMiddle.clock ≠ 0)
-    (panRun : (callEntryStateHOLFinite panMiddle panLocals).evaluateHOLFiniteState
-      (.seq panCalleeInit (.seq (.while panCondition panBody) panTail)) = (panResult,panPost))
-    (panNonerror : panResult ≠ some .error)
-    (panStateRel : panToCrepStateRelFiniteExact (callEntryStateHOLFinite panMiddle panLocals)
-      (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []}))
-    (panCodeRel : codeRelExactHOLW panContext (callEntryStateHOLFinite panMiddle panLocals).code
-      (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []}).code)
-    (panExcpRel : panToCrepExcpRelFiniteExact panContext.eids (callEntryStateHOLFinite panMiddle panLocals).eshapes)
-    (panLocalsRel : panToCrepLocalsRelFiniteExact panContext (callEntryStateHOLFinite panMiddle panLocals).locals
-      (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []}).locals)
-    (panLocalised : localisedProgHOL (.seq panCalleeInit (.seq (.while panCondition panBody) panTail)) = true)
-    (calleeEq : compileProgExactHOLW panContext (.seq panCalleeInit (.seq (.while panCondition panBody) panTail)) =
-      .seq calleeInit (.seq (.while condition body) tail))
-    (panBound : globalEntrySteps panInit name [] pan ≤ limit) :
-    let loopEntry := optimiseHOL (compileHOLExact ctxt live (.seq init (.call none name [])))
-    let loopLimit := branchTailLoopLimit ctxt live name init calleeInit condition body tail
-      (sizeOf init + 2 + (3 + sizeOf (compileProgExactHOLW panContext panCalleeInit) +
-        sizeOf (compileProgExactHOLW panContext panBody) + sizeOf (compileProgExactHOLW panContext panTail)) * limit)
-    panToCrepStateRelFiniteExact panPost post ∧
-    pcCompileCorrectResultRel panContext panPost post panResult result ∧
+/-- The shared backend result for an entry call, parameterized by the
+compiled Loop program and its independently established replay limit. -/
+abbrev TailEntryMachineResult {F : Type}
+    (post : CrepSemHOLState 64 F) (panPost : PanSemStateFiniteExact 64 F)
+    (result : Option (CrepResultHOLExact 64)) (target : LoopSemStateFiniteExact 64 F)
+    (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
+    (loopEntry : HolLoopProg 64) (loopLimit : Nat) : Prop :=
     ∃ extra loopPost, crepToLoopStateRelExact post loopPost ∧
     let shiftedWord := {word with clock := word.clock+extra}
     ∀ (ac : AsmConfigExact 64) (count entryName alg regCount : Nat) (col : Option (Spt Nat))
@@ -156,7 +108,89 @@ theorem panTailEntry_riscvWithin {F : Type}
           stackPost wordResult stackResult lens ∧
         ((LoopMachineOutcome (resultToLoop result) outcome ∧ finalFfi.ioEvents = panPost.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: panPost.ffi.ioEvents ∧
-            targetPost.stackMax.getD (targetPost.stackLimit+1) > targetPost.stackLimit)) := by
+            targetPost.stackMax.getD (targetPost.stackLimit+1) > targetPost.stackLimit))
+
+/-- The source-to-Crep result relation is independent of the callee shape. -/
+theorem tailEntry_source_result {F : Type}
+    (body : ProgHOL 64) (compiled : CrepProgHOL 64)
+    (pan : PanSemStateFiniteExact 64 F) (panPost : PanSemStateFiniteExact 64 F)
+    (panResult : Option (PanSemResultExact 64)) (source post : CrepSemHOLState 64 F)
+    (result : Option (CrepResultHOLExact 64)) (ctxt : PanToCrepContextExact 64)
+    (run : pan.evaluateHOLFiniteState body = (panResult,panPost))
+    (nonerror : panResult ≠ some .error)
+    (stateRel : panToCrepStateRelFiniteExact pan source)
+    (codeRel : codeRelExactHOLW ctxt pan.code source.code)
+    (excpRel : panToCrepExcpRelFiniteExact ctxt.eids pan.eshapes)
+    (localsRel : panToCrepLocalsRelFiniteExact ctxt pan.locals source.locals)
+    (localised : localisedProgHOL body = true)
+    (compileEq : compileProgExactHOLW ctxt body = compiled)
+    (crepRun : evalCrepSemHOLProgExact source compiled = (result,post)) :
+    panToCrepStateRelFiniteExact panPost post ∧
+      pcCompileCorrectResultRel ctxt panPost post panResult result := by
+  have correct : pcCompileCorrectAt body pan :=
+    (pcCompileCorrectAt_iff_HOL _ _).mpr (pcCompileCorrect_all _ _)
+  obtain ⟨crepResult,crepPost,run',postRel,_,_,resultRel⟩ :=
+    correct panResult panPost source ctxt run nonerror stateRel codeRel excpRel localsRel localised
+  rw [compileEq,crepRun] at run'
+  obtain ⟨rfl,rfl⟩ := Prod.mk.inj run'
+  exact ⟨postRel,resultRel⟩
+
+/-- A Pancake global-entry visit bound supplies the limit for the actual
+Crep-to-RISC-V tail-entry simulation under its backend setup conditions. -/
+theorem panTailEntry_riscvWithin {F : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
+    (init : CrepProgHOL 64) (initShape : CrepToLoopSteps.BranchProgram init)
+    (calleeInit : CrepProgHOL 64) (calleeInitShape : CrepToLoopSteps.BranchProgram calleeInit)
+    (condition : CrepExpHOL 64) (conditionShape : CrepToLoopSteps.BranchCondition condition)
+    (body tail : CrepProgHOL 64) (bodyShape : CrepToLoopSteps.BranchProgram body) (tailShape : CrepToLoopSteps.BranchProgram tail)
+    (source middle post : CrepSemHOLState 64 F) (result : Option (CrepResultHOLExact 64))
+    (target : LoopSemStateFiniteExact 64 F) (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (limit : Nat)
+    (initRun : evalCrepSemHOLProgExact source init = (none,middle))
+    (found : middle.code.lookup name = some ([],.seq calleeInit (.seq (.while condition body) tail)))
+    (clock : middle.clock ≠ 0)
+    (calleeRun : evalCrepSemHOLProgExact
+      (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []})
+      (.seq calleeInit (.seq (.while condition body) tail)) = (result,post))
+    (complete : CompleteCrepResult result)
+    (crepRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
+    (loopWordRel : loopToWordStateRelHOLExact target word)
+    (panInit panCalleeInit : ProgHOL 64) (panCondition : ExpHOL 64) (panBody panTail : ProgHOL 64)
+    (panContext : PanToCrepContextExact 64)
+    (panInitShape : PanToCrepSteps.BranchProgram panContext panCalleeInit)
+    (panConditionShape : ScalarExpression panContext panCondition)
+    (panBodyShape : PanToCrepSteps.BranchProgram panContext panBody)
+    (panTailShape : PanToCrepSteps.BranchProgram panContext panTail)
+    (pan panMiddle panPost : PanSemStateFiniteExact 64 F) (panResult : Option (PanSemResultExact 64))
+    (panLocals : HolFiniteMapExact MlString (ValueHOL 64)) (panReturnShape : ShapeHOL)
+    (panInitRun : pan.evaluateHOLFiniteState panInit = (none,panMiddle))
+    (panLookup : lookupCodeHOLFinite panMiddle.code.lookup name [] =
+      some (.seq panCalleeInit (.seq (.while panCondition panBody) panTail),panLocals,panReturnShape))
+    (panClock : panMiddle.clock ≠ 0)
+    (panRun : (callEntryStateHOLFinite panMiddle panLocals).evaluateHOLFiniteState
+      (.seq panCalleeInit (.seq (.while panCondition panBody) panTail)) = (panResult,panPost))
+    (panNonerror : panResult ≠ some .error)
+    (panStateRel : panToCrepStateRelFiniteExact (callEntryStateHOLFinite panMiddle panLocals)
+      (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []}))
+    (panCodeRel : codeRelExactHOLW panContext (callEntryStateHOLFinite panMiddle panLocals).code
+      (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []}).code)
+    (panExcpRel : panToCrepExcpRelFiniteExact panContext.eids (callEntryStateHOLFinite panMiddle panLocals).eshapes)
+    (panLocalsRel : panToCrepLocalsRelFiniteExact panContext (callEntryStateHOLFinite panMiddle panLocals).locals
+      (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []}).locals)
+    (panLocalised : localisedProgHOL (.seq panCalleeInit (.seq (.while panCondition panBody) panTail)) = true)
+    (calleeEq : compileProgExactHOLW panContext (.seq panCalleeInit (.seq (.while panCondition panBody) panTail)) =
+      .seq calleeInit (.seq (.while condition body) tail))
+    (panBound : globalEntrySteps panInit name [] pan ≤ limit) :
+    let loopEntry := optimiseHOL (compileHOLExact ctxt live (.seq init (.call none name [])))
+    let loopLimit := branchTailLoopLimit ctxt live name init calleeInit condition body tail
+      (sizeOf init + 2 + (3 + sizeOf (compileProgExactHOLW panContext panCalleeInit) +
+        sizeOf (compileProgExactHOLW panContext panBody) + sizeOf (compileProgExactHOLW panContext panTail)) * limit)
+    panToCrepStateRelFiniteExact panPost post ∧
+    pcCompileCorrectResultRel panContext panPost post panResult result ∧
+    TailEntryMachineResult post panPost result target word loopEntry loopLimit := by
   have crepFound : middle.code.lookup name = some ([],compileProgExactHOLW panContext
       (.seq panCalleeInit (.seq (.while panCondition panBody) panTail))) := by
     rw [calleeEq]
@@ -169,19 +203,13 @@ theorem panTailEntry_riscvWithin {F : Type}
       sizeOf init + 2 + (3 + sizeOf (compileProgExactHOLW panContext panCalleeInit) +
         sizeOf (compileProgExactHOLW panContext panBody) + sizeOf (compileProgExactHOLW panContext panTail)) * limit := by
     exact stepBound.trans (Nat.add_le_add_left (Nat.mul_le_mul_left _ panBound) _)
-  have correct : pcCompileCorrectAt (.seq panCalleeInit (.seq (.while panCondition panBody) panTail))
-      (callEntryStateHOLFinite panMiddle panLocals) :=
-    (pcCompileCorrectAt_iff_HOL _ _).mpr (pcCompileCorrect_all _ _)
-  obtain ⟨crepResult,crepPost,crepRun,postRel,_,_,resultRel⟩ :=
-    correct panResult panPost (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []})
-      panContext panRun panNonerror panStateRel panCodeRel panExcpRel panLocalsRel panLocalised
-  rw [calleeEq,calleeRun] at crepRun
-  obtain ⟨rfl,rfl⟩ := Prod.mk.inj crepRun
+  obtain ⟨postRel,resultRel⟩ := tailEntry_source_result _ _ _ _ _ _ _ _ _
+    panRun panNonerror panStateRel panCodeRel panExcpRel panLocalsRel panLocalised calleeEq calleeRun
   refine ⟨postRel,resultRel,?_⟩
   have machine := branchTail_riscvWithin ctxt live name init initShape calleeInit calleeInitShape condition conditionShape
     body tail bodyShape tailShape source middle post result target word _ initRun found clock calleeRun complete
     crepRel memRel globalsRel codeRel localsRel loopWordRel bound
   have ffi : panPost.ffi = post.ffi := postRel.2.2.2.2.2.2.2.1
-  simpa only [ffi] using machine
+  simpa only [TailEntryMachineResult,ffi] using machine
 
 end SteppedFlapjack.PanToCrepSteps

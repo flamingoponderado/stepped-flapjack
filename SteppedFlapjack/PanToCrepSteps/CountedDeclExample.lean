@@ -2,7 +2,11 @@ import SteppedFlapjack.PanToCrepSteps.CountedDecl
 import SteppedFlapjack.PanToCrepSteps.CountedLoopExample
 import SteppedFlapjack.PanToCrepSteps.DeclLoopShape
 
-/-! A complete counted declaration-wrapped loop example. -/
+/-! A complete counted declaration-wrapped loop example.
+
+This module is a reusable proof component for the concrete source-to-machine
+example, so it is imported by the library.
+-/
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.PanSemStateFiniteExact
 

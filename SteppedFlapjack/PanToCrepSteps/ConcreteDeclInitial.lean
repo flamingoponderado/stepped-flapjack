@@ -1,6 +1,10 @@
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram
 
-/-! Concrete global-entry source state and relation. -/
+/-! Concrete global-entry source state and relation.
+
+This module is a reusable proof component for the concrete source-to-machine
+example, so it is imported by the library.
+-/
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.PanSemStateFiniteExact
 open SteppedFlapjack.CrepToLoopSteps
@@ -13,7 +17,9 @@ theorem concreteDeclGlobalContext_empty (start : MlString) (name : VarName) (ret
     isDeclHOL,isFunctionHOL,List.filter,fpermDecsHOL,decShapesHOL]
 
 /-- A concrete original source state can be recovered from the lowered entry
-by changing only its code and clearing its global map. -/
+by changing only its code and clearing its global map. This example starts
+from the lowered entry; it does not construct that entry from an arbitrary
+original initial state. -/
 def concreteDeclOriginalState {σ : Type} (start : MlString) (name : VarName) (returned : BitVec 64)
     (lowered : PanSemStateFiniteExact 64 σ) : PanSemStateFiniteExact 64 σ :=
   { lowered with globals := HolFiniteMapExact.empty, code := HolFiniteMapExact.empty.update (newMainNameHOL (concreteDeclProgram start name returned),([],concreteDeclBody name returned,.one)) }
@@ -175,5 +181,84 @@ theorem concreteDecl_word_data {C σ : Type} (arch : Flapjack.Compiler.Encoders.
   refine ⟨⟨heapLength,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_⟩,rfl⟩
   all_goals simp [concreteDeclWordState,concreteDeclLoopState,HolFiniteMapExact.lookup_updateEq,
     FUPDATE_HOL,loopToWordGlobalsRelHOLExact,HolFiniteMapExact.lookup_empty,heap]
+
+private theorem updateEq_existing {α β : Type} [DecidableEq α] (m : HolFiniteMapExact α β)
+    (key : α) (value : β) (found : m.lookup key = some value) : m.updateEq (key,value) = m := by
+  apply HolFiniteMapExact.ext_lookup
+  intro k
+  simp only [HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL]
+  split
+  · rename_i same
+    subst k
+    exact found.symm
+  · rfl
+
+/-- Any already-related Word state is a fixed point of the concrete data
+construction, apart from installing the actual compiled code table. -/
+theorem concreteDecl_word_state_fixed {C σ : Type} (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture)
+    (source : CrepSemHOLState 64 σ) (programs : List (MlString × List Nat × CrepProgHOL 64))
+    (template : WordSemStateFiniteExact 64 C σ)
+    (rel : LoopWordDataRel (concreteDeclLoopState arch source programs) template) :
+    ∃ heapLength,
+      template.store.lookup .heapLength = some (.word heapLength) ∧
+      source.topAddr = source.baseAddr + 2 * heapLength ∧
+      concreteDeclWordState arch source programs template heapLength =
+        {template with code := sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch programs))} := by
+  obtain ⟨len,mem,domain,shared,clock,be,ffi,current,length,heap,_⟩ := rel
+  have current' : template.store.lookup .currHeap = some (.word source.baseAddr) := by
+    simpa [concreteDeclLoopState] using current
+  have hc := updateEq_existing _ _ _ current'
+  have hl := updateEq_existing _ _ _ length
+  refine ⟨len,length,?_,?_⟩
+  · simpa [concreteDeclLoopState] using heap
+  · simp only [concreteDeclLoopState] at clock be ffi
+    simp only [concreteDeclWordState,← mem,← domain,← shared]
+    rw [hc,hl,← clock,← be,← ffi]
+
+/-- A native Word entry with matching concrete memory, domains, clock, FFI,
+and heap metadata is exactly a permitted concrete Word-state construction.
+The native initializer supplies all other fields unchanged. -/
+theorem concreteDecl_native_word_compatible {C σ : Type}
+    (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture)
+    (ac : Flapjack.Compiler.Encoders.Asm.AsmConfigExact 64) (k frameSize : Nat)
+    (stack : StackSemStateFiniteExact 64 C σ)
+    (compiled : Spt (Nat × WordLangProgHOL (BitVec 64)))
+    (coracle : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (source : CrepSemHOLState 64 σ) (programs : List (MlString × List Nat × CrepProgHOL 64))
+    (heapLength : BitVec 64)
+    (memory : stack.memory = (concreteDeclLoopState arch source programs).memory)
+    (domain : stack.mdomain = (concreteDeclLoopState arch source programs).mdomain)
+    (shared : stack.shMdomain = (concreteDeclLoopState arch source programs).shMdomain)
+    (clock : stack.clock = source.clock) (endian : stack.be = source.be) (ffi : stack.ffi = source.ffi)
+    (current : stack.store.lookup .currHeap = some (.word source.baseAddr))
+    (length : stack.store.lookup .heapLength = some (.word heapLength))
+    (heap : source.topAddr = source.baseAddr + 2 * heapLength) :
+    let word := {WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
+      (Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit ac k stack compiled coracle) with
+        code := sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch programs))}
+    LoopWordDataRel (concreteDeclLoopState arch source programs) word ∧
+    concreteDeclWordState arch source programs word heapLength = word := by
+  let word := {WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
+      (Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit ac k stack compiled coracle) with
+        code := sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch programs))}
+  have rel : LoopWordDataRel (concreteDeclLoopState arch source programs) word := by
+    apply (nativeEntry_loopWordDataRel_iff ac k frameSize stack compiled _ coracle _).mpr
+    refine ⟨heapLength,memory,domain,shared,?_,?_,?_,?_,length,?_,?_⟩
+    · simpa [concreteDeclLoopState] using clock
+    · simpa [concreteDeclLoopState] using endian
+    · simpa [concreteDeclLoopState] using ffi
+    · simpa [concreteDeclLoopState] using current
+    · simpa [concreteDeclLoopState] using heap
+    · simp [concreteDeclLoopState,loopToWordGlobalsRelHOLExact,HolFiniteMapExact.lookup_empty]
+  obtain ⟨len,field,_,fixed⟩ := concreteDecl_word_state_fixed arch source programs word rel
+  have same : len = heapLength := by
+    simp only [word,WordSemStateFiniteExact.callEnv,
+      Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit,
+      HolFiniteMapExact.lookup_eraseEq,FDOMSUB_HOL] at field
+    simp at field
+    rw [length] at field
+    exact (WordLocW.word.inj (Option.some.inj field)).symm
+  subst len
+  exact ⟨rel,by simpa [word] using fixed⟩
 
 end SteppedFlapjack.PanToCrepSteps

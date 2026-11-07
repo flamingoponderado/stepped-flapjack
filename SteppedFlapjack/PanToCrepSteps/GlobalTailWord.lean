@@ -204,6 +204,8 @@ theorem globalEntry_nonInline_stack_inputs {width : Nat} [NeZero width] {C F : T
         stack (sptFromAList (Compiler.Backend.WordToWord.compile wc ac programs).2) coracle :
           WordSemStateFiniteExact width (Nat × C) F) stack [] 0 ∧
     ∃ bs n bsPost nPost body frame frameSize,
+      SteppedFlapjack.WordToStackSteps.nativeEntryBitmap ac false (ac.regCount-(5+ac.avoidRegs.length))
+        firstLoopName (Compiler.Backend.WordToWord.compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
       frame = max (maxVarHOL out / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (1-(ac.regCount-(5+ac.avoidRegs.length))) ∧
       frameSize = (if frame = 0 then 0 else frame+1) ∧
       Flapjack.Compiler.Backend.WordToStack.Native.compNative ac false out (bs,n)
@@ -286,6 +288,8 @@ theorem globalEntry_nonInline_frame_or_resource {C F : Type}
       (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
       ((firstLoopName,1,q),SteppedFlapjack.WordAllocSteps.entryColour wc programs firstLoopName)).2.2
     ∃ bs n bsPost nPost body frame frameSize,
+      SteppedFlapjack.WordToStackSteps.nativeEntryBitmap ac false (ac.regCount-(5+ac.avoidRegs.length))
+        firstLoopName (Compiler.Backend.WordToWord.compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
       frame = max (maxVarHOL out / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (1-(ac.regCount-(5+ac.avoidRegs.length))) ∧
       frameSize = (if frame = 0 then 0 else frame+1) ∧
       Compiler.Backend.WordToStack.Native.compNative ac false out (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
@@ -399,6 +403,8 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
       (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
       ((firstLoopName,1,q),SteppedFlapjack.WordAllocSteps.entryColour wc programs firstLoopName)).2.2
     ∃ bs n bsPost nPost body frame frameSize,
+      SteppedFlapjack.WordToStackSteps.nativeEntryBitmap ac false (ac.regCount-(5+ac.avoidRegs.length))
+        firstLoopName (Compiler.Backend.WordToWord.compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
       frame = max (maxVarHOL out / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (1-(ac.regCount-(5+ac.avoidRegs.length))) ∧
       frameSize = (if frame = 0 then 0 else frame+1) ∧
       Compiler.Backend.WordToStack.Native.compNative ac false out (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
@@ -445,14 +451,14 @@ theorem globalEntry_nonInline_frame_or_riscvResource {F : Type}
             (uniformFactor (width := 64) c * 3) + 4)) ∧
          evaluateTargetHOL mc lab.ffi ticks machine = (.halt HolOutcome.resourceLimitHit,finalMachine,finalFfi) ∧
          finalFfi.ioEvents = stack.ffi.ioEvents) := by
-  obtain ⟨bs,n,bsPost,nPost,body,frame,frameSize,frameDef,sizeDef,compilation,foundEntry,
+  obtain ⟨bs,n,bsPost,nPost,body,frame,frameSize,selected,frameDef,sizeDef,compilation,foundEntry,
     lengthBound,gapBound,bitmapPrefix,caseResult⟩ :=
     globalEntry_nonInline_frame_or_resource arch declarations start initializers returnShape original found
       funs exns context compiled initShape notInline state wc ac stack coracle codeEq bitmapsPrefix ok limit
   have entryFacts := SteppedFlapjack.WordToStackSteps.nativeEntry_frame_and_labels ac
     (ac.regCount-(5+ac.avoidRegs.length)) frame frameSize 1 firstLoopName _ stack bs bsPost n nPost body
     frameDef sizeDef compilation foundEntry
-  refine ⟨bs,n,bsPost,nPost,body,frame,frameSize,frameDef,sizeDef,compilation,foundEntry,
+  refine ⟨bs,n,bsPost,nPost,body,frame,frameSize,selected,frameDef,sizeDef,compilation,foundEntry,
     lengthBound,gapBound,bitmapPrefix,entryFacts.1,entryFacts.2,?_⟩
   rcases caseResult with success | ⟨post,run,ffi,stepBound⟩
   · left

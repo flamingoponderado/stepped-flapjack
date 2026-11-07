@@ -1,4 +1,5 @@
 import SteppedFlapjack.WordToStackSteps.WholeInitialization
+import SteppedFlapjack.WordToStackSteps.DeterministicEntry
 
 /-! Native frame and bitmap witnesses for arbitrary compiler-selected entries. -/
 namespace SteppedFlapjack.WordToStackSteps
@@ -21,6 +22,7 @@ theorem wholeWordStack_entryColour_native_inputs (wc : Flapjack.Compiler.Backend
     let q := (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
       ((name,count,p),entryColour wc programs name)).2.2
     ∃ bs n bsPost nPost body frame frameSize,
+      nativeEntryBitmap ac false (ac.regCount-(5+ac.avoidRegs.length)) name (compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
       frame = max (maxVarHOL q / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (count-(ac.regCount-(5+ac.avoidRegs.length))) ∧
       frameSize = (if frame = 0 then 0 else frame+1) ∧
       compNative ac false q (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
@@ -33,8 +35,8 @@ theorem wholeWordStack_entryColour_native_inputs (wc : Flapjack.Compiler.Backend
       (appListAppend bsPost).IsPrefix ((compileNative ac false (compile wc ac programs).2).1.drop (n-(appListAppend bs).length)) := by
   let col := entryColour wc programs name
   let q := (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac ((name,count,p),col)).2.2
-  obtain ⟨bs,n,bsPost,nPost,entry,frameSize,programCompiled,lookup,lengthBound,gapBound,bitmapPrefix⟩ :=
-    wholeWordStack_entryColour_bitmaps wc ac programs name count p member nodup notRaise notStore
+  obtain ⟨bs,n,bsPost,nPost,entry,frameSize,selected,programCompiled,lookup,lengthBound,gapBound,bitmapPrefix⟩ :=
+    wholeWordStack_entry_bitmap_deterministic wc ac programs name count p member nodup notRaise notStore
   let k := ac.regCount-(5+ac.avoidRegs.length)
   let frame := max (maxVarHOL q / 2 + 1 - k) (count-k)
   let size := if frame = 0 then 0 else frame+1
@@ -53,7 +55,7 @@ theorem wholeWordStack_entryColour_native_inputs (wc : Flapjack.Compiler.Backend
     rw [hp]
     exact lookup
   exact ⟨bs,n,after,afterN,body,frame,size,
-    rfl,rfl,h,lookup,found,lengthBound,gapBound,bitmapPrefix⟩
+    selected,rfl,rfl,h,lookup,found,lengthBound,gapBound,bitmapPrefix⟩
 
 
 /-- An initialized native Stack state supplies the code lookup, frame and
@@ -73,6 +75,7 @@ theorem wholeWordStack_tail_initialized_inputs {C F : Type}
     stateRel ac k 0 0 (makeInit ac k t (sptFromAList (compile wc ac programs).2) coracle :
       WordSemStateFiniteExact width (Nat × C) F) t [] 0 ∧
     ∃ bs n bsPost nPost body frame frameSize,
+      nativeEntryBitmap ac false (ac.regCount-(5+ac.avoidRegs.length)) name (compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
       frame = max (maxVarHOL q / 2 + 1 - k) (count-k) ∧
       frameSize = (if frame = 0 then 0 else frame+1) ∧
       compNative ac false q (bs,n) (k,frameSize,frame) = (body,(bsPost,nPost)) ∧
@@ -82,10 +85,10 @@ theorem wholeWordStack_tail_initialized_inputs {C F : Type}
   have nameMember : name ∈ programs.map Prod.fst := List.mem_map.mpr ⟨_,member,rfl⟩
   have notRaise : name ≠ raiseStubLocation := by intro h; subst name; exact noRaise nameMember
   have notStore : name ≠ storeConstsStubLocation := by intro h; subst name; exact noStore nameMember
-  obtain ⟨bs,n,bsPost,nPost,body,frame,frameSize,frameDef,sizeDef,compilation,_,found,lengthBound,gapBound,bitmapPrefix⟩ :=
+  obtain ⟨bs,n,bsPost,nPost,body,frame,frameSize,selected,frameDef,sizeDef,compilation,_,found,lengthBound,gapBound,bitmapPrefix⟩ :=
     wholeWordStack_entryColour_native_inputs wc ac programs name count p member nodup notRaise notStore
   refine ⟨wholeWordStack_initStateRel wc ac programs t coracle noRaise noStore codeEq bitmapsPrefix ok,
-    bs,n,bsPost,nPost,body,frame,frameSize,frameDef,sizeDef,compilation,?_,lengthBound,
+    bs,n,bsPost,nPost,body,frame,frameSize,selected,frameDef,sizeDef,compilation,?_,lengthBound,
     gapBound.trans bitmapsPrefix.length_le,?_⟩
   · simpa only [codeEq] using found
   · exact bitmapPrefix.trans (bitmapsPrefix.drop _)

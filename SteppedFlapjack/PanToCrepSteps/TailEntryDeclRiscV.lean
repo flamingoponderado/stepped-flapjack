@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.TailEntryRiscV
 import SteppedFlapjack.CrepToLoopSteps.DeclRiscVComposition
 import SteppedFlapjack.PanToCrepSteps.TailEntryDeclBound
 
@@ -78,88 +79,7 @@ theorem panTailDeclEntry_riscvWithin {F : Type}
         sizeOf (compileProgExactHOLW (scalarDeclContext panContext panLocal) panBody) + sizeOf (compileProgExactHOLW (scalarDeclContext panContext panLocal) panTail)) * limit)
     panToCrepStateRelFiniteExact panPost post ∧
     pcCompileCorrectResultRel panContext panPost post panResult result ∧
-    ∃ extra loopPost, crepToLoopStateRelExact post loopPost ∧
-    let shiftedWord := {word with clock := word.clock+extra}
-    ∀ (ac : AsmConfigExact 64) (count entryName alg regCount : Nat) (col : Option (Spt Nat))
-      (wordCtxt : Spt Nat) (labels : Nat × Nat)
-      (compiledCode : Spt (Nat × WordLangProgHOL (BitVec 64))) (locals : Spt (WordLocW 64))
-      (_wordLocals : LoopToWord.localsRelHOL wordCtxt target.locals word.locals)
-      (_retLookup : sptLookup 0 word.locals = some (.loc 1 0))
-      (_dim : goodDimindex 64) (_retLabel : ¬ wordSemIsWordLoc (.loc 1 0 : WordLocW 64) = true)
-      (_vars : ∀ k, sptMem k (accVarsHOL loopEntry .ln) → sptMem k wordCtxt)
-      (_gc : gcFunConstOk word.gcFun)
-    (wc : Flapjack.Compiler.Backend.WordToWord.Config)
-    (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
-    (_shapes : TailProgramShapes programs)
-    (_entryMember : (entryName,count,(LoopToWord.compHOL wordCtxt loopEntry labels).1) ∈ programs)
-    (_uniqueNames : (programs.map Prod.fst).Nodup)
-    (_algorithm : alg = wc.regAlg) (_registers : regCount = ac.regCount-(5+ac.avoidRegs.length))
-    (_colour : col = entryColour wc programs entryName)
-    (_wordCode : shiftedWord.code = sptFromAList programs)
-    (_compiledCodeEq : compiledCode = sptFromAList (Flapjack.Compiler.Backend.WordToWord.compile wc ac programs).2)
-    (_localsRel : wordLocalsRel (maxVarHOL (compileExp (LoopToWord.compHOL wordCtxt loopEntry labels).1)+1) shiftedWord.locals locals)
-    (_domain : sptDomain locals = (fun key => key ∈ evenList count))
-    (entry : StackSemStateFiniteExact 64 LabToTarget.Config F) (frameSize frame : Nat) (lens : List Nat)
-    (bs bsPost : AppList (BitVec 64)) (n nPost : Nat) (compiled : HolProg 64) (start argumentCount : Nat)
-    (_stackRel : stateRel ac regCount frameSize frame
-      {shiftedWord with code := compiledCode,locals := locals,clock := tailWordReplayLimit loopEntry wordCtxt labels compiledCode loopLimit}
-      {entry with stackSpace := entry.stackSpace-(frameSize-(argumentCount-regCount))} lens 0)
-    (_native : Flapjack.Compiler.Backend.WordToStack.Native.compNative ac false
-      (fullCompileSingle ac.twoRegArith regCount alg ac ((entryName,count,(LoopToWord.compHOL wordCtxt loopEntry labels).1),col)).2.2
-      (bs,n) (regCount,frameSize,frame) = (compiled,(bsPost,nPost)))
-    (_lengthBound : (appListAppend bs).length ≤ n) (_bitmapBound : n-(appListAppend bs).length ≤ entry.bitmaps.length)
-    (_bitmapPrefix : List.IsPrefix (appListAppend bsPost) (entry.bitmaps.drop (n-(appListAppend bs).length)))
-    (_labelCheck : ∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact entry.code loc)
-    (_maxBound : maxVarHOL (fullCompileSingle ac.twoRegArith regCount alg ac ((entryName,count,(LoopToWord.compHOL wordCtxt loopEntry labels).1),col)).2.2 < 2*frame+2*regCount)
-    (_frameDef : frame = max (maxVarHOL (fullCompileSingle ac.twoRegArith regCount alg ac ((entryName,count,(LoopToWord.compHOL wordCtxt loopEntry labels).1),col)).2.2 / 2 + 1 - regCount) (argumentCount-regCount))
-    (_frameSizeDef : frameSize = if frame = 0 then 0 else frame+1)
-    (_space : frameSize-(argumentCount-regCount) ≤ entry.stackSpace)
-    (_found : sptLookup start entry.code = some (Flapjack.Compiler.Backend.WordToStack.Native.compileProgNative ac false
-      (fullCompileSingle ac.twoRegArith regCount alg ac ((entryName,count,(LoopToWord.compHOL wordCtxt loopEntry labels).1),col)).2.2 argumentCount regCount (bs,n)).1)
-    (inputCode : List (Nat × HolProg 64)) (anything : WordSemGcFun 64) (cr : CompileFn 64 LabToTarget.Config) (c : DataToWord.Config)
-    (jump : Bool) (bounds : BitVec 64 × BitVec 64) (pointer : Nat) (f : Spt Nat) (gen : Bool) (maxHeap a b : Nat)
-    (removeInput : List (Nat × HolProg 64))
-    (oracle : Nat → LabToTarget.Config × List (Nat × HolProg 64) × List (BitVec 64))
-    (renamed : StackSemStateFiniteExact 64 LabToTarget.Config F) (lab : LabSem.State 64 LabToTarget.Config F)
-    (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
-    (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
-    (_distinct : (inputCode.map Prod.fst).Nodup) (_sourceCode : entry.code = sptFromAList inputCode)
-    (_pre : Pre cr c {entry with code := sptFromAList (StackRawCall.compile inputCode),clock := tailStackReplayLimit ac count entryName alg regCount col loopEntry wordCtxt labels compiledCode loopLimit+1} entry.regs)
-    (_relation : stateRelHOL jump bounds pointer
-      (Tgt anything cr c {entry with code := sptFromAList (StackRawCall.compile inputCode),clock := tailStackReplayLimit ac count entryName alg regCount col loopEntry wordCtxt labels compiledCode loopLimit+1} 0 entry.regs)
-      (makeInit f (sptFromAList (StackRemove.compileHOL jump bounds gen maxHeap a b removeInput)) oracle renamed))
-    (_ha : ¬renamed.useAlloc) (_hs : ¬renamed.useStore) (_hk : ¬renamed.useStack)
-    (_hf : Function.Bijective (findNameSpt f))
-    (_hcode : renamed.code = sptFromAList (compileHOL f (StackRemove.compileHOL jump bounds gen maxHeap a b removeInput)))
-    (_hor : renamed.compileOracle = Prod.map id (Prod.map (compileHOL f) id) ∘ oracle)
-    (_labRel : Flapjack.Compiler.Backend.StackToLab.Proofs.StateRel.stateRel renamed lab)
-    (_hpc : LabSem.locToPc start 0 lab.code = some lab.pc)
-    (_hmc : mc.target = riscvTarget) (_tie : LabToTarget.oracleTie mc machine lab)
-    (_machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) lab asm machine),
-    let out := (fullCompileSingle ac.twoRegArith regCount alg ac ((entryName,count,(LoopToWord.compHOL wordCtxt loopEntry labels).1),col)).2.2
-    let stackLimit := tailStackReplayLimit ac count entryName alg regCount col loopEntry wordCtxt labels compiledCode loopLimit
-    sptLookup entryName compiledCode = some (count,out) ∧
-    ∃ (outcome : HolOutcome) (ticks : Nat) (finalMachine : RiscV.L3.riscv_state) (finalFfi : HolFfiState F)
-      (stackPost : StackSemStateFiniteExact 64 LabToTarget.Config F) (stackResult : Option (StackSemResult 64)),
-      ticks ≤ labTickBound 4 labCode lab.codeBuffer *
-        (flattenStepFactor * (computedRunCost bounds
-          (uniformFactor (width := 64) c * (3 + callSequenceCost ac stackLimit entry.code out (bs,n) (regCount,frameSize,frame)))
-          (.call none (.inl start) none)
-          (Tgt anything cr c {entry with code := sptFromAList (StackRawCall.compile inputCode),clock := stackLimit+1} 0 entry.regs) *
-          (uniformFactor (width := 64) c * (3 + callSequenceCost ac stackLimit entry.code out (bs,n) (regCount,frameSize,frame))) + 4)) ∧
-      evaluateTargetHOL mc lab.ffi ticks machine = (.halt outcome,finalMachine,finalFfi) ∧
-      finalFfi.ioEvents = stackPost.ffi.ioEvents ∧ stackEntryClass stackResult = .CompleteResult outcome ∧
-      ∃ wordPost wordResult perm selectedLocals targetPost,
-        LoopToWord.CompileCorrect.resultCase wordCtxt (.loc 1 0) shiftedWord (resultToLoop result) loopPost wordResult wordPost ∧
-        wordPost.ffi = loopPost.ffi ∧
-        wordStateEqRel {wordPost with code := compiledCode,permute := perm,locals := selectedLocals,clock := tailWordReplayLimit loopEntry wordCtxt labels compiledCode loopLimit-(6*loopLimit-(6*loopLimit-(shiftedWord.clock-wordPost.clock)))} targetPost ∧
-        compCorrectResult ac regCount frameSize frame
-          {shiftedWord with code := compiledCode,locals := locals,clock := stackLimit}
-          {targetPost with clock := stackLimit-(tailWordReplayLimit loopEntry wordCtxt labels compiledCode loopLimit-targetPost.clock)}
-          stackPost wordResult stackResult lens ∧
-        ((LoopMachineOutcome (resultToLoop result) outcome ∧ finalFfi.ioEvents = panPost.ffi.ioEvents) ∨
-          (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: panPost.ffi.ioEvents ∧
-            targetPost.stackMax.getD (targetPost.stackLimit+1) > targetPost.stackLimit)) := by
+    TailEntryMachineResult post panPost result target word loopEntry loopLimit := by
   have crepFound : middle.code.lookup name = some ([],compileProgExactHOLW panContext
       (.dec panLocal .one panInitializer (.seq panCalleeInit (.seq (.while panCondition panBody) panTail)))) := by
     rw [calleeEq]
@@ -172,19 +92,13 @@ theorem panTailDeclEntry_riscvWithin {F : Type}
       sizeOf init + 2 + (4 + sizeOf (compileProgExactHOLW (scalarDeclContext panContext panLocal) panCalleeInit) +
         sizeOf (compileProgExactHOLW (scalarDeclContext panContext panLocal) panBody) + sizeOf (compileProgExactHOLW (scalarDeclContext panContext panLocal) panTail)) * limit := by
     exact stepBound.trans (Nat.add_le_add_left (Nat.mul_le_mul_left _ panBound) _)
-  have correct : pcCompileCorrectAt (.dec panLocal .one panInitializer (.seq panCalleeInit (.seq (.while panCondition panBody) panTail)))
-      (callEntryStateHOLFinite panMiddle panLocals) :=
-    (pcCompileCorrectAt_iff_HOL _ _).mpr (pcCompileCorrect_all _ _)
-  obtain ⟨crepResult,crepPost,crepRun,postRel,_,_,resultRel⟩ :=
-    correct panResult panPost (decClockCrepSemHOL {middle with locals := HolFiniteMapExact.empty.updateList []})
-      panContext panRun panNonerror panStateRel panCodeRel panExcpRel panLocalsRel panLocalised
-  rw [calleeEq,calleeRun] at crepRun
-  obtain ⟨rfl,rfl⟩ := Prod.mk.inj crepRun
+  obtain ⟨postRel,resultRel⟩ := tailEntry_source_result _ _ _ _ _ _ _ _ _
+    panRun panNonerror panStateRel panCodeRel panExcpRel panLocalsRel panLocalised calleeEq calleeRun
   refine ⟨postRel,resultRel,?_⟩
   have machine := branchTailDecl_riscvWithin ctxt live name init initShape localName initializer initializerShape calleeInit calleeInitShape condition conditionShape
     body tail bodyShape tailShape source middle post result target word _ initRun found clock calleeRun complete
     crepRel memRel globalsRel codeRel localsRel loopWordRel bound
   have ffi : panPost.ffi = post.ffi := postRel.2.2.2.2.2.2.2.1
-  simpa only [ffi] using machine
+  simpa only [TailEntryMachineResult,ffi] using machine
 
 end SteppedFlapjack.PanToCrepSteps

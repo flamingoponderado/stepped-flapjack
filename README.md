@@ -56,12 +56,34 @@ keep their names in the `Flapjack` namespace.
   fixtures.
 
 The `*Steps` directories also contain the quantitative compiler chain:
-Pancake → Crep → Loop → Word passes → Stack → Lab → RISC-V. The global-entry
-composition is `PanToCrepSteps.panTailEntry_globalWord_riscvWithin`; it covers
-a supported initialized loop and retains frontend, native-entry, and backend
-initialization premises. Its machine bound can depend on an execution-selected
-oracle prefix and other limit-dependent backend costs; a full-compiler bound
-with all initialization premises discharged is still in progress.
+Pancake → Crep → Loop → Word passes → Stack → Lab → RISC-V. The
+`PanToCrepSteps` modules connect counted source execution to global lowering,
+including a scalar declaration around an initialized loop. The general
+`panOriginalDeclEntry_riscvWithin` theorem carries a source control-step bound
+through this chain under the stated state and compilation conditions.
+
+`counted_singleEntry_declared_fullCompiler_riscv` takes a separately bounded,
+successful fine-grained Pancake execution of a supported scalar assignment loop
+and gives a RISC-V halt bound for the original singleton program's full compiler
+output. The bound depends on the program and backend configuration; the result
+covers successful return and resource exhaustion. The theorem assumes the
+stated source clock, source layout, compiler input, and full-initialization
+machine relations. `labInitialized_counted_declared_fullCompiler_riscv` constructs the
+source and native inputs for this supported fragment from a Lab initialization
+context.
+The aligned initialization construction keeps the byte-closed machine domain
+separate from the word-aligned Stack domain. The earlier results that required
+one nonempty domain to be both byte-closed and word-aligned have been removed;
+`unalignedLabInit_incompatible` proves why those assumptions conflict.
+
+The zero-count source has an independently proved nine-step execution and its
+actual compiler artifact has at most 1,040 bytes. A concrete RISC-V theorem
+with an explicit, independently fixed tick bound remains to be proved.
+
+The concrete declaration example includes an independently counted 13-step
+source execution. The previous machine theorem that selected part of its tick
+bound existentially has been removed; an independently fixed machine bound
+remains to be proved.
 
 Code shared with the clocked evaluator stays in Flapjack, in
 `Flapjack.PanValueFfiCore` and `Flapjack.PanExpressionEvaluatorBase`.

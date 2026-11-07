@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.TailRiscVInputsCommon
 import SteppedFlapjack.CrepToLoopSteps.OptimisedTailEntry
 import SteppedFlapjack.LoopToWordSteps.TailEntryRiscV
 
@@ -66,22 +67,6 @@ theorem branchTail_riscv_inputs {F C : Type}
     branch_tailCall_nil_optimised_bound ctxt live name init initShape calleeInit calleeInitShape
       condition conditionShape body tail bodyShape tailShape source middle post result target .ln (0,0)
       initRun found clock calleeRun complete stateRel memRel globalsRel codeRel localsRel
-  have foundSource : source.code.lookup name = some ([],.seq calleeInit (.seq (.while condition body) tail)) := by
-    simpa only [evaluateCodeInvariantHOL init source none middle initRun] using found
-  obtain ⟨loc,len,hlab,hlen,hcode⟩ := codeRel.2 name [] _ foundSource
-  have lenZero : len = 0 := by simpa using hlen.symm
-  subst len
-  have label : findLabExact ctxt name = loc := by simp [findLabExact,hlab]
-  have lookup : sptLookup (findLabExact ctxt name) {target with clock := target.clock+extra}.code =
-      some ([],ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln
-        (.seq calleeInit (.seq (.while condition body) tail))) := by
-    simpa [label,listToNumSetHOLExact] using hcode
-  have shifted : loopToWordStateRelHOLExact {target with clock := target.clock+extra}
-      {word with clock := word.clock+extra} := by
-    rcases loopWordRel with ⟨len,hm,hd,hs,hc,hbe,hffi,hbase,hlen,htop,hg,hcode⟩
-    refine ⟨len,hm,hd,hs,?_,hbe,hffi,hbase,hlen,htop,hg,hcode⟩
-    simp only
-    omega
   have bounded : LoopSteps.steps (optimiseHOL (compileHOLExact ctxt live (.seq init (.call none name []))))
       {target with clock := target.clock+extra} ≤
       branchTailLoopLimit ctxt live name init calleeInit condition body tail limit := by
@@ -93,8 +78,8 @@ theorem branchTail_riscv_inputs {F C : Type}
     simpa only [ocompileHOLExact] using LoopLiveSteps.optimise_sequence
       (branchConditionWhileBranch_wordSimpShape calleeInit calleeInitShape condition conditionShape
         body tail bodyShape tailShape (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln)
-  exact ⟨extra,loopPost,LoopLiveSteps.optimise_singleTail
-    (LoopLiveSteps.compiled_singleTail_shape ctxt live init initShape name),calleeShape,
-    lookup,run,by cases complete <;> simp [resultToLoop],completeCrep_loop complete,shifted,postRel,bounded⟩
+  exact ⟨extra,loopPost,branchTail_riscv_inputs_of_run ctxt live name init
+    (.seq calleeInit (.seq (.while condition body) tail)) initShape source middle post result target word extra loopPost _
+    initRun found complete codeRel loopWordRel calleeShape run postRel bounded⟩
 
 end SteppedFlapjack.CrepToLoopSteps
