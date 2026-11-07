@@ -48,4 +48,18 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
     (.const 1) (by simp [ExpByteRanged]) context primitive handler [] 1 2
     (updatePanValueMap p.locals "x" (.word 1)) run
   exact ⟨value,by simpa [source,expToHOL] using hol⟩
+/-- A concrete comparison witnesses the condition inversion premises. -/
+example :
+    @evalHOLExact 64 Unit _ (exactState branchingHOL).toExact
+      (fun a => Classical.propDecidable ((exactState branchingHOL).memaddrs a))
+      (.cmp .lower (.const 0) (.const 1)) = some (.val (.word 1)) := by
+  let p := executableState branchingHOL
+  have run : panValueIteCondition p.structs p.baseAddress p.topAddress panSemBitVec64BytesInWord
+      p.locals p.globals p.memory (.cmp .lower (.const 0) (.const 1)) (some (panSemBitVec64MemoryAccess p)) = some (1,3) := by
+    simp [panValueIteCondition,evalPanValueExpCounted,evalPanValueExp,panValueExpStepCost,
+      panSemBitVec64MemoryAccess,panValueMemoryAccessOfModel,panSemBitVec64WordModel,panSemWordModel,
+      RiscV.panRiscVMemoryModel,RiscV.panRiscVCmp]
+  have result := counted_condition_invert p (exactState branchingHOL) (source_related _) (source_ranged _)
+    (.cmp .lower (.const 0) (.const 1)) (by simp [ExpByteRanged]) 1 3 run
+  simpa [expToHOL] using result.1
 end SteppedFlapjack.Test

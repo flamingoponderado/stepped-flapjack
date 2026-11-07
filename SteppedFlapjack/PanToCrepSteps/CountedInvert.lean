@@ -1,4 +1,4 @@
-import SteppedFlapjack.PanToCrepSteps.CountedAssign
+import SteppedFlapjack.PanToCrepSteps.CountedIte
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
 
@@ -117,5 +117,33 @@ theorem counted_assign_invert {σ : Type}
         obtain ⟨_,hol,finalRel,finalRanged,bound⟩ := result
         exact ⟨value,postEq.symm,hol,by simpa [postEq] using finalRel,by simpa [postEq] using finalRanged,bound⟩
       · simp at run
+
+/-- A successful counted condition determines the same HOL word and exact
+expression cost. -/
+theorem counted_condition_invert {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
+    [DecidablePred source.memaddrs]
+    (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
+    (condition : Exp (RiscV.Word 64)) (conditionRanged : ExpByteRanged condition) (word : BitVec 64) (cost : Nat)
+    (run : panValueIteCondition production.structs production.baseAddress production.topAddress panSemBitVec64BytesInWord
+      production.locals production.globals production.memory condition
+      (some (panSemBitVec64MemoryAccess production)) = some (word,cost)) :
+    @evalHOLExact 64 σ _ source.toExact (fun a => Classical.propDecidable (source.memaddrs a))
+      (expToHOL condition) = some (.val (.word word)) ∧ cost = panValueExpStepCost condition := by
+  simp only [panValueIteCondition,evalPanValueExpCounted] at run
+  cases evaluated : evalPanValueExp production.structs production.locals production.globals production.memory
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord condition
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) with
+  | none => simp [evaluated] at run
+  | some value =>
+    cases value with
+    | word bits =>
+      simp only [evaluated,Option.map_some,Option.some.injEq,Prod.mk.injEq] at run
+      obtain ⟨rfl,rfl⟩ := run
+      have expressionRun : evalPanSemStateExp production condition = some (.word bits) := by
+        simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
+      exact ⟨(counted_condition_word production source rel ranged condition conditionRanged bits expressionRun).2,rfl⟩
+    | rStruct fields => simp [evaluated] at run
+    | nStruct name fields => simp [evaluated] at run
 
 end SteppedFlapjack.PanToCrepSteps
