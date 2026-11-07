@@ -21,9 +21,14 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
         (executableState branchingHOL).ffi [.word 7],2) := by
     simp [evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith,evalPanValueExpCounted,
       evalPanValueExp,panValueExpStepCost,panValuePayloadWithinLimit,panValuePayloadSizeFuel]
-  have result := counted_return_invert (executableState branchingHOL) (exactState branchingHOL)
-    (source_related _) (source_ranged _) (.const 7) (by simp [ExpByteRanged]) 7 context primitive handler [] 1 2 run
-  exact ⟨by simpa [expToHOL] using result.1,by simpa [expToHOL] using result.2.2.2⟩
+  have words : WordLocals (executableState branchingHOL).locals := by
+    simpa [executableState,singleEntrySourceProduction,sourceProduction] using wordLocals_empty
+  obtain ⟨word,valueEq,_,hol,_,_,bound⟩ := counted_scalar_return_invert (executableState branchingHOL)
+    (exactState branchingHOL) (source_related _) (source_ranged _) words (.const 7)
+    (Scalar.const (scope := []) _) (by simp [ExpByteRanged]) (.word 7) (fun _ => none)
+    context primitive handler [] 1 2 run
+  cases valueEq
+  exact ⟨by simpa [expToHOL] using hol,by simpa [expToHOL] using bound⟩
 /-- A populated local also witnesses the assignment inversion premises. -/
 example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
