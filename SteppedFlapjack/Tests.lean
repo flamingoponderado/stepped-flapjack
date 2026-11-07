@@ -1,3 +1,4 @@
+import SteppedFlapjack.Test.CountedInvert
 import SteppedFlapjack.Test.Ffi
 import SteppedFlapjack.Test.GlobalEntryExample
 import SteppedFlapjack.Test.LabToTargetSteps

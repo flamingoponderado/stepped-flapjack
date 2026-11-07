@@ -92,6 +92,22 @@ theorem controlSteps_seq {width : Nat} [NeZero width] {σ : Type}
     omega
   | some r => simp only; omega
 
+/-- A conditional counts the reached branch after evaluating its condition. -/
+theorem controlSteps_ite {width : Nat} [NeZero width] {σ : Type}
+    (condition : ExpHOL width) (a b : ProgHOL width) (source : PanSemStateFiniteExact width σ) :
+    controlSteps (.ite condition a b) source = 1 +
+      match @evalHOLExact width σ _ source.toExact (fun address => Classical.propDecidable (source.memaddrs address)) condition with
+      | some (.val (.word w)) => if w ≠ 0 then controlSteps a source else controlSteps b source
+      | _ => 0 := by
+  rw [controlSteps.eq_def]
+  have ha : Prod.Lex (fun x y : Nat => x < y) (fun x y : Nat => x < y)
+      (source.clock,sizeOf a) (source.clock,sizeOf (.ite condition a b : ProgHOL width)) := by
+    apply Prod.Lex.right; simp_wf; omega
+  have hb : Prod.Lex (fun x y : Nat => x < y) (fun x y : Nat => x < y)
+      (source.clock,sizeOf b) (source.clock,sizeOf (.ite condition a b : ProgHOL width)) := by
+    apply Prod.Lex.right; simp_wf
+  simp only [dif_pos ha,dif_pos hb]
+
 /-- A source while counts the body and each reached recursive iteration. -/
 theorem controlSteps_while {width : Nat} [NeZero width] {σ : Type}
     (condition : ExpHOL width) (body : ProgHOL width) (source : PanSemStateFiniteExact width σ) :

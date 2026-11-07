@@ -4,6 +4,7 @@ import SteppedFlapjack.Concrete.SourceState
 import SteppedFlapjack.Concrete.SourceRuns
 import SteppedFlapjack.Concrete.FrontendState
 import SteppedFlapjack.Concrete.FrontendShape
+import SteppedFlapjack.Concrete.FrontendStatic
 import SteppedFlapjack.Concrete.CrepCode
 import SteppedFlapjack.Concrete.CrepBranch
 
