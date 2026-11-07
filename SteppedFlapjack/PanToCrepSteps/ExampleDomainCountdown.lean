@@ -1,5 +1,5 @@
 import SteppedFlapjack.PanToCrepSteps.ConcreteStateCountdown
-import SteppedFlapjack.PanToCrepSteps.CountdownExampleLayout
+import SteppedFlapjack.PanToCrepSteps.CountdownBitmapLayout
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineState
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineConfig
 import Flapjack.Pancake.Proofs.PanToTarget.ExecutableCompileProgMaxAsmWith
@@ -32,7 +32,7 @@ open Flapjack.Pancake.Proofs.PanToTarget
 set_option maxHeartbeats 1000000 in
 /-- Countdown bound with fixed heap and bitmap domains, concrete registers, and
 byte memory constructed from words. Code must fit below the heap; loading and
-the bitmap-region assertion are stated explicitly. -/
+the compiler must emit a single bitmap, and code loading remains explicit. -/
 theorem exampleDomain_countdown_riscv {σ : Type}
     (name : VarName) (count budget : Nat) (returned : BitVec 64)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
@@ -40,25 +40,21 @@ theorem exampleDomain_countdown_riscv {σ : Type}
     (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel : Nat)
     (production : PanSemState (RiscV.Word 64) (FfiState σ))
     (template : PanSemStateFiniteExact 64 σ)
-    (dataSp : Nat)
-    (final : Backend.Config) (bytes : List (BitVec 8)) (bitmaps : List (BitVec 64))
+    (final : Backend.Config) (bytes : List (BitVec 8)) (bitmap : BitVec 64)
     (rest : BitVec 64 → BitVec 64)
     (ffi : HolFfiState σ)
     (cbspace labClock : Nat)
     (hcompile : compileProgAsmFast countdownRiscVBackend riscvConfig
       (singleEntryProgram (ofString "main") (.dec (ofString name) .one (.const (BitVec.ofNat 64 count)) (.seq .skip (.seq
         (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))))) =
-        some (bytes,bitmaps,final))
+        some (bytes,[bitmap],final))
     (hffi : final.labConf.ffiNames = some countdownMachineConfig.ffiNames)
-    (loaded : bytesInMemHOL 4096 bytes (countdownBytesOfWords (countdownExampleWords bytes cbspace dataSp bitmaps rest)) countdownMachineConfig.progAddresses
-      (fun a => countdownStackByteDomain countdownRiscVBackend (countdownAsmState (countdownBytesOfWords (countdownExampleWords bytes cbspace dataSp bitmaps rest)) countdownExampleRegs) countdownExampleBitmapsDomain a = true))
+    (loaded : bytesInMemHOL 4096 bytes (countdownBytesOfWords (countdownExampleWords bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap rest))) countdownMachineConfig.progAddresses
+      (fun a => countdownStackByteDomain countdownRiscVBackend (countdownAsmState (countdownBytesOfWords (countdownExampleWords bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap rest))) countdownExampleRegs) countdownExampleBitmapsDomain a = true))
     (fits : bytes.length + cbspace ≤ 61440)
     (nameRanged : NameRanged name) (wordRange : count < 2^64)
     (budgetBound : 6*count+9 ≤ budget)
-    (bitmapLayout : SetSep.star (Misc.wordList (131072 : BitVec 64) (bitmaps.map WordLocW.word))
-      (Misc.wordListExists ((131072 : BitVec 64) + 8 * BitVec.ofNat 64 bitmaps.length) dataSp)
-      (SetSep.fun2Set ((fun a => WordLocW.word (rest a)),
-        fun a => holByteAligned a = true ∧ countdownExampleBitmapsDomain a = true))) :
+ :
     let body : ProgHOL 64 := .dec (ofString name) .one (.const (BitVec.ofNat 64 count))
       (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))
     let start := ofString "main"
@@ -72,7 +68,7 @@ theorem exampleDomain_countdown_riscv {σ : Type}
     let loopCtxt := mkCtxtExact riscvConfig.isa (makeVmapExact [])
       (crepToLoopMakeFuncsExactExecutable (compileProgDeclsHOLW (compileTopExactHOL declarations start))) 0
     ∃ (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ) (backend : FullInitMachineContext stack),
-    backend.mc = countdownMachineConfig ∧ backend.machine = (countdownMachineState (countdownBytesOfWords (countdownExampleWords bytes cbspace dataSp bitmaps rest)) countdownExampleRegs) ∧
+    backend.mc = countdownMachineConfig ∧ backend.machine = (countdownMachineState (countdownBytesOfWords (countdownExampleWords bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap rest))) countdownExampleRegs) ∧
     let adjustedStack := (fullMakeInit backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset
       backend.bitmaps backend.inputCode {backend.lab with clock := budget+1} backend.saveRegs backend.dataSp backend.coracle).1
     let adjusted := backend.withClock (budget+1)
@@ -102,24 +98,25 @@ theorem exampleDomain_countdown_riscv {σ : Type}
             (.dec (ofString name) .one (.const (BitVec.ofNat 64 count)) (.seq .skip
               (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))))))
           entry (assignLoopEntryWordContext entry) (firstLoopName,2) limit) adjusted.resourceTickLimit ∧
-        evaluateTargetHOL countdownMachineConfig ffi ticks (countdownMachineState (countdownBytesOfWords (countdownExampleWords bytes cbspace dataSp bitmaps rest)) countdownExampleRegs) = (.halt outcome,finalMachine,finalFfi) ∧
+        evaluateTargetHOL countdownMachineConfig ffi ticks (countdownMachineState (countdownBytesOfWords (countdownExampleWords bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap rest))) countdownExampleRegs) = (.halt outcome,finalMachine,finalFfi) ∧
         ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧
             (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = adjustedStack.ffi.ioEvents))) := by
-  have domain : ∀ a, countdownStackByteDomain countdownRiscVBackend (countdownAsmState (countdownBytesOfWords (countdownExampleWords bytes cbspace dataSp bitmaps rest)) countdownExampleRegs)
+  have domain : ∀ a, countdownStackByteDomain countdownRiscVBackend (countdownAsmState (countdownBytesOfWords (countdownExampleWords bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap rest))) countdownExampleRegs)
       countdownExampleBitmapsDomain a = true → countdownMachineConfig.progAddresses a := by
     rw [countdownExampleByteDomain_eq]
     intro a ha
     exact countdownExampleByteDomain_facts.2 a ha
-  have closed : ∀ a, countdownStackByteDomain countdownRiscVBackend (countdownAsmState (countdownBytesOfWords (countdownExampleWords bytes cbspace dataSp bitmaps rest)) countdownExampleRegs)
+  have closed : ∀ a, countdownStackByteDomain countdownRiscVBackend (countdownAsmState (countdownBytesOfWords (countdownExampleWords bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap rest))) countdownExampleRegs)
       countdownExampleBitmapsDomain (holByteAlign a) = true →
-      countdownStackByteDomain countdownRiscVBackend (countdownAsmState (countdownBytesOfWords (countdownExampleWords bytes cbspace dataSp bitmaps rest)) countdownExampleRegs)
+      countdownStackByteDomain countdownRiscVBackend (countdownAsmState (countdownBytesOfWords (countdownExampleWords bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap rest))) countdownExampleRegs)
         countdownExampleBitmapsDomain a = true := by
     rw [countdownExampleByteDomain_eq]
     exact countdownExampleByteDomain_closed
   exact concreteState_countdown_riscv name count budget returned context primitive handler functions fuel production template
-    dataSp final bytes bitmaps (countdownBytesOfWords (countdownExampleWords bytes cbspace dataSp bitmaps rest)) countdownExampleRegs ffi cbspace labClock (fun x => WordLocW.word ((countdownExampleWords bytes cbspace dataSp bitmaps rest) x)) 131072 countdownExampleBitmapsDomain
-    hcompile hffi loaded domain closed (countdownBytesOfWords_consistent (countdownExampleWords bytes cbspace dataSp bitmaps rest))
-    (countdownExample_buffer _ bytes cbspace fits) (by omega) nameRanged wordRange budgetBound (countdownExample_stackLayout bytes cbspace dataSp bitmaps rest bitmapLayout)
+    8191 final bytes [bitmap] (countdownBytesOfWords (countdownExampleWords bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap rest))) countdownExampleRegs ffi cbspace labClock (fun x => WordLocW.word ((countdownExampleWords bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap rest)) x)) 131072 countdownExampleBitmapsDomain
+    hcompile hffi loaded domain closed (countdownBytesOfWords_consistent (countdownExampleWords bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap rest)))
+    (countdownExample_buffer _ bytes cbspace fits) (by omega) nameRanged wordRange budgetBound (countdownExample_stackLayout bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap rest)
+      (by simpa using countdownExample_singleBitmapLayout (countdownExampleBitmapBacking bitmap rest) bitmap (by simp [countdownExampleBitmapBacking])))
 
 end SteppedFlapjack.PanToCrepSteps
