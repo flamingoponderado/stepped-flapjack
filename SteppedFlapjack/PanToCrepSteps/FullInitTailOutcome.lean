@@ -51,11 +51,48 @@ theorem returned_fullInitTail_outcome {F : Type}
     exact Or.inl ⟨rfl,by simpa only [traceEq] using events⟩
   · exact Or.inr ⟨resource,by simpa only [traceEq] using events⟩
 
+/-- Stack safety removes the resource alternative from the returned outcome. -/
+theorem returned_fullInitTail_outcome_safe {F : Type}
+    (globals : PanGlobalsContextExact 64) (ctxt : PanToCrepContextExact 64)
+    (sourceFinal panPost : PanSemStateFiniteExact 64 F) (crepPost : CrepSemHOLState 64 F)
+    (loopSource loopPost : LoopSemStateFiniteExact 64 F) (crepResult : Option (CrepResultHOLExact 64))
+    (returned : BitVec 64)
+    (globalRel : panGlobalsStateRelHOLExact (goodResHOL (some (.returned (.val (.word returned))))) globals sourceFinal panPost)
+    (panCrepRel : panToCrepStateRelFiniteExact panPost crepPost)
+    (resultRel : pcCompileCorrectResultRel ctxt panPost crepPost (some (.returned (.val (.word returned)))) crepResult)
+    (crepLoopRel : crepToLoopStateRelExact crepPost loopPost)
+    (p : HolLoopProg 64) (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (limit : Nat)
+    (ready : FullInitTailReady p loopSource loopPost (resultToLoop crepResult) word limit)
+    (setup : FullInitTailSetup p word limit)
+    (base : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (frameSize : Nat)
+    (sourceEmpty : loopSource.locals = .ln)
+    (contextEq : setup.ctxt = makeCtxtHOL 2 (LoopToWord.fromNumSetHOL
+      (sptDifference (accVarsHOL p .ln) (LoopToWord.toNumSetHOL []))) .ln)
+    (wordLocals : word.locals = (callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize) base).locals)
+    (safe : setup.wordSafe) :
+    ∃ outcome ticks finalMachine finalFfi,
+      ticks ≤ setup.tickLimit ∧
+      evaluateTargetHOL setup.mc setup.lab.ffi ticks setup.machine = (.halt outcome,finalMachine,finalFfi) ∧
+      outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents := by
+  have globalFfi : sourceFinal.ffi = panPost.ffi := by
+    rcases globalRel with ⟨_,_,_,_,_,_,_,_,_,_,_,_,_,ffi,_⟩
+    exact ffi
+  have panFfi : panPost.ffi = crepPost.ffi := panCrepRel.2.2.2.2.2.2.2.1
+  have loopFfi : crepPost.ffi = loopPost.ffi := crepLoopRel.2.2.2.2.1
+  have traceEq : sourceFinal.ffi.ioEvents = loopPost.ffi.ioEvents := by rw [globalFfi,panFfi,loopFfi]
+  have resultEq : crepResult = some (.return (flattenHOL (.val (.word returned)))) := by
+    simpa only [pcCompileCorrectResultRel] using resultRel
+  obtain ⟨outcome,ticks,finalMachine,finalFfi,bound,run,matched,events⟩ :=
+    ready.run_native_safe setup base frameSize sourceEmpty contextEq wordLocals safe
+  rw [resultEq] at matched
+  cases matched
+  exact ⟨.success,ticks,finalMachine,finalFfi,bound,run,rfl,by simpa only [traceEq] using events⟩
+
 /-- A full-initialization outcome stated against the original source's final trace. -/
 def FullInitReturnedReady {F : Type} (p : HolLoopProg 64)
     (loopSource : LoopSemStateFiniteExact 64 F) (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
     (limit : Nat) (sourceFinal : PanSemStateFiniteExact 64 F) : Prop :=
-  ∀ (setup : FullInitTailSetup p word limit)
+  (∀ (setup : FullInitTailSetup p word limit)
     (base : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (frameSize : Nat),
     loopSource.locals = .ln →
     setup.ctxt = makeCtxtHOL 2 (LoopToWord.fromNumSetHOL
@@ -65,7 +102,17 @@ def FullInitReturnedReady {F : Type} (p : HolLoopProg 64)
       ticks ≤ setup.tickLimit ∧
       evaluateTargetHOL setup.mc setup.lab.ffi ticks setup.machine = (.halt outcome,finalMachine,finalFfi) ∧
       ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
-        (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents))
+        (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents))) ∧
+  (∀ (setup : FullInitTailSetup p word limit)
+    (base : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (frameSize : Nat),
+    loopSource.locals = .ln →
+    setup.ctxt = makeCtxtHOL 2 (LoopToWord.fromNumSetHOL
+      (sptDifference (accVarsHOL p .ln) (LoopToWord.toNumSetHOL []))) .ln →
+    word.locals = (callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize) base).locals →
+    setup.wordSafe → ∃ outcome ticks finalMachine finalFfi,
+      ticks ≤ setup.tickLimit ∧
+      evaluateTargetHOL setup.mc setup.lab.ffi ticks setup.machine = (.halt outcome,finalMachine,finalFfi) ∧
+      outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents)
 
 /-- Relate the generic backend-ready result to a returned Pancake word. -/
 theorem fullInitReturnedReady_of_return {F : Type}
@@ -80,8 +127,12 @@ theorem fullInitReturnedReady_of_return {F : Type}
     (p : HolLoopProg 64) (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (limit : Nat)
     (ready : FullInitTailReady p loopSource loopPost (resultToLoop crepResult) word limit) :
     FullInitReturnedReady p loopSource word limit sourceFinal := by
-  intro setup base frameSize sourceEmpty contextEq wordLocals
-  exact returned_fullInitTail_outcome globals ctxt sourceFinal panPost crepPost loopSource loopPost crepResult returned
-    globalRel panCrepRel resultRel crepLoopRel p word limit ready setup base frameSize sourceEmpty contextEq wordLocals
+  constructor
+  · intro setup base frameSize sourceEmpty contextEq wordLocals
+    exact returned_fullInitTail_outcome globals ctxt sourceFinal panPost crepPost loopSource loopPost crepResult returned
+      globalRel panCrepRel resultRel crepLoopRel p word limit ready setup base frameSize sourceEmpty contextEq wordLocals
+  · intro setup base frameSize sourceEmpty contextEq wordLocals safe
+    exact returned_fullInitTail_outcome_safe globals ctxt sourceFinal panPost crepPost loopSource loopPost crepResult returned
+      globalRel panCrepRel resultRel crepLoopRel p word limit ready setup base frameSize sourceEmpty contextEq wordLocals safe
 
 end SteppedFlapjack.PanToCrepSteps
