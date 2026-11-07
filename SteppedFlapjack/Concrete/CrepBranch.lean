@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepSteps.TailEntry
 import SteppedFlapjack.Concrete.CrepCode
 import SteppedFlapjack.CrepSteps.Defs
 import SteppedFlapjack.Concrete.SupportedSpan
@@ -137,25 +138,13 @@ theorem branching_entry_span :
   have returned : targetResult = some (.return [.word 7]) := by
     simpa [pcCompileCorrectResultRel,flattenHOL] using resultRel
   subst targetResult
-  refine ⟨targetFinal.emptyLocals,?_,?_⟩
-  · rw [branchCrepEntry,evalCrepSemHOLProgExact_seq_holShape,evalCrepSemHOLProgExact_skip]
-    simp only [if_true]
-    rw [evalCrepSemHOLProgExact_call_holShape]
-    simp [lookupCodeFiniteHOL,lookup',crepReturnInfoNodupError,nonzero,branchCrepCallee,decClockCrepSemHOL] at targetRun ⊢
-    rw [targetRun]
-    simp [flattenHOL]
-  · rw [branchCrepEntry,SteppedFlapjack.CrepSteps.steps_seq]
-    simp only [evalCrepSemHOLProgExact_skip]
-    rw [SteppedFlapjack.CrepSteps.steps_call_tail (entryName branchingHOL) [] _ [] [] _
-      (by simp) lookup' (by simp) (by simp) nonzero]
-    have one : SteppedFlapjack.CrepSteps.steps (.skip : CrepProgHOL 64) (crepState branchingHOL) = 1 :=
-      SteppedFlapjack.CrepSteps.steps_leaf _ _ rfl
-    rw [one]
-    simp only [branchCrepCallee, List.zip, List.zipWith] at bound ⊢
-    rw [codeEq] at bound ⊢
-    have size : sizeOf branchCrepBody = 38 := by decide
-    rw [size] at bound
-    omega
+  have wrapper := CrepSteps.tail_entry_returned_word (crepState branchingHOL) (entryName branchingHOL)
+    (compileProgExactHOLW branchCalleeContext branchingHOL) 7 targetFinal _ lookup' nonzero (by simpa [branchCrepCallee,flattenHOL] using targetRun) bound
+  refine ⟨targetFinal.emptyLocals,by simpa [branchCrepEntry] using wrapper.1,?_⟩
+  rw [codeEq] at wrapper
+  have size : sizeOf branchCrepBody = 38 := by decide
+  rw [size] at wrapper
+  simpa [branchCrepEntry] using wrapper.2
 
 /-- Concrete source-to-Crep correspondence, obtained by directly checking
 both runs. The five-visit calculation cross-checks the general span bound above. -/

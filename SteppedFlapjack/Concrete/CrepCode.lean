@@ -7,7 +7,8 @@ open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString SteppedFlapj
 
 macro "simp_crep_code" : tactic => `(tactic| simp [compileToCrepExactHOLW,functionsHOL,compFuncExactHOLW,crepVarsHOL,
     compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,
-    branchingHOL,countdownHOL,countdownBodyHOL,fpermHOL,compileProgExactHOL,compileExpExactHOL,
+    branchingHOL,countdownHOL,countdownBodyHOL,naturalCountdownHOL,naturalCountdown,
+    progToHOL,expToHOL,shapeToHOL,countdownBody,fpermHOL,compileProgExactHOL,compileExpExactHOL,
     compileExpExactHOLList,compileExpExactHOLW,compileIfExactHOLW,compileReturnExactHOLW,
     compileWhileExactHOLW,compileDecExactHOLW,compileLocalAssignExactHOLW,nestedDecsHOL,
     panToCrepMakeVmapHOLExact,mkCtxtExactHOL,entryName,FUPDATE,cexpHeads,
@@ -33,6 +34,18 @@ theorem countdown_crep_code (n : Nat) : crepPrograms (countdownHOL n) =
          (.while (.var 1) (.dec 2 (.op .sub [.var 1,.const 1])
            (.seq (.assign 1 (.var 2)) .skip)))
          (.return [.const 0]))))] := by
+  unfold crepPrograms declarations
+  rw [compileProgDeclsHOLW, singleEntry_inline_selection_empty, CrepInlineRoute.compileInlTopHOLExact_nil,
+    singleEntry_compileTop]
+  simp_crep_code
+
+set_option linter.unusedSimpArgs false in
+/-- The complete generated Crep function list for the natural countdown. -/
+theorem natural_countdown_crep_code (n : Nat) : crepPrograms (naturalCountdownHOL n) =
+    [(ofString "main",[],.seq .skip (.call none (entryName (naturalCountdownHOL n)) [])),
+     (entryName (naturalCountdownHOL n),[],.dec 1 (.const (BitVec.ofNat 64 n))
+       (.seq (.while (.var 1) (.dec 2 (.op .sub [.var 1,.const 1])
+           (.seq (.assign 1 (.var 2)) .skip))) (.return [.const 0])))] := by
   unfold crepPrograms declarations
   rw [compileProgDeclsHOLW, singleEntry_inline_selection_empty, CrepInlineRoute.compileInlTopHOLExact_nil,
     singleEntry_compileTop]

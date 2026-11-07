@@ -51,6 +51,13 @@ def countdown (n : Nat) : Prog (RiscV.Word 64) :=
   .dec "x" .one (.const (BitVec.ofNat 64 n))
     (.seq .skip (.seq (.while (.var .local "x") (PanToCrepSteps.countdownBody "x")) (.return (.const 0))))
 
+/-- The natural countdown, without the compiler-oriented skip prefix. -/
+def naturalCountdown (n : Nat) : Prog (RiscV.Word 64) :=
+  .dec "x" .one (.const (BitVec.ofNat 64 n))
+    (.seq (.while (.var .local "x") (PanToCrepSteps.countdownBody "x")) (.return (.const 0)))
+
+def naturalCountdownHOL (n : Nat) : ProgHOL 64 := progToHOL (naturalCountdown n)
+
 /-- A parameter-free comparison whose conditional takes the first branch. -/
 def branching : Prog (RiscV.Word 64) :=
   .ite (.cmp .lower (.const 0) (.const 1)) (.return (.const 7)) (.return (.const 9))
@@ -61,6 +68,14 @@ theorem countdown_supported (n : Nat) : Supported (countdown n) := by
     (.while (.local "x" (by simp)) (.assign "x" (by simp)
       (.op .sub (.local "x" (by simp)) (.const _)))) (.ret (.const _))))
   · simp [countdown,PanToCrepSteps.countdownBody,ProgByteRanged,ExpByteRanged,ListExpByteRanged,ShapeByteRanged,NameRanged]
+
+theorem naturalCountdown_supported (n : Nat) : Supported (naturalCountdown n) := by
+  constructor
+  · exact .decl "x" (.const _) (.seq
+      (.while (.local "x" (by simp)) (.assign "x" (by simp)
+        (.op .sub (.local "x" (by simp)) (.const _)))) (.ret (.const _)))
+  · simp [naturalCountdown,PanToCrepSteps.countdownBody,ProgByteRanged,ExpByteRanged,
+      ListExpByteRanged,ShapeByteRanged,NameRanged]
 
 theorem branching_supported : Supported branching := by
   constructor
