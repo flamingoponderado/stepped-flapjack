@@ -38,18 +38,35 @@ theorem branchingLoop_source_run (context : PanValueFfiContext (RiscV.Word 64)) 
  panShapeMatches,panValueShape,panValueAssignmentValid]
  funext name
  simp [restorePanValueLocal]
+/-- The generated body of the declared branching-loop witness. -/
+def branchingLoopCrepBody : CrepProgHOL 64 :=
+  .dec 1 (.const 2) (.seq (.while (.var 1) (.ite (.cmp .equal (.var 1) (.const 2))
+    (.seq (.assign 1 (.const 1)) .skip) (.seq (.assign 1 (.const 0)) .skip))) (.return [.const 7]))
+
 set_option linter.unusedSimpArgs false in
 /-- The actual compiler output retains the conditional inside the loop. -/
 theorem branchingLoop_crep_code : crepPrograms (progToHOL branchingLoop) =
  [(ofString "main",[],.seq .skip (.call none (entryName (progToHOL branchingLoop)) [])),
-  (entryName (progToHOL branchingLoop),[],.dec 1 (.const 2)
-    (.seq (.while (.var 1) (.ite (.cmp .equal (.var 1) (.const 2))
-      (.seq (.assign 1 (.const 1)) .skip) (.seq (.assign 1 (.const 0)) .skip))) (.return [.const 7])))] := by
+  (entryName (progToHOL branchingLoop),[],branchingLoopCrepBody)] := by
   unfold crepPrograms declarations
   rw [compileProgDeclsHOLW, singleEntry_inline_selection_empty, CrepInlineRoute.compileInlTopHOLExact_nil,
     singleEntry_compileTop]
-  simp only [branchingLoop,progToHOL,expToHOL,shapeToHOL]
+  simp only [branchingLoop,branchingLoopCrepBody,progToHOL,expToHOL,shapeToHOL]
   simp_crep_code
+
+/-- The actual code table selects the calculated branching-loop body. -/
+theorem branchingLoop_code_lookup :
+    (crepState (progToHOL branchingLoop)).code.lookup (entryName (progToHOL branchingLoop)) =
+      some ([],branchingLoopCrepBody) := by
+  have fresh : entryName (progToHOL branchingLoop) ≠ ofString "main" := by
+    intro same
+    have notMem := PanGlobalsDeclListExact.freshNameMlS_correct (ofString "main")
+      ((functionsHOL (singleEntryProgram (ofString "main") (progToHOL branchingLoop))).map Prod.fst)
+    apply notMem
+    simpa [entryName,newMainNameHOL,singleEntryProgram,functionsHOL] using same
+  simp [crepState,concreteDeclCrepState,branchingLoop_crep_code,alistToFmapCodeExact,
+    HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,Ne.symm fresh]
+
 private def loopHOL : ProgHOL 64 := progToHOL branchingLoop
 
 private def loopEntry := callEntryStateHOLFinite (loweredState loopHOL) HolFiniteMapExact.empty
@@ -173,9 +190,20 @@ theorem branchingLoop_entry_crep :
       evalCrepSemHOLProgExact (crepState (progToHOL branchingLoop)) branchingLoopCrepEntry =
         (some (.return [.word 7]),targetFinal) ∧
       CrepSteps.steps branchingLoopCrepEntry (crepState (progToHOL branchingLoop)) ≤
-        3 + sizeOf (compileProgExactHOLW branchingLoopCalleeContext (progToHOL branchingLoop)) * 23 := by
+        1130 := by
   obtain ⟨sourceFinal,run,bound⟩ := sourceRun
   have span := supported_entry_crep_return branchingLoop branchingLoop_supported sourceFinal 7 23 run bound
-  simpa [loopHOL,loopEntry,branchingLoopCrepEntry,branchingLoopCalleeContext] using span
+  have lookup := (supported_callee_relations branchingLoop branchingLoop_supported).1
+  have codeEq : compileProgExactHOLW branchingLoopCalleeContext (progToHOL branchingLoop) = branchingLoopCrepBody := by
+    rw [branchingLoop_code_lookup] at lookup
+    exact (Prod.mk.inj (Option.some.inj lookup)).2.symm
+  change ∃ final,
+    evalCrepSemHOLProgExact (crepState (progToHOL branchingLoop)) branchingLoopCrepEntry =
+      (some (.return [.word 7]),final) ∧
+    CrepSteps.steps branchingLoopCrepEntry (crepState (progToHOL branchingLoop)) ≤
+      3 + sizeOf (compileProgExactHOLW branchingLoopCalleeContext (progToHOL branchingLoop)) * 23 at span
+  have size : sizeOf branchingLoopCrepBody = 49 := by decide
+  rw [codeEq,size] at span
+  simpa using span
 
 end SteppedFlapjack.Concrete
