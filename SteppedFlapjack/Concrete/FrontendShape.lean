@@ -68,7 +68,7 @@ theorem supportedIn_frontend_shape {scope : List VarName} {program : Prog (RiscV
 
 theorem supported_frontend_shape {program : Prog (RiscV.Word 64)} (supported : Supported program)
     (ctxt : PanToCrepContextExact 64) : FrontendProgram ctxt (progToHOL program) :=
-  supportedIn_frontend_shape supported ctxt (by intro name member; simp at member)
+  supportedIn_frontend_shape supported.1 ctxt (by intro name member; simp at member)
 
 /-- A comparison is accepted in an actual conditional and compiles to a
 single Crep comparison expression. -/
@@ -96,7 +96,7 @@ theorem supportedIn_globals_fixed {scope : List VarName} {program : Prog (RiscV.
 theorem supported_globals_fixed {program : Prog (RiscV.Word 64)}
     (supported : Supported program) (globals : PanGlobalsContextExact 64) :
     compileProgExactHOL globals (progToHOL program) = progToHOL program :=
-  supportedIn_globals_fixed supported globals
+  supportedIn_globals_fixed supported.1 globals
 
 /-- The phase-zero witnesses instantiate the generalized frontend shape. -/
 theorem countdown_frontend_shape (n : Nat) (ctxt : PanToCrepContextExact 64) :
