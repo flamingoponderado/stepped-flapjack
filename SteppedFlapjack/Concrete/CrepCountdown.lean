@@ -122,4 +122,53 @@ theorem natural_countdown_entry_crep (n : Nat) (range : n < 2^64)
   rw [codeEq,size] at span
   exact span
 
+theorem countdown_simp_declarations (n : Nat) :
+ panSimpDeclsHOL (declarations (countdownHOL n)) = declarations (naturalCountdownHOL n) := by
+ simp [declarations,singleEntryProgram,panSimpDeclsHOL,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,
+   retToTailHOL,seqCallRetHOL,countdownHOL,naturalCountdownHOL,naturalCountdown,countdownBodyHOL,countdownBody,
+   progToHOL,expToHOL,shapeToHOL]
+
+theorem countdown_simp_program (n : Nat) : panSimpProg (countdown n) = naturalCountdown n := by
+  simp [panSimpProg,retToTail,seqAssoc,smartSeq,seqCallRet,countdown,naturalCountdown,countdownBody]
+
+theorem countdown_simp_source (n : Nat) :
+  panSimpSourceState (countdown n) (exactState (countdownHOL n)) = exactState (naturalCountdownHOL n) := by
+  simp [panSimpSourceState,countdown_simp_program,exactState,singleEntrySourceTemplate,
+    naturalCountdownHOL]
+
+
+theorem countdown_panSimp_crep_code (n : Nat) :
+    compileProgDeclsHOLW (compileTopExactHOL (panSimpDeclsHOL (declarations (countdownHOL n))) (ofString "main")) =
+      crepPrograms (naturalCountdownHOL n) := by
+  rw [countdown_simp_declarations]
+  rfl
+
+/-- The prefixed source countdown reaches the actual pan_simp/global/Crep
+entry with a closed-form Crep bound. -/
+theorem countdown_panSimp_crep (n : Nat) (range : n < 2^64)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
+    ∃ sourceResult targetFinal,
+      evalPanValueFfiProgSteps context primitive handler (executableState (countdownHOL n)).structs []
+        (executableState (countdownHOL n)).baseAddress (executableState (countdownHOL n)).topAddress
+        panSemBitVec64BytesInWord (n+4) (executableState (countdownHOL n)).locals
+        (executableState (countdownHOL n)).globals (executableState (countdownHOL n)).memory
+        (executableState (countdownHOL n)).ffi (countdown n)
+        (memoryAccess := some (panSemBitVec64MemoryAccess (executableState (countdownHOL n)))) =
+          some (sourceResult,6*n+9) ∧
+      evalCrepSemHOLProgExact
+        (crepStateFrom (panSimpSourceState (countdown n) (exactState (countdownHOL n)))
+          (progToHOL (panSimpProg (countdown n)))) (naturalCrepEntry n) =
+        (some (.return [.word 0]),targetFinal) ∧
+      CrepSteps.steps (naturalCrepEntry n)
+        (crepStateFrom (panSimpSourceState (countdown n) (exactState (countdownHOL n)))
+          (progToHOL (panSimpProg (countdown n)))) ≤ 3+(n+36)*(6*n+7) := by
+  obtain ⟨sourceResult,_,sourceRun,_,_,_⟩ := countdown_run n range context primitive handler
+  obtain ⟨targetFinal,targetRun,targetBound⟩ := natural_countdown_entry_crep n range context primitive handler
+  refine ⟨sourceResult,targetFinal,sourceRun,?_,?_⟩
+  · simpa [countdown_simp_source,countdown_simp_program,naturalCountdownHOL,
+      crepStateFrom,loweredStateFrom,crepState,loweredState] using targetRun
+  · simpa [countdown_simp_source,countdown_simp_program,naturalCountdownHOL,
+      crepStateFrom,loweredStateFrom,crepState,loweredState] using targetBound
+
 end SteppedFlapjack.Concrete

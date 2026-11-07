@@ -122,4 +122,37 @@ theorem branching_source_crep_correspondence
   exact ⟨final,branching_globals_related,crep_state_related _,branching_run context primitive handler,
     run,branchCrepEntry_steps⟩
 
+theorem branching_simp_program : panSimpProg branching = branching := by
+  simp [panSimpProg,retToTail,seqAssoc,smartSeq,branching]
+
+theorem branching_simp_source : panSimpSourceState branching (exactState branchingHOL) = exactState branchingHOL := by
+  simp [panSimpSourceState,branching_simp_program,exactState,singleEntrySourceTemplate,← branching_hol_eq]
+
+theorem branching_simp_declarations : panSimpDeclsHOL (declarations branchingHOL) = declarations branchingHOL := by
+  simpa [← branching_hol_eq,branching_simp_program] using supported_panSimp_declarations branching branching_supported
+
+theorem branching_panSimp_crep (context : PanValueFfiContext (RiscV.Word 64))
+    (primitive : PanPrimitiveHandler (RiscV.Word 64)) (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
+    ∃ targetFinal,
+      evalPanValueFfiProgSteps context primitive handler (executableState branchingHOL).structs []
+        (executableState branchingHOL).baseAddress (executableState branchingHOL).topAddress
+        panSemBitVec64BytesInWord 2 (executableState branchingHOL).locals
+        (executableState branchingHOL).globals (executableState branchingHOL).memory
+        (executableState branchingHOL).ffi branching
+        (memoryAccess := some (panSemBitVec64MemoryAccess (executableState branchingHOL))) =
+          some (.returned (executableState branchingHOL).locals (executableState branchingHOL).globals
+            (executableState branchingHOL).memory (executableState branchingHOL).ffi [.word 7],6) ∧
+      evalCrepSemHOLProgExact
+        (crepStateFrom (panSimpSourceState branching (exactState branchingHOL))
+          (progToHOL (panSimpProg branching))) branchCrepEntry =
+        (some (.return [.word 7]),targetFinal) ∧
+      CrepSteps.steps branchCrepEntry
+        (crepStateFrom (panSimpSourceState branching (exactState branchingHOL))
+          (progToHOL (panSimpProg branching))) ≤ 231 := by
+  obtain ⟨targetFinal,targetRun,targetBound⟩ := branching_entry_span
+  refine ⟨targetFinal,branching_run context primitive handler,?_,?_⟩
+  · simpa [branching_simp_source,branching_simp_program,← branching_hol_eq,
+      crepStateFrom,loweredStateFrom,crepState,loweredState] using targetRun
+  · simpa [branching_simp_source,branching_simp_program,← branching_hol_eq,
+      crepStateFrom,loweredStateFrom,crepState,loweredState] using targetBound
 end SteppedFlapjack.Concrete
