@@ -2,7 +2,7 @@ import SteppedFlapjack.Concrete.CrepCountdown
 
 /-! A supported loop that takes both arms of its conditional. -/
 namespace SteppedFlapjack.Concrete
-open Flapjack Flapjack.Pancake.PanLang SteppedFlapjack.PanToCrepSteps
+open Flapjack Flapjack.Basis.Pure.MlString Flapjack.Pancake.PanLang SteppedFlapjack.PanToCrepSteps
 
 /-- The first iteration changes 2 to 1; the second changes 1 to 0. -/
 def branchingLoop : Prog (RiscV.Word 64) :=
@@ -38,4 +38,16 @@ theorem branchingLoop_source_run (context : PanValueFfiContext (RiscV.Word 64)) 
  panShapeMatches,panValueShape,panValueAssignmentValid]
  funext name
  simp [restorePanValueLocal]
+set_option linter.unusedSimpArgs false in
+/-- The actual compiler output retains the conditional inside the loop. -/
+theorem branchingLoop_crep_code : crepPrograms (progToHOL branchingLoop) =
+ [(ofString "main",[],.seq .skip (.call none (entryName (progToHOL branchingLoop)) [])),
+  (entryName (progToHOL branchingLoop),[],.dec 1 (.const 2)
+    (.seq (.while (.var 1) (.ite (.cmp .equal (.var 1) (.const 2))
+      (.seq (.assign 1 (.const 1)) .skip) (.seq (.assign 1 (.const 0)) .skip))) (.return [.const 7])))] := by
+  unfold crepPrograms declarations
+  rw [compileProgDeclsHOLW, singleEntry_inline_selection_empty, CrepInlineRoute.compileInlTopHOLExact_nil,
+    singleEntry_compileTop]
+  simp only [branchingLoop,progToHOL,expToHOL,shapeToHOL]
+  simp_crep_code
 end SteppedFlapjack.Concrete
