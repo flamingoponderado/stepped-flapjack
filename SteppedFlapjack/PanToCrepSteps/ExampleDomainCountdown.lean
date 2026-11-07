@@ -1,6 +1,6 @@
 import SteppedFlapjack.PanToCrepSteps.ConcreteStateCountdown
 import SteppedFlapjack.PanToCrepSteps.CountdownCodeMemory
-import SteppedFlapjack.PanToCrepSteps.CountdownNoShare
+import SteppedFlapjack.PanToCrepSteps.CountdownNoFfi
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineState
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineConfig
 import Flapjack.Pancake.Proofs.PanToTarget.ExecutableCompileProgMaxAsmWith
@@ -48,7 +48,6 @@ theorem exampleDomain_countdown_riscv {σ : Type}
       (singleEntryProgram (ofString "main") (.dec (ofString name) .one (.const (BitVec.ofNat 64 count)) (.seq .skip (.seq
         (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))))) =
         some (bytes,bitmaps,final))
-    (hffi : final.labConf.ffiNames = some countdownMachineConfig.ffiNames)
     (fits : bytes.length + cbspace ≤ 61440)
     (nameRanged : NameRanged name) (wordRange : count < 2^64)
     (budgetBound : 6*count+9 ≤ budget)
@@ -101,6 +100,8 @@ theorem exampleDomain_countdown_riscv {σ : Type}
         ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧
             (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = adjustedStack.ffi.ioEvents))) := by
+  have hffi : final.labConf.ffiNames = some countdownMachineConfig.ffiNames := by
+    simpa [countdownMachineConfig] using countdown_artifact_emptyFfi (ofString name) (BitVec.ofNat 64 count) returned bytes bitmaps final (by simpa [countdownBodyHOL] using hcompile)
   have noShared := (countdown_artifact_noSharedMetadata (ofString name) (BitVec.ofNat 64 count) returned bytes bitmaps final (by simpa [countdownBodyHOL] using hcompile)).1
   refine ⟨noShared, ?_⟩
   have bm : bitmaps = [4] := countdown_artifact_bitmap_exact (ofString name) (BitVec.ofNat 64 count) returned bytes bitmaps final (by simpa [countdownBodyHOL] using hcompile)
