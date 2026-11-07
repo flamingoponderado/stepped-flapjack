@@ -40,14 +40,14 @@ theorem executableCompiler_countdown_noFfi_riscv {σ : Type}
     (ffi : HolFfiState σ)
     (cbspace labClock : Nat) (asm : AsmState 64)
     (memory : BitVec 64 → WordLocW 64) (bitmapPtr : BitVec 64)
-    (bitmapsDomain sharedDomain : BitVec 64 → Bool)
+    (bitmapsDomain : BitVec 64 → Bool)
     (hmc : isRiscvMachineConfig mc)
     (hcompile : compileProgMaxAsmExecutable countdownRiscVBackend riscvConfig
       (singleEntryProgram (ofString "main") (.dec (ofString name) .one (.const (BitVec.ofNat 64 count)) (.seq .skip (.seq
         (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))))) =
         (some (bytes,bitmaps,final),stackMax))
     (hffi : final.labConf.ffiNames = some mc.ffiNames)
-    (hinit : goodInitState mc machine bytes cbspace asm memory (countdownStackLabDomain countdownRiscVBackend asm bitmapsDomain) (fun a => sharedDomain a && holByteAligned a))
+    (hinit : goodInitState mc machine bytes cbspace asm memory (countdownStackByteDomain countdownRiscVBackend asm bitmapsDomain) (fun _ => false))
     (noFfi : mc.ffiNames = []) (noMmio : mc.mmioInfo = [])
     (nameRanged : NameRanged name) (wordRange : count < 2^64)
     (budgetBound : 6*count+9 ≤ budget)
@@ -103,7 +103,7 @@ theorem executableCompiler_countdown_noFfi_riscv {σ : Type}
   obtain ⟨hlab,hbitmaps⟩ := countdown_executableCompiler_lab (ofString name) (BitVec.ofNat 64 count) returned
     mc hmc.1 bytes bitmaps final stackMax (by simpa only [countdownBodyHOL] using hcompile)
   exact riscvBackend_countdown_noFfi_riscv name count budget returned context primitive handler functions fuel production template
-    dataSp final.labConf bytes mc machine ffi cbspace labClock asm memory bitmapPtr bitmapsDomain sharedDomain
+    dataSp final.labConf bytes mc machine ffi cbspace labClock asm memory bitmapPtr bitmapsDomain
     hmc hlab hffi hinit noFfi noMmio nameRanged wordRange budgetBound (by simpa only [hbitmaps] using layout)
 
 end SteppedFlapjack.PanToCrepSteps

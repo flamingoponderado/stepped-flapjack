@@ -1,4 +1,4 @@
-import SteppedFlapjack.PanToCrepSteps.FilteredCompiledCountdown
+import SteppedFlapjack.PanToCrepSteps.AlignedCompiledCountdown
 import Flapjack.Compiler.Backend.RiscVConfig.PancakeConfigOk
 import SteppedFlapjack.PanToCrepSteps.FilteredCountdownGuards
 import SteppedFlapjack.PanToCrepSteps.CountdownRiscVConfig
@@ -40,12 +40,12 @@ theorem riscvBackend_countdown_compiled_riscv {σ : Type}
     (ffi : HolFfiState σ)
     (cbspace labClock : Nat) (asm : AsmState 64)
     (memory : BitVec 64 → WordLocW 64) (bitmapPtr : BitVec 64)
-    (bitmapsDomain sharedDomain : BitVec 64 → Bool)
+    (bitmapsDomain : BitVec 64 → Bool)
     (hmc : isRiscvMachineConfig mc)
     (hcompile : LabToTarget.compile riscvConfig countdownRiscVBackend.labConf
       (countdownStackLabCode (ofString name) (BitVec.ofNat 64 count) returned countdownRiscVBackend) = some (bytes,cfg))
     (hffi : cfg.ffiNames = some mc.ffiNames)
-    (hinit : goodInitState mc machine bytes cbspace asm memory (countdownStackLabDomain countdownRiscVBackend asm bitmapsDomain) (fun a => sharedDomain a && holByteAligned a))
+    (hinit : goodInitState mc machine bytes cbspace asm memory (countdownStackByteDomain countdownRiscVBackend asm bitmapsDomain) (fun _ => false))
     (hentries : ∀ i, mmioPcsMinIndex mc.ffiNames = some i →
       (cfg.shmemExtra.map (fun r => { r with
         entryPc := (mc.target.getPc machine).toNat+r.entryPc,
@@ -113,9 +113,9 @@ theorem riscvBackend_countdown_compiled_riscv {σ : Type}
     intro ffis h
     change none = some ffis at h
     cases h
-  exact filteredCompiled_countdown_riscv name count budget returned context primitive handler functions fuel production template
+  exact alignedCompiled_countdown_riscv name count budget returned context primitive handler functions fuel production template
     countdownRiscVBackend riscvPancakeBackendConfigOk dataSp cfg bytes mc machine ffi cbspace labClock asm memory
-    bitmapPtr bitmapsDomain sharedDomain hmc.1 (riscvPancakeInitOk mc hmc) hmc.2.2.1 hmc.2.1 hmc.2.2.2.2.1 hmc.2.2.2.1
+    bitmapPtr bitmapsDomain hmc.1 (riscvPancakeInitOk mc hmc) hmc.2.2.1 hmc.2.1 hmc.2.2.2.2.1 hmc.2.2.2.1
     hcompile provided hffi hinit hentries hmmio hbuffer nameRanged wordRange budgetBound layout
 
 end SteppedFlapjack.PanToCrepSteps

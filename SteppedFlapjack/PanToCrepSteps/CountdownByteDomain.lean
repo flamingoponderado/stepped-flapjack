@@ -6,9 +6,9 @@ import SteppedFlapjack.PanToCrepSteps.RiscVBackendCountdown
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Compiler.Backend
 
-/-- A 64 KiB heap region, disjoint from the code entry at address 4096. -/
+/-- A 128 KiB heap-and-bitmap region, disjoint from the code entry at address 4096. -/
 def countdownExampleByteDomain (a : BitVec 64) : Bool :=
-  decide (65536 ≤ a.toNat ∧ a.toNat < 131072)
+  decide (65536 ≤ a.toNat ∧ a.toNat < 196608)
 
 /-- The concrete region is nonempty and lies inside the machine's program domain. -/
 theorem countdownExampleByteDomain_facts :
@@ -38,6 +38,10 @@ theorem countdownExampleByteDomain_closed (a : BitVec 64) :
   simp only [countdownExampleByteDomain,decide_eq_true_eq,aligned] at h ⊢
   omega
 
+/-- Byte-addressed bitmap storage follows the 64 KiB heap region. -/
+def countdownExampleBitmapsDomain (a : BitVec 64) : Bool :=
+  decide (131072 ≤ a.toNat ∧ a.toNat < 196608)
+
 /-- Place the heap bounds in the original RISC-V length registers. -/
 def countdownExampleRegs (r : BitVec 5) : BitVec 64 :=
   if r = 11 then 65536 else if r = 13 then 131072 else 0
@@ -45,12 +49,15 @@ def countdownExampleRegs (r : BitVec 5) : BitVec 64 :=
 /-- The byte domain computed by the actual backend register mapping is the
 concrete nonempty byte-closed interval. -/
 theorem countdownExampleByteDomain_eq (mem : BitVec 64 → BitVec 8) :
-    countdownStackByteDomain countdownRiscVBackend (countdownAsmState mem countdownExampleRegs) (fun _ => false) =
+    countdownStackByteDomain countdownRiscVBackend (countdownAsmState mem countdownExampleRegs) countdownExampleBitmapsDomain =
       countdownExampleByteDomain := by
   have init := Flapjack.Compiler.Backend.RiscVConfig.riscvPancakeInitOk countdownMachineConfig countdownMachineConfig_fields.1
   have h4 : StackNames.findNameSpt countdownRiscVBackend.stackConf.regNames 4 = 13 := init.2.1
   have h2 : StackNames.findNameSpt countdownRiscVBackend.stackConf.regNames 2 = 11 := init.2.2.2.1
   funext a
-  simp [countdownStackByteDomain,countdownAsmState,h4,h2,countdownExampleRegs,countdownExampleByteDomain,BitVec.le_def,BitVec.lt_def]
+  apply Bool.eq_iff_iff.mpr
+  simp [countdownStackByteDomain,countdownAsmState,h4,h2,countdownExampleRegs,
+    countdownExampleBitmapsDomain,countdownExampleByteDomain,BitVec.le_def,BitVec.lt_def]
+  omega
 
 end SteppedFlapjack.PanToCrepSteps

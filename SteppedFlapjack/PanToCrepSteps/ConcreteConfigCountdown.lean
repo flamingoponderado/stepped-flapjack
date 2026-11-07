@@ -42,13 +42,13 @@ theorem concreteConfig_countdown_riscv {σ : Type}
     (ffi : HolFfiState σ)
     (cbspace labClock : Nat) (asm : AsmState 64)
     (memory : BitVec 64 → WordLocW 64) (bitmapPtr : BitVec 64)
-    (bitmapsDomain sharedDomain : BitVec 64 → Bool)
+    (bitmapsDomain : BitVec 64 → Bool)
     (hcompile : compileProgAsmFast countdownRiscVBackend riscvConfig
       (singleEntryProgram (ofString "main") (.dec (ofString name) .one (.const (BitVec.ofNat 64 count)) (.seq .skip (.seq
         (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))))) =
         some (bytes,bitmaps,final))
     (hffi : final.labConf.ffiNames = some countdownMachineConfig.ffiNames)
-    (hinit : goodInitState countdownMachineConfig machine bytes cbspace asm memory (countdownStackLabDomain countdownRiscVBackend asm bitmapsDomain) (fun a => sharedDomain a && holByteAligned a))
+    (hinit : goodInitState countdownMachineConfig machine bytes cbspace asm memory (countdownStackByteDomain countdownRiscVBackend asm bitmapsDomain) (fun _ => false))
     (nameRanged : NameRanged name) (wordRange : count < 2^64)
     (budgetBound : 6*count+9 ≤ budget)
     (layout : countdownStackMemoryLayout countdownRiscVBackend countdownMachineConfig machine asm memory bitmapPtr bitmapsDomain bytes
@@ -101,7 +101,7 @@ theorem concreteConfig_countdown_riscv {σ : Type}
           (outcome = .resourceLimitHit ∧
             (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = adjustedStack.ffi.ioEvents))) := by
   exact artifactCompiler_countdown_noFfi_riscv name count budget returned context primitive handler functions fuel production template
-    dataSp final bytes bitmaps countdownMachineConfig machine ffi cbspace labClock asm memory bitmapPtr bitmapsDomain sharedDomain
+    dataSp final bytes bitmaps countdownMachineConfig machine ffi cbspace labClock asm memory bitmapPtr bitmapsDomain
     countdownMachineConfig_fields.1 hcompile hffi hinit countdownMachineConfig_fields.2.1 countdownMachineConfig_fields.2.2
     nameRanged wordRange budgetBound layout
 

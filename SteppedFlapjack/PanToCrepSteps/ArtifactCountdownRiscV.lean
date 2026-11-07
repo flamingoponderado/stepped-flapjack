@@ -41,14 +41,14 @@ theorem artifactCompiler_countdown_noFfi_riscv {σ : Type}
     (ffi : HolFfiState σ)
     (cbspace labClock : Nat) (asm : AsmState 64)
     (memory : BitVec 64 → WordLocW 64) (bitmapPtr : BitVec 64)
-    (bitmapsDomain sharedDomain : BitVec 64 → Bool)
+    (bitmapsDomain : BitVec 64 → Bool)
     (hmc : isRiscvMachineConfig mc)
     (hcompile : compileProgAsmFast countdownRiscVBackend riscvConfig
       (singleEntryProgram (ofString "main") (.dec (ofString name) .one (.const (BitVec.ofNat 64 count)) (.seq .skip (.seq
         (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))))) =
         some (bytes,bitmaps,final))
     (hffi : final.labConf.ffiNames = some mc.ffiNames)
-    (hinit : goodInitState mc machine bytes cbspace asm memory (countdownStackLabDomain countdownRiscVBackend asm bitmapsDomain) (fun a => sharedDomain a && holByteAligned a))
+    (hinit : goodInitState mc machine bytes cbspace asm memory (countdownStackByteDomain countdownRiscVBackend asm bitmapsDomain) (fun _ => false))
     (noFfi : mc.ffiNames = []) (noMmio : mc.mmioInfo = [])
     (nameRanged : NameRanged name) (wordRange : count < 2^64)
     (budgetBound : 6*count+9 ≤ budget)
@@ -109,7 +109,7 @@ theorem artifactCompiler_countdown_noFfi_riscv {σ : Type}
   have fullCompile : full = (some (bytes,bitmaps,final),full.2) := by
     exact Prod.ext artifact rfl
   exact executableCompiler_countdown_noFfi_riscv name count budget returned context primitive handler functions fuel production template
-    dataSp final bytes bitmaps full.2 mc machine ffi cbspace labClock asm memory bitmapPtr bitmapsDomain sharedDomain
+    dataSp final bytes bitmaps full.2 mc machine ffi cbspace labClock asm memory bitmapPtr bitmapsDomain
     hmc (by simpa only [full,source] using fullCompile) hffi hinit noFfi noMmio nameRanged wordRange budgetBound layout
 
 end SteppedFlapjack.PanToCrepSteps

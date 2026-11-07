@@ -66,12 +66,12 @@ theorem riscvBackend_countdown_noFfi_riscv {σ : Type}
     (ffi : HolFfiState σ)
     (cbspace labClock : Nat) (asm : AsmState 64)
     (memory : BitVec 64 → WordLocW 64) (bitmapPtr : BitVec 64)
-    (bitmapsDomain sharedDomain : BitVec 64 → Bool)
+    (bitmapsDomain : BitVec 64 → Bool)
     (hmc : isRiscvMachineConfig mc)
     (hcompile : LabToTarget.compile riscvConfig countdownRiscVBackend.labConf
       (countdownStackLabCode (ofString name) (BitVec.ofNat 64 count) returned countdownRiscVBackend) = some (bytes,cfg))
     (hffi : cfg.ffiNames = some mc.ffiNames)
-    (hinit : goodInitState mc machine bytes cbspace asm memory (countdownStackLabDomain countdownRiscVBackend asm bitmapsDomain) (fun a => sharedDomain a && holByteAligned a))
+    (hinit : goodInitState mc machine bytes cbspace asm memory (countdownStackByteDomain countdownRiscVBackend asm bitmapsDomain) (fun _ => false))
     (noFfi : mc.ffiNames = []) (noMmio : mc.mmioInfo = [])
     (nameRanged : NameRanged name) (wordRange : count < 2^64)
     (budgetBound : 6*count+9 ≤ budget)
@@ -163,7 +163,7 @@ theorem riscvBackend_countdown_noFfi_riscv {σ : Type}
       BitVec.ofNat 64 bn + BitVec.ofNat 64 bytes.length + mc.target.getPc machine ∉ mc.ffiEntryPcs.take i := by
     simp [entriesEmpty]
   exact riscvBackend_countdown_compiled_riscv name count budget returned context primitive handler functions fuel production template
-    dataSp cfg bytes mc machine ffi cbspace labClock asm memory bitmapPtr bitmapsDomain sharedDomain
+    dataSp cfg bytes mc machine ffi cbspace labClock asm memory bitmapPtr bitmapsDomain
     hmc hcompile hffi hinit entries mmio buffer nameRanged wordRange budgetBound layout
 
 end SteppedFlapjack.PanToCrepSteps
