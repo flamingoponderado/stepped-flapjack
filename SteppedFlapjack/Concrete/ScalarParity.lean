@@ -171,6 +171,57 @@ theorem ScalarLocalsRel.assign {σ : Type} {scope : List VarName} {ctxt : PanToC
     refine ⟨reg,found,?_⟩
     simpa [setVarHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE,reverse,distinctReverse] using values
 
+/-- Every source name in the current lexical scope holds a word. -/
+def ScalarScopePresent {σ : Type} (scope : List VarName) (source : PanSemStateFiniteExact 64 σ) : Prop :=
+  ∀ name ∈ scope, ∃ word, source.locals.lookup (ofString name) = some (.val (.word word))
+
+/-- The empty lexical scope is present in every source state. -/
+theorem ScalarScopePresent.empty {σ : Type} (source : PanSemStateFiniteExact 64 σ) : ScalarScopePresent [] source := by
+  intro name member
+  simp at member
+
+/-- A word update preserves the current scope and makes its name present. -/
+theorem ScalarScopePresent.setVar {σ : Type} {scope : List VarName} {source : PanSemStateFiniteExact 64 σ}
+    (present : ScalarScopePresent scope source) (name : VarName) (word : BitVec 64) :
+    ScalarScopePresent (name :: scope) (setVarHOLFinite (ofString name) (.val (.word word)) source) := by
+  intro item member
+  simp only [List.mem_cons] at member
+  by_cases same : ofString name = ofString item
+  · refine ⟨word,?_⟩
+    simp [setVarHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE,same]
+  · rcases member with eq | member
+    · subst item
+      exact False.elim (same rfl)
+    · obtain ⟨old,found⟩ := present item member
+      refine ⟨old,?_⟩
+      simpa [setVarHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE,same] using found
+
+/-- For present scalar locals, the established compiler relation supplies two-way local agreement. -/
+theorem ScalarLocalsRel.of_existing {σ : Type} {scope : List VarName} {ctxt : PanToCrepContextExact 64}
+    {source : PanSemStateFiniteExact 64 σ} {target : CrepSemHOLState 64 σ}
+    (registered : ScopeRelation scope ctxt) (present : ScalarScopePresent scope source)
+    (related : panToCrepLocalsRelFiniteExact ctxt source.locals target.locals) :
+    ScalarLocalsRel scope ctxt source target := by
+  intro name member
+  obtain ⟨reg,found⟩ := registered name member
+  obtain ⟨word,sourceFound⟩ := present name member
+  obtain ⟨slots,values,slotFound,targetFound,flat,_⟩ := related.2.2 (ofString name) (.val (.word word)) sourceFound
+  have eqSlots : slots = [reg] := by
+    simp only [shapeOfHOLExact] at slotFound
+    rw [found] at slotFound
+    exact (Prod.mk.inj (Option.some.inj slotFound)).2.symm
+  subst slots
+  have valuesEq : values = [.word word] := by simpa [flattenHOL] using flat.symm
+  subst values
+  have targetValue : target.locals.lookup reg = some (.word word) := by
+    cases h : target.locals.lookup reg with
+    | none => simp [h,flattenHOL] at targetFound
+    | some value =>
+      simp [h,flattenHOL] at targetFound
+      exact congrArg some targetFound
+  refine ⟨reg,found,?_⟩
+  simp [sourceFound,targetValue]
+
 example {σ : Type} (ctxt : PanToCrepContextExact 64) (source : PanSemStateFiniteExact 64 σ)
     (target : CrepSemHOLState 64 σ) :
     ∃ compiled, compileExpExactHOLW ctxt (expToHOL (.shift .lsl (.const 1) (.const 64) : Exp (RiscV.Word 64))) =
