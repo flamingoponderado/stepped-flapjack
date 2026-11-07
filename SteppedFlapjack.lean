@@ -57,6 +57,7 @@ import SteppedFlapjack.PanToCrepSteps.CountdownRiscVConfig
 import SteppedFlapjack.PanToCrepSteps.CountdownGoodCode
 import SteppedFlapjack.PanToCrepSteps.CountdownBackendConfig
 import SteppedFlapjack.PanToCrepSteps.CountdownStackInit
+import SteppedFlapjack.PanToCrepSteps.CountdownCompiledLab
 import SteppedFlapjack.PanToCrepSteps.CountdownMemoryLayout
 import SteppedFlapjack.PanToCrepSteps.CountedSingleEntryFullInit
 import SteppedFlapjack.PanToCrepSteps.CountedCountdownFullInit
