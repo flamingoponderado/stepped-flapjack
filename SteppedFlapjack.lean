@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.CountdownAllocation
 import SteppedFlapjack.PanToCrepSteps.CountdownWordLiteral
 import SteppedFlapjack.PanToCrepSteps.CountdownStructuralLab
 import SteppedFlapjack.PanToCrepSteps.CountdownCompilationReduction
