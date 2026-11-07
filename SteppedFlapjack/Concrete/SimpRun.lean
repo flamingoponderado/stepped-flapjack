@@ -1,6 +1,7 @@
 import SteppedFlapjack.Concrete.SimpSupported
 import SteppedFlapjack.Concrete.FrontendState
 import Flapjack.Pancake.Proofs.PanSimp.CompileCorrect
+import Flapjack.Pancake.Proofs.PanSimp.SeqAssocAssembly
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
 
@@ -33,6 +34,13 @@ theorem supported_panSimp_state_rel {σ : Type} (program : Prog (RiscV.Word 64))
         simp [eq,comp]
       · simp at found
 
+/-- On the same source state, simplification preserves every supported run,
+including errors, because the pass only reassociates sequences. -/
+theorem supported_panSimp_same_state {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (source : PanSemStateFiniteExact 64 σ) :
+    source.evaluateHOLFiniteState (progToHOL (panSimpProg program)) = source.evaluateHOLFiniteState (progToHOL program) := by
+  rw [← supported_seqAssocHOL program supported,evaluateSeqAssocHOL]
+  rw [evaluateHOLFiniteState_seq_line780,evaluateHOLFiniteState_skip]
 theorem supported_panSimp_run {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
  (source sourceFinal : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
  (sourceCode : source.code = HolFiniteMapExact.empty.update (entryName (progToHOL program),([],progToHOL program,.one)))

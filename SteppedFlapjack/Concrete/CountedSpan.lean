@@ -49,7 +49,7 @@ theorem supported_counted_full_frontend_exit {σ : Type}
         3 + sizeOf (compileProgExactHOLW callee body) *
           (sizeOf (compileProgExactHOLW callee body) * (n+1)) := by
   obtain ⟨holResult,sourceFinal,sourceRun,outcome,_,_⟩ := supported_counted_source supported.1 production source rel ranged words
-    supported.2 context primitive handler functions fuel count result run nonerror (by omega)
+    supported.2 context primitive handler functions fuel count result run (by omega)
   cases outcome with
   | normal l g m f final finalRel finalRanged finalWords =>
     have span := supported_full_frontend_exit_clock program supported source sourceFinal locals globals structs exceptions
@@ -61,6 +61,8 @@ theorem supported_counted_full_frontend_exit {σ : Type}
       topOutside aligned sourceCode (some word) sourceRun
     obtain ⟨targetFinal,targetRun,bound⟩ := span
     exact ⟨some word,targetFinal,.returned l g m f word,targetRun,by simpa [clock] using bound⟩
+  | error l g m f final finalRel finalRanged finalWords =>
+    exact False.elim nonerror
 
 /-- A counted source run bounded by `n` reaches the actual generated entry
 point within a bound calculated from `n` and the generated function body. -/
