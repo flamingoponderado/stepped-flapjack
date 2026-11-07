@@ -13,6 +13,12 @@ def countdownHOL (n : Nat) : ProgHOL 64 :=
 
 def branchingHOL : ProgHOL 64 := .ite (.const 1) (.return (.const 7)) (.return (.const 9))
 
+theorem countdown_hol_eq (n : Nat) : countdownHOL n = progToHOL (countdown n) := by
+  simp [countdownHOL,countdown,countdownBody,countdownBodyHOL,progToHOL,expToHOL,shapeToHOL]
+
+theorem branching_hol_eq : branchingHOL = progToHOL branching := by
+  simp [branchingHOL,branching,progToHOL,expToHOL]
+
 theorem countdown_name_ranged : NameRanged "x" := by simp [NameRanged]
 
 theorem countdown_expressions_ranged (n : Nat) :
@@ -24,7 +30,6 @@ theorem countdown_expressions_ranged (n : Nat) :
 /-- The exact `6*n+9` count and the matching HOL run use no initialization
 hypotheses: the concrete state already satisfies them. -/
 theorem countdown_run (n : Nat) (range : n < 2^64)
-    (ctxt : PanToCrepContextExact 64)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
     ∃ result final,
@@ -45,7 +50,7 @@ theorem countdown_run (n : Nat) (range : n < 2^64)
   have run := counted_decl_countdown_return n (executableState (countdownHOL n)) (exactState (countdownHOL n))
     (source_related _) (source_ranged _) "x" countdown_name_ranged range (by
       change n ≤ 2^64
-      omega) 0 ctxt context primitive handler [] 0
+      omega) 0 (mkCtxtExactHOL HolFiniteMapExact.empty HolFiniteMapExact.empty 0 HolFiniteMapExact.empty) context primitive handler [] 0
   obtain ⟨result,final,exec,hol,bound,_,resultEq⟩ := run
   exact ⟨result,final,by simpa [countdown] using exec,by simpa [countdownHOL] using hol,
     by simpa [countdownHOL] using bound,resultEq⟩

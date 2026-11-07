@@ -9,17 +9,33 @@ namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 open SteppedFlapjack.PanToCrepSteps
 
-/-- The source and shared-memory ranges used by the init-e challenge. -/
-def heapBase : BitVec 64 := 0xa1000000
-def heapTop : BitVec 64 := 33806089704
+/- Layout parameters mirror init-e at commit
+`254b0d1590010583b727ba5af77d4d706973defb` (InitE/Parameters.lean). -/
+def sourceBase : Nat := 0xa1000000
+def ramStart : Nat := 0xa0000000
+def ramSize : Nat := 29 * 1024 * 1024 * 1024
+def ramEnd : Nat := ramStart + ramSize
+def stackSize : Nat := 16 * 1024 * 1024
+def stackStart : Nat := ramEnd - stackSize
+def globalsWords : Nat := 67
+def heapEnd : Nat := stackStart - globalsWords * 8
+def inputStart : Nat := 0x40000000
+def inputSize : Nat := 0x40000000
+def inputEnd : Nat := inputStart + inputSize
+def outputStart : Nat := 0xa0410000
+def outputSize : Nat := 0x1000
+def outputEnd : Nat := outputStart + outputSize
+
+def heapBase : BitVec 64 := BitVec.ofNat 64 sourceBase
+def heapTop : BitVec 64 := BitVec.ofNat 64 heapEnd
 
 def ordinaryAddress (a : BitVec 64) : Prop :=
-  0xa1000000 ≤ a.toNat ∧ a.toNat < 33806089704 ∧ a.toNat % 8 = 0
+  sourceBase ≤ a.toNat ∧ a.toNat < heapEnd ∧ a.toNat % 8 = 0
 
 def sharedAddress (a : BitVec 64) : Prop :=
   a.toNat % 8 = 0 ∧
-    ((0x40000000 ≤ a.toNat ∧ a.toNat < 0x80000000) ∨
-      (0xa0410000 ≤ a.toNat ∧ a.toNat < 0xa0411000))
+    ((inputStart ≤ a.toNat ∧ a.toNat < inputEnd) ∨
+      (outputStart ≤ a.toNat ∧ a.toNat < outputEnd))
 
 instance (a : BitVec 64) : Decidable (ordinaryAddress a) := by
   unfold ordinaryAddress
@@ -32,31 +48,33 @@ instance (a : BitVec 64) : Decidable (sharedAddress a) := by
 /-- The input and output ranges use the same aligned shared-word domain as init-e. -/
 theorem sharedAddress_alignment (a : BitVec 64) :
     sharedAddress a ↔ Flapjack.holByteAligned a = true ∧
-      ((0x40000000 ≤ a.toNat ∧ a.toNat < 0x80000000) ∨
-        (0xa0410000 ≤ a.toNat ∧ a.toNat < 0xa0411000)) := by
+      ((inputStart ≤ a.toNat ∧ a.toNat < inputEnd) ∨
+        (outputStart ≤ a.toNat ∧ a.toNat < outputEnd)) := by
   rw [Flapjack.Pancake.Proofs.PanToTarget.holByteAligned_iff_mod (Or.inr rfl)]
   rfl
 
 /-- The interval presentation agrees with the compiler's word-address domain. -/
 theorem ordinaryAddress_eq_addresses (a : BitVec 64) :
-    ordinaryAddress a ↔ Flapjack.Compiler.Backend.StackRemove.addresses heapBase 3888119741 a := by
+    ordinaryAddress a ↔ Flapjack.Compiler.Backend.StackRemove.addresses heapBase ((stackStart - sourceBase) / 8 - globalsWords) a := by
   rw [Flapjack.Compiler.Backend.StackRemove.mem_addresses]
   constructor
   · intro h
     refine ⟨(a.toNat - 0xa1000000) / 8, ?_, ?_⟩
-    · simp only [ordinaryAddress] at h
+    · simp only [ordinaryAddress,sourceBase,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords] at h
+      simp [stackStart,ramEnd,ramStart,ramSize,stackSize,sourceBase,globalsWords]
       omega
     · apply BitVec.eq_of_toNat_eq
       change a.toNat = (BitVec.ofNat 64 0xa1000000 +
         BitVec.ofNat 64 ((a.toNat - 0xa1000000) / 8) * BitVec.ofNat 64 8).toNat
       rw [BitVec.ofNat_mul_ofNat, BitVec.ofNat_add_ofNat, BitVec.toNat_ofNat]
-      simp only [ordinaryAddress] at h
+      simp only [ordinaryAddress,sourceBase,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords] at h
       omega
   · rintro ⟨i, hi, h⟩
+    simp only [stackStart,ramEnd,ramStart,ramSize,stackSize,sourceBase,globalsWords] at hi
     change a = BitVec.ofNat 64 0xa1000000 + BitVec.ofNat 64 i * BitVec.ofNat 64 8 at h
     have hn := congrArg BitVec.toNat h
     rw [BitVec.ofNat_mul_ofNat, BitVec.ofNat_add_ofNat, BitVec.toNat_ofNat] at hn
-    simp only [ordinaryAddress]
+    simp only [ordinaryAddress,sourceBase,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords]
     omega
 
 /-- The challenge's five startup pointer words; the rest of ordinary memory is zero. -/
@@ -64,8 +82,8 @@ def startupHeaders : List (BitVec 64) :=
   [0xa0020018, 0xa0028ff0, 0xa0028ff0, 0x800f0134, 0x800f1000]
 
 def initialWord (a : BitVec 64) : BitVec 64 :=
-  if 0xa1000000 ≤ a.toNat ∧ a.toNat < 0xa1000000 + 40 then
-    startupHeaders[(a.toNat - 0xa1000000) / 8]?.getD 0
+  if sourceBase ≤ a.toNat ∧ a.toNat < sourceBase + 40 then
+    startupHeaders[(a.toNat - sourceBase) / 8]?.getD 0
   else 0
 
 /-- The first and last reserved words match init-e's startup metadata. -/
