@@ -1,3 +1,5 @@
+import SteppedFlapjack.Concrete.CountedScalar
+import SteppedFlapjack.Concrete.ScalarWords
 import SteppedFlapjack.PanToCrepSteps.CountedInvert
 import SteppedFlapjack.Concrete.BranchingLoop
 import SteppedFlapjack.Concrete.CrepCountdown

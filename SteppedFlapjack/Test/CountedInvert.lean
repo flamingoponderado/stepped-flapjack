@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.CountedScalar
 import SteppedFlapjack.PanToCrepSteps.CountedInvert
 import SteppedFlapjack.Concrete.SourceRuns
 
@@ -62,4 +63,18 @@ example :
   have result := counted_condition_invert p (exactState branchingHOL) (source_related _) (source_ranged _)
     (.cmp .lower (.const 0) (.const 1)) (by simp [ExpByteRanged]) 1 3 run
   simpa [expToHOL] using result.1
+/-- A concrete scalar declaration witnesses the initializer inversion. -/
+example : ∃ word,
+    (PanValue.word (2 : BitVec 64)) = .word word ∧ 1 = panValueExpStepCost (.const (2 : BitVec 64)) ∧
+    @evalHOLExact 64 Unit _ (exactState branchingHOL).toExact
+      (fun a => Classical.propDecidable ((exactState branchingHOL).memaddrs a)) (.const 2) = some (.val (.word word)) := by
+  let p := executableState branchingHOL
+  have words : WordLocals p.locals := by
+    simpa [p,executableState,singleEntrySourceProduction,sourceProduction] using wordLocals_empty
+  have run : panValueDecAccepted p.structs p.baseAddress p.topAddress panSemBitVec64BytesInWord p.locals p.globals p.memory
+      (.const 2) (some (panSemBitVec64MemoryAccess p)) .one = some (.word 2,1) := by
+    simp [panValueDecAccepted,evalPanValueExpCounted,evalPanValueExp,panValueExpStepCost,panValueShape,panShapeMatches]
+  have result := counted_scalar_initializer_invert p (exactState branchingHOL) (source_related _) (source_ranged _) words
+    (.const 2) (Scalar.const (scope := []) _) (by simp [ExpByteRanged]) (.word 2) 1 run
+  simpa [expToHOL] using result
 end SteppedFlapjack.Test
