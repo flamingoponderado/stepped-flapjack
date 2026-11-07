@@ -2,7 +2,7 @@ import SteppedFlapjack.PanToCrepSteps.CountedCountdown
 
 /-! A syntactic, locally scoped scalar fragment for the first compiler pass. -/
 namespace SteppedFlapjack.Concrete
-open Flapjack Flapjack.Pancake.PanLang
+open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 
 /-- Expressions in the supported scalar fragment; local reads must be in scope. -/
 inductive Scalar (scope : List VarName) : Exp (RiscV.Word 64) → Prop
@@ -26,6 +26,17 @@ inductive SupportedIn : List VarName → Prog (RiscV.Word 64) → Prop
 
 /-- A parameter-free single-function body begins with no local variables. -/
 def Supported (program : Prog (RiscV.Word 64)) : Prop := SupportedIn [] program
+
+/-- Function renaming leaves this call-free source fragment unchanged. -/
+theorem supportedIn_fperm {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : SupportedIn scope program) (a b : MlString) :
+    fpermHOL a b (progToHOL program) = progToHOL program := by
+  induction supported <;> simp_all [progToHOL,fpermHOL]
+
+theorem supported_fperm {program : Prog (RiscV.Word 64)}
+    (supported : Supported program) (a b : MlString) :
+    fpermHOL a b (progToHOL program) = progToHOL program :=
+  supportedIn_fperm supported a b
 
 /-- The prefixed source body used by the existing countdown correspondence. -/
 def countdown (n : Nat) : Prog (RiscV.Word 64) :=
