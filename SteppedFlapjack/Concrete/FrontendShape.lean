@@ -96,6 +96,10 @@ theorem ScopeRelation.declare {scope : List VarName} {ctxt : PanToCrepContextExa
 through declarations and allowing nested control flow and comparisons. -/
 inductive FrontendProgram : PanToCrepContextExact 64 → ProgHOL 64 → Prop
   | skip {ctxt} : FrontendProgram ctxt .skip
+  | break {ctxt} : FrontendProgram ctxt .break
+  | continue {ctxt} : FrontendProgram ctxt .continue
+  | tick {ctxt} : FrontendProgram ctxt .tick
+  | store {ctxt a v} : FrontendScalar ctxt a → FrontendScalar ctxt v → FrontendProgram ctxt (.store a v)
   | assign {ctxt name e} (reg : Nat) : ctxt.vars.lookup name = some (.one,[reg]) →
       FrontendScalar ctxt e → FrontendProgram ctxt (.assign .local name e)
   | decl {ctxt name e body} : FrontendScalar ctxt e →
@@ -105,6 +109,21 @@ inductive FrontendProgram : PanToCrepContextExact 64 → ProgHOL 64 → Prop
       FrontendProgram ctxt (.ite e a b)
   | while {ctxt e body} : FrontendScalar ctxt e → FrontendProgram ctxt body → FrontendProgram ctxt (.while e body)
   | ret {ctxt e} : FrontendScalar ctxt e → FrontendProgram ctxt (.return e)
+
+/-- The previously established loop-free frontend shape is a subset of the
+generalized shape. Its direct-expression guarantees are retained separately. -/
+theorem frontendProgram_of_branch {ctxt : PanToCrepContextExact 64} {program : ProgHOL 64}
+    (shape : BranchProgram ctxt program) : FrontendProgram ctxt program := by
+  induction shape with
+  | skip => exact .skip
+  | «break» => exact .break
+  | «continue» => exact .continue
+  | tick => exact .tick
+  | «return» e => exact .ret (.direct e)
+  | assign name reg found e => exact .assign reg found (.direct e)
+  | store a v => exact .store (.direct a) (.direct v)
+  | seq a b iha ihb => exact .seq iha ihb
+  | ite e a b iha ihb => exact .ite (.direct e) iha ihb
 
 /-- All supported source programs have the generalized frontend shape. -/
 theorem supportedIn_frontend_shape {scope : List VarName} {program : Prog (RiscV.Word 64)}
