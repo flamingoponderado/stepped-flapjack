@@ -1,5 +1,6 @@
 import SteppedFlapjack.PanToCrepSteps.ConcreteStateCountdown
 import SteppedFlapjack.PanToCrepSteps.CountdownCodeMemory
+import SteppedFlapjack.PanToCrepSteps.CountdownCompilerShape
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineState
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineConfig
 import Flapjack.Pancake.Proofs.PanToTarget.ExecutableCompileProgMaxAsmWith
@@ -65,6 +66,7 @@ theorem exampleDomain_countdown_riscv {σ : Type}
       (getEidsFromDeclsHOL (compileTopExactHOL declarations start))
     let loopCtxt := mkCtxtExact riscvConfig.isa (makeVmapExact [])
       (crepToLoopMakeFuncsExactExecutable (compileProgDeclsHOLW (compileTopExactHOL declarations start))) 0
+    bitmap = 4 ∧
     ∃ (stack : StackSemStateFiniteExact 64 LabToTarget.Config σ) (backend : FullInitMachineContext stack),
     backend.mc = countdownMachineConfig ∧ backend.machine = (countdownMachineState (countdownBytesOfWords (countdownExampleWords bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap (countdownWriteCode 4096 bytes initial)))) countdownExampleRegs) ∧
     let adjustedStack := (fullMakeInit backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset
@@ -100,6 +102,7 @@ theorem exampleDomain_countdown_riscv {σ : Type}
         ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧
             (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = adjustedStack.ffi.ioEvents))) := by
+  refine ⟨countdown_artifact_single_bitmap (ofString name) (BitVec.ofNat 64 count) returned bytes bitmap final (by simpa [countdownBodyHOL] using hcompile), ?_⟩
   have domain : ∀ a, countdownStackByteDomain countdownRiscVBackend (countdownAsmState (countdownBytesOfWords (countdownExampleWords bytes cbspace 8191 [bitmap] (countdownExampleBitmapBacking bitmap (countdownWriteCode 4096 bytes initial)))) countdownExampleRegs)
       countdownExampleBitmapsDomain a = true → countdownMachineConfig.progAddresses a := by
     rw [countdownExampleByteDomain_eq]
