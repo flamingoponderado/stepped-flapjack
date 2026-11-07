@@ -61,3 +61,43 @@ theorem countdownExampleByteDomain_eq (mem : BitVec 64 → BitVec 8) :
   omega
 
 end SteppedFlapjack.PanToCrepSteps
+
+namespace SteppedFlapjack.PanToCrepSteps
+open Flapjack Flapjack.Compiler.Backend
+
+/-- Construct byte memory from word memory so that every aligned word has
+exactly the bytes required by the original machine initializer. -/
+noncomputable def countdownBytesOfWords (words : BitVec 64 → BitVec 64) (a : BitVec 64) : BitVec 8 :=
+  HolByte.getByte a (words (holByteAlign a)) false
+
+/-- The constructed byte and word memories satisfy the initializers
+ global word and byte consistency condition. -/
+theorem countdownBytesOfWords_consistent (words : BitVec 64 → BitVec 64) :
+    ∀ a, ∃ w, countdownBytesOfWords words a = HolByte.getByte a w false ∧
+      (fun x => WordLocW.word (words x)) (holByteAlign a) = .word w := by
+  intro a
+  exact ⟨words (holByteAlign a),rfl,rfl⟩
+
+/-- A code buffer ending before the heap is in program memory and disjoint
+from the concrete byte domain. -/
+theorem countdownExample_buffer (mem : BitVec 64 → BitVec 8) (bytes : List (BitVec 8)) (cbspace : Nat)
+    (fits : bytes.length + cbspace ≤ 61440) :
+    ∀ n, n < cbspace → countdownMachineConfig.progAddresses (BitVec.ofNat 64 (n+bytes.length)+4096) ∧
+      countdownStackByteDomain countdownRiscVBackend (countdownAsmState mem countdownExampleRegs)
+        countdownExampleBitmapsDomain (BitVec.ofNat 64 (n+bytes.length)+4096) ≠ true := by
+  intro n hn
+  have small : n + bytes.length + 4096 < 65536 := by omega
+  have value : (BitVec.ofNat 64 (n+bytes.length)+4096).toNat = n+bytes.length+4096 := by
+    simp only [BitVec.toNat_add,BitVec.toNat_ofNat]
+    simp
+    omega
+  constructor
+  · change 4096 ≤ (BitVec.ofNat 64 (n+bytes.length)+4096).toNat
+    rw [value]
+    omega
+  · rw [countdownExampleByteDomain_eq]
+    simp only [countdownExampleByteDomain,decide_eq_true_eq,ne_eq]
+    rw [value]
+    omega
+
+end SteppedFlapjack.PanToCrepSteps
