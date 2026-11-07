@@ -87,29 +87,4 @@ theorem unfilteredLabToRiscVWithin {F : Type}
       hmc tie rel filteredRun hbound
   exact ⟨ticks,finalMachine,hticks,by simpa only [initialFfi,postFfi] using hrun⟩
 
-/-- The original and filtered initializers need no separate simulation
-hypothesis when transferring a bounded Lab run to the RISC-V machine. -/
-theorem makeInit_unfilteredToRiscVWithin {F : Type}
-    (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection) (ffi : HolFfiState F)
-    (asm : AsmState 64) (memory : BitVec 64 → WordLocW 64) (dm sdm : BitVec 64 → Bool)
-    (machine : RiscV.L3.riscv_state) (program : LabProgHOL 64) (cbpos : BitVec 64) (cbspace : Nat)
-    (oracle : Nat → Config × LabProgHOL 64) (p : BitVec 64) (code : LabProgHOL 64) (labs : Spt (Spt Nat))
-    (outcome : HolOutcome) (clock bound : Nat) (post : LabSem.State 64 Config F)
-    (hmc : mc.target = riscvTarget)
-    (tie : oracleTie mc machine (makeInit mc ffi asm memory dm sdm machine (LabFilter.filterSkip program)
-      (compileLab mc.target.config) cbpos cbspace (fun n => ((oracle n).1,LabFilter.filterSkip (oracle n).2))))
-    (rel : stateRel (mc,code,labs,p) (makeInit mc ffi asm memory dm sdm machine (LabFilter.filterSkip program)
-      (compileLab mc.target.config) cbpos cbspace (fun n => ((oracle n).1,LabFilter.filterSkip (oracle n).2))) asm machine)
-    (run : evaluate {makeInit mc ffi asm memory dm sdm machine program (LabToTarget.compile mc.target.config)
-      cbpos cbspace oracle with clock := clock} = (.halt outcome,post)) (hbound : clock ≤ bound) :
-    ∃ ticks finalMachine, ticks ≤ labTickBound 4 code (makeInit mc ffi asm memory dm sdm machine
-      (LabFilter.filterSkip program) (compileLab mc.target.config) cbpos cbspace
-      (fun n => ((oracle n).1,LabFilter.filterSkip (oracle n).2))).codeBuffer * bound ∧
-      evaluateTargetHOL mc ffi ticks machine = (.halt outcome,finalMachine,post.ffi) := by
-  have hfilter := makeInit_filterRel mc ffi asm memory dm sdm machine program
-    (compileLab mc.target.config) cbpos cbspace oracle
-  have hrun := unfilteredLabToRiscVWithin p _ _ post outcome clock bound mc code labs asm machine
-    hmc hfilter tie rel run hbound
-  simpa only [makeInit] using hrun
-
 end SteppedFlapjack.LabToTargetSteps

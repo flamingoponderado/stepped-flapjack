@@ -1,6 +1,16 @@
-import SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopRiscV
+import SteppedFlapjack.PanToCrepSteps.FullInitTailOutcome
+import SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopEntry
+import SteppedFlapjack.CrepToLoopSteps.DeclRiscVInputs
+import SteppedFlapjack.LoopToWordSteps.TailRiscVSetup
+import SteppedFlapjack.WordToStackSteps.TailEntryFrame
+import SteppedFlapjack.PanToCrepSteps.GlobalSourceEntry
+import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopReturn
+import SteppedFlapjack.PanToCrepSteps.TailEntryCrepBound
+import SteppedFlapjack.PanToCrepSteps.TailEntryRelations
+import SteppedFlapjack.CrepToLoopSteps.RiscVInputs
 import SteppedFlapjack.PanToCrepSteps.GlobalDecl
-import SteppedFlapjack.PanToCrepSteps.CountedDeclaredFullInit
+import SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopNative
+import SteppedFlapjack.PanToCrepSteps.FullInitAssignLoopInputs
 import SteppedFlapjack.PanToCrepSteps.SourceInitialFrontend
 
 /-! Source-bounded unprefixed declarations through the optimized Loop entry. -/
