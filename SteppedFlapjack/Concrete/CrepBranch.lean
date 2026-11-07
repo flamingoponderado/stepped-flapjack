@@ -121,12 +121,15 @@ theorem branching_entry_span :
       evalCrepSemHOLProgExact (crepState branchingHOL) branchCrepEntry =
         (some (.return [.word 7]),targetFinal) ∧
       SteppedFlapjack.CrepSteps.steps branchCrepEntry (crepState branchingHOL) ≤
-        3 + sizeOf (compileProgExactHOLW branchCalleeContext branchingHOL) * 6 := by
+        231 := by
   have relations := supported_callee_relations branching branching_supported
   simp only [← branching_hol_eq] at relations
   obtain ⟨lookup,_,_,_,_,_⟩ := relations
   have lookup' : (crepState branchingHOL).code.lookup (entryName branchingHOL) =
       some ([],compileProgExactHOLW branchCalleeContext branchingHOL) := lookup
+  have codeEq : compileProgExactHOLW branchCalleeContext branchingHOL = branchCrepBody := by
+    rw [branchCrepCode_lookup] at lookup
+    exact (Prod.mk.inj (Option.some.inj lookup)).2.symm
   have nonzero : (crepState branchingHOL).clock ≠ 0 := by
     simp [crepState,concreteDeclCrepState,loweredState,noGlobalsLoweredPreCall,
       exactState,singleEntrySourceTemplate,sourceTemplate]
@@ -149,6 +152,9 @@ theorem branching_entry_span :
       SteppedFlapjack.CrepSteps.steps_leaf _ _ rfl
     rw [one]
     simp only [branchCrepCallee, List.zip, List.zipWith] at bound ⊢
+    rw [codeEq] at bound ⊢
+    have size : sizeOf branchCrepBody = 38 := by decide
+    rw [size] at bound
     omega
 
 /-- Concrete source-to-Crep correspondence, obtained by directly checking
