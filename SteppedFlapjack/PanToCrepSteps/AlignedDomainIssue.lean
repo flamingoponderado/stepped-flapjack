@@ -58,53 +58,6 @@ theorem alignedDomain_closed_empty (base : BitVec 64 → Bool)
     rw [hnot,Bool.and_false] at bad
     contradiction
 
-/-- The current aligned countdown domain conflicts with byte-closure when the
-Stack layout supplies a nonempty heap. This exposes a missing alignment bridge. -/
-theorem countdown_alignedDomain_incompatible
-    (config : Backend.Config) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
-    (machine : RiscV.L3.riscv_state) (asm : AsmState 64) (memory : BitVec 64 → WordLocW 64)
-    (bitmapPtr : BitVec 64) (bitmapsDomain : BitVec 64 → Bool) (bytes : List (BitVec 8))
-    (cbspace dataSp : Nat) (bitmaps : List (BitVec 64))
-    (layout : countdownStackMemoryLayout config mc machine asm memory bitmapPtr bitmapsDomain bytes cbspace dataSp bitmaps)
-    (closed : ∀ a, countdownStackLabDomain config asm bitmapsDomain (holByteAlign a) = true →
-      countdownStackLabDomain config asm bitmapsDomain a = true) : False := by
-  let lo := asm.regs (StackNames.findNameSpt config.stackConf.regNames 2)
-  let hi := asm.regs (StackNames.findNameSpt config.stackConf.regNames 4)
-  have aligned : holByteAligned lo = true := layout.1
-  have order : lo ≤ hi := layout.2.2.2.1
-  have enough : (8192 : BitVec 64) ≤ hi - lo := by
-    simpa [lo,hi,StackRemove.bytesInWord] using layout.2.2.2.2.1
-  have strict : lo < hi := by
-    have ne : lo ≠ hi := by
-      intro eq
-      rw [← eq,BitVec.sub_self] at enough
-      contradiction
-    change lo.toNat < hi.toNat
-    change lo.toNat ≤ hi.toNat at order
-    have neNat : lo.toNat ≠ hi.toNat := by
-      intro h
-      exact ne (BitVec.eq_of_toNat_eq h)
-    omega
-  let raw : BitVec 64 → Bool := fun a => decide (lo ≤ a ∧ a < hi) || bitmapsDomain a
-  have witness : (raw lo && holByteAligned lo) = true := by
-    simp [raw,strict,aligned]
-  have empty := alignedDomain_closed_empty raw (by simpa [raw,lo,hi,countdownStackLabDomain] using closed) lo
-  rw [witness] at empty
-  contradiction
-
-/-- The current combined countdown theorem's initializer and Stack layout
-premises cannot both hold. A byte-domain to aligned-domain bridge is required. -/
-theorem countdown_goodInit_layout_incompatible
-    (config : Backend.Config) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
-    (machine : RiscV.L3.riscv_state) (asm : AsmState 64) (memory : BitVec 64 → WordLocW 64)
-    (bitmapPtr : BitVec 64) (bitmapsDomain sharedDomain : BitVec 64 → Bool) (bytes : List (BitVec 8))
-    (cbspace dataSp : Nat) (bitmaps : List (BitVec 64))
-    (layout : countdownStackMemoryLayout config mc machine asm memory bitmapPtr bitmapsDomain bytes cbspace dataSp bitmaps)
-    (init : goodInitState mc machine bytes cbspace asm memory (countdownStackLabDomain config asm bitmapsDomain)
-      (fun a => sharedDomain a && holByteAligned a)) : False := by
-  exact countdown_alignedDomain_incompatible config mc machine asm memory bitmapPtr bitmapsDomain bytes cbspace dataSp bitmaps
-    layout init.2.2.2.2.2.2.2.2.2.2.2.1
-
 open Flapjack.Compiler.Backend.StackLang Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
 open Flapjack.Compiler.Backend.StackRemove.Proofs Flapjack.Compiler.Backend.StackRemove
 

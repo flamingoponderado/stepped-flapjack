@@ -70,25 +70,6 @@ theorem callSequenceCost_mono {width : Nat} [NeZero width] (ac : AsmConfigExact 
 termination_by sizeOf p
 decreasing_by all_goals subst p; simp_wf; try omega
 
-/-- A larger independently established source limit gives a larger compiled
-call-sequence budget through both replay-clock transformations. -/
-theorem declSource_callSequenceCost_mono
-    (crepCtxt : CrepToLoopContextExact) (live : NumSet) (callee : MlString)
-    (entryInit : CrepProgHOL 64) (localVar : Nat) (value : CrepExpHOL 64)
-    (init : CrepProgHOL 64) (condition : CrepExpHOL 64) (body tail : CrepProgHOL 64)
-    (ac : AsmConfigExact 64) (count name alg regCount : Nat) (col : Option (Spt Nat))
-    (loop : HolLoopProg 64) (ctxt : Spt Nat) (labels : Nat × Nat)
-    (code : Spt (Nat × WordLangProgHOL (BitVec 64))) (stackCode : Spt (HolProg 64))
-    (out : WordLangProgHOL (BitVec 64)) (bs : AppList (BitVec 64) × Nat) (kf : Nat × Nat × Nat)
-    {first second : Nat} (bound : first ≤ second) :
-    callSequenceCost ac (tailStackReplayLimit ac count name alg regCount col loop ctxt labels code
-      (branchTailDeclLoopLimit crepCtxt live callee entryInit localVar value init condition body tail first)) stackCode out bs kf ≤
-    callSequenceCost ac (tailStackReplayLimit ac count name alg regCount col loop ctxt labels code
-      (branchTailDeclLoopLimit crepCtxt live callee entryInit localVar value init condition body tail second)) stackCode out bs kf := by
-  apply callSequenceCost_mono
-  apply tailStackReplayLimit_mono
-  exact branchTailDeclLoopLimit_mono crepCtxt live callee entryInit localVar value init condition body tail bound
-
 /-- The full finite-oracle machine-cost expression is monotone in the Stack
 replay limit. Changing the clock does not change its code or oracle budget. -/
 theorem machineCost_mono {C F : Type}
@@ -110,50 +91,5 @@ theorem machineCost_mono {C F : Type}
   rw [computedRunCost_clock,computedRunCost_clock]
   exact Nat.mul_le_mul_left labFactor (Nat.mul_le_mul_left flattenFactor
     (Nat.add_le_add_right (Nat.mul_le_mul factor stepBudget) 4))
-
-/-- A larger declaration-source bound yields a larger complete finite-oracle
-machine-cost expression for the same compiled program and initial data. -/
-theorem declSource_machineCost_mono {C F : Type}
-    (crepCtxt : CrepToLoopContextExact) (live : NumSet) (callee : MlString)
-    (entryInit : CrepProgHOL 64) (localVar : Nat) (value : CrepExpHOL 64)
-    (init : CrepProgHOL 64) (condition : CrepExpHOL 64) (body tail : CrepProgHOL 64)
-    (ac : AsmConfigExact 64) (count name alg regCount : Nat) (col : Option (Spt Nat))
-    (loop : HolLoopProg 64) (ctxt : Spt Nat) (labels : Nat × Nat)
-    (code : Spt (Nat × WordLangProgHOL (BitVec 64))) (stackCode : Spt (HolProg 64))
-    (out : WordLangProgHOL (BitVec 64)) (bs : AppList (BitVec 64) × Nat) (kf : Nat × Nat × Nat)
-    (bounds : BitVec 64 × BitVec 64) (program : HolProg 64)
-    (state : StackSemStateFiniteExact 64 C F) (uniform labFactor flattenFactor : Nat)
-    {first second : Nat} (h : first ≤ second) :
-    let clock := fun n => tailStackReplayLimit ac count name alg regCount col loop ctxt labels code
-      (branchTailDeclLoopLimit crepCtxt live callee entryInit localVar value init condition body tail n)
-    let cost := fun n => uniform * (3 + callSequenceCost ac (clock n) stackCode out bs kf)
-    labFactor * (flattenFactor *
-      (computedRunCost bounds (cost first) program {state with clock := clock first+1} * cost first + 4)) ≤
-    labFactor * (flattenFactor *
-      (computedRunCost bounds (cost second) program {state with clock := clock second+1} * cost second + 4)) := by
-  apply machineCost_mono
-  apply tailStackReplayLimit_mono
-  exact branchTailDeclLoopLimit_mono crepCtxt live callee entryInit localVar value init condition body tail h
-
-/-- The monotone machine expression applies to the actual Stack-allocation
-initial state used by the RISC-V compilation theorem. -/
-theorem machineCost_Tgt_mono {C F : Type}
-    (ac : AsmConfigExact 64) (stackCode : Spt (HolProg 64))
-    (out : WordLangProgHOL (BitVec 64)) (bs : AppList (BitVec 64) × Nat) (kf : Nat × Nat × Nat)
-    (bounds : BitVec 64 × BitVec 64) (program : HolProg 64)
-    (state : StackSemStateFiniteExact 64 C F) (anything : WordSemGcFun 64)
-    (cr : CompileFn 64 C) (config : DataToWord.Config) (uniform labFactor flattenFactor : Nat)
-    {first second : Nat} (h : first ≤ second) :
-    labFactor * (flattenFactor *
-      (computedRunCost bounds (uniform * (3 + callSequenceCost ac first stackCode out bs kf)) program
-        (Tgt anything cr config {state with clock := first+1} 0 state.regs) *
-        (uniform * (3 + callSequenceCost ac first stackCode out bs kf)) + 4)) ≤
-    labFactor * (flattenFactor *
-      (computedRunCost bounds (uniform * (3 + callSequenceCost ac second stackCode out bs kf)) program
-        (Tgt anything cr config {state with clock := second+1} 0 state.regs) *
-        (uniform * (3 + callSequenceCost ac second stackCode out bs kf)) + 4)) := by
-  simpa only [Tgt,Nat.add_zero] using
-    machineCost_mono ac stackCode out bs kf bounds program (Tgt anything cr config state 0 state.regs)
-      uniform labFactor flattenFactor h
 
 end SteppedFlapjack.PanToCrepSteps
