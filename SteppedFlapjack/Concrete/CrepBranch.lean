@@ -43,8 +43,7 @@ def branchCrepEntry : CrepProgHOL 64 := .seq .skip (.call none (entryName branch
 /-- The entry proved below is exactly the compiler-generated main function. -/
 theorem branchCrepEntry_generated :
     (ofString "main",[],branchCrepEntry) ∈ crepPrograms branchingHOL := by
-  rw [branching_crep_code]
-  simp [branchCrepEntry]
+  simpa [branchCrepEntry] using generated_entry_member branchingHOL
 
 /-- The complete generated entry visits five Crep statements. -/
 theorem branchCrepEntry_steps :
@@ -93,29 +92,6 @@ def branchCalleeContext : PanToCrepContextExact 64 :=
   let caller := frontendContext branchingHOL
   ctxtFcExactHOL caller.funcs caller.eids [] [] []
 
-def branchCrepCallee : CrepSemHOLState 64 Unit :=
-  decClockCrepSemHOL {crepState branchingHOL with locals := HolFiniteMapExact.empty.updateList []}
-
-/-- The general frontend span establishes the actual comparison callee run. -/
-theorem branching_callee_span :
-    ∃ targetResult targetFinal,
-      evalCrepSemHOLProgExact branchCrepCallee (compileProgExactHOLW branchCalleeContext branchingHOL) =
-        (targetResult,targetFinal) ∧
-      pcCompileCorrectResultRel branchCalleeContext
-        (callEntryStateHOLFinite (loweredState branchingHOL) HolFiniteMapExact.empty).emptyLocalsHOLFinite
-        targetFinal (some (.returned (.val (.word 7)))) targetResult ∧
-      SteppedFlapjack.CrepSteps.steps (compileProgExactHOLW branchCalleeContext branchingHOL) branchCrepCallee ≤
-        sizeOf (compileProgExactHOLW branchCalleeContext branchingHOL) * 6 := by
-  have relations := supported_callee_relations branching branching_supported
-  simp only [← branching_hol_eq] at relations
-  obtain ⟨_,_,stateRel,codeRel,excpRel,localsRel⟩ := relations
-  obtain ⟨sourceRun,sourceBound⟩ := branching_callee_source
-  have span := frontend_correct_with_steps branchCalleeContext branchingHOL (branching_frontend_shape _)
-    _ _ (some (.returned (.val (.word 7)))) branchCrepCallee 6
-    sourceRun (by simp) sourceBound stateRel codeRel excpRel localsRel
-  obtain ⟨targetResult,targetFinal,targetRun,_,_,_,resultRel,bound⟩ := span
-  exact ⟨targetResult,targetFinal,targetRun,resultRel,bound⟩
-
 /-- The generated comparison entry bound follows from the general span. -/
 theorem branching_entry_span :
     ∃ targetFinal,
@@ -123,28 +99,24 @@ theorem branching_entry_span :
         (some (.return [.word 7]),targetFinal) ∧
       SteppedFlapjack.CrepSteps.steps branchCrepEntry (crepState branchingHOL) ≤
         231 := by
+  obtain ⟨run,bound⟩ := branching_callee_source
+  have span := supported_entry_crep_return branching branching_supported _ 7 6
+    (by simpa [← branching_hol_eq] using run) (by simpa [← branching_hol_eq] using bound)
   have relations := supported_callee_relations branching branching_supported
   simp only [← branching_hol_eq] at relations
-  obtain ⟨lookup,_,_,_,_,_⟩ := relations
-  have lookup' : (crepState branchingHOL).code.lookup (entryName branchingHOL) =
-      some ([],compileProgExactHOLW branchCalleeContext branchingHOL) := lookup
+  have lookup := relations.1
   have codeEq : compileProgExactHOLW branchCalleeContext branchingHOL = branchCrepBody := by
     rw [branchCrepCode_lookup] at lookup
     exact (Prod.mk.inj (Option.some.inj lookup)).2.symm
-  have nonzero : (crepState branchingHOL).clock ≠ 0 := by
-    simp [crepState,concreteDeclCrepState,loweredState,noGlobalsLoweredPreCall,
-      exactState,singleEntrySourceTemplate,sourceTemplate]
-  obtain ⟨targetResult,targetFinal,targetRun,resultRel,bound⟩ := branching_callee_span
-  have returned : targetResult = some (.return [.word 7]) := by
-    simpa [pcCompileCorrectResultRel,flattenHOL] using resultRel
-  subst targetResult
-  have wrapper := CrepSteps.tail_entry_returned_word (crepState branchingHOL) (entryName branchingHOL)
-    (compileProgExactHOLW branchCalleeContext branchingHOL) 7 targetFinal _ lookup' nonzero (by simpa [branchCrepCallee,flattenHOL] using targetRun) bound
-  refine ⟨targetFinal.emptyLocals,by simpa [branchCrepEntry] using wrapper.1,?_⟩
-  rw [codeEq] at wrapper
   have size : sizeOf branchCrepBody = 38 := by decide
-  rw [size] at wrapper
-  simpa [branchCrepEntry] using wrapper.2
+  simp only [← branching_hol_eq] at span
+  change ∃ final,
+    evalCrepSemHOLProgExact (crepState branchingHOL) branchCrepEntry =
+      (some (.return [.word 7]),final) ∧
+    CrepSteps.steps branchCrepEntry (crepState branchingHOL) ≤
+      3 + sizeOf (compileProgExactHOLW branchCalleeContext branchingHOL) * 6 at span
+  rw [codeEq,size] at span
+  simpa using span
 
 /-- Concrete source-to-Crep correspondence, obtained by directly checking
 both runs. The five-visit calculation cross-checks the general span bound above. -/

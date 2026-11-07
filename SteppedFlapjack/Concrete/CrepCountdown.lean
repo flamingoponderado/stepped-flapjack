@@ -55,43 +55,13 @@ def countdownCalleeContext (n : Nat) : PanToCrepContextExact 64 :=
   let caller := frontendContext (countdownHOL n)
   ctxtFcExactHOL caller.funcs caller.eids [] [] []
 
-def countdownCrepCallee (n : Nat) : CrepSemHOLState 64 Unit :=
-  decClockCrepSemHOL {crepState (countdownHOL n) with locals := HolFiniteMapExact.empty.updateList []}
-
-/-- The countdown's actual generated callee satisfies the general Crep span
-with the concrete source bound `6*n+9`. -/
-theorem countdown_callee_crep (n : Nat) (range : n < 2^64)
-    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
-    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
-    ∃ sourceFinal targetResult targetFinal,
-      (countdownPanEntry n).evaluateHOLFiniteState (countdownHOL n) =
-        (some (.returned (.val (.word 0))),sourceFinal) ∧
-      evalCrepSemHOLProgExact (countdownCrepCallee n)
-        (compileProgExactHOLW (countdownCalleeContext n) (countdownHOL n)) = (targetResult,targetFinal) ∧
-      pcCompileCorrectResultRel (countdownCalleeContext n) sourceFinal targetFinal
-        (some (.returned (.val (.word 0)))) targetResult ∧
-      SteppedFlapjack.CrepSteps.steps (compileProgExactHOLW (countdownCalleeContext n) (countdownHOL n))
-        (countdownCrepCallee n) ≤
-        sizeOf (compileProgExactHOLW (countdownCalleeContext n) (countdownHOL n)) * (6*n+9) := by
-  have relations := supported_callee_relations (countdown n) (countdown_supported n)
-  simp only [← countdown_hol_eq] at relations
-  obtain ⟨_,_,stateRel,codeRel,excpRel,localsRel⟩ := relations
-  obtain ⟨sourceFinal,sourceRun,sourceBound⟩ := countdown_callee_source n range context primitive handler
-  have shape := countdown_frontend_shape n (countdownCalleeContext n)
-  have span := frontend_correct_with_steps (countdownCalleeContext n) (countdownHOL n) shape
-    (countdownPanEntry n) sourceFinal (some (.returned (.val (.word 0)))) (countdownCrepCallee n) (6*n+9)
-    sourceRun (by simp) sourceBound stateRel codeRel excpRel localsRel
-  obtain ⟨targetResult,targetFinal,targetRun,_,_,_,resultRel,bound⟩ := span
-  exact ⟨sourceFinal,targetResult,targetFinal,sourceRun,targetRun,resultRel,bound⟩
-
 /-- The actual generated main function calls the renamed countdown callee. -/
 def countdownCrepEntry (n : Nat) : CrepProgHOL 64 :=
   .seq .skip (.call none (entryName (countdownHOL n)) [])
 
 theorem countdownCrepEntry_generated (n : Nat) :
     (ofString "main",[],countdownCrepEntry n) ∈ crepPrograms (countdownHOL n) := by
-  rw [countdown_crep_code]
-  simp [countdownCrepEntry]
+  simpa [countdownCrepEntry] using generated_entry_member (countdownHOL n)
 
 /-- The generated Crep entry has an explicit visit bound obtained from the
 countdown source bound and the general frontend span. -/
@@ -103,24 +73,11 @@ theorem countdown_entry_crep (n : Nat) (range : n < 2^64)
         (some (.return [.word 0]),targetFinal) ∧
       SteppedFlapjack.CrepSteps.steps (countdownCrepEntry n) (crepState (countdownHOL n)) ≤
         3 + sizeOf (compileProgExactHOLW (countdownCalleeContext n) (countdownHOL n)) * (6*n+9) := by
-  have relations := supported_callee_relations (countdown n) (countdown_supported n)
-  simp only [← countdown_hol_eq] at relations
-  obtain ⟨lookup,_,_,_,_,_⟩ := relations
-  have lookup' : (crepState (countdownHOL n)).code.lookup (entryName (countdownHOL n)) =
-      some ([],compileProgExactHOLW (countdownCalleeContext n) (countdownHOL n)) := lookup
-  have nonzero : (crepState (countdownHOL n)).clock ≠ 0 := by
-    simp [crepState,concreteDeclCrepState,loweredState,noGlobalsLoweredPreCall,
-      exactState,singleEntrySourceTemplate,sourceTemplate]
-  obtain ⟨sourceFinal,targetResult,targetFinal,_,targetRun,resultRel,bound⟩ :=
-    countdown_callee_crep n range context primitive handler
-  have returned : targetResult = some (.return [.word 0]) := by
-    simpa [pcCompileCorrectResultRel,flattenHOL] using resultRel
-  subst targetResult
-  have wrapper := CrepSteps.tail_entry_returned_word (crepState (countdownHOL n))
-    (entryName (countdownHOL n)) (compileProgExactHOLW (countdownCalleeContext n) (countdownHOL n))
-    0 targetFinal _ lookup' nonzero (by simpa [countdownCrepCallee,flattenHOL] using targetRun) bound
-  exact ⟨targetFinal.emptyLocals,by simpa [countdownCrepEntry] using wrapper.1,
-    by simpa [countdownCrepEntry] using wrapper.2⟩
+  obtain ⟨sourceFinal,run,bound⟩ := countdown_callee_source n range context primitive handler
+  have span := supported_entry_crep_return (countdown n) (countdown_supported n) sourceFinal 0 (6*n+9)
+    (by simpa [← countdown_hol_eq,countdownPanEntry] using run)
+    (by simpa [← countdown_hol_eq,countdownPanEntry] using bound)
+  simpa [← countdown_hol_eq,countdownCalleeContext,countdownCrepEntry] using span
 
 /-- The natural unprefixed source countdown and its actual generated callee. -/
 def naturalPanEntry (n : Nat) : PanSemStateFiniteExact 64 Unit :=
@@ -171,43 +128,13 @@ def naturalCalleeContext (n : Nat) : PanToCrepContextExact 64 :=
   let caller := frontendContext (naturalCountdownHOL n)
   ctxtFcExactHOL caller.funcs caller.eids [] [] []
 
-def naturalCrepCallee (n : Nat) : CrepSemHOLState 64 Unit :=
-  decClockCrepSemHOL {crepState (naturalCountdownHOL n) with locals := HolFiniteMapExact.empty.updateList []}
-
-/-- The natural countdown's compiled callee follows from the general span and
-its exact counted source budget. -/
-theorem natural_countdown_callee_crep (n : Nat) (range : n < 2^64)
-    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
-    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
-    ∃ sourceFinal targetResult targetFinal,
-      (naturalPanEntry n).evaluateHOLFiniteState (naturalCountdownHOL n) =
-        (some (.returned (.val (.word 0))),sourceFinal) ∧
-      evalCrepSemHOLProgExact (naturalCrepCallee n)
-        (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) = (targetResult,targetFinal) ∧
-      pcCompileCorrectResultRel (naturalCalleeContext n) sourceFinal targetFinal
-        (some (.returned (.val (.word 0)))) targetResult ∧
-      CrepSteps.steps (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n))
-        (naturalCrepCallee n) ≤
-        sizeOf (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) * (6*n+7) := by
-  have relations := supported_callee_relations (naturalCountdown n) (naturalCountdown_supported n)
-  change _ ∧ _ ∧ panToCrepStateRelFiniteExact (naturalPanEntry n) (naturalCrepCallee n) ∧ _ at relations
-  obtain ⟨_,_,stateRel,codeRel,excpRel,localsRel⟩ := relations
-  obtain ⟨_,sourceFinal,_,sourceRun,sourceBound⟩ := natural_countdown_callee_source n range context primitive handler
-  have shape := supported_frontend_shape (naturalCountdown_supported n) (naturalCalleeContext n)
-  have span := frontend_correct_with_steps (naturalCalleeContext n) (naturalCountdownHOL n) shape
-    (naturalPanEntry n) sourceFinal (some (.returned (.val (.word 0)))) (naturalCrepCallee n) (6*n+7)
-    sourceRun (by simp) sourceBound stateRel codeRel excpRel localsRel
-  obtain ⟨targetResult,targetFinal,targetRun,_,_,_,resultRel,bound⟩ := span
-  exact ⟨sourceFinal,targetResult,targetFinal,sourceRun,targetRun,resultRel,bound⟩
-
 /-- The generated entry for the unprefixed countdown. -/
 def naturalCrepEntry (n : Nat) : CrepProgHOL 64 :=
   .seq .skip (.call none (entryName (naturalCountdownHOL n)) [])
 
 theorem naturalCrepEntry_generated (n : Nat) :
     (ofString "main",[],naturalCrepEntry n) ∈ crepPrograms (naturalCountdownHOL n) := by
-  rw [natural_countdown_crep_code]
-  simp [naturalCrepEntry]
+  simpa [naturalCrepEntry] using generated_entry_member (naturalCountdownHOL n)
 
 /-- The unprefixed countdown entry inherits the exact `6*n+7` source budget. -/
 theorem natural_countdown_entry_crep (n : Nat) (range : n < 2^64)
@@ -218,21 +145,9 @@ theorem natural_countdown_entry_crep (n : Nat) (range : n < 2^64)
         (some (.return [.word 0]),targetFinal) ∧
       CrepSteps.steps (naturalCrepEntry n) (crepState (naturalCountdownHOL n)) ≤
         3 + sizeOf (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) * (6*n+7) := by
-  have relations := supported_callee_relations (naturalCountdown n) (naturalCountdown_supported n)
-  have lookup : (crepState (naturalCountdownHOL n)).code.lookup (entryName (naturalCountdownHOL n)) =
-      some ([],compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) := relations.1
-  have nonzero : (crepState (naturalCountdownHOL n)).clock ≠ 0 := by
-    simp [crepState,concreteDeclCrepState,loweredState,noGlobalsLoweredPreCall,
-      exactState,singleEntrySourceTemplate,sourceTemplate]
-  obtain ⟨_,targetResult,targetFinal,_,targetRun,resultRel,bound⟩ :=
-    natural_countdown_callee_crep n range context primitive handler
-  have returned : targetResult = some (.return [.word 0]) := by
-    simpa [pcCompileCorrectResultRel,flattenHOL] using resultRel
-  subst targetResult
-  have wrapper := CrepSteps.tail_entry_returned_word (crepState (naturalCountdownHOL n))
-    (entryName (naturalCountdownHOL n)) (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n))
-    0 targetFinal _ lookup nonzero (by simpa [naturalCrepCallee,flattenHOL] using targetRun) bound
-  exact ⟨targetFinal.emptyLocals,by simpa [naturalCrepEntry] using wrapper.1,
-    by simpa [naturalCrepEntry] using wrapper.2⟩
+  obtain ⟨_,sourceFinal,_,run,bound⟩ := natural_countdown_callee_source n range context primitive handler
+  have span := supported_entry_crep_return (naturalCountdown n) (naturalCountdown_supported n)
+    sourceFinal 0 (6*n+7) run bound
+  simpa [naturalCountdownHOL,naturalCalleeContext,naturalCrepEntry] using span
 
 end SteppedFlapjack.Concrete
