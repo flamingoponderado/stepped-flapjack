@@ -96,7 +96,7 @@ theorem labInit_countdown_memoryLayout_riscv {σ : Type}
           (outcome = .resourceLimitHit ∧
             (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = adjustedStack.ffi.ioEvents))) := by
   have stackInit := countdown_stackInit_from_memory (ofString name) (BitVec.ofNat 64 count) returned config mc machine ffi asm memory
-    bitmapPtr bitmapsDomain sharedDomain (progToBytes code2) cbspace dataSp cfg hmc hcfg hinit ptr len ptr2 len2 layout
+    bitmapPtr bitmapsDomain sharedDomain (progToBytes code2) cbspace dataSp cfg (LabToTarget.compileLab mc.target.config) hmc hcfg hinit ptr len ptr2 len2 layout
   apply labInit_countdown_backendConfig_riscv name count budget returned context primitive handler functions fuel production template
     config hcfg (fun k => decide (k ∈ mc.calleeSavedRegs)) dataSp cfg mc machine ffi
     (countdownStackLabCode (ofString name) (BitVec.ofNat 64 count) returned config) code2 labs labelClock i cbspace labClock asm memory

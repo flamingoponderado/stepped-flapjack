@@ -57,6 +57,7 @@ theorem countdown_stackInit_from_memory {σ : Type}
     (ffi : HolFfiState σ) (asm : AsmState 64) (memory : BitVec 64 → WordLocW 64)
     (bitmapPtr : BitVec 64) (bitmapsDomain sharedDomain : BitVec 64 → Bool)
     (bytes : List (BitVec 8)) (cbspace dataSp : Nat) (cfg : Config)
+    (comp : Config → LabSem.LabProgHOL 64 → Option (List (BitVec 8) × Config))
     (target : mc.target = riscvTarget) (hcfg : backendConfigOk riscvConfig config)
     (hinit : mcInitOk riscvConfig config mc)
     (ptr : mc.ptrReg = 10) (len : mc.lenReg = 11) (ptr2 : mc.ptr2Reg = 12) (len2 : mc.len2Reg = 13)
@@ -72,7 +73,7 @@ theorem countdown_stackInit_from_memory {σ : Type}
     let oracle : Nat → Config × LabSem.LabProgHOL 64 := fun _ => (cfg,StackToLab.compileNoStubs config.stackConf.regNames config.stackConf.jump riscvConfig.addrOffset sp [])
     let lab := LabToTarget.makeInit mc ffi asm memory
       (fun a => (heapDomain a || bitmapsDomain a) && holByteAligned a)
-      (fun a => sharedDomain a && holByteAligned a) machine code (LabToTarget.compileLab mc.target.config)
+      (fun a => sharedDomain a && holByteAligned a) machine code comp
       (mc.target.getPc machine + BitVec.ofNat 64 bytes.length) cbspace oracle
     StackToLab.Proofs.FullMakeInitSemantics.Assumptions config.stackConf config.dataConf maxHeap sp riscvConfig.addrOffset
       native.1 native.2.2.2 lab (fun k => decide (k ∈ mc.calleeSavedRegs)) dataSp (fun _ => (cfg,[],[])) := by
@@ -83,7 +84,7 @@ theorem countdown_stackInit_from_memory {σ : Type}
   let word := WordToWord.compile config.wordToWordConf riscvConfig (panToWordCompileProgHOL riscvConfig.isa source)
   let native := WordToStack.Native.compileNative riscvConfig false word.2
   have h := panToTargetFullMakeInitAssumptions config mc ffi asm memory bitmapPtr bitmapsDomain sharedDomain machine
-    (LabToTarget.compileLab mc.target.config) bytes cbspace cfg source word.1 word.2 native.1 native.2.1 native.2.2.1 native.2.2.2 dataSp
+    comp bytes cbspace cfg source word.1 word.2 native.1 native.2.1 native.2.2.1 native.2.2.2 dataSp
     (by rw [target]; exact hcfg) (riscvTarget_mcConfOk mc target ptr len ptr2 len2)
     (by rw [target]; exact hinit) (by simp [target,riscvTarget,riscvConfig])
     (by rw [target]; exact Prod.mk.eta.symm)

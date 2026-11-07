@@ -281,6 +281,7 @@ import SteppedFlapjack.PanToCrepSteps.FullInitTailOutcome
 import SteppedFlapjack.StackToLabSteps.PipelineComposition
 import SteppedFlapjack.StackToLabSteps.RiscVPipeline
 import SteppedFlapjack.LabToTargetSteps.LabRiscVComposition
+import SteppedFlapjack.LabToTargetSteps.FilteredRiscV
 import SteppedFlapjack.StackRawCallSteps.LeafSteps
 import SteppedFlapjack.StackRawCallSteps.IfSteps
 import SteppedFlapjack.StackRawCallSteps.LoopSteps
