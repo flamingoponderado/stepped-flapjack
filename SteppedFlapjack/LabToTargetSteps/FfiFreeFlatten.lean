@@ -1,5 +1,5 @@
 import Flapjack.Compiler.Backend.StackToLab.Proofs.NoShmemop
-import Flapjack.Compiler.Backend.LabToTarget.ShmemInfo
+import Flapjack.Compiler.Backend.LabToTarget.CodeAppend
 
 /-! FFI exclusion for Stack-to-Lab flattening and FFI-name collection. -/
 namespace SteppedFlapjack.LabToTargetSteps
