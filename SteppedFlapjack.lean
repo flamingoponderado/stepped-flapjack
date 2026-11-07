@@ -70,6 +70,7 @@ import SteppedFlapjack.PanToCrepSteps.ConcreteConfigCountdown
 import SteppedFlapjack.PanToCrepSteps.ConcreteStateCountdown
 import SteppedFlapjack.PanToCrepSteps.ExampleDomainCountdown
 import SteppedFlapjack.PanToCrepSteps.CountdownCompilerShape
+import SteppedFlapjack.LabToTargetSteps.FfiFreeFlatten
 import SteppedFlapjack.PanToCrepSteps.SingleEntrySourceEnvironment
 import SteppedFlapjack.PanToCrepSteps.CanonicalFfi
 import SteppedFlapjack.PanToCrepSteps.CountdownCanonicalSource
