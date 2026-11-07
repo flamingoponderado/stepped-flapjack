@@ -1,15 +1,6 @@
+import SteppedFlapjack.PanToCrepSteps.AssignLoopEntryDefs
 import SteppedFlapjack.PanToCrepSteps.CountdownZeroStackMax
-import SteppedFlapjack.PanToCrepSteps.CountdownZeroSetupSafe
-import SteppedFlapjack.PanToCrepSteps.CountdownZeroFrontendSafe
-import SteppedFlapjack.PanToCrepSteps.CountdownZeroMachineSafe
-import SteppedFlapjack.PanToCrepSteps.CountdownZeroExplicitBound
-import SteppedFlapjack.PanToCrepSteps.CountdownZeroSourceSafe
-import SteppedFlapjack.PanToCrepSteps.CountdownZeroSingleEntrySafe
-import SteppedFlapjack.PanToCrepSteps.CountdownZeroCountedSafe
-import SteppedFlapjack.PanToCrepSteps.CountdownZeroLabSafe
-import SteppedFlapjack.PanToCrepSteps.CountdownZeroGeneralSafe
 import SteppedFlapjack.PanToCrepSteps.CountdownZeroEntry
-import SteppedFlapjack.LoopToWordSteps.FullInitNativeZeroFrame
 import SteppedFlapjack.PanToCrepSteps.NoFfiCountdown
 import SteppedFlapjack.PanToCrepSteps.CountdownExecutableCompiler
 import Flapjack.Compiler.Backend.LabToTarget.ShmemMembership
@@ -43,7 +34,6 @@ import SteppedFlapjack.PanToCrepSteps.GlobalDecl
 import SteppedFlapjack.PanToCrepSteps.DeclSteps
 import SteppedFlapjack.PanToCrepSteps.DeclShape
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclRiscV
-import SteppedFlapjack.PanToCrepSteps.ConcreteDeclNativeRiscV
 import SteppedFlapjack.PanToCrepSteps.GlobalTailWord
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclProgram
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
@@ -58,7 +48,12 @@ import SteppedFlapjack.PanToCrepSteps.CountedWhileTrace
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoop
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopInvert
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopReturn
-import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopEntry
+import SteppedFlapjack.PanToCrepSteps.TailEntryCrepBound
+import SteppedFlapjack.PanToCrepSteps.TailEntryRelations
+import SteppedFlapjack.CrepToLoopSteps.RiscVInputs
+import SteppedFlapjack.LoopToWordSteps.TailRiscVSetup
+import SteppedFlapjack.WordToStackSteps.TailEntryFrame
+import SteppedFlapjack.PanToCrepSteps.GlobalSourceEntry
 import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopNative
 import SteppedFlapjack.PanToCrepSteps.SourceNativeInputs
 import SteppedFlapjack.PanToCrepSteps.SourceFullInitInputs
@@ -72,9 +67,8 @@ import SteppedFlapjack.PanToCrepSteps.DeclWhileSourceRiscV
 import SteppedFlapjack.PanToCrepSteps.DeclWhileSingleEntry
 import SteppedFlapjack.PanToCrepSteps.CountedDeclWhileFullCompiler
 import SteppedFlapjack.PanToCrepSteps.SimplifiedCountdownFullCompiler
-import SteppedFlapjack.PanToCrepSteps.LabCountdownFullCompiler
+import SteppedFlapjack.PanToCrepSteps.LabInitializedCountdown
 import SteppedFlapjack.PanToCrepSteps.LabCountedFullCompiler
-import SteppedFlapjack.PanToCrepSteps.CountdownGeneralApplication
 import SteppedFlapjack.LoopToWordSteps.FullInitMachineConstruct
 import SteppedFlapjack.PanToCrepSteps.AlignedLabInitSourceMemory
 import SteppedFlapjack.PanToCrepSteps.AlignedCompiledCountdown
@@ -87,11 +81,6 @@ import SteppedFlapjack.PanToCrepSteps.CountdownGoodCode
 import SteppedFlapjack.PanToCrepSteps.CountdownStackInit
 import SteppedFlapjack.PanToCrepSteps.CountdownCompiledLab
 import SteppedFlapjack.PanToCrepSteps.CountedSingleEntryFullInit
-import SteppedFlapjack.PanToCrepSteps.CountedCountdownFullInit
-import SteppedFlapjack.PanToCrepSteps.LabInitializedCountdown
-import SteppedFlapjack.PanToCrepSteps.LabCountdownRiscV
-import SteppedFlapjack.PanToCrepSteps.CountedDeclaredSourceInitialNative
-import SteppedFlapjack.PanToCrepSteps.CountedSingleEntryNative
 import SteppedFlapjack.PanToCrepSteps.CountedCountdown
 import SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep
 import SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample
@@ -102,7 +91,6 @@ import SteppedFlapjack.PanToCrepSteps.CountedReturn
 import SteppedFlapjack.Pancake.Semantics.PanSem.ExpressionCostBridge
 import SteppedFlapjack.PanToCrepSteps.GlobalInitializers
 import SteppedFlapjack.PanToCrepSteps.OriginalEntryRiscV
-import SteppedFlapjack.PanToCrepSteps.GlobalSourceEntry
 import SteppedFlapjack.PanToCrepSteps.GlobalWhile
 import SteppedFlapjack.PanToCrepSteps.GlobalShapes
 import SteppedFlapjack.PanToCrepSteps.TailEntryGlobalWordRiscV
@@ -119,28 +107,23 @@ import SteppedFlapjack.LoopToWordSteps.WholeCodeRel
 import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
 import SteppedFlapjack.PanToCrepSteps.TailEntryCompiledRiscV
 import SteppedFlapjack.PanToCrepSteps.TailEntryFrontendRiscV
-import SteppedFlapjack.PanToCrepSteps.TailEntryRelations
 import SteppedFlapjack.PanToCrepSteps.TailEntryRiscV
-import SteppedFlapjack.PanToCrepSteps.TailEntryCrepBound
 import SteppedFlapjack.CrepToLoopSteps.TailRiscVComposition
-import SteppedFlapjack.WordToStackSteps.TailEntryFrame
 import SteppedFlapjack.WordToStackSteps.WholeTailInitialization
 import SteppedFlapjack.CrepToLoopSteps.TailRiscVInputsCommon
-import SteppedFlapjack.CrepToLoopSteps.RiscVInputs
 import SteppedFlapjack.WordAllocSteps.WholeTailCode
 import SteppedFlapjack.WordToStackSteps.DirectTailRiscV
 import SteppedFlapjack.LoopToWordSteps.TailEntryCompiledCode
 import SteppedFlapjack.LoopToWordSteps.TailEntryRiscV
-import SteppedFlapjack.LoopToWordSteps.TailRiscVSetup
-import SteppedFlapjack.LoopToWordSteps.NativeTailRiscVReady
 import SteppedFlapjack.LoopToWordSteps.NativeTailCompilerFacts
-import SteppedFlapjack.LoopToWordSteps.NativeTailSetup
-import SteppedFlapjack.CrepToLoopSteps.NativeTailFrontendSetup
-import SteppedFlapjack.CrepToLoopSteps.WholeNativeCodeKeys
-import SteppedFlapjack.CrepToLoopSteps.NativeSetupFromLab
+import Flapjack.Compiler.Backend.DataToWord.Proofs.Gc.GcFunConstOk
+import SteppedFlapjack.LoopToWordSteps.Outcome
+import Flapjack.Pancake.LoopToWord.Proofs.LabPres
+import Flapjack.Pancake.CrepToLoop.Proofs.MakeFuncsLemmas
+import SteppedFlapjack.WordToStackSteps.NativeCodeKeys
+import Flapjack.Compiler.Backend.StackToLab.Proofs.MakeInit
+import Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
 import SteppedFlapjack.LoopToWordSteps.TailRiscVClock
-import SteppedFlapjack.PanToCrepSteps.NativeTailClockOutcome
-import SteppedFlapjack.PanToCrepSteps.NativeTailOutcome
 import SteppedFlapjack.WordAllocSteps.CompiledCodeTail
 import SteppedFlapjack.WordToStackSteps.CompiledTail
 import SteppedFlapjack.WordToStackSteps.DirectTailLocal
@@ -179,7 +162,6 @@ import SteppedFlapjack.CrepToLoopSteps.ConditionPrefix
 import SteppedFlapjack.CrepToLoopSteps.BackendReady
 import SteppedFlapjack.LoopToWordSteps.WordAllocatedRiscV
 import SteppedFlapjack.LoopToWordSteps.WordAllocatedSequence
-import SteppedFlapjack.LoopToWordSteps.Outcome
 import SteppedFlapjack.WordToStackSteps.EntryComposition
 import SteppedFlapjack.WordToStackSteps.FixedEntryFrame
 import SteppedFlapjack.CrepToLoopSteps.WordSimpSequence
@@ -296,14 +278,12 @@ import SteppedFlapjack.StackToLabSteps.FullInitLabSteps
 import SteppedFlapjack.StackToLabSteps.FullInitRemoveLabSteps
 import SteppedFlapjack.StackToLabSteps.FullInitAllocSteps
 import SteppedFlapjack.StackToLabSteps.FullInitStackLabSteps
-import SteppedFlapjack.StackToLabSteps.FullInitRiscVSteps
+import SteppedFlapjack.LabToTargetSteps.LabRiscVComposition
+import SteppedFlapjack.StackToLabSteps.EntryLocation
 import SteppedFlapjack.StackToLabSteps.FullInitFilteredRiscVSteps
-import SteppedFlapjack.StackToLabSteps.FullInitWordRiscV
 import SteppedFlapjack.StackToLabSteps.FullInitFilteredWordRiscV
-import SteppedFlapjack.LoopToWordSteps.FullInitTailRiscV
 import SteppedFlapjack.LoopToWordSteps.FullInitTailSetup
 import SteppedFlapjack.LoopToWordSteps.ExplicitTickLimit
-import SteppedFlapjack.LoopToWordSteps.FullInitTailSafe
 import SteppedFlapjack.LoopToWordSteps.FullInitNativeSetup
 import SteppedFlapjack.LoopToWordSteps.FullInitNativeValidity
 import SteppedFlapjack.CrepToLoopSteps.FullInitNativeFrontend
@@ -311,7 +291,6 @@ import SteppedFlapjack.PanToCrepSteps.FullInitTailClockOutcome
 import SteppedFlapjack.PanToCrepSteps.FullInitTailOutcome
 import SteppedFlapjack.StackToLabSteps.PipelineComposition
 import SteppedFlapjack.StackToLabSteps.RiscVPipeline
-import SteppedFlapjack.LabToTargetSteps.LabRiscVComposition
 import SteppedFlapjack.LabToTargetSteps.FilteredRiscV
 import SteppedFlapjack.LabToTargetSteps.DomainAlignmentBridge
 import SteppedFlapjack.StackRawCallSteps.LeafSteps
@@ -590,7 +569,6 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.SourceInitialFrontend`: Source-first initial Crep and Loop state relations.
 - `SteppedFlapjack.PanToCrepSteps.SingleEntryGlobals`: Actual globals compilation for a single entry function.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclRiscV`: Counted concrete source execution through the RISC-V bound.
-- `SteppedFlapjack.PanToCrepSteps.ConcreteDeclNativeRiscV`: Native initialization for the concrete RISC-V bound.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrame`: Concrete native frame and RISC-V resource alternative.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclFrameRiscV`: Counted source and bounded machine execution for the selected frame.
 - `SteppedFlapjack.PanToCrepSteps.ConcreteDeclCommonBound`: A single bound for both concrete native entry outcomes.
@@ -600,25 +578,17 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoop`: Counted assignment loops through global and Crep lowering.
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopInvert`: Reconstruct assignment-loop paths from counted runs.
 - `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopReturn`: Assignment loops followed by a source return and global entry.
-- `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopEntry`: Assignment-loop source budgets through the compiled RISC-V entry.
-- `SteppedFlapjack.PanToCrepSteps.SourceNativeInputs`: Construct native inputs from source and Stack data.
-- `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopNative`: Direct counted-source and native RISC-V bound.
-- `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopWhole`: Whole-source execution to native RISC-V bound.
+- `SteppedFlapjack.PanToCrepSteps.SourceNativeInputs`: Construct compiler inputs from source data.
+- `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopNative`: Counted assignment-loop compiler inputs.
+- `SteppedFlapjack.PanToCrepSteps.CountedAssignLoopWhole`: Whole-source execution and inversion facts.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoop`: Declared assignment-loop source and global bounds.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopEntry`: Declared assignment-loop Crep entry.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopRiscV`: Declared assignment-loop Loop and backend bounds.
-- `SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopNative`: Whole declared source to native RISC-V bound.
-- `SteppedFlapjack.PanToCrepSteps.CountedDeclaredSourceInitialNative`: Source-first no-global declared-loop native bound.
-- `SteppedFlapjack.PanToCrepSteps.CountedSingleEntryNative`: Single-entry declared-loop native bound.
+- `SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopNative`: Declared assignment-loop source inversion facts.
 - `SteppedFlapjack.PanToCrepSteps.CountdownEntryCrep`: Countdown through generated entries to a packaged RISC-V backend.
 - `SteppedFlapjack.LoopToWordSteps.TailRiscVSetup`: Shared RISC-V backend initialization interface.
-- `SteppedFlapjack.LoopToWordSteps.NativeTailRiscVReady`: Native Loop/Word local initialization.
 - `SteppedFlapjack.LoopToWordSteps.NativeTailCompilerFacts`: Compiler-derived Word and Stack entry facts.
-- `SteppedFlapjack.LoopToWordSteps.NativeTailSetup`: Constructed native setup or bounded RISC-V resource outcome.
-- `SteppedFlapjack.CrepToLoopSteps.NativeTailFrontendSetup`: Join the native setup to the whole frontend state.
 - `SteppedFlapjack.LoopToWordSteps.TailRiscVClock`: Reuse backend setups at shifted Word clocks.
-- `SteppedFlapjack.PanToCrepSteps.NativeTailClockOutcome`: Source outcome from a shifted-clock backend setup.
-- `SteppedFlapjack.PanToCrepSteps.NativeTailOutcome`: Returned source outcomes and event traces at the machine.
 - `SteppedFlapjack.PanToCrepSteps.CountedWhileTraceExample`: A constructed state-changing loop trace.
 - `SteppedFlapjack.PanToCrepSteps.CountedDeclList`: Counted/HOL bridge for nested scalar declarations.
 - `SteppedFlapjack.PanToCrepSteps.ReplayLimitMono`: Monotonic source-derived compiler replay budgets.
@@ -707,8 +677,8 @@ phase 4 of flapjack#1251:
   call-free loop-fragment runs is bounded by their evaluator step count.
 - `SteppedFlapjack.WordSteps.CallSteps`: returning-call equations covering all
   callee results after successful call setup.
-- `SteppedFlapjack.StackToLabSteps.FullInitAllocSteps`, `FullInitStackLabSteps`,
-  `FullInitRiscVSteps`: actual initialized stack execution through RISC-V.
+- `SteppedFlapjack.StackToLabSteps.FullInitAllocSteps`, `FullInitStackLabSteps`:
+  actual initialized stack execution through LabSem.
 - `SteppedFlapjack.StackToLabSteps.FullInitRemoveLabSteps`: bounded actual
   stack-removal initialization composed through LabSem.
 - `SteppedFlapjack.StackRemoveSteps.InitEntrySteps`, `InitHypSteps`: initialized

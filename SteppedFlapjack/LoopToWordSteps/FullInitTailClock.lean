@@ -24,10 +24,4 @@ theorem FullInitTailSetup.withWordClock_tickLimit {F : Type} {p : HolLoopProg 64
     (setup : FullInitTailSetup p word limit) (clock : Nat) :
     (setup.withWordClock clock).tickLimit = setup.tickLimit := rfl
 
-/-- Stack safety is unchanged because the replay replaces the Word clock. -/
-theorem FullInitTailSetup.withWordClock_wordSafe {F : Type} {p : HolLoopProg 64}
-    {word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F} {limit : Nat}
-    (setup : FullInitTailSetup p word limit) (clock : Nat) :
-    (setup.withWordClock clock).wordSafe ↔ setup.wordSafe := Iff.rfl
-
 end SteppedFlapjack.LoopToWordSteps

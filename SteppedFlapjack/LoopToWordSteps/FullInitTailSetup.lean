@@ -1,4 +1,9 @@
-import SteppedFlapjack.LoopToWordSteps.FullInitTailRiscV
+import SteppedFlapjack.LoopToWordSteps.TailEntryRiscV
+import SteppedFlapjack.StackToLabSteps.FullInitStackLabSteps
+import SteppedFlapjack.LabToTargetSteps.LabRiscVComposition
+import SteppedFlapjack.StackToLabSteps.EntryLocation
+import SteppedFlapjack.WordToStackSteps.EntryComposition
+import SteppedFlapjack.WordToStackSteps.DirectTailLocal
 import SteppedFlapjack.LoopToWordSteps.FullInitFilteredTailRiscV
 import SteppedFlapjack.WordToStackSteps.TailEntryFrame
 
@@ -86,7 +91,7 @@ structure FullInitTailSetup {F : Type} (p : HolLoopProg 64)
   machine : RiscV.L3.riscv_state
   hmc : mc.target = riscvTarget
   machineLab : LabSem.State 64 LabToTarget.Config F := lab
-  labRelation : machineLab = lab ∨ LabExecutionLink machineLab lab
+  labRelation : LabExecutionLink machineLab lab
   tie : LabToTarget.oracleTie mc machine machineLab
   machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) machineLab asm machine
 
@@ -131,95 +136,8 @@ theorem FullInitTailSetup.run_bounded {F : Type} {loc : Nat} {p callee : HolLoop
       evaluateTargetHOL setup.mc setup.lab.ffi ticks setup.machine = (.halt outcome,finalMachine,finalFfi) ∧
       ((LoopMachineOutcome result outcome ∧ finalFfi.ioEvents = sourcePost.ffi.ioEvents) ∨
         (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: sourcePost.ffi.ioEvents)) := by
-    rcases setup.labRelation with same | filtered
-    · have tie : LabToTarget.oracleTie setup.mc setup.machine setup.lab := by simpa only [same] using setup.tie
-      have rel : LabToTarget.stateRel (setup.mc,setup.labCode,setup.labs,setup.pc) setup.lab setup.asm setup.machine := by
-        simpa only [same] using setup.machineRel
-      obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,_,_,_,_,_,correspondence,_⟩ :=
-        singleTail_fullInit_riscvWithin setup.ac setup.count setup.name setup.alg setup.regCount setup.col shape calleeShape
-          source sourcePost result word setup.ctxt setup.labels setup.compiledCode setup.locals limit lookup premises complete
-          setup.gc setup.noInstall setup.codeRel setup.codeDomain setup.localsRel setup.domain sourceBound setup.entry
-          setup.frameSize setup.frame setup.lens setup.bs setup.bsPost setup.n setup.nPost setup.compiled setup.argumentCount
-          setup.stackRel setup.native setup.lengthBound setup.bitmapBound setup.bitmapPrefix setup.labelCheck setup.maxBound
-          setup.frameDef setup.frameSizeDef setup.space setup.found setup.stackConf setup.dataConf setup.maxHeap setup.sp
-          setup.offset setup.bitmaps setup.inputCode setup.lab setup.saveRegs setup.dataSp setup.coracle setup.initAssumptions
-          setup.entryEq setup.pc setup.mc setup.labCode setup.labs setup.asm setup.machine setup.hmc tie rel
-      refine ⟨outcome,ticks,finalMachine,finalFfi,?_,run,?_⟩
-      · simpa [FullInitTailSetup.tickLimit] using bound
-      · rcases correspondence with good | ⟨resource,events,_⟩
-        · exact Or.inl good
-        · exact Or.inr ⟨resource,events⟩
-    · have buffer : setup.machineLab.codeBuffer = setup.lab.codeBuffer := filtered.codeBuffer
-      obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,_,_,_,_,_,correspondence,_⟩ :=
-        singleTail_fullInit_filtered_riscvWithin setup.ac setup.count setup.name setup.alg setup.regCount setup.col shape calleeShape
-          source sourcePost result word setup.ctxt setup.labels setup.compiledCode setup.locals limit lookup premises complete
-          setup.gc setup.noInstall setup.codeRel setup.codeDomain setup.localsRel setup.domain sourceBound setup.entry
-          setup.frameSize setup.frame setup.lens setup.bs setup.bsPost setup.n setup.nPost setup.compiled setup.argumentCount
-          setup.stackRel setup.native setup.lengthBound setup.bitmapBound setup.bitmapPrefix setup.labelCheck setup.maxBound
-          setup.frameDef setup.frameSizeDef setup.space setup.found setup.stackConf setup.dataConf setup.maxHeap setup.sp
-          setup.offset setup.bitmaps setup.inputCode setup.lab setup.machineLab setup.saveRegs setup.dataSp setup.coracle setup.initAssumptions
-          setup.entryEq setup.pc setup.mc setup.labCode setup.labs setup.asm setup.machine setup.hmc filtered setup.tie setup.machineRel
-      refine ⟨outcome,ticks,finalMachine,finalFfi,?_,run,?_⟩
-      · simpa [FullInitTailSetup.tickLimit,buffer] using bound
-      · rcases correspondence with good | ⟨resource,events,_⟩
-        · exact Or.inl good
-        · exact Or.inr ⟨resource,events⟩
-  exact resultBound
-
-
-/-- The computed optimized Word entry remains within its recorded stack limit. -/
-noncomputable def FullInitTailSetup.wordSafe {F : Type} {p : HolLoopProg 64}
-    {word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F} {limit : Nat}
-    (setup : FullInitTailSetup p word limit) : Prop :=
-  let out := (fullCompileSingle setup.ac.twoRegArith setup.regCount setup.alg setup.ac
-    ((setup.name,setup.count,(LoopToWord.compHOL setup.ctxt p setup.labels).1),setup.col)).2.2
-  let post := (WordSemStateFiniteExact.evaluate out
-    {word with code := setup.compiledCode, locals := setup.locals, clock := tailWordReplayLimit p setup.ctxt setup.labels setup.compiledCode limit}).2
-  post.stackMax.getD (post.stackLimit+1) ≤ post.stackLimit
-
-/-- A bounded source run has a matching bounded RISC-V outcome when the
-actual optimized Word run remains within its stack limit. -/
-theorem FullInitTailSetup.run_bounded_safe {F : Type} {loc : Nat} {p callee : HolLoopProg 64}
-    (source sourcePost : LoopSemStateFiniteExact 64 F) (result : Option (LoopResultExact 64))
-    (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (limit : Nat)
-    (setup : FullInitTailSetup p word limit)
-    (shape : SingleTailEntryShape loc p) (calleeShape : LoopSequenceSource callee)
-    (lookup : sptLookup loc source.code = some ([],callee))
-    (premises : LoopSemStateFiniteExact.evaluate p source = (result,sourcePost) ∧ result ≠ some .error ∧
-      loopToWordStateRelHOLExact source word ∧ LoopToWord.localsRelHOL setup.ctxt source.locals word.locals ∧
-      sptLookup 0 word.locals = some (.loc 1 0) ∧ goodDimindex 64 ∧ ¬ wordSemIsWordLoc (.loc 1 0 : WordLocW 64) = true ∧
-      (∀ k, sptMem k (accVarsHOL p .ln) → sptMem k setup.ctxt))
-    (complete : CompleteLoopResult result) (sourceBound : LoopSteps.steps p source ≤ limit)
-    (safe : setup.wordSafe) :
-    ∃ outcome ticks finalMachine finalFfi,
-      ticks ≤ setup.tickLimit ∧
-      evaluateTargetHOL setup.mc setup.lab.ffi ticks setup.machine = (.halt outcome,finalMachine,finalFfi) ∧
-      LoopMachineOutcome result outcome ∧ finalFfi.ioEvents = sourcePost.ffi.ioEvents := by
-  rcases setup.labRelation with same | filtered
-  · have tie : LabToTarget.oracleTie setup.mc setup.machine setup.lab := by simpa only [same] using setup.tie
-    have rel : LabToTarget.stateRel (setup.mc,setup.labCode,setup.labs,setup.pc) setup.lab setup.asm setup.machine := by
-      simpa only [same] using setup.machineRel
-    obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,targetPost,_,_,_,_,correspondence,targetRun⟩ :=
-      singleTail_fullInit_riscvWithin setup.ac setup.count setup.name setup.alg setup.regCount setup.col shape calleeShape
-        source sourcePost result word setup.ctxt setup.labels setup.compiledCode setup.locals limit lookup premises complete
-        setup.gc setup.noInstall setup.codeRel setup.codeDomain setup.localsRel setup.domain sourceBound setup.entry
-        setup.frameSize setup.frame setup.lens setup.bs setup.bsPost setup.n setup.nPost setup.compiled setup.argumentCount
-        setup.stackRel setup.native setup.lengthBound setup.bitmapBound setup.bitmapPrefix setup.labelCheck setup.maxBound
-        setup.frameDef setup.frameSizeDef setup.space setup.found setup.stackConf setup.dataConf setup.maxHeap setup.sp
-        setup.offset setup.bitmaps setup.inputCode setup.lab setup.saveRegs setup.dataSp setup.coracle setup.initAssumptions
-        setup.entryEq setup.pc setup.mc setup.labCode setup.labs setup.asm setup.machine setup.hmc tie rel
-    have postSafe : targetPost.stackMax.getD (targetPost.stackLimit+1) ≤ targetPost.stackLimit := by
-      unfold FullInitTailSetup.wordSafe at safe
-      dsimp only at safe
-      rw [targetRun] at safe
-      exact safe
-    refine ⟨outcome,ticks,finalMachine,finalFfi,?_,run,?_⟩
-    · simpa [FullInitTailSetup.tickLimit] using bound
-    · rcases correspondence with good | ⟨_,_,bad⟩
-      · exact good
-      · omega
-  · have buffer : setup.machineLab.codeBuffer = setup.lab.codeBuffer := filtered.codeBuffer
-    obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,targetPost,_,_,_,_,correspondence,targetRun⟩ :=
+    have buffer : setup.machineLab.codeBuffer = setup.lab.codeBuffer := setup.labRelation.codeBuffer
+    obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,_,_,_,_,_,correspondence,_⟩ :=
       singleTail_fullInit_filtered_riscvWithin setup.ac setup.count setup.name setup.alg setup.regCount setup.col shape calleeShape
         source sourcePost result word setup.ctxt setup.labels setup.compiledCode setup.locals limit lookup premises complete
         setup.gc setup.noInstall setup.codeRel setup.codeDomain setup.localsRel setup.domain sourceBound setup.entry
@@ -227,24 +145,20 @@ theorem FullInitTailSetup.run_bounded_safe {F : Type} {loc : Nat} {p callee : Ho
         setup.stackRel setup.native setup.lengthBound setup.bitmapBound setup.bitmapPrefix setup.labelCheck setup.maxBound
         setup.frameDef setup.frameSizeDef setup.space setup.found setup.stackConf setup.dataConf setup.maxHeap setup.sp
         setup.offset setup.bitmaps setup.inputCode setup.lab setup.machineLab setup.saveRegs setup.dataSp setup.coracle setup.initAssumptions
-        setup.entryEq setup.pc setup.mc setup.labCode setup.labs setup.asm setup.machine setup.hmc filtered setup.tie setup.machineRel
-    have postSafe : targetPost.stackMax.getD (targetPost.stackLimit+1) ≤ targetPost.stackLimit := by
-      unfold FullInitTailSetup.wordSafe at safe
-      dsimp only at safe
-      rw [targetRun] at safe
-      exact safe
+        setup.entryEq setup.pc setup.mc setup.labCode setup.labs setup.asm setup.machine setup.hmc setup.labRelation setup.tie setup.machineRel
     refine ⟨outcome,ticks,finalMachine,finalFfi,?_,run,?_⟩
     · simpa [FullInitTailSetup.tickLimit,buffer] using bound
-    · rcases correspondence with good | ⟨_,_,bad⟩
-      · exact good
-      · omega
+    · rcases correspondence with good | ⟨resource,events,_⟩
+      · exact Or.inl good
+      · exact Or.inr ⟨resource,events⟩
+  exact resultBound
 
 
 /-- A Loop execution is ready for any compatible full-initialization setup. -/
 def FullInitTailReady {F : Type} (p : HolLoopProg 64)
     (source sourcePost : LoopSemStateFiniteExact 64 F) (result : Option (LoopResultExact 64))
     (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (limit : Nat) : Prop :=
-  (∀ (setup : FullInitTailSetup p word limit),
+  ∀ (setup : FullInitTailSetup p word limit),
     LoopToWord.localsRelHOL setup.ctxt source.locals word.locals →
     sptLookup 0 word.locals = some (.loc 1 0) →
     (∀ k, sptMem k (accVarsHOL p .ln) → sptMem k setup.ctxt) →
@@ -252,15 +166,7 @@ def FullInitTailReady {F : Type} (p : HolLoopProg 64)
       ticks ≤ setup.tickLimit ∧
       evaluateTargetHOL setup.mc setup.lab.ffi ticks setup.machine = (.halt outcome,finalMachine,finalFfi) ∧
       ((LoopMachineOutcome result outcome ∧ finalFfi.ioEvents = sourcePost.ffi.ioEvents) ∨
-        (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: sourcePost.ffi.ioEvents))) ∧
-  (∀ (setup : FullInitTailSetup p word limit),
-    LoopToWord.localsRelHOL setup.ctxt source.locals word.locals →
-    sptLookup 0 word.locals = some (.loc 1 0) →
-    (∀ k, sptMem k (accVarsHOL p .ln) → sptMem k setup.ctxt) → setup.wordSafe →
-    ∃ outcome ticks finalMachine finalFfi,
-      ticks ≤ setup.tickLimit ∧
-      evaluateTargetHOL setup.mc setup.lab.ffi ticks setup.machine = (.halt outcome,finalMachine,finalFfi) ∧
-      LoopMachineOutcome result outcome ∧ finalFfi.ioEvents = sourcePost.ffi.ioEvents)
+        (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: sourcePost.ffi.ioEvents))
 
 /-- The proved Loop execution yields readiness for the full-initialization backend. -/
 theorem fullInitTailReady_of_loop {F : Type} {loc : Nat} {p callee : HolLoopProg 64}
@@ -272,13 +178,9 @@ theorem fullInitTailReady_of_loop {F : Type} {loc : Nat} {p callee : HolLoopProg
     (notError : result ≠ some .error) (rel : loopToWordStateRelHOLExact source word)
     (complete : CompleteLoopResult result) (bound : LoopSteps.steps p source ≤ limit) :
     FullInitTailReady p source sourcePost result word limit := by
-  constructor
-  · intro setup locals zero used
-    exact setup.run_bounded source sourcePost result word limit shape calleeShape lookup
-      ⟨run,notError,rel,locals,zero,Or.inr rfl,by decide,used⟩ complete bound
-  · intro setup locals zero used safe
-    exact setup.run_bounded_safe source sourcePost result word limit shape calleeShape lookup
-      ⟨run,notError,rel,locals,zero,Or.inr rfl,by decide,used⟩ complete bound safe
+  intro setup locals zero used
+  exact setup.run_bounded source sourcePost result word limit shape calleeShape lookup
+    ⟨run,notError,rel,locals,zero,Or.inr rfl,by decide,used⟩ complete bound
 
 /-- The compiler-selected call environment supplies the local-state premises. -/
 theorem FullInitTailReady.run_native {F : Type} {p : HolLoopProg 64}
@@ -298,33 +200,9 @@ theorem FullInitTailReady.run_native {F : Type} {p : HolLoopProg 64}
         (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: sourcePost.ffi.ioEvents)) := by
   have localFacts := nativeTailEntry_loopLocals p base frameSize
   have lookup := (nativeEntry_locals base frameSize 0).2.2
-  apply ready.1 setup
+  apply ready setup
   · simpa only [sourceEmpty,contextEq,wordLocals] using localFacts.1
   · simpa only [wordLocals] using lookup
   · simpa only [contextEq] using localFacts.2
-
-/-- Native entry locals also discharge the premises of the safe readiness result. -/
-theorem FullInitTailReady.run_native_safe {F : Type} {p : HolLoopProg 64}
-    {source sourcePost : LoopSemStateFiniteExact 64 F} {result : Option (LoopResultExact 64)}
-    {word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F} {limit : Nat}
-    (ready : FullInitTailReady p source sourcePost result word limit)
-    (setup : FullInitTailSetup p word limit)
-    (base : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (frameSize : Nat)
-    (sourceEmpty : source.locals = .ln)
-    (contextEq : setup.ctxt = makeCtxtHOL 2 (LoopToWord.fromNumSetHOL
-      (sptDifference (accVarsHOL p .ln) (LoopToWord.toNumSetHOL []))) .ln)
-    (wordLocals : word.locals = (WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize) base).locals)
-    (safe : setup.wordSafe) :
-    ∃ outcome ticks finalMachine finalFfi,
-      ticks ≤ setup.tickLimit ∧
-      evaluateTargetHOL setup.mc setup.lab.ffi ticks setup.machine = (.halt outcome,finalMachine,finalFfi) ∧
-      LoopMachineOutcome result outcome ∧ finalFfi.ioEvents = sourcePost.ffi.ioEvents := by
-  have localFacts := nativeTailEntry_loopLocals p base frameSize
-  have lookup := (nativeEntry_locals base frameSize 0).2.2
-  apply ready.2 setup
-  · simpa only [sourceEmpty,contextEq,wordLocals] using localFacts.1
-  · simpa only [wordLocals] using lookup
-  · simpa only [contextEq] using localFacts.2
-  · exact safe
 
 end SteppedFlapjack.LoopToWordSteps

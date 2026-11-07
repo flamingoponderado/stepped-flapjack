@@ -70,10 +70,7 @@ covers successful return and resource exhaustion. The theorem assumes the
 stated source clock, source layout, compiler input, and full-initialization
 machine relations. `labInitialized_counted_declared_fullCompiler_riscv` constructs the
 source and native inputs for this supported fragment from a Lab initialization
-context. Its `withClock` variant derives a sufficient proof clock from the
-source budget without changing the counted run or RISC-V machine.
-`labInitialized_countdown_fromGeneral_withClock_riscv` applies that general
-theorem to a countdown with a separately proved exact source cost.
+context.
 The aligned initialization construction keeps the byte-closed machine domain
 separate from the word-aligned Stack domain. The earlier results that required
 one nonempty domain to be both byte-closed and word-aligned have been removed;
@@ -87,13 +84,6 @@ The concrete declaration example includes an independently counted 13-step
 source execution. The previous machine theorem that selected part of its tick
 bound existentially has been removed; an independently fixed machine bound
 remains to be proved.
-
-The declaration chain currently duplicates much of the earlier tail-entry
-chain, including backend premises. Factoring the chain over supported callee
-shapes and a proved shape-specific limit remains work in progress. The counted
-loop and declaration examples are imported as reusable proofs for the
-concrete result; standalone compile-time fixtures remain in
-`SteppedFlapjack/Test/`.
 
 Code shared with the clocked evaluator stays in Flapjack, in
 `Flapjack.PanValueFfiCore` and `Flapjack.PanExpressionEvaluatorBase`.

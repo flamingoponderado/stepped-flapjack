@@ -1,4 +1,5 @@
-import SteppedFlapjack.LoopToWordSteps.NativeTailRiscVReady
+import SteppedFlapjack.LoopToWordSteps.TailRiscVSetup
+import SteppedFlapjack.WordToStackSteps.TailEntryFrame
 import SteppedFlapjack.WordAllocSteps.WholeTailCode
 
 /-! Compiler-derived Word and Stack premises for a native Loop entry. -/

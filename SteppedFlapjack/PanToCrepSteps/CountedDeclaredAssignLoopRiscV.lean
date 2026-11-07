@@ -1,8 +1,13 @@
 import SteppedFlapjack.PanToCrepSteps.FullInitTailOutcome
 import SteppedFlapjack.PanToCrepSteps.CountedDeclaredAssignLoopEntry
 import SteppedFlapjack.CrepToLoopSteps.DeclRiscVInputs
-import SteppedFlapjack.PanToCrepSteps.NativeTailOutcome
-import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopEntry
+import SteppedFlapjack.LoopToWordSteps.TailRiscVSetup
+import SteppedFlapjack.WordToStackSteps.TailEntryFrame
+import SteppedFlapjack.PanToCrepSteps.GlobalSourceEntry
+import SteppedFlapjack.PanToCrepSteps.CountedAssignLoopReturn
+import SteppedFlapjack.PanToCrepSteps.TailEntryCrepBound
+import SteppedFlapjack.PanToCrepSteps.TailEntryRelations
+import SteppedFlapjack.CrepToLoopSteps.RiscVInputs
 
 /-! Declared assignment-loop entry through the optimized Loop and RISC-V backend. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -152,8 +157,6 @@ theorem counted_declared_assignLoop_globalEntry_riscv {σ : Type}
         SteppedFlapjack.LoopSteps.steps loopEntry {target with clock := target.clock+extra} ≤ loopLimit ∧
         TailRiscVReady loopEntry {target with clock := target.clock+extra} loopPost (resultToLoop crepResult)
           {word with clock := word.clock+extra} loopLimit ∧
-        NativeReturnedReady loopEntry {target with clock := target.clock+extra}
-          {word with clock := word.clock+extra} loopLimit sourceFinal ∧
         FullInitReturnedReady loopEntry {target with clock := target.clock+extra}
           {word with clock := word.clock+extra} loopLimit sourceFinal := by
   obtain ⟨sourceResult,sourceFinal,panPost,crepMiddle,crepPost,crepResult,sourceExec,sourceRun,postRel,crepInitRun,
@@ -204,10 +207,8 @@ theorem counted_declared_assignLoop_globalEntry_riscv {σ : Type}
     loopRun notError shiftedRel loopComplete loopBound
   have fullReady := fullInitTailReady_of_loop _ loopPost _ _ _ entryShape calleeShape calleeLookup
     loopRun notError shiftedRel loopComplete loopBound
-  refine ⟨ready,?_,?_⟩
-  · exact nativeReturnedReady_of_return globals calleeContext sourceFinal panPost crepPost _ loopPost crepResult returned
-      postRel finalRel resultRel postLoopRel _ _ _ ready
-  · exact fullInitReturnedReady_of_return globals calleeContext sourceFinal panPost crepPost _ loopPost crepResult returned
-      postRel finalRel resultRel postLoopRel _ _ _ fullReady
+  refine ⟨ready,?_⟩
+  exact fullInitReturnedReady_of_return globals calleeContext sourceFinal panPost crepPost _ loopPost crepResult returned
+    postRel finalRel resultRel postLoopRel _ _ _ fullReady
 
 end SteppedFlapjack.PanToCrepSteps

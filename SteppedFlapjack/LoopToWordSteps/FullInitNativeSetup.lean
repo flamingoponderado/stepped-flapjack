@@ -1,6 +1,9 @@
 import SteppedFlapjack.LoopToWordSteps.FullInitTailSetup
 import SteppedFlapjack.LoopToWordSteps.NativeTailCompilerFacts
-import SteppedFlapjack.StackToLabSteps.FullInitRiscVSteps
+import SteppedFlapjack.StackToLabSteps.FullInitStackLabSteps
+import SteppedFlapjack.LabToTargetSteps.LabRiscVComposition
+import SteppedFlapjack.StackToLabSteps.EntryLocation
+import SteppedFlapjack.WordToStackSteps.EntryComposition
 import Flapjack.Compiler.Backend.DataToWord.Proofs.Gc.GcFunConstOk
 import Flapjack.Compiler.Backend.StackRemove.Proofs.InitFfi
 import Flapjack.Compiler.Backend.StackProps.EvaluateConsts
@@ -44,7 +47,7 @@ structure FullInitMachineContext {F : Type} (stack : StackSemStateFiniteExact 64
   machine : RiscV.L3.riscv_state
   hmc : mc.target = riscvTarget
   machineLab : LabSem.State 64 LabToTarget.Config F := lab
-  labRelation : machineLab = lab ∨ LabExecutionLink machineLab lab
+  labRelation : LabExecutionLink machineLab lab
   tie : LabToTarget.oracleTie mc machine machineLab
   machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) machineLab asm machine
 
@@ -78,10 +81,7 @@ noncomputable def FullInitMachineContext.withClock {F : Type}
   machine := backend.machine
   hmc := backend.hmc
   machineLab := {backend.machineLab with clock := clock}
-  labRelation := by
-    rcases backend.labRelation with h | h
-    · exact Or.inl (by rw [h])
-    · exact Or.inr (h.withClock clock)
+  labRelation := backend.labRelation.withClock clock
   tie := by simpa [LabToTarget.oracleTie] using backend.tie
   machineRel := LabToTarget.stateRelClock _ backend.machineLab backend.asm backend.machine clock backend.machineRel
 
@@ -271,27 +271,15 @@ theorem fullInitNativeTail_setup_or_resource {F : Type}
         ticks ≤ backend.resourceTickLimit ∧
         evaluateTargetHOL backend.mc backend.lab.ffi ticks backend.machine = (.halt .resourceLimitHit,finalMachine,finalFfi) ∧
         finalFfi.ioEvents = stack.ffi.ioEvents := by
-      rcases backend.labRelation with same | filtered
-      · have tie : LabToTarget.oracleTie backend.mc backend.machine backend.lab := by simpa only [same] using backend.tie
-        have rel : LabToTarget.stateRel (backend.mc,backend.labCode,backend.labs,backend.pc) backend.lab backend.asm backend.machine := by
-          simpa only [same] using backend.machineRel
-        obtain ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,events⟩ :=
-          fullInitStackRiscVWithin backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset backend.bitmaps
-            backend.inputCode backend.lab backend.saveRegs backend.dataSp backend.coracle backend.initAssumptions
-            backend.pc backend.mc backend.labCode backend.labs backend.asm backend.machine backend.hmc tie rel
-            _ 3 (some (.halt (.word 2))) post .resourceLimitHit (by simpa [backend.stackEq] using run)
-            (by simp) (by simpa [backend.stackEq] using bound) (by simp [stackEntryClass])
-        exact ⟨ticks,finalMachine,finalFfi,by simpa [FullInitMachineContext.resourceTickLimit] using tickBound,
-          machineRun,by simpa only [ffi] using events⟩
-      · have buffer : backend.machineLab.codeBuffer = backend.lab.codeBuffer := filtered.codeBuffer
-        obtain ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,events⟩ :=
-          fullInitStackFilteredRiscVWithin backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset backend.bitmaps
-            backend.inputCode backend.lab backend.machineLab backend.saveRegs backend.dataSp backend.coracle backend.initAssumptions
-            backend.pc backend.mc backend.labCode backend.labs backend.asm backend.machine backend.hmc filtered backend.tie backend.machineRel
-            _ 3 (some (.halt (.word 2))) post .resourceLimitHit (by simpa [backend.stackEq] using run)
-            (by simp) (by simpa [backend.stackEq] using bound) (by simp [stackEntryClass])
-        exact ⟨ticks,finalMachine,finalFfi,by simpa [FullInitMachineContext.resourceTickLimit,buffer] using tickBound,
-          machineRun,by simpa only [ffi] using events⟩
+      have buffer : backend.machineLab.codeBuffer = backend.lab.codeBuffer := backend.labRelation.codeBuffer
+      obtain ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,events⟩ :=
+        fullInitStackFilteredRiscVWithin backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset backend.bitmaps
+          backend.inputCode backend.lab backend.machineLab backend.saveRegs backend.dataSp backend.coracle backend.initAssumptions
+          backend.pc backend.mc backend.labCode backend.labs backend.asm backend.machine backend.hmc backend.labRelation backend.tie backend.machineRel
+          _ 3 (some (.halt (.word 2))) post .resourceLimitHit (by simpa [backend.stackEq] using run)
+          (by simp) (by simpa [backend.stackEq] using bound) (by simp [stackEntryClass])
+      exact ⟨ticks,finalMachine,finalFfi,by simpa [FullInitMachineContext.resourceTickLimit,buffer] using tickBound,
+        machineRun,by simpa only [ffi] using events⟩
     exact Or.inr result
 
 end SteppedFlapjack.LoopToWordSteps
