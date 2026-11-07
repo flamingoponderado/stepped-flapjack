@@ -1,4 +1,5 @@
-import SteppedFlapjack.Concrete.SimpCodeControl
+import SteppedFlapjack.Concrete.CompiledClock
+import SteppedFlapjack.Concrete.SimpRun
 import SteppedFlapjack.Concrete.GlobalControl
 import Flapjack.Pancake.Proofs.PanGlobals.CompileCorrect.Assembly
 import SteppedFlapjack.Concrete.CrepCode
@@ -128,6 +129,52 @@ theorem supported_original_entry_crep_return {σ : Type}
     loweredFinal word sourceLimit loweredRun
   rw [count]
   exact sourceBound
+
+/-- A word-returning supported HOL source run reaches the actual simplified,
+global-lowered Crep entry. Its explicit bound uses only the generated Crep
+body size and the initial source clock. -/
+theorem supported_full_frontend_clock {σ : Type}
+    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (source sourceFinal : PanSemStateFiniteExact 64 σ)
+    (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
+    (structs : source.structs = []) (exceptions : source.eshapes = HolFiniteMapExact.empty)
+    (topOutside : ¬ source.memaddrs source.topAddr) (aligned : panGlobalsByteAlignedHOL source.topAddr)
+    (sourceCode : source.code = HolFiniteMapExact.empty.update
+      (entryName (progToHOL program),([],progToHOL program,.one)))
+    (word : BitVec 64)
+    (run : source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word word))),sourceFinal)) :
+    let simplified := panSimpProg program
+    let body := progToHOL simplified
+    let caller := frontendContext body
+    let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
+    let entry : CrepProgHOL 64 := .seq .skip (.call none (entryName body) [])
+    let simplifiedSource := panSimpSourceState program source
+    ∃ targetFinal,
+      evalCrepSemHOLProgExact (crepStateFrom simplifiedSource body) entry = (some (.return [.word word]),targetFinal) ∧
+      CrepSteps.steps entry (crepStateFrom simplifiedSource body) ≤
+        3 + sizeOf (compileProgExactHOLW callee body) *
+          (sizeOf (compileProgExactHOLW callee body) * (source.clock+1)) := by
+  let simplified := panSimpProg program
+  let body := progToHOL simplified
+  let caller := frontendContext body
+  let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
+  let simplifiedSource := panSimpSourceState program source
+  have shape : Supported simplified := (supported_panSimp program supported).1
+  obtain ⟨simplifiedFinal,simplifiedRun,_⟩ := supported_panSimp_run program supported source sourceFinal
+    (some (.returned (.val (.word word)))) sourceCode run (by simp)
+  have bound := supported_control_compiled_clock shape callee simplifiedSource simplifiedFinal
+    (some (.returned (.val (.word word)))) simplifiedRun (by simp)
+  have result := supported_original_entry_crep_return simplified shape simplifiedSource simplifiedFinal
+    (by simpa [simplifiedSource,panSimpSourceState] using locals)
+    (by simpa [simplifiedSource,panSimpSourceState] using globals)
+    (by simpa [simplifiedSource,panSimpSourceState] using structs)
+    (by simpa [simplifiedSource,panSimpSourceState] using exceptions)
+    (by simpa [simplifiedSource,panSimpSourceState] using topOutside)
+    (by simpa [simplifiedSource,panSimpSourceState] using aligned)
+    (by simp [simplifiedSource,panSimpSourceState,simplified]) word
+    (sizeOf (compileProgExactHOLW callee body) * (source.clock+1)) simplifiedRun
+    (by simpa [simplifiedSource,panSimpSourceState] using bound)
+  exact result
 
 /-- The original-source entry span instantiated with the checked init-e-shaped fixture. -/
 theorem supported_original_entry_crep_return_fixture
