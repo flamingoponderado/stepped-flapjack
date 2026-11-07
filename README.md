@@ -81,7 +81,9 @@ matching singleton source environments, code table and executable FFI state.
 RISC-V configuration and proves its register, encoder, and compiled no-install
 conditions. `labInit_countdown_backendConfig_riscv` also derives the compiled
 Lab good-code guard from the original compiler proof and standard backend
-configuration. It derives the Lab compiler-oracle contract from the empty
+configuration. `labInit_countdown_memoryLayout_riscv` derives the Stack
+initializer from explicit register, bitmap and memory layout conditions using
+the original compiler proof. It derives the Lab compiler-oracle contract from the empty
 installation oracle and its label, position and FFI configuration. The remaining
 concrete initialization guards must be proved for an application.
 
