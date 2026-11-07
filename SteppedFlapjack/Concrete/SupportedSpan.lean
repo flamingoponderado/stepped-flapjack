@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.GlobalControl
 import Flapjack.Pancake.Proofs.PanGlobals.CompileCorrect.Assembly
 import SteppedFlapjack.Concrete.CrepCode
 import SteppedFlapjack.CrepSteps.TailEntry
@@ -7,31 +8,6 @@ import SteppedFlapjack.PanToCrepSteps.WhileSteps
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
 open SteppedFlapjack.PanToCrepSteps
-
-/-- A non-error HOL run of a supported body yields a related Crep run, with
-visits bounded by the generated body size times its source control budget.
-This is the Pan-to-Crep body pass; it does not yet include the global entry. -/
-theorem supported_body_crep_with_steps {σ : Type}
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
-    (context : PanToCrepContextExact 64)
-    (source sourceFinal : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
-    (target : CrepSemHOLState 64 σ) (sourceLimit : Nat)
-    (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal))
-    (nonerror : result ≠ some .error) (sourceBound : controlSteps (progToHOL program) source ≤ sourceLimit)
-    (stateRel : panToCrepStateRelFiniteExact source target)
-    (codeRel : codeRelExactHOLW context source.code target.code)
-    (excpRel : panToCrepExcpRelFiniteExact context.eids source.eshapes)
-    (localsRel : panToCrepLocalsRelFiniteExact context source.locals target.locals) :
-    ∃ targetResult targetFinal,
-      evalCrepSemHOLProgExact target (compileProgExactHOLW context (progToHOL program)) = (targetResult,targetFinal) ∧
-      panToCrepStateRelFiniteExact sourceFinal targetFinal ∧
-      codeRelExactHOLW context sourceFinal.code targetFinal.code ∧
-      panToCrepExcpRelFiniteExact context.eids sourceFinal.eshapes ∧
-      pcCompileCorrectResultRel context sourceFinal targetFinal result targetResult ∧
-      CrepSteps.steps (compileProgExactHOLW context (progToHOL program)) target ≤
-        sizeOf (compileProgExactHOLW context (progToHOL program)) * sourceLimit := by
-  exact frontend_correct_with_steps context (progToHOL program) (supported_frontend_shape supported context)
-    source sourceFinal result target sourceLimit run nonerror sourceBound stateRel codeRel excpRel localsRel
 
 /-- The actual global pass transports a non-error supported source run to
 the generated callee for a caller-supplied machine configuration. -/
@@ -121,14 +97,44 @@ theorem supported_entry_crep_return_from {σ : Type}
   exact ⟨targetFinal.emptyLocals,wrapper.1,wrapper.2⟩
 
 
-/-- The init-e-shaped fixture is an instance of the configurable entry theorem. -/
-theorem supported_entry_crep_return
+/-- An original HOL source run lifts through global lowering and the
+generated Crep entry, using the original run's control-visit budget. -/
+theorem supported_original_entry_crep_return {σ : Type}
+    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (source sourceFinal : PanSemStateFiniteExact 64 σ)
+    (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
+    (structs : source.structs = []) (exceptions : source.eshapes = HolFiniteMapExact.empty)
+    (topOutside : ¬ source.memaddrs source.topAddr) (aligned : panGlobalsByteAlignedHOL source.topAddr)
+    (sourceCode : source.code = HolFiniteMapExact.empty.update
+      (entryName (progToHOL program),([],progToHOL program,.one)))
+    (word : BitVec 64) (sourceLimit : Nat)
+    (run : source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word word))),sourceFinal))
+    (sourceBound : controlSteps (progToHOL program) source ≤ sourceLimit) :
+    let body := progToHOL program
+    let caller := frontendContext body
+    let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
+    let entry : CrepProgHOL 64 := .seq .skip (.call none (entryName body) [])
+    ∃ targetFinal,
+      evalCrepSemHOLProgExact (crepStateFrom source body) entry = (some (.return [.word word]),targetFinal) ∧
+      CrepSteps.steps entry (crepStateFrom source body) ≤ 3 + sizeOf (compileProgExactHOLW callee body) * sourceLimit := by
+  have rel := source_globals_related_from program supported source locals globals structs topOutside aligned sourceCode
+  obtain ⟨loweredFinal,loweredRun,_⟩ := supported_globals_run_from program supported source sourceFinal
+    (some (.returned (.val (.word word)))) locals globals structs topOutside aligned sourceCode run (by simp)
+  have count := supported_globals_control supported emptyGlobalsContext source sourceFinal
+    (callEntryStateHOLFinite (loweredStateFrom source (progToHOL program)) HolFiniteMapExact.empty)
+    (some (.returned (.val (.word word)))) run (by simp) rel
+  apply supported_entry_crep_return_from program supported source locals globals structs exceptions
+    loweredFinal word sourceLimit loweredRun
+  rw [count]
+  exact sourceBound
+
+/-- The original-source entry span instantiated with the checked init-e-shaped fixture. -/
+theorem supported_original_entry_crep_return_fixture
     (program : Prog (RiscV.Word 64)) (supported : Supported program)
     (sourceFinal : PanSemStateFiniteExact 64 Unit) (word : BitVec 64) (sourceLimit : Nat)
-    (run : (callEntryStateHOLFinite (loweredState (progToHOL program)) HolFiniteMapExact.empty).evaluateHOLFiniteState
-      (progToHOL program) = (some (.returned (.val (.word word))),sourceFinal))
-    (sourceBound : controlSteps (progToHOL program)
-      (callEntryStateHOLFinite (loweredState (progToHOL program)) HolFiniteMapExact.empty) ≤ sourceLimit) :
+    (run : (exactState (progToHOL program)).evaluateHOLFiniteState (progToHOL program) =
+      (some (.returned (.val (.word word))),sourceFinal))
+    (sourceBound : controlSteps (progToHOL program) (exactState (progToHOL program)) ≤ sourceLimit) :
     let body := progToHOL program
     let caller := frontendContext body
     let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
@@ -136,8 +142,16 @@ theorem supported_entry_crep_return
     ∃ targetFinal,
       evalCrepSemHOLProgExact (crepState body) entry = (some (.return [.word word]),targetFinal) ∧
       CrepSteps.steps entry (crepState body) ≤ 3 + sizeOf (compileProgExactHOLW callee body) * sourceLimit := by
+  have topOutside : ¬ (exactState (progToHOL program)).memaddrs (exactState (progToHOL program)).topAddr := by
+    simp [exactState,singleEntrySourceTemplate,sourceTemplate,ordinaryAddress,heapTop,heapEnd,
+      stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords,sourceBase]
+  have aligned : panGlobalsByteAlignedHOL (exactState (progToHOL program)).topAddr := by
+    change BitVec.ofNat 64 ((heapTop.toNat / 8) * 8) = heapTop
+    decide
+  have code : (exactState (progToHOL program)).code = HolFiniteMapExact.empty.update
+      (entryName (progToHOL program),([],progToHOL program,.one)) := rfl
   simpa [loweredStateFrom,crepStateFrom,loweredState,crepState] using
-    supported_entry_crep_return_from program supported (exactState (progToHOL program)) rfl rfl rfl rfl
-      sourceFinal word sourceLimit run sourceBound
+    supported_original_entry_crep_return program supported (exactState (progToHOL program)) sourceFinal
+      rfl rfl rfl rfl topOutside aligned code word sourceLimit run sourceBound
 
 end SteppedFlapjack.Concrete

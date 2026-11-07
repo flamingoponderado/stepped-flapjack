@@ -62,7 +62,7 @@ theorem branchingLoop_code_lookup :
 
 private def loopHOL : ProgHOL 64 := progToHOL branchingLoop
 
-private def loopEntry := callEntryStateHOLFinite (loweredState loopHOL) HolFiniteMapExact.empty
+private def loopEntry := exactState loopHOL
 
 private def bodyHOL : ProgHOL 64 := .ite (.cmp .equal (.var .local (ofString "x")) (.const 2))
   (.assign .local (ofString "x") (.const 1)) (.assign .local (ofString "x") (.const 0))
@@ -103,9 +103,9 @@ private theorem ev0 : @evalHOLFinite 64 Unit _ s0 (fun a => Classical.propDecida
   simp [evalHOLExact,s0,s1,s2,setVarHOLFinite,decClockHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE]
 
 private theorem clk2 : s2.clock ≠ 0 := by
-  simp [s2,setVarHOLFinite,loopEntry,callEntryStateHOLFinite,loweredState,noGlobalsLoweredPreCall,exactState,singleEntrySourceTemplate,sourceTemplate]
+  simp [s2,setVarHOLFinite,loopEntry,exactState,singleEntrySourceTemplate,sourceTemplate]
 private theorem clk1 : s1.clock ≠ 0 := by
-  simp [s1,s2,setVarHOLFinite,decClockHOLFinite,loopEntry,callEntryStateHOLFinite,loweredState,noGlobalsLoweredPreCall,exactState,singleEntrySourceTemplate,sourceTemplate]
+  simp [s1,s2,setVarHOLFinite,decClockHOLFinite,loopEntry,exactState,singleEntrySourceTemplate,sourceTemplate]
 
 private theorem loopRun : s2.evaluateHOLFiniteState loopStmt = (none,s0) := by
   rw [loopStmt,evaluateHOLFiniteState_while_fixClockRewrite,ev2]
@@ -185,7 +185,7 @@ theorem branchingLoop_entry_crep :
       CrepSteps.steps branchingLoopCrepEntry (crepState (progToHOL branchingLoop)) ≤
         1130 := by
   obtain ⟨sourceFinal,run,bound⟩ := sourceRun
-  have span := supported_entry_crep_return branchingLoop branchingLoop_supported sourceFinal 7 23 run bound
+  have span := supported_original_entry_crep_return_fixture branchingLoop branchingLoop_supported sourceFinal 7 23 run bound
   have lookup := (supported_callee_relations branchingLoop branchingLoop_supported).1
   have codeEq : compileProgExactHOLW branchingLoopCalleeContext (progToHOL branchingLoop) = branchingLoopCrepBody := by
     rw [branchingLoop_code_lookup] at lookup

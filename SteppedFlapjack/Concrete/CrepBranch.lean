@@ -69,19 +69,6 @@ theorem branchCrepEntry_run :
   change (crepState branchingHOL).clock ≠ 0 at nonzero
   simp [lookupCodeFiniteHOL,branchCrepCode_lookup,crepReturnInfoNodupError,nonzero,branchCrepBody_run]
 
-/-- The comparison body has the same source run at the generated callee. -/
-theorem branching_callee_source :
-    (callEntryStateHOLFinite (loweredState branchingHOL) HolFiniteMapExact.empty).evaluateHOLFiniteState branchingHOL =
-      (some (.returned (.val (.word 7))),
-        (callEntryStateHOLFinite (loweredState branchingHOL) HolFiniteMapExact.empty).emptyLocalsHOLFinite) ∧
-    controlSteps branchingHOL (callEntryStateHOLFinite (loweredState branchingHOL) HolFiniteMapExact.empty) ≤ 6 := by
-  constructor
-  · rw [branchingHOL,PanSemStateFiniteExact.evaluateHOLFiniteState_ite]
-    simp [PanSemStateFiniteExact.evaluateHOLFiniteState_return,
-      evalHOLExact,shapeOfHOLExact,Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
-  · simp [branchingHOL,controlSteps.eq_def,evalHOLExact,Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
-    split <;> omega
-
 def branchCalleeContext : PanToCrepContextExact 64 :=
   let caller := frontendContext branchingHOL
   ctxtFcExactHOL caller.funcs caller.eids [] [] []
@@ -93,8 +80,8 @@ theorem branching_entry_span :
         (some (.return [.word 7]),targetFinal) ∧
       SteppedFlapjack.CrepSteps.steps branchCrepEntry (crepState branchingHOL) ≤
         231 := by
-  obtain ⟨run,bound⟩ := branching_callee_source
-  have span := supported_entry_crep_return branching branching_supported _ 7 6
+  obtain ⟨run,bound⟩ := branching_hol_run
+  have span := supported_original_entry_crep_return_fixture branching branching_supported _ 7 6
     (by simpa [← branching_hol_eq] using run) (by simpa [← branching_hol_eq] using bound)
   have relations := supported_callee_relations branching branching_supported
   simp only [← branching_hol_eq] at relations
