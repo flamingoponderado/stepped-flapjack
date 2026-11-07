@@ -2,16 +2,78 @@ import SteppedFlapjack.Concrete.Fragment
 import SteppedFlapjack.PanToCrepSteps.SingleEntrySourceEnvironment
 import SteppedFlapjack.PanToCrepSteps.CanonicalFfi
 import SteppedFlapjack.PanToCrepSteps.SingleEntryGlobals
+import Flapjack.Pancake.Proofs.PanToTarget.AssemblyMemory
 
 /-! Fixed source memory and matching single-function environments. -/
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 open SteppedFlapjack.PanToCrepSteps
 
-/-- The 64 KiB example starts at 65536; its full machine byte domain ends at 196608. -/
-def heapBase : BitVec 64 := 65536
-def heapTop : BitVec 64 := 196608
+/-- The source and shared-memory ranges used by the init-e challenge. -/
+def heapBase : BitVec 64 := 0xa1000000
+def heapTop : BitVec 64 := 33806089704
 
+def ordinaryAddress (a : BitVec 64) : Prop :=
+  0xa1000000 ≤ a.toNat ∧ a.toNat < 33806089704 ∧ a.toNat % 8 = 0
+
+def sharedAddress (a : BitVec 64) : Prop :=
+  a.toNat % 8 = 0 ∧
+    ((0x40000000 ≤ a.toNat ∧ a.toNat < 0x80000000) ∨
+      (0xa0410000 ≤ a.toNat ∧ a.toNat < 0xa0411000))
+
+instance (a : BitVec 64) : Decidable (ordinaryAddress a) := by
+  unfold ordinaryAddress
+  infer_instance
+
+instance (a : BitVec 64) : Decidable (sharedAddress a) := by
+  unfold sharedAddress
+  infer_instance
+
+/-- The input and output ranges use the same aligned shared-word domain as init-e. -/
+theorem sharedAddress_alignment (a : BitVec 64) :
+    sharedAddress a ↔ Flapjack.holByteAligned a = true ∧
+      ((0x40000000 ≤ a.toNat ∧ a.toNat < 0x80000000) ∨
+        (0xa0410000 ≤ a.toNat ∧ a.toNat < 0xa0411000)) := by
+  rw [Flapjack.Pancake.Proofs.PanToTarget.holByteAligned_iff_mod (Or.inr rfl)]
+  rfl
+
+/-- The interval presentation agrees with the compiler's word-address domain. -/
+theorem ordinaryAddress_eq_addresses (a : BitVec 64) :
+    ordinaryAddress a ↔ Flapjack.Compiler.Backend.StackRemove.addresses heapBase 3888119741 a := by
+  rw [Flapjack.Compiler.Backend.StackRemove.mem_addresses]
+  constructor
+  · intro h
+    refine ⟨(a.toNat - 0xa1000000) / 8, ?_, ?_⟩
+    · simp only [ordinaryAddress] at h
+      omega
+    · apply BitVec.eq_of_toNat_eq
+      change a.toNat = (BitVec.ofNat 64 0xa1000000 +
+        BitVec.ofNat 64 ((a.toNat - 0xa1000000) / 8) * BitVec.ofNat 64 8).toNat
+      rw [BitVec.ofNat_mul_ofNat, BitVec.ofNat_add_ofNat, BitVec.toNat_ofNat]
+      simp only [ordinaryAddress] at h
+      omega
+  · rintro ⟨i, hi, h⟩
+    change a = BitVec.ofNat 64 0xa1000000 + BitVec.ofNat 64 i * BitVec.ofNat 64 8 at h
+    have hn := congrArg BitVec.toNat h
+    rw [BitVec.ofNat_mul_ofNat, BitVec.ofNat_add_ofNat, BitVec.toNat_ofNat] at hn
+    simp only [ordinaryAddress]
+    omega
+
+/-- The challenge's five startup pointer words; the rest of ordinary memory is zero. -/
+def startupHeaders : List (BitVec 64) :=
+  [0xa0020018, 0xa0028ff0, 0xa0028ff0, 0x800f0134, 0x800f1000]
+
+def initialWord (a : BitVec 64) : BitVec 64 :=
+  if 0xa1000000 ≤ a.toNat ∧ a.toNat < 0xa1000000 + 40 then
+    startupHeaders[(a.toNat - 0xa1000000) / 8]?.getD 0
+  else 0
+
+/-- The first and last reserved words match init-e's startup metadata. -/
+theorem startup_first_and_last :
+    initialWord heapBase = 0xa0020018 ∧ initialWord (heapBase + 32) = 0x800f1000 := by
+  decide
+
+/-- This oracle is sufficient for the FFI-free witnesses; it is not init-e's host oracle. -/
 def sourceFfi : HolFfiState Unit :=
   { oracle := fun _ s _ bytes => .ret s bytes, ffiState := (), ioEvents := [] }
 
@@ -21,9 +83,9 @@ def sourceTemplate : PanSemStateFiniteExact 64 Unit where
   structs := []
   code := HolFiniteMapExact.empty
   eshapes := HolFiniteMapExact.empty
-  memory := fun _ => .word 0
-  memaddrs := fun a => 65536 ≤ a.toNat ∧ a.toNat < 196608 ∧ a.toNat % 8 = 0
-  shMemaddrs := fun _ => False
+  memory := fun a => .word (initialWord a)
+  memaddrs := ordinaryAddress
+  shMemaddrs := sharedAddress
   clock := 2^64
   be := false
   ffi := sourceFfi
@@ -36,9 +98,9 @@ def sourceProduction : PanSemState (RiscV.Word 64) (FfiState Unit) where
   structs := []
   code := []
   exceptionShapes := fun _ => none
-  memory := fun _ => some (.word 0)
-  memaddrs := fun a => decide (65536 ≤ a.toNat ∧ a.toNat < 196608 ∧ a.toNat % 8 = 0)
-  sharedMemaddrs := fun _ => false
+  memory := fun a => some (.word (initialWord a))
+  memaddrs := fun a => decide (ordinaryAddress a)
+  sharedMemaddrs := fun a => decide (sharedAddress a)
   clock := 2^64
   be := false
   ffi := sourceFfiState sourceFfi
@@ -57,7 +119,8 @@ def executableState (body : ProgHOL 64) : PanSemState (RiscV.Word 64) (FfiState 
   singleEntrySourceProduction sourceProduction (entryName body) body
 
 instance (body : ProgHOL 64) : DecidablePred (exactState body).memaddrs := by
-  change DecidablePred (fun a : BitVec 64 => 65536 ≤ a.toNat ∧ a.toNat < 196608 ∧ a.toNat % 8 = 0)
+  change DecidablePred ordinaryAddress
+  unfold ordinaryAddress
   infer_instance
 
 theorem source_environment (body : ProgHOL 64) : PanSemEnvironmentRel (executableState body) (exactState body) :=
