@@ -5,6 +5,7 @@ import Flapjack.Compiler.Backend.WordToStack.Proofs.ProgramBitmaps
 import SteppedFlapjack.PanToCrepSteps.CountdownExecutableCompiler
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineConfig
 import SteppedFlapjack.WordToStackSteps.BitmapFree
+import SteppedFlapjack.WordAllocSteps.TailShape
 import Flapjack.Pancake.Proofs.PanToTarget.ExecutableCompileProgMaxAsmWith
 
 /-! Structural facts about the actual countdown compiler pipeline. -/
@@ -96,19 +97,18 @@ theorem countdown_artifact_single_bitmap (name : MlString) (initial returned : B
   have eq : (4 : BitVec 64) = bitmap := by simpa using pref
   exact eq.symm
 
-/-- If the allocated countdown bodies have the supported loop or tail-entry
-shapes, native compilation adds no bitmap entries. -/
+/-- Supported source Word bodies retain their shapes through allocation and
+produce exactly the initial bitmap. -/
 theorem countdown_native_single_bitmap (name : MlString) (initial returned : BitVec 64)
     (wc : WordToWord.Config)
-    (shapes : ∀ row ∈ (WordToWord.compile wc Flapjack.Compiler.Encoders.RiscV.Target.riscvConfig
-      (panToWordCompileProgHOL Flapjack.Compiler.Encoders.RiscV.Target.riscvConfig.isa
+    (shapes : ∀ row ∈ (panToWordCompileProgHOL Flapjack.Compiler.Encoders.RiscV.Target.riscvConfig.isa
         (singleEntryProgram (ofString "main") (.dec name .one (.const initial) (.seq .skip (.seq
           (.while (.var .local name) (.assign .local name (.op .sub [.var .local name,.const 1])))
-          (.return (.const returned)))))))).2,
-      SteppedFlapjack.WordAllocSteps.RegTailShape row.2.2 ∨
-      SteppedFlapjack.WordSimpSteps.LoopSequence row.2.2 ∨
-      SteppedFlapjack.WordToStackSteps.LoopBlock row.2.2) :
+          (.return (.const returned))))))),
+      SteppedFlapjack.LoopLiveSteps.WordTailEntryShape row.2.2 ∨
+      SteppedFlapjack.WordSimpSteps.LoopSequence row.2.2) :
     (countdownNativeRiscV name initial returned wc).1 = [4] := by
-  exact SteppedFlapjack.WordToStackSteps.bitmapFree_compileNative _ _ shapes
+  apply SteppedFlapjack.WordToStackSteps.bitmapFree_compileNative
+  exact SteppedFlapjack.WordAllocSteps.wholeCompile_tailOrLoop_shape wc _ _ shapes
 
 end SteppedFlapjack.PanToCrepSteps
