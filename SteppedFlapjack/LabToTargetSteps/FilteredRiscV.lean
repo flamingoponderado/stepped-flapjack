@@ -9,6 +9,15 @@ open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.LabSem
 open Flapjack.Compiler.Backend.LabToTarget Flapjack.Compiler.Backend.Semantics.TargetProps
 open Flapjack.Compiler.Encoders.RiscV.Target
 
+/-- Resetting both clocks preserves the filter simulation relation. -/
+theorem filterRel_withClock {width : Nat} [NeZero width] {C F : Type}
+    (filtered original : LabSem.State width C F) (clock : Nat)
+    (rel : LabFilter.Proofs.stateRel filtered original) :
+    LabFilter.Proofs.stateRel {filtered with clock := clock} {original with clock := clock} := by
+  rcases rel with ⟨⟨comp,hfiltered,hcomp⟩,hfailed⟩
+  subst filtered
+  exact ⟨⟨comp,rfl,hcomp⟩,hfailed⟩
+
 /-- Removing skips preserves any terminating Lab evaluation at the same clock,
 including its final FFI state. -/
 theorem filteredLab_halt_sameClock {width : Nat} [NeZero width] {C F : Type}

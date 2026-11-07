@@ -43,8 +43,10 @@ structure FullInitMachineContext {F : Type} (stack : StackSemStateFiniteExact 64
   asm : AsmState 64
   machine : RiscV.L3.riscv_state
   hmc : mc.target = riscvTarget
-  tie : LabToTarget.oracleTie mc machine lab
-  machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) lab asm machine
+  machineLab : LabSem.State 64 LabToTarget.Config F := lab
+  labRelation : machineLab = lab ∨ LabFilter.Proofs.stateRel machineLab lab
+  tie : LabToTarget.oracleTie mc machine machineLab
+  machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) machineLab asm machine
 
 /-- Reset the Lab clock while retaining the same machine state and all
 initialization relations. This permits a clock-zero machine initializer to
@@ -75,8 +77,16 @@ noncomputable def FullInitMachineContext.withClock {F : Type}
   asm := backend.asm
   machine := backend.machine
   hmc := backend.hmc
+  machineLab := {backend.machineLab with clock := clock}
+  labRelation := by
+    rcases backend.labRelation with h | h
+    · exact Or.inl (by rw [h])
+    · right
+      obtain ⟨⟨comp,hs,hcomp⟩,hf⟩ := h
+      rw [hs]
+      exact ⟨⟨comp,rfl,hcomp⟩,hf⟩
   tie := by simpa [LabToTarget.oracleTie] using backend.tie
-  machineRel := LabToTarget.stateRelClock _ backend.lab backend.asm backend.machine clock backend.machineRel
+  machineRel := LabToTarget.stateRelClock _ backend.machineLab backend.asm backend.machine clock backend.machineRel
 
 /-- Clock adjustment retains the original machine, compiler inputs and Lab
 data, while setting exactly the requested evaluation clock. -/
@@ -252,20 +262,41 @@ theorem fullInitNativeTail_setup_or_resource {F : Type}
       saveRegs := backend.saveRegs, dataSp := backend.dataSp, coracle := backend.coracle,
       initAssumptions := backend.initAssumptions, entryEq := by simp [entry,backend.stackEq],
       pc := backend.pc, mc := backend.mc, labCode := backend.labCode, labs := backend.labs,
-      asm := backend.asm, machine := backend.machine, hmc := backend.hmc, tie := backend.tie, machineRel := backend.machineRel }
+      asm := backend.asm, machine := backend.machine, hmc := backend.hmc, machineLab := backend.machineLab,
+      labRelation := backend.labRelation, tie := backend.tie, machineRel := backend.machineRel }
     have tickEq : setup.tickLimit = backend.successTickLimit wc ac programs p ctxt labels limit := by
       dsimp only [setup,FullInitTailSetup.tickLimit,FullInitMachineContext.successTickLimit,entry,k,compiledCode]
       rw [selected]
       simp only [Option.getD_some,← frameDef,← sizeDef]
     exact Or.inl ⟨word,setup,rfl,rfl,rfl,rfl,tickEq,frameSize,rfl⟩
   · obtain ⟨post,run,ffi,bound⟩ := resource
-    obtain ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,events⟩ :=
-      fullInitStackRiscVWithin backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset backend.bitmaps
-        backend.inputCode backend.lab backend.saveRegs backend.dataSp backend.coracle backend.initAssumptions
-        backend.pc backend.mc backend.labCode backend.labs backend.asm backend.machine backend.hmc backend.tie backend.machineRel
-        _ 3 (some (.halt (.word 2))) post .resourceLimitHit (by simpa [backend.stackEq] using run)
-        (by simp) (by simpa [backend.stackEq] using bound) (by simp [stackEntryClass])
-    exact Or.inr ⟨ticks,finalMachine,finalFfi,by simpa [FullInitMachineContext.resourceTickLimit] using tickBound,
-      machineRun,by simpa only [ffi] using events⟩
+    have result : ∃ ticks finalMachine finalFfi,
+        ticks ≤ backend.resourceTickLimit ∧
+        evaluateTargetHOL backend.mc backend.lab.ffi ticks backend.machine = (.halt .resourceLimitHit,finalMachine,finalFfi) ∧
+        finalFfi.ioEvents = stack.ffi.ioEvents := by
+      rcases backend.labRelation with same | filtered
+      · have tie : LabToTarget.oracleTie backend.mc backend.machine backend.lab := by simpa only [same] using backend.tie
+        have rel : LabToTarget.stateRel (backend.mc,backend.labCode,backend.labs,backend.pc) backend.lab backend.asm backend.machine := by
+          simpa only [same] using backend.machineRel
+        obtain ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,events⟩ :=
+          fullInitStackRiscVWithin backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset backend.bitmaps
+            backend.inputCode backend.lab backend.saveRegs backend.dataSp backend.coracle backend.initAssumptions
+            backend.pc backend.mc backend.labCode backend.labs backend.asm backend.machine backend.hmc tie rel
+            _ 3 (some (.halt (.word 2))) post .resourceLimitHit (by simpa [backend.stackEq] using run)
+            (by simp) (by simpa [backend.stackEq] using bound) (by simp [stackEntryClass])
+        exact ⟨ticks,finalMachine,finalFfi,by simpa [FullInitMachineContext.resourceTickLimit] using tickBound,
+          machineRun,by simpa only [ffi] using events⟩
+      · have buffer : backend.machineLab.codeBuffer = backend.lab.codeBuffer := by
+          obtain ⟨⟨_,h,_⟩,_⟩ := filtered
+          rw [h]
+        obtain ⟨ticks,finalMachine,finalFfi,tickBound,machineRun,events⟩ :=
+          fullInitStackFilteredRiscVWithin backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset backend.bitmaps
+            backend.inputCode backend.lab backend.machineLab backend.saveRegs backend.dataSp backend.coracle backend.initAssumptions
+            backend.pc backend.mc backend.labCode backend.labs backend.asm backend.machine backend.hmc filtered backend.tie backend.machineRel
+            _ 3 (some (.halt (.word 2))) post .resourceLimitHit (by simpa [backend.stackEq] using run)
+            (by simp) (by simpa [backend.stackEq] using bound) (by simp [stackEntryClass])
+        exact ⟨ticks,finalMachine,finalFfi,by simpa [FullInitMachineContext.resourceTickLimit,buffer] using tickBound,
+          machineRun,by simpa only [ffi] using events⟩
+    exact Or.inr result
 
 end SteppedFlapjack.LoopToWordSteps

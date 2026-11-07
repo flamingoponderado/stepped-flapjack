@@ -76,8 +76,54 @@ noncomputable def fullInitMachineContext_of_labInit {F : Type}
     dataSp := dataSp, coracle := stackOracle,
     initAssumptions := by simpa [Assumptions,StackToLab.Proofs.MakeInit.memoryAssumption,lab0] using stackInit,
     stackEq := rfl, pc := mc.target.getPc ms, mc := mc, labCode := code2, labs := labs, asm := t,
-    machine := ms, hmc := hmc,
+    machine := ms, hmc := hmc, labRelation := Or.inl rfl,
     tie := by simpa [oracleTie,lab0] using tie,
     machineRel := by simpa [lab0] using stateRelClock _ lab0 t ms labClock rel }
+
+/-- Derive the full machine context from Lab initialization guards and the
+Stack-to-Lab initializer assumptions with the actual skip filter; no Lab/machine relation is assumed. -/
+noncomputable def fullInitMachineContext_of_filteredLabInit {F : Type}
+    (stackConf : StackToLab.Config) (dataConf : DataToWord.Config) (maxHeap sp : Nat)
+    (offset : BitVec 64 × BitVec 64) (bitmaps : List (BitVec 64))
+    (inputCode : List (Nat × HolProg 64)) (saveRegs : Nat → Bool) (dataSp : Nat)
+    (stackOracle : Nat → LabToTarget.Config × List (Nat × HolProg 64) × List (BitVec 64))
+    (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection) (ms : RiscV.L3.riscv_state)
+    (ffi : HolFfiState F) (code code2 : LabProgHOL 64) (labs : Spt (Spt Nat))
+    (labelClock i cbspace labClock : Nat) (t : AsmState 64)
+    (m : BitVec 64 → WordLocW 64) (dm sdm : BitVec 64 → Bool)
+    (labOracle : Nat → LabToTarget.Config × LabProgHOL 64)
+    (newFfiNames : List HolFfiName) (shmemInfo newShmemInfo : List ShmemInfoNum)
+    (hmc : mc.target = riscvTarget)
+    (guards : LabMachineInitGuards mc ms (LabFilter.filterSkip code) code2 labs labelClock i cbspace t m dm sdm
+      (fun n => ((labOracle n).1,LabFilter.filterSkip (labOracle n).2)) newFfiNames shmemInfo newShmemInfo)
+    (stackInit : Assumptions stackConf dataConf maxHeap sp offset bitmaps inputCode
+      (LabToTarget.makeInit mc ffi t m dm sdm ms code (LabToTarget.compile mc.target.config)
+        (mc.target.getPc ms + BitVec.ofNat 64 (progToBytes code2).length) cbspace labOracle)
+      saveRegs dataSp stackOracle) :
+    let lab := {LabToTarget.makeInit mc ffi t m dm sdm ms code (LabToTarget.compile mc.target.config)
+      (mc.target.getPc ms + BitVec.ofNat 64 (progToBytes code2).length) cbspace labOracle with clock := labClock}
+    FullInitMachineContext (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps inputCode lab saveRegs dataSp stackOracle).1 := by
+  let lab0 := LabToTarget.makeInit mc ffi t m dm sdm ms code (LabToTarget.compile mc.target.config)
+    (mc.target.getPc ms + BitVec.ofNat 64 (progToBytes code2).length) cbspace labOracle
+  let filteredOracle := fun n => ((labOracle n).1,LabFilter.filterSkip (labOracle n).2)
+  let filteredLab := LabToTarget.makeInit mc ffi t m dm sdm ms (LabFilter.filterSkip code)
+    (compileLab mc.target.config) (mc.target.getPc ms + BitVec.ofNat 64 (progToBytes code2).length) cbspace filteredOracle
+  have rel := makeInit_stateRel mc ms ffi (LabFilter.filterSkip code) code2 labs labelClock i cbspace t m dm sdm
+    filteredOracle newFfiNames shmemInfo newShmemInfo guards
+  have tie := oracleTie_makeInit mc ffi t m dm sdm ms (LabFilter.filterSkip code) (compileLab mc.target.config)
+    (mc.target.getPc ms + BitVec.ofNat 64 (progToBytes code2).length) cbspace filteredOracle
+  have filterRel := SteppedFlapjack.LabToTargetSteps.makeInit_filterRel mc ffi t m dm sdm ms code
+    (compileLab mc.target.config) (mc.target.getPc ms + BitVec.ofNat 64 (progToBytes code2).length) cbspace labOracle
+  have filterClock : LabFilter.Proofs.stateRel {filteredLab with clock := labClock} {lab0 with clock := labClock} := by
+    exact SteppedFlapjack.LabToTargetSteps.filterRel_withClock _ _ labClock filterRel
+  exact {
+    stackConf := stackConf, dataConf := dataConf, maxHeap := maxHeap, sp := sp, offset := offset,
+    bitmaps := bitmaps, inputCode := inputCode, lab := {lab0 with clock := labClock}, saveRegs := saveRegs,
+    dataSp := dataSp, coracle := stackOracle,
+    initAssumptions := by simpa [Assumptions,StackToLab.Proofs.MakeInit.memoryAssumption,lab0] using stackInit,
+    stackEq := rfl, pc := mc.target.getPc ms, mc := mc, labCode := code2, labs := labs, asm := t,
+    machine := ms, hmc := hmc, machineLab := {filteredLab with clock := labClock}, labRelation := Or.inr filterClock,
+    tie := by simpa [oracleTie,filteredLab] using tie,
+    machineRel := by simpa [filteredLab] using stateRelClock _ filteredLab t ms labClock rel }
 
 end SteppedFlapjack.LoopToWordSteps

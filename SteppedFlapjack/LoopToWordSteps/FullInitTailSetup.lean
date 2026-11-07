@@ -1,4 +1,5 @@
 import SteppedFlapjack.LoopToWordSteps.FullInitTailRiscV
+import SteppedFlapjack.LoopToWordSteps.FullInitFilteredTailRiscV
 import SteppedFlapjack.WordToStackSteps.TailEntryFrame
 
 /-! Packaged full-initialization backend for supported Loop entries. -/
@@ -84,8 +85,10 @@ structure FullInitTailSetup {F : Type} (p : HolLoopProg 64)
   asm : AsmState 64
   machine : RiscV.L3.riscv_state
   hmc : mc.target = riscvTarget
-  tie : LabToTarget.oracleTie mc machine lab
-  machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) lab asm machine
+  machineLab : LabSem.State 64 LabToTarget.Config F := lab
+  labRelation : machineLab = lab ∨ LabFilter.Proofs.stateRel machineLab lab
+  tie : LabToTarget.oracleTie mc machine machineLab
+  machineRel : LabToTarget.stateRel (mc,labCode,labs,pc) machineLab asm machine
 
 /-- Explicit tick bound for the initialized backend. -/
 noncomputable def FullInitTailSetup.tickLimit {F : Type} {p : HolLoopProg 64}
@@ -123,20 +126,47 @@ theorem FullInitTailSetup.run_bounded {F : Type} {loc : Nat} {p callee : HolLoop
       evaluateTargetHOL setup.mc setup.lab.ffi ticks setup.machine = (.halt outcome,finalMachine,finalFfi) ∧
       ((LoopMachineOutcome result outcome ∧ finalFfi.ioEvents = sourcePost.ffi.ioEvents) ∨
         (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: sourcePost.ffi.ioEvents)) := by
-  obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,_,_,_,_,_,correspondence⟩ :=
-    singleTail_fullInit_riscvWithin setup.ac setup.count setup.name setup.alg setup.regCount setup.col shape calleeShape
-      source sourcePost result word setup.ctxt setup.labels setup.compiledCode setup.locals limit lookup premises complete
-      setup.gc setup.noInstall setup.codeRel setup.codeDomain setup.localsRel setup.domain sourceBound setup.entry
-      setup.frameSize setup.frame setup.lens setup.bs setup.bsPost setup.n setup.nPost setup.compiled setup.argumentCount
-      setup.stackRel setup.native setup.lengthBound setup.bitmapBound setup.bitmapPrefix setup.labelCheck setup.maxBound
-      setup.frameDef setup.frameSizeDef setup.space setup.found setup.stackConf setup.dataConf setup.maxHeap setup.sp
-      setup.offset setup.bitmaps setup.inputCode setup.lab setup.saveRegs setup.dataSp setup.coracle setup.initAssumptions
-      setup.entryEq setup.pc setup.mc setup.labCode setup.labs setup.asm setup.machine setup.hmc setup.tie setup.machineRel
-  refine ⟨outcome,ticks,finalMachine,finalFfi,?_,run,?_⟩
-  · simpa [FullInitTailSetup.tickLimit] using bound
-  · rcases correspondence with good | ⟨resource,events,_⟩
-    · exact Or.inl good
-    · exact Or.inr ⟨resource,events⟩
+  have resultBound : ∃ outcome ticks finalMachine finalFfi,
+      ticks ≤ setup.tickLimit ∧
+      evaluateTargetHOL setup.mc setup.lab.ffi ticks setup.machine = (.halt outcome,finalMachine,finalFfi) ∧
+      ((LoopMachineOutcome result outcome ∧ finalFfi.ioEvents = sourcePost.ffi.ioEvents) ∨
+        (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: sourcePost.ffi.ioEvents)) := by
+    rcases setup.labRelation with same | filtered
+    · have tie : LabToTarget.oracleTie setup.mc setup.machine setup.lab := by simpa only [same] using setup.tie
+      have rel : LabToTarget.stateRel (setup.mc,setup.labCode,setup.labs,setup.pc) setup.lab setup.asm setup.machine := by
+        simpa only [same] using setup.machineRel
+      obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,_,_,_,_,_,correspondence⟩ :=
+        singleTail_fullInit_riscvWithin setup.ac setup.count setup.name setup.alg setup.regCount setup.col shape calleeShape
+          source sourcePost result word setup.ctxt setup.labels setup.compiledCode setup.locals limit lookup premises complete
+          setup.gc setup.noInstall setup.codeRel setup.codeDomain setup.localsRel setup.domain sourceBound setup.entry
+          setup.frameSize setup.frame setup.lens setup.bs setup.bsPost setup.n setup.nPost setup.compiled setup.argumentCount
+          setup.stackRel setup.native setup.lengthBound setup.bitmapBound setup.bitmapPrefix setup.labelCheck setup.maxBound
+          setup.frameDef setup.frameSizeDef setup.space setup.found setup.stackConf setup.dataConf setup.maxHeap setup.sp
+          setup.offset setup.bitmaps setup.inputCode setup.lab setup.saveRegs setup.dataSp setup.coracle setup.initAssumptions
+          setup.entryEq setup.pc setup.mc setup.labCode setup.labs setup.asm setup.machine setup.hmc tie rel
+      refine ⟨outcome,ticks,finalMachine,finalFfi,?_,run,?_⟩
+      · simpa [FullInitTailSetup.tickLimit] using bound
+      · rcases correspondence with good | ⟨resource,events,_⟩
+        · exact Or.inl good
+        · exact Or.inr ⟨resource,events⟩
+    · have buffer : setup.machineLab.codeBuffer = setup.lab.codeBuffer := by
+        obtain ⟨⟨_,h,_⟩,_⟩ := filtered
+        rw [h]
+      obtain ⟨outcome,ticks,finalMachine,finalFfi,_,_,bound,run,_,_,_,_,_,_,_,_,_,_,_,correspondence⟩ :=
+        singleTail_fullInit_filtered_riscvWithin setup.ac setup.count setup.name setup.alg setup.regCount setup.col shape calleeShape
+          source sourcePost result word setup.ctxt setup.labels setup.compiledCode setup.locals limit lookup premises complete
+          setup.gc setup.noInstall setup.codeRel setup.codeDomain setup.localsRel setup.domain sourceBound setup.entry
+          setup.frameSize setup.frame setup.lens setup.bs setup.bsPost setup.n setup.nPost setup.compiled setup.argumentCount
+          setup.stackRel setup.native setup.lengthBound setup.bitmapBound setup.bitmapPrefix setup.labelCheck setup.maxBound
+          setup.frameDef setup.frameSizeDef setup.space setup.found setup.stackConf setup.dataConf setup.maxHeap setup.sp
+          setup.offset setup.bitmaps setup.inputCode setup.lab setup.machineLab setup.saveRegs setup.dataSp setup.coracle setup.initAssumptions
+          setup.entryEq setup.pc setup.mc setup.labCode setup.labs setup.asm setup.machine setup.hmc filtered setup.tie setup.machineRel
+      refine ⟨outcome,ticks,finalMachine,finalFfi,?_,run,?_⟩
+      · simpa [FullInitTailSetup.tickLimit,buffer] using bound
+      · rcases correspondence with good | ⟨resource,events,_⟩
+        · exact Or.inl good
+        · exact Or.inr ⟨resource,events⟩
+  exact resultBound
 
 
 /-- A Loop execution is ready for any compatible full-initialization setup. -/
