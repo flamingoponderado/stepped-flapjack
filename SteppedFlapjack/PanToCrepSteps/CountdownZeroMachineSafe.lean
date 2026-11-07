@@ -10,6 +10,34 @@ open Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Backend.Semantics.Ta
 open Flapjack.Compiler.Encoders.RiscV.Target
 open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps
 
+/-- The actual optimized Word program of the zero-count source. -/
+noncomputable def countdownZeroWordProgram : List (Nat × Nat × WordLangProgHOL (BitVec 64)) :=
+  (compile countdownRiscVBackend.wordToWordConf riscvConfig
+    (panToWordCompileProgHOL riscvConfig.isa
+      (singleEntryProgram (ofString "main") (.dec (ofString "x") .one (.const (0 : BitVec 64)) (.seq .skip (.seq
+        (.while (.var .local (ofString "x")) (.assign .local (ofString "x") (.op .sub [.var .local (ofString "x"),.const 1])))
+        (.return (.const (0 : BitVec 64))))))))).2
+
+/-- The compiler-input fields for the concrete source select exactly the
+zero-count Word program used by the machine-safety proof. -/
+theorem FullInitAssignLoopInputs.countdownZero_wordProgram {σ : Type}
+    (declarations : List (DeclHOL 64)) (start : MlString) (caller : PanToCrepContextExact 64)
+    (loopCtxt : CrepToLoopContextExact) (entry : HolLoopProg 64) (limit : Nat)
+    (target : LoopSemStateFiniteExact 64 σ)
+    (native : FullInitAssignLoopInputs declarations start caller loopCtxt entry limit target)
+    (declarationsEq : declarations = singleEntryProgram (ofString "main")
+      (.dec (ofString "x") .one (.const (0 : BitVec 64))
+        (.seq (.while (.var .local (ofString "x"))
+          (.assign .local (ofString "x") (.op .sub [.var .local (ofString "x"),.const 1])))
+          (.return (.const (0 : BitVec 64))))))
+    (startEq : start = ofString "main") (archEq : native.arch = riscvConfig.isa)
+    (wcEq : native.wc = countdownRiscVBackend.wordToWordConf) :
+    (compile native.wc riscvConfig (loopToWordCompileHOL
+      (compileProgHOLExact native.arch native.crepPrograms))).2 = countdownZeroWordProgram := by
+  rw [native.programsEq,archEq,wcEq,declarationsEq,startEq]
+  unfold countdownZeroWordProgram
+  rw [singleEntry_countdown_panToWord riscvConfig.isa (ofString "x") (0 : BitVec 64) (0 : BitVec 64)]
+
 /-- When the compiler inputs are the actual zero-count optimized Word code,
 the source return has a successful machine outcome within the fitting-frame
 bound. No resource-limit outcome is needed. -/
@@ -27,11 +55,13 @@ theorem FullInitAssignLoopInputs.countdownZero_machineBound_safe {σ : Type}
       ∃ extra, FullInitReturnedReady entry {target with locals := .ln, clock := target.clock+extra}
         {word with clock := word.clock+extra} limit sourceFinal)
     (acEq : native.ac = riscvConfig)
-    (wordCode : sptFromAList (compile native.wc riscvConfig
-      (loopToWordCompileHOL (compileProgHOLExact native.arch native.crepPrograms))).2 = countdownZeroWordCode)
-    (entryBody : HolProg 64)
-    (zeroEntry : sptLookup firstLoopName native.stack.code = some (.seq (.stackAlloc 0) entryBody))
-    (enabled : native.stack.useStack = true) :
+    (declarationsEq : declarations = singleEntryProgram (ofString "main")
+      (.dec (ofString "x") .one (.const (0 : BitVec 64))
+        (.seq (.while (.var .local (ofString "x"))
+          (.assign .local (ofString "x") (.op .sub [.var .local (ofString "x"),.const 1])))
+          (.return (.const (0 : BitVec 64))))))
+    (startEq : start = ofString "main") (archEq : native.arch = riscvConfig.isa)
+    (wcEq : native.wc = countdownRiscVBackend.wordToWordConf) :
     ∃ ticks finalMachine finalFfi,
       ticks ≤ native.backend.successTickLimit native.wc riscvConfig
         (loopToWordCompileHOL (compileProgHOLExact native.arch native.crepPrograms))
@@ -39,6 +69,21 @@ theorem FullInitAssignLoopInputs.countdownZero_machineBound_safe {σ : Type}
       evaluateTargetHOL native.backend.mc native.backend.lab.ffi ticks native.backend.machine =
         (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents := by
   let initial := {target with locals := .ln}
+  have wordProgram := native.countdownZero_wordProgram declarations start caller loopCtxt entry limit target
+    declarationsEq startEq archEq wcEq
+  have wordCode : sptFromAList (compile native.wc riscvConfig
+      (loopToWordCompileHOL (compileProgHOLExact native.arch native.crepPrograms))).2 = countdownZeroWordCode := by
+    rw [wordProgram]
+    rfl
+  let entryBody : HolProg 64 := .seq .skip (.seq .skip (.call none (.inl 65) none))
+  have zeroEntry : sptLookup firstLoopName native.stack.code = some (.seq (.stackAlloc 0) entryBody) := by
+    rw [native.codeEq,acEq,wordProgram]
+    unfold countdownZeroWordProgram entryBody
+    rw [← WordToWord.compileWith_eq_compile Flapjack.RegAlloc.regAllocExecutable (by
+      funext a b c d e f g
+      exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g)]
+    exact countdownZero_native_entry_exact
+  have enabled : native.stack.useStack = true := native.ok.2.2.2.1
   have data : LoopWordDataRel initial {countdownZeroInitialWord native.stack native.coracle with
       code := sptFromAList (loopToWordCompileHOL (compileProgHOLExact native.arch native.crepPrograms))} := by
     simpa only [initial,LoopWordDataRel,acEq,wordCode,countdownZeroInitialWord,countdownZeroLimit] using native.data
