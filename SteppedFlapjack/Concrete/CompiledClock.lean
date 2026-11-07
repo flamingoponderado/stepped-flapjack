@@ -52,10 +52,10 @@ clock plus one source control visits. -/
 theorem supported_control_compiled_clock {σ : Type} {program : Prog (RiscV.Word 64)}
     (supported : Supported program) (context : PanToCrepContextExact 64)
     (source sourceFinal : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
-    (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal)) (nonerror : result ≠ some .error) :
+    (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal)) :
     controlSteps (progToHOL program) source ≤
       sizeOf (compileProgExactHOLW context (progToHOL program)) * (source.clock+1) := by
-  have cost := supported_control_clock supported source sourceFinal result run nonerror
+  have cost := supported_control_clock supported source sourceFinal result run
   have weight := supported_weight_le_compiled supported context
   have clock : source.clock - sourceFinal.clock + 1 ≤ source.clock+1 := by omega
   exact cost.trans ((Nat.mul_le_mul weight clock))

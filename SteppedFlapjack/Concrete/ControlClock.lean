@@ -11,7 +11,7 @@ def programWeight : Prog (RiscV.Word 64) → Nat
 
 private def ClockBound (program : Prog (RiscV.Word 64)) : Prop :=
   ∀ {σ : Type} (source sourceFinal : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64)),
-    source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal) → result ≠ some .error →
+    source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal) →
     controlSteps (progToHOL program) source ≤ programWeight program * (source.clock - sourceFinal.clock + 1)
 
 private theorem weightPos (program : Prog (RiscV.Word 64)) : 1 ≤ programWeight program := by
@@ -19,23 +19,19 @@ private theorem weightPos (program : Prog (RiscV.Word 64)) : 1 ≤ programWeight
 
 private theorem clockSeq {a b : Prog (RiscV.Word 64)} (aBound : ClockBound a) (bBound : ClockBound b) :
     ClockBound (.seq a b) := by
-  intro σ source sourceFinal result run nonerror
+  intro σ source sourceFinal result run
   simp only [progToHOL] at run ⊢
   rw [evaluateHOLFiniteState_seq_line780] at run
   rcases firstRun : source.evaluateHOLFiniteState (progToHOL a) with ⟨firstResult,middle⟩
   rw [firstRun] at run
   dsimp only at run
-  have firstNonerror : firstResult ≠ some .error := by
-    intro h
-    rw [h] at run
-    exact nonerror (Prod.mk.inj run).1.symm
-  have firstCost := aBound source middle firstResult firstRun firstNonerror
+  have firstCost := aBound source middle firstResult firstRun
   have firstClock := evaluateHOLFiniteState_clock_le source (progToHOL a)
   rw [firstRun] at firstClock
   rw [controlSteps_seq,firstRun]
   cases firstResult with
   | none =>
-    have secondCost := bBound middle sourceFinal result run nonerror
+    have secondCost := bBound middle sourceFinal result run
     have secondClock := evaluateHOLFiniteState_clock_le middle (progToHOL b)
     have secondRun : middle.evaluateHOLFiniteState (progToHOL b) = (result,sourceFinal) := by simpa using run
     rw [secondRun] at secondClock
@@ -56,11 +52,21 @@ private theorem clockSeq {a b : Prog (RiscV.Word 64)} (aBound : ClockBound a) (b
 private theorem clockIte {condition : Exp (RiscV.Word 64)} {a b : Prog (RiscV.Word 64)}
     (aBound : ClockBound a) (bBound : ClockBound b) : ClockBound (.ite condition a b) := by
   classical
-  intro σ source sourceFinal result run nonerror
+  intro σ source sourceFinal result run
   simp only [progToHOL] at run ⊢
   rw [evaluateHOLFiniteState_ite] at run
   split at run
-  case h_2 => exact absurd (Prod.mk.inj run).1.symm nonerror
+  case h_2 =>
+    obtain ⟨_,rfl⟩ := Prod.mk.inj run
+    rw [controlSteps_ite]
+    split
+    · rename_i word heval
+      have bad : ∀ w, @evalHOLExact 64 σ _ source.toExact
+          (fun a => Classical.propDecidable (source.memaddrs a)) (expToHOL condition) = some (.val (.word w)) → False := by assumption
+      exact False.elim (bad word heval)
+    · simp only [programWeight,Nat.sub_self,Nat.zero_add,Nat.mul_one]
+      have pa := weightPos a
+      omega
   rename_i w heval
   rw [controlSteps_ite]
   simp only [heval,programWeight]
@@ -69,17 +75,17 @@ private theorem clockIte {condition : Exp (RiscV.Word 64)} {a b : Prog (RiscV.Wo
   by_cases zero : w = 0
   · simp only [zero] at run
     simp only [zero,ne_eq,not_true_eq_false,if_false]
-    have cost := bBound source sourceFinal result run nonerror
+    have cost := bBound source sourceFinal result run
     nlinarith
   · simp only [if_neg zero] at run
     simp only [if_pos zero]
-    have cost := aBound source sourceFinal result run nonerror
+    have cost := aBound source sourceFinal result run
     nlinarith
 
 private theorem clockDecl (name : VarName) {initializer : Exp (RiscV.Word 64)} {body : Prog (RiscV.Word 64)}
     (bodyBound : ClockBound body) : ClockBound (.dec name .one initializer body) := by
   classical
-  intro σ source sourceFinal result run nonerror
+  intro σ source sourceFinal result run
   simp only [progToHOL,shapeToHOL] at run ⊢
   rw [evaluateHOLFiniteState_dec_total] at run
   dsimp only at run
@@ -87,7 +93,9 @@ private theorem clockDecl (name : VarName) {initializer : Exp (RiscV.Word 64)} {
       (fun a => Classical.propDecidable (source.memaddrs a)) (expToHOL initializer) with
   | none =>
     simp only [evaluated] at run
-    exact absurd (Prod.mk.inj run).1.symm nonerror
+    obtain ⟨_,rfl⟩ := Prod.mk.inj run
+    rw [controlSteps.eq_def]
+    simp [evaluated,programWeight]
   | some value =>
     simp only [evaluated] at run
     by_cases valid : shapeEqHOL .one (shapeOfHOLExact value) = true
@@ -100,24 +108,39 @@ private theorem clockDecl (name : VarName) {initializer : Exp (RiscV.Word 64)} {
         have h := congrArg (fun s : PanSemStateFiniteExact 64 σ => s.clock) (Prod.mk.inj run).2
         simpa using h
       subst result
-      have bound := bodyBound (setVarHOLFinite (ofString name) value source) bodyFinal bodyResult bodyRun nonerror
+      have bound := bodyBound (setVarHOLFinite (ofString name) value source) bodyFinal bodyResult bodyRun
       rw [controlSteps_dec _ _ _ _ _ value evaluated valid]
       simp only [programWeight,setVarHOLFinite] at bound ⊢
       rw [← sameClock]
       nlinarith
     · simp only [valid,Bool.false_eq_true,ite_false] at run
-      exact absurd (Prod.mk.inj run).1.symm nonerror
+      obtain ⟨_,rfl⟩ := Prod.mk.inj run
+      rw [controlSteps.eq_def]
+      simp [evaluated,valid,programWeight]
 
 private theorem clockWhile {condition : Exp (RiscV.Word 64)} {body : Prog (RiscV.Word 64)}
     (bodyBound : ClockBound body) : ClockBound (.while condition body) := by
   classical
-  intro σ source sourceFinal result run nonerror
+  intro σ source sourceFinal result run
   simp only [progToHOL] at run ⊢
   induction hc : source.clock using Nat.strongRecOn generalizing source sourceFinal result with
   | _ clock ih =>
     rw [evaluateHOLFiniteState_while_fixClockRewrite] at run
     split at run
-    case h_2 => exact absurd (Prod.mk.inj run).1.symm nonerror
+    case h_2 =>
+      obtain ⟨_,rfl⟩ := Prod.mk.inj run
+      rw [controlSteps_while]
+      split
+      · rename_i word heval
+        have bad : ∀ w, source.evalHOLFinite (expToHOL condition) = some (.val (.word w)) → False := by assumption
+        have finite : source.evalHOLFinite (expToHOL condition) = some (.val (.word word)) := by
+          rw [← evalHOLFinite_eq_classical]
+          exact heval
+        exact False.elim (bad word finite)
+      · rw [← hc]
+        simp only [programWeight,Nat.sub_self,Nat.zero_add,Nat.mul_one]
+        have p := weightPos body
+        omega
     rename_i w heval
     have hevalExact : @evalHOLExact 64 σ _ source.toExact
         (fun a => Classical.propDecidable (source.memaddrs a)) (expToHOL condition) = some (.val (.word w)) := heval
@@ -136,10 +159,7 @@ private theorem clockWhile {condition : Exp (RiscV.Word 64)} {body : Prog (RiscV
         rcases bodyRun : source.decClockHOLFinite.evaluateHOLFiniteState (progToHOL body) with ⟨bodyResult,sourcePost⟩
         rw [bodyRun] at run
         dsimp only at run
-        have bodyNonerror : bodyResult ≠ some .error := by
-          rintro rfl
-          exact absurd (Prod.mk.inj run).1.symm nonerror
-        have bodyCost := bodyBound source.decClockHOLFinite sourcePost bodyResult bodyRun bodyNonerror
+        have bodyCost := bodyBound source.decClockHOLFinite sourcePost bodyResult bodyRun
         have bodyClock := evaluateHOLFiniteState_clock_le source.decClockHOLFinite (progToHOL body)
         rw [bodyRun] at bodyClock
         have smaller : sourcePost.clock < clock := by
@@ -147,7 +167,7 @@ private theorem clockWhile {condition : Exp (RiscV.Word 64)} {body : Prog (RiscV
           omega
         cases bodyResult with
         | none =>
-          have recurse := ih sourcePost.clock smaller sourcePost sourceFinal result nonerror (by simpa using run) rfl
+          have recurse := ih sourcePost.clock smaller sourcePost sourceFinal result (by simpa using run) rfl
           have finalClock := evaluateHOLFiniteState_clock_le sourcePost (.while (expToHOL condition) (progToHOL body))
           have restRun : sourcePost.evaluateHOLFiniteState (.while (expToHOL condition) (progToHOL body)) = (result,sourceFinal) := by simpa using run
           rw [restRun] at finalClock
@@ -161,7 +181,7 @@ private theorem clockWhile {condition : Exp (RiscV.Word 64)} {body : Prog (RiscV
         | some r =>
           cases r with
           | «continue» =>
-            have recurse := ih sourcePost.clock smaller sourcePost sourceFinal result nonerror (by simpa using run) rfl
+            have recurse := ih sourcePost.clock smaller sourcePost sourceFinal result (by simpa using run) rfl
             have finalClock := evaluateHOLFiniteState_clock_le sourcePost (.while (expToHOL condition) (progToHOL body))
             have restRun : sourcePost.evaluateHOLFiniteState (.while (expToHOL condition) (progToHOL body)) = (result,sourceFinal) := by simpa using run
             rw [restRun] at finalClock
@@ -172,8 +192,7 @@ private theorem clockWhile {condition : Exp (RiscV.Word 64)} {body : Prog (RiscV
             have delta : source.clock-sourceFinal.clock = 1+(source.clock-1-sourcePost.clock)+(sourcePost.clock-sourceFinal.clock) := by omega
             rw [delta]
             nlinarith
-          | error => exact absurd rfl bodyNonerror
-          | «break» | timeOut | returned _ | finalFfi _ | exception _ _ =>
+            | error | «break» | timeOut | returned _ | finalFfi _ | exception _ _ =>
             have finalEq : sourcePost = sourceFinal := (Prod.mk.inj run).2
             subst sourceFinal
             change controlSteps (progToHOL body) source.decClockHOLFinite ≤
@@ -193,7 +212,7 @@ private theorem supportedClockBound {scope : List VarName} {program : Prog (Risc
     (supported : SupportedIn scope program) : ClockBound program := by
   induction supported with
   | skip | assign | ret =>
-    intro σ source sourceFinal result run nonerror
+    intro σ source sourceFinal result run
     simp [progToHOL,controlSteps.eq_def,programWeight]
   | decl name scalar body ih => exact clockDecl name ih
   | seq a b iha ihb => exact clockSeq iha ihb
@@ -201,11 +220,11 @@ private theorem supportedClockBound {scope : List VarName} {program : Prog (Risc
   | «while» scalar body ih => exact clockWhile ih
 
 /-- Supported source visits are bounded by program weight times consumed
-clock plus one; the bound is valid for arbitrary nested loops. -/
+clock plus one; it covers errors and arbitrary nested loops. -/
 theorem supported_control_clock {σ : Type} {program : Prog (RiscV.Word 64)} (supported : Supported program)
     (source sourceFinal : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
-    (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal)) (nonerror : result ≠ some .error) :
+    (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal)) :
     controlSteps (progToHOL program) source ≤ programWeight program * (source.clock - sourceFinal.clock + 1) :=
-  supportedClockBound supported.1 source sourceFinal result run nonerror
+  supportedClockBound supported.1 source sourceFinal result run
 
 end SteppedFlapjack.Concrete

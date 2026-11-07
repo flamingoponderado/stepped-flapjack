@@ -193,7 +193,7 @@ theorem supported_full_frontend_exit_clock {σ : Type}
   let simplifiedSource := panSimpSourceState program source
   have shape : Supported simplified := (supported_panSimp program supported).1
   obtain ⟨simplifiedFinal,simplifiedRun,_⟩ := supported_panSimp_run program supported source sourceFinal (bodyExitSource exit) sourceCode run (by cases exit <;> simp [bodyExitSource])
-  have bound := supported_control_compiled_clock shape callee simplifiedSource simplifiedFinal (bodyExitSource exit) simplifiedRun (by cases exit <;> simp [bodyExitSource])
+  have bound := supported_control_compiled_clock shape callee simplifiedSource simplifiedFinal (bodyExitSource exit) simplifiedRun
   have result := supported_original_entry_crep_exit simplified shape simplifiedSource simplifiedFinal
     (by simpa [simplifiedSource,panSimpSourceState] using locals)
     (by simpa [simplifiedSource,panSimpSourceState] using globals)
