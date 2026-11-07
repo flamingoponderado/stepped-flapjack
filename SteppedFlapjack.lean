@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.FrontendShape
 import SteppedFlapjack.Concrete.FrontendState
 import SteppedFlapjack.Concrete.SourceRuns
 import SteppedFlapjack.PanToCrepSteps.AssignLoopEntryDefs

@@ -35,10 +35,14 @@ theorem crep_state_related (body : ProgHOL 64) :
 
 /-- Renaming-free single-function bodies have a concrete global-lowering relation
 using the actual generated function table. -/
-theorem source_globals_related (body : ProgHOL 64)
-    (renameEq : fpermHOL (ofString "main") (entryName body) body = body) :
-    panGlobalsStateRelHOLExact true emptyGlobalsContext (exactState body)
-      (callEntryStateHOLFinite (loweredState body) HolFiniteMapExact.empty) := by
+theorem source_globals_related (program : Prog (RiscV.Word 64)) (supported : Supported program) :
+    panGlobalsStateRelHOLExact true emptyGlobalsContext (exactState (progToHOL program))
+      (callEntryStateHOLFinite (loweredState (progToHOL program)) HolFiniteMapExact.empty) := by
+  let body := progToHOL program
+  have renameEq : fpermHOL (ofString "main") (entryName body) body = body :=
+    supported_fperm supported _ _
+  change panGlobalsStateRelHOLExact true emptyGlobalsContext (exactState body)
+      (callEntryStateHOLFinite (loweredState body) HolFiniteMapExact.empty)
   apply noGlobals_source_callEntry_rel (exactState body) (loweredCode body)
   · rfl
   · rfl
@@ -56,13 +60,13 @@ theorem source_globals_related (body : ProgHOL 64)
 theorem countdown_globals_related (n : Nat) :
     panGlobalsStateRelHOLExact true emptyGlobalsContext (exactState (countdownHOL n))
       (callEntryStateHOLFinite (loweredState (countdownHOL n)) HolFiniteMapExact.empty) := by
-  apply source_globals_related
-  simp [countdownHOL,countdownBodyHOL,fpermHOL]
+  rw [countdown_hol_eq]
+  exact source_globals_related (countdown n) (countdown_supported n)
 
 theorem branching_globals_related :
     panGlobalsStateRelHOLExact true emptyGlobalsContext (exactState branchingHOL)
       (callEntryStateHOLFinite (loweredState branchingHOL) HolFiniteMapExact.empty) := by
-  apply source_globals_related
-  simp [branchingHOL,fpermHOL]
+  rw [branching_hol_eq]
+  exact source_globals_related branching branching_supported
 
 end SteppedFlapjack.Concrete

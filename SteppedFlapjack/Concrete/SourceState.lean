@@ -59,22 +59,24 @@ theorem ordinaryAddress_eq_addresses (a : BitVec 64) :
   rw [Flapjack.Compiler.Backend.StackRemove.mem_addresses]
   constructor
   · intro h
-    refine ⟨(a.toNat - 0xa1000000) / 8, ?_, ?_⟩
+    refine ⟨(a.toNat - sourceBase) / 8, ?_, ?_⟩
     · simp only [ordinaryAddress,sourceBase,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords] at h
       simp [stackStart,ramEnd,ramStart,ramSize,stackSize,sourceBase,globalsWords]
       omega
     · apply BitVec.eq_of_toNat_eq
-      change a.toNat = (BitVec.ofNat 64 0xa1000000 +
-        BitVec.ofNat 64 ((a.toNat - 0xa1000000) / 8) * BitVec.ofNat 64 8).toNat
+      change a.toNat = (BitVec.ofNat 64 sourceBase +
+        BitVec.ofNat 64 ((a.toNat - sourceBase) / 8) * BitVec.ofNat 64 8).toNat
       rw [BitVec.ofNat_mul_ofNat, BitVec.ofNat_add_ofNat, BitVec.toNat_ofNat]
       simp only [ordinaryAddress,sourceBase,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords] at h
+      simp only [sourceBase]
       omega
   · rintro ⟨i, hi, h⟩
     simp only [stackStart,ramEnd,ramStart,ramSize,stackSize,sourceBase,globalsWords] at hi
-    change a = BitVec.ofNat 64 0xa1000000 + BitVec.ofNat 64 i * BitVec.ofNat 64 8 at h
+    change a = BitVec.ofNat 64 sourceBase + BitVec.ofNat 64 i * BitVec.ofNat 64 8 at h
     have hn := congrArg BitVec.toNat h
     rw [BitVec.ofNat_mul_ofNat, BitVec.ofNat_add_ofNat, BitVec.toNat_ofNat] at hn
     simp only [ordinaryAddress,sourceBase,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords]
+    simp only [sourceBase] at hn
     omega
 
 /-- The challenge's five startup pointer words; the rest of ordinary memory is zero. -/
