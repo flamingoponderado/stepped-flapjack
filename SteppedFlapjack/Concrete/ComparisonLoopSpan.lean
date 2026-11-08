@@ -18,14 +18,14 @@ theorem branching_fixture_entry_loop (arch : AsmArchitecture)
     let ctxt := witnessLoopContext arch branchingHOL
     let c := ctxtFcExact ctxt.target ctxt.funcs [] []
     let code := compileHOLExact c .ln branchCrepBody
-    let budget := sizeOf (optimiseHOL code)*(33+1)
+    let budget := scalarOutputEnvelope (sizeOf (optimiseHOL code))*(33+1)
     CrepSteps.steps branchCrepEntry crep ≤ 33 ∧
     (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms branchingHOL) ∧
     ∃ final post,
       evalCrepSemHOLProgExact crep branchCrepEntry = (some (.return [.word 7]),final) ∧
       evaluate branchingLoopEntry {target with clock := target.clock+2*budget} = (some (.result [.word 7]),post) ∧
       LoopSteps.steps branchingLoopEntry {target with clock := target.clock+2*budget} ≤
-        sizeOf (optimiseScalar code)*(2*budget+1)+8 ∧
+        sizeOf (optimiseHOL code)*(2*budget+1)+8 ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       crepToLoopMemRelHOLExact final.memory post.memory final.memaddrs ∧
       crepToLoopGlobalsRelHOLExact final.globals post.globals ∧
@@ -57,8 +57,6 @@ theorem branching_fixture_entry_loop (arch : AsmArchitecture)
   have result := generatedScalar_entry_explicit ctxt name branchCrepBody branchScalar crep final target [.word 7] 33
     nonzero found run bound rel.1 rel.2.1 rel.2.2 codeLocals.1 codeLocals.2 label
   obtain ⟨post,entry,steps,finalState,finalMem,finalGlobals,finalCode⟩ := result
-  have factor := scalarProgramFactor_loopFree branchScalar (by rfl) (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln
-  simp only [factor] at entry steps
   refine ⟨bound,compiled,final,post,run,?_,?_,finalState,finalMem,finalGlobals,finalCode⟩
   · simpa [ctxt,name,target,crep,branchCrepBody,wlabWlocExact] using entry
   · simpa [ctxt,name,target,crep,branchCrepBody] using steps

@@ -1,4 +1,5 @@
 import SteppedFlapjack.CrepToLoopSteps.ScalarUnmarked
+import SteppedFlapjack.CrepToLoopSteps.ScalarPrefixOutput
 import SteppedFlapjack.CrepToLoopSteps.ScalarIteBound
 import SteppedFlapjack.CrepToLoopSteps.ConditionPrefix
 import SteppedFlapjack.CrepToLoopSteps.ScalarDeclBound
@@ -123,7 +124,7 @@ private theorem scalarSequence_programBound {width : Nat} [NeZero width] {σ : T
 /-- A syntax-derived factor for arbitrary nesting and sequencing of scalar loops. -/
 noncomputable def scalarProgramFactor {width : Nat} [NeZero width]
     (ctxt : CrepToLoopContextExact) (live : NumSet) (p : CrepProgHOL width) : Nat :=
-  if scalarNoWhile p then sizeOf (optimiseScalar (compileHOLExact ctxt live p))
+  if scalarNoWhile p then loopVisitWeight (compileHOLExact ctxt live p)
   else match p with
     | .seq a b => 1 + scalarProgramFactor ctxt live a + scalarProgramFactor ctxt live b
     | .ite condition a b =>
@@ -140,21 +141,130 @@ noncomputable def scalarProgramFactor {width : Nat} [NeZero width]
         loopVisitWeight (compileHOLExact ctxt live p) *
           (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
             2*scalarProgramFactor ctxt live body+3)
-    | _ => sizeOf (compileHOLExact ctxt live p)
+    | _ => loopVisitWeight (compileHOLExact ctxt live p)
 
-/-- On loop-free scalar programs the factor is exactly the optimized Loop code size. -/
-theorem scalarProgramFactor_loopFree {width : Nat} [NeZero width] {p : CrepProgHOL width}
-    (shape : ScalarProgram p) (free : scalarNoWhile p = true)
-    (ctxt : CrepToLoopContextExact) (live : NumSet) :
-    scalarProgramFactor ctxt live p = sizeOf (optimiseHOL (compileHOLExact ctxt live p)) := by
-  have factor : scalarProgramFactor ctxt live p = sizeOf (optimiseScalar (compileHOLExact ctxt live p)) := by
-    cases p <;> simp_all [scalarProgramFactor]
-  rw [factor,optimiseScalar_eq (compile_scalar_program shape ctxt live)]
+
+
+/-- A code-size-derived envelope for recursive scalar compilation costs. -/
+def scalarOutputEnvelope : Nat → Nat
+  | 0 => 1
+  | n+1 => (n+2) * (n+2 + 2*scalarOutputEnvelope n+3) + 1
+
+/-- The optimized visit bound is linear in the source limit, with both
+coefficients calculated from optimized code size. -/
+theorem scalarOutputVisit_linear (codeSize limit : Nat) :
+    codeSize * (2*(scalarOutputEnvelope codeSize*(limit+1))+1) =
+      (2*codeSize*scalarOutputEnvelope codeSize)*limit +
+        codeSize*(2*scalarOutputEnvelope codeSize+1) := by
+  ring
+
+theorem scalarOutputEnvelope_pos (n : Nat) : 0 < scalarOutputEnvelope n := by
+  cases n <;> simp [scalarOutputEnvelope]
+
+theorem scalarOutputEnvelope_succ_ge (n : Nat) : scalarOutputEnvelope n ≤ scalarOutputEnvelope (n+1) := by
+  rw [scalarOutputEnvelope]
+  have h := scalarOutputEnvelope_pos n
+  nlinarith
+
+theorem scalarOutputEnvelope_mono : Monotone scalarOutputEnvelope := by
+  exact monotone_nat_of_le_succ scalarOutputEnvelope_succ_ge
+
+theorem scalarOutputEnvelope_base (n : Nat) : n ≤ scalarOutputEnvelope n := by
+  cases n with
+  | zero => simp
+  | succ n => rw [scalarOutputEnvelope]; have h := scalarOutputEnvelope_pos n; nlinarith
+
+theorem scalarOutputEnvelope_step (n k : Nat) (hk : k < n) :
+    n * (n+2*scalarOutputEnvelope k+3) ≤ scalarOutputEnvelope n := by
+  cases n with
+  | zero => omega
+  | succ n =>
+    have le : scalarOutputEnvelope k ≤ scalarOutputEnvelope n := scalarOutputEnvelope_mono (by omega)
+    rw [scalarOutputEnvelope]
+    have pos := scalarOutputEnvelope_pos n
+    nlinarith
+
+theorem scalarOutputEnvelope_seq (n a b : Nat) (ha : a < n) (hb : b < n) :
+    1 + scalarOutputEnvelope a + scalarOutputEnvelope b ≤ scalarOutputEnvelope n := by
+  cases n with
+  | zero => omega
+  | succ n =>
+    have la : scalarOutputEnvelope a ≤ scalarOutputEnvelope n := scalarOutputEnvelope_mono (by omega)
+    have lb : scalarOutputEnvelope b ≤ scalarOutputEnvelope n := scalarOutputEnvelope_mono (by omega)
+    rw [scalarOutputEnvelope]
+    have pos := scalarOutputEnvelope_pos n
+    nlinarith
+
+theorem scalarProgramFactor_scalarOutputEnvelope {width : Nat} [NeZero width] {p : CrepProgHOL width} (shape : ScalarProgram p) :
+    ∀ ctxt live, scalarProgramFactor ctxt live p ≤ scalarOutputEnvelope (loopVisitWeight (compileHOLExact ctxt live p)) := by
+  induction shape with
+  | skip | «break» | «continue» | tick | ret | assign | store =>
+    intro ctxt live
+    simp only [scalarProgramFactor,scalarNoWhile,if_true]
+    exact scalarOutputEnvelope_base _
+  | @seq a b ha hb iha ihb =>
+    intro ctxt live
+    by_cases free : scalarNoWhile (.seq a b) = true
+    · simp only [scalarProgramFactor,free,if_true]; exact scalarOutputEnvelope_base _
+    · simp only [scalarProgramFactor,free,Bool.false_eq_true,if_false]
+      have wa := seq_children_weight a b ctxt live
+      have aa := iha ctxt live
+      have bb := ihb ctxt live
+      have bound := scalarOutputEnvelope_seq _ _ _ wa.1 wa.2
+      omega
+  | @ite condition a b cond ha hb iha ihb =>
+    intro ctxt live
+    by_cases free : scalarNoWhile (.ite condition a b) = true
+    · simp only [scalarProgramFactor,free,if_true]; exact scalarOutputEnvelope_base _
+    · simp only [scalarProgramFactor,free,Bool.false_eq_true,if_false]
+      let w := loopVisitWeight (compileHOLExact ctxt live (.ite condition a b))
+      have child := ite_children_weight (condition := condition) (a := a) (b := b) ctxt live
+      have wa : loopVisitWeight (compileHOLExact ctxt live a) < w := child.1
+      have wb : loopVisitWeight (compileHOLExact ctxt live b) < w := child.2
+      have aa := iha ctxt live
+      have bb := ihb ctxt live
+      have amax : scalarProgramFactor ctxt live a ≤ scalarOutputEnvelope (w-1) := aa.trans (scalarOutputEnvelope_mono (by omega))
+      have bmax : scalarProgramFactor ctxt live b ≤ scalarOutputEnvelope (w-1) := bb.trans (scalarOutputEnvelope_mono (by omega))
+      have maxBound : max (scalarProgramFactor ctxt live a) (scalarProgramFactor ctxt live b) ≤ scalarOutputEnvelope (w-1) := max_le amax bmax
+      have wp : 0 < w := by have := loopVisitWeight_pos (compileHOLExact ctxt live (.ite condition a b)); omega
+      have prefBound := ite_prefix_le_control cond ha hb ctxt live
+      have bound := scalarOutputEnvelope_step w (w-1) (by omega)
+      change w * (_ + 2*max (scalarProgramFactor ctxt live a) (scalarProgramFactor ctxt live b)+2) ≤ scalarOutputEnvelope w
+      nlinarith
+  | @dec name init body initShape bodyShape ih =>
+    intro ctxt live
+    by_cases free : scalarNoWhile (.dec name init body) = true
+    · simp only [scalarProgramFactor,free,if_true]; exact scalarOutputEnvelope_base _
+    · simp only [scalarProgramFactor,free,Bool.false_eq_true,if_false]
+      let w := loopVisitWeight (compileHOLExact ctxt live (.dec name init body))
+      let tmp := (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1
+      let bc := {ctxt with vars := ctxt.vars.updateEq (name,tmp), vmax := tmp}
+      let bl := sptInsert tmp () live
+      have child : loopVisitWeight (compileHOLExact bc bl body) < w := dec_body_weight name ctxt live
+      have bodyBound := ih bc bl
+      have bodyMax : scalarProgramFactor bc bl body ≤ scalarOutputEnvelope (w-1) := bodyBound.trans (scalarOutputEnvelope_mono (by omega))
+      have wp : 0 < w := by have := loopVisitWeight_pos (compileHOLExact ctxt live (.dec name init body)); omega
+      have prefBound := dec_prefix_le_control name initShape bodyShape ctxt live
+      have bound := scalarOutputEnvelope_step w (w-1) (by omega)
+      change w * (_ + 2*scalarProgramFactor bc bl body+1) ≤ scalarOutputEnvelope w
+      nlinarith
+  | @«while» condition body cond bodyShape ih =>
+    intro ctxt live
+    simp only [scalarProgramFactor,scalarNoWhile,Bool.false_eq_true,if_false]
+    let w := loopVisitWeight (compileHOLExact ctxt live (.while condition body))
+    have child : loopVisitWeight (compileHOLExact ctxt live body) < w := while_body_weight ctxt live
+    have bodyBound := ih ctxt live
+    have bodyMax : scalarProgramFactor ctxt live body ≤ scalarOutputEnvelope (w-1) := bodyBound.trans (scalarOutputEnvelope_mono (by omega))
+    have wp : 0 < w := by have := loopVisitWeight_pos (compileHOLExact ctxt live (.while condition body)); omega
+    have prefBound := while_prefix_le_control cond bodyShape ctxt live
+    have bound := scalarOutputEnvelope_step w (w-1) (by omega)
+    change w * (_ + 2*scalarProgramFactor ctxt live body+3) ≤ scalarOutputEnvelope w
+    nlinarith
 
 private theorem scalarBranch_programBound {width : Nat} [NeZero width] {σ : Type}
     (p : CrepProgHOL width) (shape : ScalarProgram p) (free : scalarNoWhile p = true)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
-    @ProgramBound width _ σ p ctxt live (sizeOf (optimiseScalar (compileHOLExact ctxt live p))) := by
+    @ProgramBound width _ σ p ctxt live (loopVisitWeight (compileHOLExact ctxt live p)) := by
   intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
   obtain ⟨extra,out,final,eval,hs,hm,hg,hc,map,hl,steps,_⟩ :=
     branchProgram_correct_with_bounded_extra p (.scalar shape free) source sourceFinal result target ctxt live
@@ -162,12 +272,10 @@ private theorem scalarBranch_programBound {width : Nat} [NeZero width] {σ : Typ
   subst out
   have static := LoopSteps.branchedProgram_structural_bound (compile_loopFreeCrep (.scalar shape free) ctxt live)
     {target with clock := target.clock+extra}
-  have weightBound : LoopSteps.structuralWeight (compileHOLExact ctxt live p) ≤
-      sizeOf (optimiseScalar (compileHOLExact ctxt live p)) := by
-    simpa only [optimiseScalar_eq (compile_scalar_program shape ctxt live)] using
-      scalarBranch_structural_le_output shape free ctxt live
+  have weightEq := branch_visitWeight (compile_scalar_branch shape free ctxt live)
   have enough : LoopSteps.structuralWeight (compileHOLExact ctxt live p) ≤
-      sizeOf (optimiseScalar (compileHOLExact ctxt live p)) * (CrepSteps.steps p source+1) := by
+      loopVisitWeight (compileHOLExact ctxt live p) * (CrepSteps.steps p source+1) := by
+    rw [weightEq]
     have := CrepSteps.steps_pos p source
     nlinarith
   exact ⟨extra,final,eval,hs,hm,hg,hc,hl,static.trans enough⟩
@@ -199,7 +307,7 @@ private theorem scalarProgram_programBound {width : Nat} [NeZero width] {σ : Ty
     simpa [scalarProgramFactor,scalarNoWhile] using scalarWhile_programBound condition cond body bodyShape ctxt live _ (ih ctxt live)
 
 /-- A completed scalar program executes as optimized Loop code with a
-concrete clock and visit bound calculated from source syntax and a Crep limit. -/
+clock and visit bound calculated solely from that code and a Crep visit limit. -/
 theorem scalarProgram_explicit {σ : Type} (p : CrepProgHOL 64) (shape : ScalarProgram p)
     (ctxt : CrepToLoopContextExact) (live : NumSet)
     (source sourceFinal : CrepSemHOLState 64 σ) (result : Option (CrepResultHOLExact 64))
@@ -211,24 +319,28 @@ theorem scalarProgram_explicit {σ : Type} (p : CrepProgHOL 64) (shape : ScalarP
     (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
     (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
     (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
-    let bound := scalarProgramFactor ctxt live p*(limit+1)
     let code := compileHOLExact ctxt live p
+    let bound := scalarOutputEnvelope (sizeOf (optimiseHOL code))*(limit+1)
     ∃ post,
       evaluate (optimiseHOL code) {target with clock := target.clock+2*bound} = (resultToLoop result,post) ∧
       LoopSteps.steps (optimiseHOL code) {target with clock := target.clock+2*bound} ≤
-        sizeOf (optimiseScalar code)*(2*bound+1) ∧
+        sizeOf (optimiseHOL code)*(2*bound+1) ∧
       crepToLoopStateRelExact sourceFinal {post with clock := sourceFinal.clock} ∧
       crepToLoopMemRelHOLExact sourceFinal.memory post.memory sourceFinal.memaddrs ∧
       crepToLoopGlobalsRelHOLExact sourceFinal.globals post.globals ∧
       crepToLoopCodeRelExact ctxt sourceFinal.code post.code := by
-  let bound := scalarProgramFactor ctxt live p*(limit+1)
   let code := compileHOLExact ctxt live p
+  let bound := scalarOutputEnvelope (sizeOf (optimiseHOL code))*(limit+1)
   have scalar := shape
   obtain ⟨extra,oldPost,oldRun,hs,hm,hg,hc,_,visits⟩ :=
     scalarProgram_programBound shape ctxt live source sourceFinal result target run
       (completeCrep_nonerror complete) stateRel memRel globalsRel codeRel localsRel
+  have controlBound : loopVisitWeight code ≤ sizeOf (optimiseHOL code) :=
+    scalarProgram_control_le_output shape ctxt live
+  have factorBound : scalarProgramFactor ctxt live p ≤ scalarOutputEnvelope (sizeOf (optimiseHOL code)) :=
+    (scalarProgramFactor_scalarOutputEnvelope shape ctxt live).trans (scalarOutputEnvelope_mono controlBound)
   have visitBound : LoopSteps.steps code {target with clock := target.clock+extra} ≤ bound := by
-    exact visits.trans (Nat.mul_le_mul_left _ (by omega))
+    exact visits.trans (Nat.mul_le_mul factorBound (by omega))
   have loopShape := compile_scalar_program scalar ctxt live
   have extraBound : extra ≤ 2*bound :=
     scalarLoop_extra_le_visits source sourceFinal result target oldPost ctxt live scalar extra bound
@@ -236,7 +348,8 @@ theorem scalarProgram_explicit {σ : Type} (p : CrepProgHOL 64) (shape : ScalarP
   have final := hs.2.2.1
   have optimized := scalarLoop_explicit_optimised loopShape target oldPost (resultToLoop result)
     extra (2*bound) bound oldRun (completeCrep_loop complete) extraBound visitBound
-  refine ⟨{oldPost with clock := oldPost.clock+(2*bound-extra)},optimized.1,optimized.2,?_,?_,?_,?_⟩
+  refine ⟨{oldPost with clock := oldPost.clock+(2*bound-extra)},optimized.1,?_,?_,?_,?_,?_⟩
+  · simpa only [optimiseScalar_eq loopShape] using optimized.2
   · simpa [crepToLoopStateRelExact,final] using hs
   · simpa using hm
   · simpa using hg
