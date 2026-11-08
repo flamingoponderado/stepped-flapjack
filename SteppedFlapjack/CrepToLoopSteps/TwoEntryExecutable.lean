@@ -1,5 +1,6 @@
 import SteppedFlapjack.CrepToLoopSteps.ScalarExecutable
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopShape
+import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.Basis.Pure.MlString Flapjack.Compiler.Encoders.Asm
 open SteppedFlapjack.LoopLiveSteps
@@ -26,4 +27,21 @@ theorem twoLoopPrograms_eq {width : Nat} [NeZero width] (arch : AsmArchitecture)
   have b := optimiseScalar_eq calleeShape
   simpa [twoLoopPrograms,twoPrograms,compileProgHOLExact,compFuncHOLExact,
     crepSimpProgHOL,scalarProgram_simp_fixed shape,programs,ctxt,Nat.add_comm,List.range_succ,listToNumSetHOLExact] using And.intro a b
+theorem twoPrograms_codeRel {width : Nat} [NeZero width] (arch : AsmArchitecture)
+    (name callee : MlString) (body : CrepProgHOL width) (fresh : name ≠ callee)
+    (shape : ScalarProgram body) :
+    let programs := twoPrograms name callee body
+    crepToLoopCodeRelExact
+      (mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0)
+      (alistToFmapCodeExact programs) (sptFromAList (compileProgHOLExact arch programs)) := by
+  apply wholeCrep_fixed_executable_codeRel arch _ name (.seq .skip (.call none callee []))
+  · simp [twoPrograms,fresh]
+  · simp [twoPrograms,holAlookup]
+  · intro n ps p mem
+    simp only [twoPrograms,List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at mem
+    rcases mem with h | h
+    · obtain ⟨rfl,rfl,rfl⟩ := h
+      simp [crepSimpProgHOL]
+    · obtain ⟨rfl,rfl,rfl⟩ := h
+      exact scalarProgram_simp_fixed shape
 end SteppedFlapjack.CrepToLoopSteps

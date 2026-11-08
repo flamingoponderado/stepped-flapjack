@@ -70,4 +70,61 @@ theorem loopStateFrom_relations {σ : Type} (arch : AsmArchitecture)
     crepToLoopGlobalsRelHOLExact (crepStateFrom source body).globals (loopStateFrom arch source body).globals := by
   exact PanToCrepSteps.concreteDecl_crepLoop_relations arch (crepStateFrom source body) (crepPrograms body) rfl
 
+def witnessLoopContext (arch : AsmArchitecture) (body : ProgHOL 64) : CrepToLoopContextExact :=
+  mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (crepPrograms body)) 0
+
+/-- Actual generated code tables satisfy compiler code and empty-live relations. -/
+theorem loopStateFrom_code_locals {σ : Type} (arch : AsmArchitecture)
+    (source : PanSemStateFiniteExact 64 σ) (body : ProgHOL 64) (calleeBody : CrepProgHOL 64)
+    (shape : ScalarProgram calleeBody)
+    (code : crepPrograms body = twoPrograms (ofString "main") (entryName body) calleeBody) :
+    crepToLoopCodeRelExact (witnessLoopContext arch body) (crepStateFrom source body).code
+        (loopStateFrom arch source body).code ∧
+    crepToLoopLocalsRelExact (witnessLoopContext arch body) .ln (crepStateFrom source body).locals
+        (loopStateFrom arch source body).locals := by
+  have fresh : ofString "main" ≠ entryName body := Ne.symm (entryName_fresh body)
+  have relation := twoPrograms_codeRel arch _ _ calleeBody fresh shape
+  constructor
+  · simpa [witnessLoopContext,loopStateFrom,crepStateFrom,PanToCrepSteps.concreteDeclCrepState,
+      PanToCrepSteps.concreteDeclLoopState,code] using relation
+  · apply PanToCrepSteps.empty_crepLoop_locals
+    simp [witnessLoopContext,mkCtxtExact,makeVmapExact,HolFiniteMapExact.updateListEq]
+/-- The comparison witness needs no separate code or locals premises. -/
+theorem branching_loop_code_locals {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64 σ) :
+    crepToLoopCodeRelExact (witnessLoopContext arch branchingHOL) (crepStateFrom source branchingHOL).code
+      (loopStateFrom arch source branchingHOL).code ∧
+    crepToLoopLocalsRelExact (witnessLoopContext arch branchingHOL) .ln (crepStateFrom source branchingHOL).locals
+      (loopStateFrom arch source branchingHOL).locals := by
+  apply loopStateFrom_code_locals arch source branchingHOL branchingCrepBody branching_scalar
+  simpa [twoPrograms,branchingCrepBody] using branching_crep_code
+
+/-- The countdown witness needs no separate code or locals premises. -/
+theorem countdown_loop_code_locals {σ : Type} (arch : AsmArchitecture)
+    (source : PanSemStateFiniteExact 64 σ) (n : Nat) :
+    crepToLoopCodeRelExact (witnessLoopContext arch (countdownHOL n)) (crepStateFrom source (countdownHOL n)).code
+      (loopStateFrom arch source (countdownHOL n)).code ∧
+    crepToLoopLocalsRelExact (witnessLoopContext arch (countdownHOL n)) .ln (crepStateFrom source (countdownHOL n)).locals
+      (loopStateFrom arch source (countdownHOL n)).locals := by
+  apply loopStateFrom_code_locals arch source (countdownHOL n) _ (countdown_scalar _)
+  simpa [twoPrograms] using countdown_crep_code n
+
+/-- The unprefixed countdown witness has the same constructed relations. -/
+theorem naturalCountdown_loop_code_locals {σ : Type} (arch : AsmArchitecture)
+    (source : PanSemStateFiniteExact 64 σ) (n : Nat) :
+    crepToLoopCodeRelExact (witnessLoopContext arch (naturalCountdownHOL n)) (crepStateFrom source (naturalCountdownHOL n)).code
+      (loopStateFrom arch source (naturalCountdownHOL n)).code ∧
+    crepToLoopLocalsRelExact (witnessLoopContext arch (naturalCountdownHOL n)) .ln (crepStateFrom source (naturalCountdownHOL n)).locals
+      (loopStateFrom arch source (naturalCountdownHOL n)).locals := by
+  apply loopStateFrom_code_locals arch source (naturalCountdownHOL n) _ (naturalCountdown_scalar _)
+  simpa [twoPrograms] using natural_countdown_crep_code n
+
+/-- The conditional-loop witness has the same constructed relations. -/
+theorem branchingLoop_loop_code_locals {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64 σ) :
+    crepToLoopCodeRelExact (witnessLoopContext arch (progToHOL branchingLoop)) (crepStateFrom source (progToHOL branchingLoop)).code
+      (loopStateFrom arch source (progToHOL branchingLoop)).code ∧
+    crepToLoopLocalsRelExact (witnessLoopContext arch (progToHOL branchingLoop)) .ln
+      (crepStateFrom source (progToHOL branchingLoop)).locals (loopStateFrom arch source (progToHOL branchingLoop)).locals := by
+  apply loopStateFrom_code_locals arch source (progToHOL branchingLoop) _ branchingLoop_scalar
+  simpa [twoPrograms] using branchingLoop_crep_code
+
 end SteppedFlapjack.Concrete

@@ -35,17 +35,20 @@ theorem generated_entry_member (body : ProgHOL 64) :
     singleEntry_compileTop]
   simp_crep_code
 
+/-- The generated callee name differs from the public entry name. -/
+theorem entryName_fresh (body : ProgHOL 64) : entryName body ≠ ofString "main" := by
+  intro same
+  have notMem := PanGlobalsDeclListExact.freshNameMlS_correct (ofString "main")
+    ((functionsHOL (singleEntryProgram (ofString "main") body)).map Prod.fst)
+  apply notMem
+  simpa [entryName,newMainNameHOL,singleEntryProgram,functionsHOL] using same
+
 /-- For a computed two-function output, the generated table selects its callee. -/
 theorem generated_callee_lookup (body : ProgHOL 64) (target : CrepProgHOL 64)
     (code : crepPrograms body =
       [(ofString "main",[],.seq .skip (.call none (entryName body) [])),(entryName body,[],target)]) :
     (crepState body).code.lookup (entryName body) = some ([],target) := by
-  have fresh : entryName body ≠ ofString "main" := by
-    intro same
-    have notMem := PanGlobalsDeclListExact.freshNameMlS_correct (ofString "main")
-      ((functionsHOL (singleEntryProgram (ofString "main") body)).map Prod.fst)
-    apply notMem
-    simpa [entryName,newMainNameHOL,singleEntryProgram,functionsHOL] using same
+  have fresh := entryName_fresh body
   simp [crepState,concreteDeclCrepState,code,alistToFmapCodeExact,
     HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,Ne.symm fresh]
 
