@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.WhileExplicit
 import SteppedFlapjack.Concrete.BranchLoopSpan
 import SteppedFlapjack.CrepToLoopSteps.BranchExplicit
 import SteppedFlapjack.Concrete.WitnessLoopCode
@@ -864,4 +865,3 @@ their names in the `Flapjack` namespace. The tests are in the separate
 -/
 
 
-import SteppedFlapjack.CrepToLoopSteps.WhileExplicit
