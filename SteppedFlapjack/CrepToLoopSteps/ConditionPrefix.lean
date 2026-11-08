@@ -11,7 +11,7 @@ open SteppedFlapjack.LoopToWordSteps
 without an existential expression in the factor. -/
 theorem conditionWhileThenBranch_programBound {width : Nat} [NeZero width] {σ : Type}
     (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
-    (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
+    (body tail : CrepProgHOL width) (bodyShape : LoopFreeCrep body) (tailShape : BranchProgram tail)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     @ProgramBound width _ σ (.seq (.while condition body) tail) ctxt live
       (1 + (1 + sizeOf (compileHOLExact ctxt live (.while condition body))) *
@@ -41,7 +41,7 @@ source-step bound; no correctness hypothesis is required for a subprogram. -/
 theorem branchConditionWhileBranch_programBound {width : Nat} [NeZero width] {σ : Type}
     (init : CrepProgHOL width) (initShape : BranchProgram init)
     (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
-    (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
+    (body tail : CrepProgHOL width) (bodyShape : LoopFreeCrep body) (tailShape : BranchProgram tail)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     @ProgramBound width _ σ (.seq init (.seq (.while condition body) tail)) ctxt live
       (1 + sizeOf (compileHOLExact ctxt live init) +
@@ -54,7 +54,7 @@ theorem branchConditionWhileBranch_programBound {width : Nat} [NeZero width] {σ
 theorem branchConditionWhileBranch_select {width : Nat} [NeZero width]
     (init : CrepProgHOL width) (initShape : BranchProgram init)
     (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
-    (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
+    (body tail : CrepProgHOL width) (bodyShape : LoopFreeCrep body) (tailShape : BranchProgram tail)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     LoopSelectProgram (compileHOLExact ctxt live (.seq init (.seq (.while condition body) tail))) := by
   simpa only [compileHOLExact] using LoopSelectProgram.seq (compile_branchProgram_select initShape ctxt live)

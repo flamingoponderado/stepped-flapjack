@@ -21,6 +21,14 @@ theorem twoLoopPrograms_entry_code (arch : AsmArchitecture) (name callee : MlStr
     crepToLoopMakeFuncsExactExecutable,twoPrograms,mkCtxtExact,makeVmapExact,findLabExact,
     HolFiniteMapExact.updateListEq,FUPDATE_LIST,FUPDATE,List.range_succ,fresh]
 
+/-- The second generated function receives the direct-call label 65. -/
+theorem twoPrograms_callee_label (arch : AsmArchitecture) (name callee : MlString)
+    (body : CrepProgHOL 64) (fresh : name ≠ callee) :
+    findLabExact (mkCtxtExact arch (makeVmapExact [])
+      (crepToLoopMakeFuncsExactExecutable (twoPrograms name callee body)) 0) callee = 65 := by
+  simp [findLabExact,mkCtxtExact,crepToLoopMakeFuncsExactExecutable,twoPrograms,firstLoopName,
+    FUPDATE_LIST,FUPDATE,List.range_succ,fresh]
+
 /-- The actual generated, optimized entry has this concrete tail-call code. -/
 theorem branching_loop_entry_code (arch : AsmArchitecture) :
     (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms branchingHOL) := by

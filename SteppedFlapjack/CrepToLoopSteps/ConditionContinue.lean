@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.BranchExtraClock
 import SteppedFlapjack.CrepToLoopSteps.ConditionZero
 
 /-! Continuing iterations for general branch conditions. -/
@@ -152,7 +153,7 @@ private theorem localsResultRel_exitLoop (ctxt : CrepToLoopContextExact) (l : Nu
 the condition prefix clock and body clock and arbitrary reserve for later work. -/
 theorem branchCondition_continue_run
     (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
-    (body : CrepProgHOL width) (bodyShape : BranchProgram body)
+    (body : CrepProgHOL width) (bodyShape : LoopFreeCrep body)
     (source sourcePost : CrepSemHOLState width F) (bodyResult : Option (CrepResultHOLExact width))
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet)
     (w : BitVec width) (guard : evalCrepSemHOLExp source condition = some (.word w))
@@ -263,7 +264,7 @@ theorem branchCondition_continue_run
 /-- Break exits with a bounded condition and body clock plus the exit cut. -/
 theorem branchCondition_break_run
     (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
-    (body : CrepProgHOL width) (bodyShape : BranchProgram body)
+    (body : CrepProgHOL width) (bodyShape : LoopFreeCrep body)
     (source sourcePost : CrepSemHOLState width F)
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet)
     (w : BitVec width) (guard : evalCrepSemHOLExp source condition = some (.word w))
@@ -376,7 +377,7 @@ theorem branchCondition_break_run
 /-- A nonlocal result propagates with bounded condition and body clock. -/
 theorem branchCondition_exit_run
     (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
-    (body : CrepProgHOL width) (bodyShape : BranchProgram body)
+    (body : CrepProgHOL width) (bodyShape : LoopFreeCrep body)
     (source sourcePost : CrepSemHOLState width F) (r : CrepResultHOLExact width)
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet)
     (w : BitVec width) (guard : evalCrepSemHOLExp source condition = some (.word w))

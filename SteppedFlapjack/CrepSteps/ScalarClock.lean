@@ -1,5 +1,5 @@
 import SteppedFlapjack.CrepSteps.BranchClock
-import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
+import SteppedFlapjack.CrepToLoopSteps.ScalarProgramDef
 
 /-! Clock consumption for arbitrarily nested scalar Crep programs. -/
 namespace SteppedFlapjack.CrepSteps

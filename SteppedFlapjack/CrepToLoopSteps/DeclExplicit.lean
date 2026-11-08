@@ -13,7 +13,7 @@ clock calculated from the source visit limit and compiler output. -/
 theorem directDecl_whileThenBranch_explicit {σ : Type}
     (name : Nat) (e : CrepExpHOL 64) (shape : DirectExpression e)
     (condition : CrepExpHOL 64) (body tail : CrepProgHOL 64)
-    (conditionShape : DirectExpression condition) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
+    (conditionShape : DirectExpression condition) (bodyShape : LoopFreeCrep body) (tailShape : BranchProgram tail)
     (scalar : ScalarProgram (.dec name e (.seq (.while condition body) tail)))
     (ctxt : CrepToLoopContextExact) (live : NumSet)
     (source sourceFinal : CrepSemHOLState 64 σ) (result : Option (CrepResultHOLExact 64))
@@ -30,7 +30,7 @@ theorem directDecl_whileThenBranch_explicit {σ : Type}
     let bodyCtxt := {ctxt with vars := ctxt.vars.updateEq (name,ctxt.vmax+1), vmax := ctxt.vmax+1}
     let bodyLive := sptInsert (ctxt.vmax+1) () live
     let factor := 1 + (1 + sizeOf (compileHOLExact bodyCtxt bodyLive (.while condition body))) *
-      (sizeOf (compileHOLExact bodyCtxt bodyLive body)+3) + sizeOf (compileHOLExact bodyCtxt bodyLive tail)
+      (sizeOf (compileHOLExact bodyCtxt bodyLive body)+4) + sizeOf (compileHOLExact bodyCtxt bodyLive tail)
     let bound := (factor+4)*(limit+1)
     let code := compileHOLExact ctxt live p
     ∃ post,
@@ -45,13 +45,23 @@ theorem directDecl_whileThenBranch_explicit {σ : Type}
   let bc := {ctxt with vars := ctxt.vars.updateEq (name,ctxt.vmax+1), vmax := ctxt.vmax+1}
   let bl := sptInsert (ctxt.vmax+1) () live
   let factor := 1 + (1 + sizeOf (compileHOLExact bc bl (.while condition body))) *
-    (sizeOf (compileHOLExact bc bl body)+3) + sizeOf (compileHOLExact bc bl tail)
+    (sizeOf (compileHOLExact bc bl body)+4) + sizeOf (compileHOLExact bc bl tail)
   let bound := (factor+4)*(limit+1)
   let code := compileHOLExact ctxt live p
+  have ⟨condValue,condCompiled⟩ := directExpression_noCode conditionShape bc (bc.vmax+1) bl
+  have continuation := conditionWhileThenBranch_programBound (σ := σ) condition (.direct conditionShape) body tail
+    bodyShape tailShape bc bl
+  simp only [condCompiled,loopNestedSeqHOL] at continuation
   obtain ⟨extra,oldPost,oldRun,hs,hm,hg,hc,visits⟩ :=
-    directDecl_whileThenBranch_bound name e shape condition body tail conditionShape bodyShape tailShape
-      ctxt live source sourceFinal result target run (completeCrep_nonerror complete)
+    directDecl_terminal_bound name e shape (.seq (.while condition body) tail) ctxt live _ continuation
+      source sourceFinal result target run (completeCrep_nonerror complete)
       stateRel memRel globalsRel codeRel localsRel
+  have sizeEq : sizeOf (.skip : HolLoopProg 64) + sizeOf (compileHOLExact bc bl body) + 3 =
+      sizeOf (compileHOLExact bc bl body) + 4 := by simp; omega
+  rw [sizeEq] at visits
+  change LoopSteps.steps code {target with clock := target.clock+extra} ≤
+      (factor+4)*(CrepSteps.steps p source+1) at visits
+  change CrepSteps.steps p source ≤ limit at sourceBound
   have visitBound : LoopSteps.steps code {target with clock := target.clock+extra} ≤ bound := by
     exact visits.trans (Nat.mul_le_mul_left _ (by omega))
   have loopShape := compile_scalar_program scalar ctxt live

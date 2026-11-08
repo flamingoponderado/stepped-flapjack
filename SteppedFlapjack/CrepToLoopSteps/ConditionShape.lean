@@ -1,3 +1,5 @@
+import SteppedFlapjack.CrepToLoopSteps.BranchExtraClock
+import SteppedFlapjack.LoopSteps.ClockConsumption
 import SteppedFlapjack.CrepToLoopSteps.ScalarPrefix
 
 /-! Scalar conditions whose compiled expression prefixes are loop-free. -/
@@ -96,7 +98,7 @@ def branchConditionWhileBody {width : Nat} [NeZero width]
 and accepted by the selected RISC-V backend. -/
 theorem branchCondition_compileWhile {width : Nat} [NeZero width]
     (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
-    (body : CrepProgHOL width) (bodyShape : BranchProgram body)
+    (body : CrepProgHOL width) (bodyShape : LoopFreeCrep body)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     ∃ code value next outLive,
       compileExpHOLExact ctxt (ctxt.vmax+1) live condition = (code,value,next,outLive) ∧
@@ -114,7 +116,7 @@ theorem branchCondition_compileWhile {width : Nat} [NeZero width]
     rcases hp with h | rfl | rfl
     · exact branch p h
     · exact .leaf (.assign _ _)
-    · exact .ite _ _ _ _ (.seq (compile_branchProgram bodyShape ctxt live) (.leaf (.continue 0))) (.leaf (.break 0))
+    · exact .ite _ _ _ _ (.seq (compile_loopFreeCrep bodyShape ctxt live) (.leaf (.continue 0))) (.leaf (.break 0))
   have fullSelect : ∀ p ∈ code ++ [.assign next value,
       .ite .notEqual next (.imm (0 : BitVec width))
         (.seq (compileHOLExact ctxt live body) (.continue 0)) (.break 0) live], LoopSelectProgram p := by
@@ -123,7 +125,7 @@ theorem branchCondition_compileWhile {width : Nat} [NeZero width]
     rcases hp with h | rfl | rfl
     · exact selected p h
     · exact .assign _ _
-    · exact .ite _ _ _ _ (.seq (compile_branchProgram_select bodyShape ctxt live) (.leaf (.continue 0))) (.leaf (.break 0))
+    · exact .ite _ _ _ _ (.seq (compile_loopFreeCrep_select bodyShape ctxt live) (.leaf (.continue 0))) (.leaf (.break 0))
   have hcomp : compileHOLExact ctxt live (.while condition body) =
       .loop live (branchConditionWhileBody ctxt live code value next body) live := by
     simp only [compileHOLExact,compiled,branchConditionWhileBody]

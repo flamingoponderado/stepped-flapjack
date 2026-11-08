@@ -9,7 +9,7 @@ open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 compiled syntax. The post-state relation ignores the deliberately added clock. -/
 theorem branchConditionWhile_explicit {width : Nat} [NeZero width] {F : Type}
     (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
-    (body : CrepProgHOL width) (bodyShape : BranchProgram body)
+    (body : CrepProgHOL width) (bodyShape : LoopFreeCrep body)
     (source sourceFinal : CrepSemHOLState width F) (result : Option (CrepResultHOLExact width))
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet) (limit : Nat)
     (run : evalCrepSemHOLProgExact source (.while condition body) = (result,sourceFinal))
