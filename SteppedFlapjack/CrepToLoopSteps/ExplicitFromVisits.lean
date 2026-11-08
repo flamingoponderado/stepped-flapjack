@@ -1,11 +1,14 @@
+import SteppedFlapjack.CrepToLoopSteps.ScalarCompilerClock
 import SteppedFlapjack.CrepToLoopSteps.ScalarClockShift
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopConsumption
 import SteppedFlapjack.CrepToLoopSteps.ScalarExecutable
+import SteppedFlapjack.CrepToLoopSteps.ScalarLoopShape
 
 /-! Transfer a proved execution to an explicit clock and optimized code. -/
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.LoopSemStateFiniteExact
 open SteppedFlapjack.LoopToWordSteps
+open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 
 /-- Given an execution and bounds on its clock padding and visits, the actual
 optimizer runs at the chosen clock and its visit bound is code-computable. -/

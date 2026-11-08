@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
 import SteppedFlapjack.CrepToLoopSteps.ScalarExecutable
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopShape
 import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel

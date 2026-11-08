@@ -65,13 +65,10 @@ theorem directDecl_whileThenBranch_explicit {σ : Type}
   have visitBound : LoopSteps.steps code {target with clock := target.clock+extra} ≤ bound := by
     exact visits.trans (Nat.mul_le_mul_left _ (by omega))
   have loopShape := compile_scalar_program scalar ctxt live
-  have consumed := scalarLoop_consumed loopShape _ oldPost (resultToLoop result) oldRun
-  change target.clock+extra-oldPost.clock ≤ 2*LoopSteps.steps code {target with clock := target.clock+extra} at consumed
-  have sourceClock := evalCrepSemHOLProgExact_clock_le source p
-  rw [run] at sourceClock
-  have initial := stateRel.2.2.1
+  have extraBound : extra ≤ 2*bound :=
+    scalarLoop_extra_le_visits source sourceFinal result target oldPost ctxt live scalar extra bound
+      run stateRel hs oldRun visitBound
   have final := hs.2.2.1
-  have extraBound : extra ≤ 2*bound := by simp only at consumed sourceClock; omega
   have optimized := scalarLoop_explicit_optimised loopShape target oldPost (resultToLoop result)
     extra (2*bound) bound oldRun (completeCrep_loop complete) extraBound visitBound
   refine ⟨{oldPost with clock := oldPost.clock+(2*bound-extra)},optimized.1,optimized.2,?_,?_,?_,?_⟩

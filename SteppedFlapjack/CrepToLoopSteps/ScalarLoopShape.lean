@@ -1,4 +1,4 @@
-import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
+import SteppedFlapjack.CrepToLoopSteps.ScalarProgramDef
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoop
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack SteppedFlapjack.LoopToWordSteps

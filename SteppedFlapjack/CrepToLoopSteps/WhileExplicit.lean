@@ -37,8 +37,8 @@ theorem branchConditionWhile_explicit {width : Nat} [NeZero width] {F : Type}
   let budget := (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
       sizeOf (compileHOLExact ctxt live body)+2) * (limit+1)
   obtain ⟨extra,oldPost,extraBound,oldRun,hs,hm,hg,hc,hl⟩ :=
-    branchConditionWhile_bounded_clock condition conditionShape body bodyShape source sourceFinal result target ctxt live
-      run nonerror stateRel memRel globalsRel codeRel localsRel
+    branchConditionWhile_bounded_clock condition conditionShape body (sizeOf (compileHOLExact ctxt live body)) source sourceFinal result target ctxt live
+      (loopFree_linearBodySimulation body bodyShape ctxt live) run nonerror stateRel memRel globalsRel codeRel localsRel
   have extraBudget : extra ≤ budget := extraBound.trans (Nat.mul_le_mul_left _ (by omega))
   let delta := budget-extra
   have shifted := evaluate_add_clock_eq _ _ _ _ delta oldRun nontimeout
