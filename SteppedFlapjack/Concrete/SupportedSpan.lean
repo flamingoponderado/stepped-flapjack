@@ -1,5 +1,4 @@
 import SteppedFlapjack.Concrete.CrepError
-import SteppedFlapjack.Concrete.CompiledClock
 import SteppedFlapjack.Concrete.SimpRun
 import SteppedFlapjack.Concrete.GlobalControl
 import SteppedFlapjack.Concrete.CrepCode

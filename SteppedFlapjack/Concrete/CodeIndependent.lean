@@ -158,6 +158,15 @@ private theorem supportedCode {scope : List VarName} {program : Prog (RiscV.Word
   | «while» scalar body ih => exact whileCode scalar ih
   | ret scalar => exact returnCode scalar
 
+/-- A supported body is independent of the code table in any lexical scope. -/
+theorem supportedIn_code_irrel {σ : Type} {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : SupportedIn scope program) (source : PanSemStateFiniteExact 64 σ)
+    (code : HolFiniteMapExact MlString (List (MlString × ShapeHOL) × ProgHOL 64 × ShapeHOL)) :
+    ({source with code := code} : PanSemStateFiniteExact 64 σ).evaluateHOLFiniteState (progToHOL program) =
+      let result := source.evaluateHOLFiniteState (progToHOL program)
+      (result.1,{result.2 with code := code}) :=
+  supportedCode supported source code
+
 /-- Supported bodies do not inspect or change the code table, even on error. -/
 theorem supported_code_irrel {σ : Type} {program : Prog (RiscV.Word 64)} (supported : Supported program)
     (source : PanSemStateFiniteExact 64 σ)

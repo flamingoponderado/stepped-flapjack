@@ -46,7 +46,7 @@ theorem fixture_counted_span (program : Prog (RiscV.Word 64)) (supported : Suppo
     ∃ final, evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState program (clockedFixtureSource program n)) body) entry =
       (some (.return [.word word]),final) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program (clockedFixtureSource program n)) body) ≤
-        3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) * (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1)) := by
+        3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n + 1 + programWeight program) := by
   let source := clockedFixtureSource program n
   let production := clockedFixtureProduction program n
   let _ : DecidablePred source.memaddrs := by
@@ -84,7 +84,7 @@ theorem countdown_counted_fixture (n : Nat) (range : n < 2^64)
           (naturalCountdownHOL n)) (naturalCrepEntry n) = (some (.return [.word 0]),final) ∧
       CrepSteps.steps (naturalCrepEntry n)
         (crepStateFrom (panSimpSourceState (countdown n) (clockedFixtureSource (countdown n) (6*n+9)))
-          (naturalCountdownHOL n)) ≤ 3 + 8*(8*(6*n+10)) := by
+          (naturalCountdownHOL n)) ≤ 3 + 8*(6*n+17) := by
   obtain ⟨result,_,run,_,_,resultEq⟩ := countdown_run n range context primitive handler
   subst result
   have run' : evalPanValueFfiProgSteps context primitive handler (executableState (progToHOL (countdown n))).structs []
@@ -110,9 +110,9 @@ theorem countdown_counted_fixture (n : Nat) (range : n < 2^64)
       (crepStateFrom (panSimpSourceState (countdown n) (clockedFixtureSource (countdown n) (6*n+9)))
         (naturalCountdownHOL n)) ≤
     3 + CrepSteps.statementWeight (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) *
-      (CrepSteps.statementWeight (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) * (6*n+9+1)) at span
+      (6*n+9+1+programWeight (countdown n)) at span
   rw [size] at span
-  simpa [Nat.add_assoc] using span
+  simpa [Nat.add_assoc,programWeight,countdown,naturalCountdown,countdownBody] using span
 
 /-- The natural countdown through the full counted span. -/
 theorem natural_countdown_counted_fixture (n : Nat) (range : n < 2^64)
@@ -124,7 +124,7 @@ theorem natural_countdown_counted_fixture (n : Nat) (range : n < 2^64)
           (naturalCountdownHOL n)) (naturalCrepEntry n) = (some (.return [.word 0]),final) ∧
       CrepSteps.steps (naturalCrepEntry n)
         (crepStateFrom (panSimpSourceState (naturalCountdown n) (clockedFixtureSource (naturalCountdown n) (6*n+7)))
-          (naturalCountdownHOL n)) ≤ 3 + 8*(8*(6*n+8)) := by
+          (naturalCountdownHOL n)) ≤ 3 + 8*(6*n+13) := by
   have actual := counted_decl_countdown_simplified n (executableState (naturalCountdownHOL n))
     (exactState (naturalCountdownHOL n)) (source_related _) (source_ranged _) "x" countdown_name_ranged range
     (by change n ≤ 2^64; omega) 0 context primitive handler [] 0
@@ -155,9 +155,9 @@ theorem natural_countdown_counted_fixture (n : Nat) (range : n < 2^64)
       (crepStateFrom (panSimpSourceState (naturalCountdown n) (clockedFixtureSource (naturalCountdown n) (6*n+7)))
         (naturalCountdownHOL n)) ≤
     3 + CrepSteps.statementWeight (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) *
-      (CrepSteps.statementWeight (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) * (6*n+7+1)) at span
+      (6*n+7+1+programWeight (naturalCountdown n)) at span
   rw [size] at span
-  simpa [Nat.add_assoc] using span
+  simpa [Nat.add_assoc,programWeight,countdown,naturalCountdown,countdownBody] using span
 
 /-- The comparison witness through the full counted span. -/
 theorem branching_counted_fixture
@@ -167,7 +167,7 @@ theorem branching_counted_fixture
       evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState branching (clockedFixtureSource branching 6)) branchingHOL)
         branchCrepEntry = (some (.return [.word 7]),final) ∧
       CrepSteps.steps branchCrepEntry
-        (crepStateFrom (panSimpSourceState branching (clockedFixtureSource branching 6)) branchingHOL) ≤ 66 := by
+        (crepStateFrom (panSimpSourceState branching (clockedFixtureSource branching 6)) branchingHOL) ≤ 33 := by
   have run := branching_run context primitive handler
   have run' : evalPanValueFfiProgSteps context primitive handler (executableState (progToHOL branching)).structs []
       (executableState (progToHOL branching)).baseAddress (executableState (progToHOL branching)).topAddress
@@ -195,9 +195,9 @@ theorem branching_counted_fixture
       CrepSteps.steps branchCrepEntry
         (crepStateFrom (panSimpSourceState branching (clockedFixtureSource branching 6)) branchingHOL) ≤
         3 + CrepSteps.statementWeight (compileProgExactHOLW branchCalleeContext branchingHOL) *
-          (CrepSteps.statementWeight (compileProgExactHOLW branchCalleeContext branchingHOL) * 7) at span
+          (6+1+programWeight branching) at span
   rw [codeEq,size] at span
-  simpa using span
+  simpa [programWeight,branching,branchingLoop] using span
 
 /-- The loop executing both conditional arms through the full counted span. -/
 theorem branching_loop_counted_fixture
@@ -208,7 +208,7 @@ theorem branching_loop_counted_fixture
         (crepStateFrom (panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)) (progToHOL branchingLoop))
         branchingLoopCrepEntry = (some (.return [.word 7]),final) ∧
       CrepSteps.steps branchingLoopCrepEntry
-        (crepStateFrom (panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)) (progToHOL branchingLoop)) ≤ 2907 := by
+        (crepStateFrom (panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)) (progToHOL branchingLoop)) ≤ 344 := by
   have run := branchingLoop_source_run context primitive handler
   have span := fixture_counted_span branchingLoop branchingLoop_supported context primitive handler 7 23 23
     (executableState (progToHOL branchingLoop)).locals (executableState (progToHOL branchingLoop)).globals
@@ -225,8 +225,8 @@ theorem branching_loop_counted_fixture
     CrepSteps.steps branchingLoopCrepEntry
       (crepStateFrom (panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)) (progToHOL branchingLoop)) ≤
         3 + CrepSteps.statementWeight (compileProgExactHOLW branchingLoopCalleeContext (progToHOL branchingLoop)) *
-          (CrepSteps.statementWeight (compileProgExactHOLW branchingLoopCalleeContext (progToHOL branchingLoop)) * (23+1)) at span
+          (23+1+programWeight branchingLoop) at span
   rw [codeEq,size] at span
-  simpa using span
+  simpa [programWeight,branching,branchingLoop] using span
 
 end SteppedFlapjack.Concrete

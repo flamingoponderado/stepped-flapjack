@@ -109,7 +109,7 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
     let body := progToHOL (panSimpProg badShift)
     let entry : CrepProgHOL 64 := .seq .skip (.call none (entryName body) [])
     ∃ final, evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState badShift source) body) entry = (some .error,final) ∧
-      CrepSteps.steps entry (crepStateFrom (panSimpSourceState badShift source) body) ≤ 9 := by
+      CrepSteps.steps entry (crepStateFrom (panSimpSourceState badShift source) body) ≤ 12 := by
   let source := clockedFixtureSource badShift 1
   let production := clockedFixtureProduction badShift 1
   let _ : DecidablePred source.memaddrs := by change DecidablePred ordinaryAddress; infer_instance
@@ -129,5 +129,6 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
           (frontendContext (progToHOL (panSimpProg badShift))).eids [] [] [])
         (progToHOL (panSimpProg badShift))) = 1 := by decide +kernel
     refine ⟨final,target,?_⟩
-    simpa [size] using bound
+    rw [size] at bound
+    simpa [source,programWeight,badShift] using bound
 end SteppedFlapjack.Concrete
