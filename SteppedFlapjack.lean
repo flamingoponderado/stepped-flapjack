@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.ScalarLoopConsumption
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopLive
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopShape
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgram

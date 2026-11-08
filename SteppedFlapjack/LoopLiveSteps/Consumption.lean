@@ -1,4 +1,4 @@
-import SteppedFlapjack.LoopLiveSteps.ClockBound
+import SteppedFlapjack.CrepToLoopSteps.ScalarLoopConsumption
 import SteppedFlapjack.LoopSteps.ClockConsumption
 import SteppedFlapjack.LoopToWordSteps.WordSimpSequenceBound
 
@@ -8,125 +8,26 @@ open Flapjack Flapjack.LoopSemStateFiniteExact
 open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.LoopSteps
 variable {width : Nat} [NeZero width] {F : Type}
 
-/-- A branch-bodied loop consumes at most two clock units per evaluator visit,
-including entry and exit cuts. -/
-theorem loop_consumed (live exits : NumSet) {body : HolLoopProg width} (shape : LoopBranch body)
-    (s post : LoopSemStateFiniteExact width F) (result : Option (LoopResultExact width))
-    (run : evaluate (.loop live body exits) s = (result,post)) :
-    s.clock-post.clock ≤ 2 * steps (.loop live body exits) s := by
-  induction hc : s.clock using Nat.strongRecOn generalizing s post result with
-  | _ clock ih =>
-    rcases cut : cutRes live (none,s) with ⟨cutResult,entry⟩
-    have cutBound := cutRes_clock_consumed live none s
-    rw [cut] at cutBound
-    simp only at cutBound
-    cases cutResult with
-    | some r =>
-      have execution := run
-      rw [evaluate,cut] at execution
-      simp only [Prod.mk.injEq] at execution
-      obtain ⟨_,rfl⟩ := execution
-      rw [steps_loop,cut]
-      simp only at cutBound ⊢
-      omega
-    | none =>
-      rcases bodyRun : evaluate body entry with ⟨bodyResult,middle⟩
-      have entryClock := cutRes_none_clock cut
-      have bodyClock := evaluate_clock body entry bodyResult middle bodyRun
-      have bodyBound := branchedProgram_clock_consumed (branch_branched shape) entry middle bodyResult bodyRun
-      have execution := run
-      rw [evaluate,cut] at execution
-      simp only at execution
-      rw [fix_clock_evaluate,bodyRun] at execution
-      rw [steps_loop,cut]
-      simp only
-      rw [bodyRun]
-      by_cases continuing : bodyResult = none ∨ bodyResult = some (.continue 0)
-      · have recurRun : evaluate (.loop live body exits) middle = (result,post) := by
-          rcases continuing with h | h <;> rw [h] at execution <;> exact execution
-        have smaller : middle.clock < s.clock := by omega
-        have recur := ih middle.clock (by simpa [hc] using smaller) middle post result recurRun rfl
-        have finalClock := evaluate_clock (.loop live body exits) middle result post recurRun
-        rcases continuing with h | h <;> rw [h] <;> simp only <;> omega
-      · have hnone : bodyResult ≠ none := fun h => continuing (Or.inl h)
-        have hcont : bodyResult ≠ some (.continue 0) := fun h => continuing (Or.inr h)
-        cases bodyResult with
-        | none => exact (hnone rfl).elim
-        | some r =>
-          cases r <;> try (simp only at execution ⊢; cases execution; simp_all; omega)
-          case «break» label =>
-            cases label with
-            | zero =>
-              simp only at execution ⊢
-              have exitBound := cutRes_clock_consumed exits none middle
-              rw [execution] at exitBound
-              simp only at exitBound
-              omega
-            | succ n => simp only at execution ⊢; cases execution; simp_all; omega
+/-- The older nonnested-loop fragment embeds in the recursive Loop grammar. -/
+theorem sequence_scalarLoop {p : HolLoopProg width} (shape : LoopSequenceSource p) :
+    SteppedFlapjack.CrepToLoopSteps.ScalarLoop p := by
+  induction shape with
+  | branch h => exact .branch h
+  | loop li lo h => exact .loop li lo (.branch h)
+  | seq _ _ iha ihb => exact .seq iha ihb
 
-/-- Clock used by a supported execution is at most twice its actual visits. -/
+/-- Supported executions consume at most twice their actual visits. -/
 theorem sequence_consumed {p : HolLoopProg width} (shape : LoopSequenceSource p)
     (s post : LoopSemStateFiniteExact width F) (result : Option (LoopResultExact width))
-    (run : evaluate p s = (result,post)) : s.clock - post.clock ≤ 2 * steps p s := by
-  induction shape generalizing s post result with
-  | branch h =>
-    have bound := branchedProgram_clock_consumed (branch_branched h) s post result run
-    omega
-  | @loop live exits body h => exact loop_consumed live exits h s post result run
-  | @seq a b ha hb iha ihb =>
-    rw [steps_seq,evaluate_seq] at *
-    rcases first : evaluate a s with ⟨out,middle⟩
-    rw [first] at run
-    have firstBound := iha s middle out first
-    have firstClock := evaluate_clock a s out middle first
-    cases out with
-    | none =>
-      simp only at run ⊢
-      have secondBound := ihb middle post result run
-      have secondClock := evaluate_clock b middle result post run
-      omega
-    | some x =>
-      simp only [Prod.mk.injEq] at run
-      obtain ⟨_,rfl⟩ := run
-      simp only
-      omega
+    (run : evaluate p s = (result,post)) : s.clock - post.clock ≤ 2 * steps p s :=
+  SteppedFlapjack.CrepToLoopSteps.scalarLoop_consumed (sequence_scalarLoop shape) s post result run
 
-/-- Supported executions visit at most a syntax factor per consumed clock unit,
-plus one. Unlike an initial-clock bound this is stable under clock padding. -/
+/-- Visits depend on consumed clock, not spare input clock. -/
 theorem sequence_consumption_bound {p : HolLoopProg width} (shape : LoopSequenceSource p)
     (s post : LoopSemStateFiniteExact width F) (result : Option (LoopResultExact width))
     (run : evaluate p s = (result,post)) :
-    steps p s ≤ sizeOf p * (s.clock - post.clock + 1) := by
-  induction shape generalizing s post result with
-  | branch h =>
-    have bound := branchedProgram_static_bound (branch_branched h) s
-    nlinarith
-  | @loop live exits body h =>
-    have bound := loop_steps_by_clock_consumption live exits body (branch_branched h) s post result run
-    have size : 1 + sizeOf body ≤ sizeOf (.loop live body exits : HolLoopProg width) := by simp_wf; omega
-    exact bound.trans (Nat.mul_le_mul_right _ size)
-  | @seq a b ha hb iha ihb =>
-    have size : 1 + sizeOf a + sizeOf b ≤ sizeOf (.seq a b : HolLoopProg width) := by simp_wf
-    rw [steps_seq,evaluate_seq] at *
-    rcases first : evaluate a s with ⟨out,middle⟩
-    rw [first] at run
-    have firstBound := iha s middle out first
-    have firstClock := evaluate_clock a s out middle first
-    cases out with
-    | none =>
-      simp only at run ⊢
-      have secondBound := ihb middle post result run
-      have secondClock := evaluate_clock b middle result post run
-      have budget1 : s.clock - middle.clock + 1 ≤ s.clock - post.clock + 1 := by omega
-      have budget2 : middle.clock - post.clock + 1 ≤ s.clock - post.clock + 1 := by omega
-      have scaled1 := Nat.mul_le_mul_left (sizeOf a) budget1
-      have scaled2 := Nat.mul_le_mul_left (sizeOf b) budget2
-      nlinarith
-    | some x =>
-      simp only [Prod.mk.injEq] at run
-      obtain ⟨_,rfl⟩ := run
-      simp only
-      nlinarith
+    steps p s ≤ sizeOf p * (s.clock - post.clock + 1) :=
+  SteppedFlapjack.CrepToLoopSteps.scalarLoop_consumption_bound (sequence_scalarLoop shape) s post result run
 
 /-- For a completed supported run, the actual optimizer's visits are bounded
 by optimized syntax and source visits, independently of spare input clock. -/
