@@ -66,7 +66,7 @@ theorem counted_singleEntry_declared_fullCompiler_riscv {σ : Type}
     (targetDef : target = {concreteDeclLoopState arch crep (compileProgDeclsHOLW (compileTopExactHOL declarations start)) with memory := target.memory})
     (memoryRel : crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs)
     (native : FullInitAssignLoopInputs declarations start caller loopCtxt (assignLoopEntryProgram declarations initializers caller loopCtxt .ln)
-      (declWhileSourceLoopLimit declarations initializers globals caller (ofString name) (.const initial) (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment)) (.return (.const returned)) budget pan loopCtxt .ln) target) :
+      (declWhileSourceLoopLimit declarations initializers globals caller (ofString name) (.const initial) (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment)) (.return (.const returned)) budget loopCtxt .ln) target) :
     let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
     ∃ sourceFinal,
       source.evaluateHOLFiniteState (.dec (ofString name) .one (.const initial) (.seq .skip (.seq (.while (expToHOL condition)
@@ -78,7 +78,7 @@ theorem counted_singleEntry_declared_fullCompiler_riscv {σ : Type}
             (.dec (ofString name) .one (.const initial) (.seq .skip
               (.seq (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment))) (.return (.const returned)))))))
           entry (assignLoopEntryWordContext entry) (firstLoopName,2)
-          (declWhileSourceLoopLimit declarations initializers globals caller (ofString name) (.const initial) (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment)) (.return (.const returned)) budget pan loopCtxt .ln)) native.backend.resourceTickLimit ∧
+          (declWhileSourceLoopLimit declarations initializers globals caller (ofString name) (.const initial) (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment)) (.return (.const returned)) budget loopCtxt .ln)) native.backend.resourceTickLimit ∧
         evaluateTargetHOL native.backend.mc native.backend.lab.ffi ticks native.backend.machine =
           (.halt outcome,finalMachine,finalFfi) ∧
         ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
