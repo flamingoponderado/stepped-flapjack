@@ -8,11 +8,17 @@ open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 def nestedLoopExample : CrepProgHOL 64 :=
   .seq (.while (.const 1) (.seq (.while (.const 0) .skip) (.break 0))) (.return [.const 7])
 
+private theorem optimizedSkipSize : sizeOf (optimiseScalar (.skip : HolLoopProg 64)) = 2 := by decide +kernel
+private theorem optimizedBreakSize : sizeOf (optimiseScalar (.break 0 : HolLoopProg 64)) = 2 := by decide +kernel
+private theorem optimizedReturnSize : sizeOf (optimiseScalar
+    (.seq (.assign 1 (.const (BitVec.ofNat 64 7))) (.seq (.return [1]) .skip) : HolLoopProg 64)) = 24 := by decide +kernel
+
 /-- The concrete factor is computable from code and architecture. -/
 example (arch : AsmArchitecture) :
-    scalarProgramFactor (mkCtxtExact arch (makeVmapExact []) HolFiniteMapExact.empty 0) .ln nestedLoopExample = 12518 := by
-  simp [nestedLoopExample,scalarProgramFactor,scalarNoWhile,LoopSteps.structuralWeight,compileHOLExact,compileExpHOLExact,compileExpsHOLExact,
+    scalarProgramFactor (mkCtxtExact arch (makeVmapExact []) HolFiniteMapExact.empty 0) .ln nestedLoopExample = 16677 := by
+  simp [nestedLoopExample,scalarProgramFactor,scalarNoWhile,optimizedSkipSize,optimizedBreakSize,compileHOLExact,compileExpHOLExact,compileExpsHOLExact,
     loopNestedSeqHOL,genTemps,mkCtxtExact,makeVmapExact,HolFiniteMapExact.updateListEq]
+  rw [optimizedReturnSize]
 
 /-- The recursive shape includes the reached inner loop and the outer break. -/
 theorem nestedLoop_shape : ScalarProgram nestedLoopExample := by
@@ -98,18 +104,19 @@ example {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64
     let target := SteppedFlapjack.Concrete.loopStateFrom arch source SteppedFlapjack.Concrete.branchingHOL
     let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
     ∃ post, evaluate (optimiseHOL (compileHOLExact ctxt .ln nestedLoopExample))
-        {target with clock := target.clock+175252} = (some (.result [.word 7]),post) ∧
+        {target with clock := target.clock+233478} = (some (.result [.word 7]),post) ∧
       LoopSteps.steps (optimiseHOL (compileHOLExact ctxt .ln nestedLoopExample))
-        {target with clock := target.clock+175252} ≤ 14896505 := by
+        {target with clock := target.clock+233478} ≤ 19845715 := by
   let crep := SteppedFlapjack.Concrete.crepStateFrom source SteppedFlapjack.Concrete.branchingHOL
   let target := SteppedFlapjack.Concrete.loopStateFrom arch source SteppedFlapjack.Concrete.branchingHOL
   let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
   have rel := SteppedFlapjack.Concrete.loopStateFrom_relations arch source SteppedFlapjack.Concrete.branchingHOL
   have codeLocals := SteppedFlapjack.Concrete.branching_loop_code_locals arch source
-  have factor : scalarProgramFactor ctxt .ln nestedLoopExample = 12518 := by
-    simp [ctxt,SteppedFlapjack.Concrete.witnessLoopContext,nestedLoopExample,scalarProgramFactor,scalarNoWhile,LoopSteps.structuralWeight,
+  have factor : scalarProgramFactor ctxt .ln nestedLoopExample = 16677 := by
+    simp [ctxt,SteppedFlapjack.Concrete.witnessLoopContext,nestedLoopExample,scalarProgramFactor,scalarNoWhile,optimizedSkipSize,optimizedBreakSize,
       compileHOLExact,compileExpHOLExact,compileExpsHOLExact,loopNestedSeqHOL,genTemps,mkCtxtExact,
       makeVmapExact,HolFiniteMapExact.updateListEq]
+    rw [optimizedReturnSize]
   let loopCode : HolLoopProg 64 := .seq
     (.loop .ln (.seq (.assign 1 (.const 1)) (.seq
       (.ite .notEqual 1 (.imm 0)

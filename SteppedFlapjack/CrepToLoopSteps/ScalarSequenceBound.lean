@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.ScalarUnmarked
 import SteppedFlapjack.CrepToLoopSteps.ScalarIteBound
 import SteppedFlapjack.CrepToLoopSteps.ConditionPrefix
 import SteppedFlapjack.CrepToLoopSteps.ScalarDeclBound
@@ -122,7 +123,7 @@ private theorem scalarSequence_programBound {width : Nat} [NeZero width] {σ : T
 /-- A syntax-derived factor for arbitrary nesting and sequencing of scalar loops. -/
 noncomputable def scalarProgramFactor {width : Nat} [NeZero width]
     (ctxt : CrepToLoopContextExact) (live : NumSet) (p : CrepProgHOL width) : Nat :=
-  if scalarNoWhile p then LoopSteps.structuralWeight (compileHOLExact ctxt live p)
+  if scalarNoWhile p then sizeOf (optimiseScalar (compileHOLExact ctxt live p))
   else match p with
     | .seq a b => 1 + scalarProgramFactor ctxt live a + scalarProgramFactor ctxt live b
     | .ite condition a b =>
@@ -141,10 +142,19 @@ noncomputable def scalarProgramFactor {width : Nat} [NeZero width]
             2*scalarProgramFactor ctxt live body+3)
     | _ => sizeOf (compileHOLExact ctxt live p)
 
+/-- On loop-free scalar programs the factor is exactly the optimized Loop code size. -/
+theorem scalarProgramFactor_loopFree {width : Nat} [NeZero width] {p : CrepProgHOL width}
+    (shape : ScalarProgram p) (free : scalarNoWhile p = true)
+    (ctxt : CrepToLoopContextExact) (live : NumSet) :
+    scalarProgramFactor ctxt live p = sizeOf (optimiseHOL (compileHOLExact ctxt live p)) := by
+  have factor : scalarProgramFactor ctxt live p = sizeOf (optimiseScalar (compileHOLExact ctxt live p)) := by
+    cases p <;> simp_all [scalarProgramFactor]
+  rw [factor,optimiseScalar_eq (compile_scalar_program shape ctxt live)]
+
 private theorem scalarBranch_programBound {width : Nat} [NeZero width] {σ : Type}
     (p : CrepProgHOL width) (shape : ScalarProgram p) (free : scalarNoWhile p = true)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
-    @ProgramBound width _ σ p ctxt live (LoopSteps.structuralWeight (compileHOLExact ctxt live p)) := by
+    @ProgramBound width _ σ p ctxt live (sizeOf (optimiseScalar (compileHOLExact ctxt live p))) := by
   intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
   obtain ⟨extra,out,final,eval,hs,hm,hg,hc,map,hl,steps,_⟩ :=
     branchProgram_correct_with_bounded_extra p (.scalar shape free) source sourceFinal result target ctxt live
@@ -152,8 +162,12 @@ private theorem scalarBranch_programBound {width : Nat} [NeZero width] {σ : Typ
   subst out
   have static := LoopSteps.branchedProgram_structural_bound (compile_loopFreeCrep (.scalar shape free) ctxt live)
     {target with clock := target.clock+extra}
+  have weightBound : LoopSteps.structuralWeight (compileHOLExact ctxt live p) ≤
+      sizeOf (optimiseScalar (compileHOLExact ctxt live p)) := by
+    simpa only [optimiseScalar_eq (compile_scalar_program shape ctxt live)] using
+      scalarBranch_structural_le_output shape free ctxt live
   have enough : LoopSteps.structuralWeight (compileHOLExact ctxt live p) ≤
-      LoopSteps.structuralWeight (compileHOLExact ctxt live p) * (CrepSteps.steps p source+1) := by
+      sizeOf (optimiseScalar (compileHOLExact ctxt live p)) * (CrepSteps.steps p source+1) := by
     have := CrepSteps.steps_pos p source
     nlinarith
   exact ⟨extra,final,eval,hs,hm,hg,hc,hl,static.trans enough⟩
