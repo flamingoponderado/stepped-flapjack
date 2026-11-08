@@ -1,4 +1,5 @@
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopLive
+import SteppedFlapjack.LoopSteps.BranchedStatic
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack SteppedFlapjack.LoopToWordSteps
 variable {width : Nat} [NeZero width]
@@ -9,6 +10,46 @@ def loopSkeletonWeight : HolLoopProg width → Nat
   | .ite _ _ _ a b _ => 1 + loopSkeletonWeight a + loopSkeletonWeight b
   | .loop _ body _ => 1 + loopSkeletonWeight body
   | _ => 1
+
+/-- Control-node count including marks, used to bound evaluator visits. -/
+def loopVisitWeight : HolLoopProg width → Nat
+  | .mark p => 1 + loopVisitWeight p
+  | .seq a b => 1 + loopVisitWeight a + loopVisitWeight b
+  | .ite _ _ _ a b _ => 1 + loopVisitWeight a + loopVisitWeight b
+  | .loop _ body _ => 1 + loopVisitWeight body
+  | _ => 1
+
+theorem loopVisitWeight_pos (p : HolLoopProg width) : 0 < loopVisitWeight p := by
+  cases p <;> simp [loopVisitWeight]
+
+/-- Appending statements to a nested sequence cannot reduce its control weight. -/
+theorem nestedSeq_append_weight (a b : List (HolLoopProg width)) :
+    loopVisitWeight (loopNestedSeqHOL a) ≤ loopVisitWeight (loopNestedSeqHOL (a ++ b)) := by
+  induction a with
+  | nil => simp only [List.nil_append,loopNestedSeqHOL,loopVisitWeight]; exact loopVisitWeight_pos _
+  | cons p rest ih => simp only [List.cons_append,loopNestedSeqHOL,loopVisitWeight]; omega
+
+theorem branched_visitWeight {p : HolLoopProg width}
+    (shape : SteppedFlapjack.LoopToWordSteps.BranchedProgram p) :
+    loopVisitWeight p = LoopSteps.structuralWeight p := by
+  induction shape with
+  | leaf h => cases h <;> rfl
+  | mark _ ih => simp only [loopVisitWeight,LoopSteps.structuralWeight,ih]
+  | seq _ _ a b => simp only [loopVisitWeight,LoopSteps.structuralWeight,a,b]
+  | ite _ _ _ _ _ _ a b => simp only [loopVisitWeight,LoopSteps.structuralWeight,a,b]
+
+theorem branch_visitWeight {p : HolLoopProg width} (shape : LoopBranch p) :
+    loopVisitWeight p = LoopSteps.structuralWeight p := by
+  induction shape <;> simp_all [loopVisitWeight,LoopSteps.structuralWeight]
+
+theorem scalarLoop_visitWeight_le_size {p : HolLoopProg width} (shape : ScalarLoop p) :
+    loopVisitWeight p ≤ sizeOf p := by
+  induction shape with
+  | branch h =>
+    induction h <;> simp_all [loopVisitWeight] <;> omega
+  | seq _ _ a b => simp only [loopVisitWeight]; simp_wf; omega
+  | ite _ _ _ _ _ _ a b => simp only [loopVisitWeight]; simp_wf; omega
+  | loop _ _ _ ih => simp only [loopVisitWeight]; simp_wf; omega
 
 private theorem branch_shrink_weight {p : HolLoopProg width} (shape : LoopBranch p) :
     ∀ lt live, loopSkeletonWeight (shrinkHOL lt p live).1 = loopSkeletonWeight p := by

@@ -19,19 +19,19 @@ private theorem scalarWhile_programBound {width : Nat} [NeZero width] {σ : Type
     (ctxt : CrepToLoopContextExact) (live : NumSet) (bodyFactor : Nat)
     (bodyBound : @ProgramBound width _ σ body ctxt live bodyFactor) :
     @ProgramBound width _ σ (.while condition body) ctxt live
-      (sizeOf (compileHOLExact ctxt live (.while condition body)) *
-        (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) + 2*bodyFactor+3)) := by
+      (loopVisitWeight (compileHOLExact ctxt live (.while condition body)) *
+        (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) + 2*bodyFactor+3)) := by
   intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
   let p := CrepProgHOL.while condition body
   let code := compileHOLExact ctxt live p
-  let prefixSize : Nat := sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1)
+  let prefixSize : Nat := LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1)
   have bodySim := scalar_program_bodySimulation body bodyShape ctxt live bodyFactor bodyBound
   obtain ⟨extra,post,extraBound,targetRun,hs,hm,hg,hc,hl⟩ :=
     branchConditionWhile_bounded_clock condition conditionShape body (2*bodyFactor) source sourceFinal result target ctxt live
       (by simpa [Nat.mul_assoc] using bodySim) run nonerror stateRel memRel globalsRel codeRel localsRel
   have shape : ScalarProgram p := .while conditionShape bodyShape
   have loopShape := compile_scalar_program shape ctxt live
-  have visits := scalarLoop_consumption_bound loopShape _ post (resultToLoop result) targetRun
+  have visits := scalarLoop_control_consumption_bound loopShape _ post (resultToLoop result) targetRun
   have consumed := CrepSteps.scalarProgram_clock_consumed shape source sourceFinal result run
   have initial := stateRel.2.2.1
   have final := hs.2.2.1
@@ -39,7 +39,7 @@ private theorem scalarWhile_programBound {width : Nat} [NeZero width] {σ : Type
   rw [run] at sourceClock
   simp only at sourceClock
   change LoopSteps.steps code {target with clock := target.clock+extra} ≤
-    sizeOf code * (target.clock+extra-post.clock+1) at visits
+    loopVisitWeight code * (target.clock+extra-post.clock+1) at visits
   change source.clock - sourceFinal.clock ≤ CrepSteps.steps p source at consumed
   change extra ≤ (prefixSize+2*bodyFactor+2)*(CrepSteps.steps p source+1) at extraBound
   have delta : target.clock+extra-post.clock ≤ CrepSteps.steps p source+extra := by omega
@@ -47,7 +47,7 @@ private theorem scalarWhile_programBound {width : Nat} [NeZero width] {σ : Type
       (prefixSize+2*bodyFactor+3)*(CrepSteps.steps p source+1) := by nlinarith
   refine ⟨extra,post,targetRun,hs,hm,hg,hc,hl,?_⟩
   change LoopSteps.steps code {target with clock := target.clock+extra} ≤
-    (sizeOf code*(prefixSize+2*bodyFactor+3))*(CrepSteps.steps p source+1)
+    (loopVisitWeight code*(prefixSize+2*bodyFactor+3))*(CrepSteps.steps p source+1)
   rw [Nat.mul_assoc]
   exact visits.trans (Nat.mul_le_mul_left _ clockBound)
 
@@ -127,18 +127,18 @@ noncomputable def scalarProgramFactor {width : Nat} [NeZero width]
   else match p with
     | .seq a b => 1 + scalarProgramFactor ctxt live a + scalarProgramFactor ctxt live b
     | .ite condition a b =>
-        sizeOf (compileHOLExact ctxt live p) *
-          (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
+        loopVisitWeight (compileHOLExact ctxt live p) *
+          (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
             2*max (scalarProgramFactor ctxt live a) (scalarProgramFactor ctxt live b)+2)
     | .dec name init body =>
         let tmp := (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1
-        sizeOf (compileHOLExact ctxt live p) *
-          (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) +
+        loopVisitWeight (compileHOLExact ctxt live p) *
+          (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) +
             2*scalarProgramFactor {ctxt with vars := ctxt.vars.updateEq (name,tmp), vmax := tmp}
               (sptInsert tmp () live) body+1)
     | .while condition body =>
-        sizeOf (compileHOLExact ctxt live p) *
-          (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
+        loopVisitWeight (compileHOLExact ctxt live p) *
+          (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
             2*scalarProgramFactor ctxt live body+3)
     | _ => sizeOf (compileHOLExact ctxt live p)
 

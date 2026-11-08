@@ -16,12 +16,12 @@ theorem scalarDecl_programBound {width : Nat} [NeZero width] {σ : Type}
       {ctxt with vars := ctxt.vars.updateEq (name,(compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1), vmax := (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1}
       (sptInsert (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1 () live) bodyFactor) :
     @ProgramBound width _ σ (.dec name init body) ctxt live
-      (sizeOf (compileHOLExact ctxt live (.dec name init body)) *
-        (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) + 2*bodyFactor+1)) := by
+      (loopVisitWeight (compileHOLExact ctxt live (.dec name init body)) *
+        (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) + 2*bodyFactor+1)) := by
   intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
   let p := CrepProgHOL.dec name init body
   let code := compileHOLExact ctxt live p
-  let prefixSize := sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1)
+  let prefixSize := LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1)
   have scalar : ScalarProgram p := .dec name initShape bodyShape
   have loopShape := compile_scalar_program scalar ctxt live
   have sourceConsumed := CrepSteps.scalarProgram_clock_consumed scalar source sourceFinal result run
@@ -43,7 +43,7 @@ theorem scalarDecl_programBound {width : Nat} [NeZero width] {σ : Type}
     obtain ⟨ck,st,exprRun,exprValue,exprState,exprMem,exprGlobals,exprCode,exprLocals⟩ :=
       crepToLoop_comp_exp_preserves_eval source init value target ctxt (ctxt.vmax+1) live np loopValue tmp outLive
         ⟨initRun,stateRel,memRel,globalsRel,codeRel,localsRel,compiled,by omega⟩
-    have prefixBound := condition_extraClock_bound source target st np ck (by
+    have prefixBound := condition_extraClock_control_bound source target st np ck (by
       intro q hq
       obtain ⟨_,_,_,_,hc,hbranch,_⟩ := condition_prefix_shape initShape ctxt (ctxt.vmax+1) live
       rw [compiled] at hc
@@ -111,11 +111,11 @@ theorem scalarDecl_programBound {width : Nat} [NeZero width] {σ : Type}
       sourceRun nonerror stateRel memRel globalsRel codeRel localsRel targetRun
     have sourceCount := CrepSteps.steps_dec name init body source
     simp only [initRun] at sourceCount
-    have prefixEq : sizeOf (loopNestedSeqHOL np) = prefixSize := by dsimp [prefixSize]; rw [compiled]
+    have prefixEq : LoopSteps.structuralWeight (loopNestedSeqHOL np) = prefixSize := by dsimp [prefixSize]; rw [compiled]
     rw [prefixEq] at prefixBound
     have padding : ck+extra ≤ (prefixSize+2*bodyFactor)*(CrepSteps.steps p source+1) := by
       nlinarith
-    have allVisits := scalarLoop_consumption_bound loopShape _ post (resultToLoop result) targetRun
+    have allVisits := scalarLoop_control_consumption_bound loopShape _ post (resultToLoop result) targetRun
     have initial := stateRel.2.2.1
     have final := finalState.2.2.1
     have delta : target.clock+(ck+extra)-post.clock ≤ CrepSteps.steps p source+(ck+extra) := by omega
@@ -124,7 +124,7 @@ theorem scalarDecl_programBound {width : Nat} [NeZero width] {σ : Type}
     refine ⟨ck+extra,post,targetRun,finalState,finalMem,finalGlobals,finalCode,finalLocals,?_⟩
     rw [prefixEq]
     change LoopSteps.steps code {target with clock := target.clock+(ck+extra)} ≤
-      (sizeOf code*(prefixSize+2*bodyFactor+1))*(CrepSteps.steps p source+1)
+      (loopVisitWeight code*(prefixSize+2*bodyFactor+1))*(CrepSteps.steps p source+1)
     rw [Nat.mul_assoc]
     exact allVisits.trans (Nat.mul_le_mul_left _ budget)
 end SteppedFlapjack.CrepToLoopSteps

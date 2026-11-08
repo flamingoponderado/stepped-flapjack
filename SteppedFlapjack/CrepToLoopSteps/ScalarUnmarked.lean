@@ -149,12 +149,36 @@ private theorem branch_weight_equal {p : HolLoopProg width} (shape : LoopBranch 
     (unmarked : noMark p = true) : LoopSteps.structuralWeight p = loopSkeletonWeight p := by
   induction shape <;> simp_all [noMark,LoopSteps.structuralWeight,loopSkeletonWeight]
 
+/-- Without administrative marks, the visit and skeleton weights coincide. -/
+theorem scalarLoop_visitWeight_eq_skeleton {p : HolLoopProg width} (shape : ScalarLoop p)
+    (unmarked : noMark p = true) : loopVisitWeight p = loopSkeletonWeight p := by
+  induction shape with
+  | branch h => rw [branch_visitWeight h,branch_weight_equal h unmarked]
+  | seq _ _ iha ihb =>
+    simp only [noMark,Bool.and_eq_true] at unmarked
+    simp only [loopVisitWeight,loopSkeletonWeight,iha unmarked.1,ihb unmarked.2]
+  | ite _ _ _ _ _ _ iha ihb =>
+    simp only [noMark,Bool.and_eq_true] at unmarked
+    simp only [loopVisitWeight,loopSkeletonWeight,iha unmarked.1,ihb unmarked.2]
+  | loop _ _ _ ih =>
+    simp only [noMark] at unmarked
+    simp only [loopVisitWeight,loopSkeletonWeight,ih unmarked]
+
+/-- The compiled scalar program’s visit weight is bounded by its optimized code size. -/
+theorem scalarProgram_control_le_output {p : CrepProgHOL width} (shape : ScalarProgram p)
+    (ctxt : CrepToLoopContextExact) (live : NumSet) :
+    loopVisitWeight (compileHOLExact ctxt live p) ≤
+      sizeOf (optimiseHOL (compileHOLExact ctxt live p)) := by
+  let compiledShape := compile_scalar_program shape ctxt live
+  rw [scalarLoop_visitWeight_eq_skeleton compiledShape (scalar_program_unmarked shape ctxt live)]
+  exact scalarLoop_weight_le_optimised_size compiledShape
+
 /-- Loop-free compiled scalar code has structural weight bounded by the
 size of the actual optimized output. -/
 theorem scalarBranch_structural_le_output {p : CrepProgHOL width} (shape : ScalarProgram p)
     (free : scalarNoWhile p = true) (ctxt : CrepToLoopContextExact) (live : NumSet) :
     LoopSteps.structuralWeight (compileHOLExact ctxt live p) ≤
       sizeOf (optimiseHOL (compileHOLExact ctxt live p)) := by
-  rw [branch_weight_equal (compile_scalar_branch shape free ctxt live) (scalar_program_unmarked shape ctxt live)]
-  exact scalarLoop_weight_le_optimised_size (compile_scalar_program shape ctxt live)
+  rw [← branch_visitWeight (compile_scalar_branch shape free ctxt live)]
+  exact scalarProgram_control_le_output shape ctxt live
 end SteppedFlapjack.CrepToLoopSteps

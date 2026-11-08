@@ -21,7 +21,7 @@ theorem branchConditionWhile_explicit {width : Nat} [NeZero width] {F : Type}
     (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
     (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
     let p := CrepProgHOL.while condition body
-    let budget := (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
+    let budget := (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
       sizeOf (compileHOLExact ctxt live body)+2) * (limit+1)
     ∃ post,
       evaluate (compileHOLExact ctxt live p) {target with clock := target.clock+budget} =
@@ -34,7 +34,7 @@ theorem branchConditionWhile_explicit {width : Nat} [NeZero width] {F : Type}
       LoopSteps.steps (compileHOLExact ctxt live p) {target with clock := target.clock+budget} ≤
         (1 + sizeOf (compileHOLExact ctxt live p)) * (limit+budget+1) := by
   let p := CrepProgHOL.while condition body
-  let budget := (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
+  let budget := (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
       sizeOf (compileHOLExact ctxt live body)+2) * (limit+1)
   obtain ⟨extra,oldPost,extraBound,oldRun,hs,hm,hg,hc,hl⟩ :=
     branchConditionWhile_bounded_clock condition conditionShape body (sizeOf (compileHOLExact ctxt live body)) source sourceFinal result target ctxt live

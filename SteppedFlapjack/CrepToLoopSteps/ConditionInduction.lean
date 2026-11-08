@@ -23,7 +23,7 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
     (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
     (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
     ∃ extra post,
-      extra ≤ (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) + bodyFactor+2) * (CrepSteps.steps (.while condition body) source+1) ∧
+      extra ≤ (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) + bodyFactor+2) * (CrepSteps.steps (.while condition body) source+1) ∧
       evaluate (compileHOLExact ctxt live (.while condition body)) {target with clock := target.clock+extra} =
         (resultToLoop result,post) ∧
       crepToLoopStateRelExact sourceFinal post ∧
@@ -67,7 +67,7 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
           have continueCase (hcontinue : bodyResult = none ∨ bodyResult = some (.continue 0))
               (rest : evalCrepSemHOLProgExact postSource (.while condition body) = (result,sourceFinal)) :
               ∃ extra post,
-                extra ≤ (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) + bodyFactor+2) * (CrepSteps.steps (.while condition body) source+1) ∧
+                extra ≤ (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) + bodyFactor+2) * (CrepSteps.steps (.while condition body) source+1) ∧
                 evaluate (compileHOLExact ctxt live (.while condition body)) {target with clock := target.clock+extra} =
                   (resultToLoop result,post) ∧
                 crepToLoopStateRelExact sourceFinal post ∧
@@ -180,6 +180,13 @@ theorem branchConditionWhile_bounded_steps {width : Nat} [NeZero width] {F : Typ
   have codeEq : code = (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1 := by
     simpa using congrArg Prod.fst exprCompiled.symm
   rw [← codeEq] at clockBound
+  obtain ⟨prefixCode,_,_,_,prefixCompiled,prefixShape,_⟩ :=
+    condition_prefix_shape conditionShape ctxt (ctxt.vmax+1) live
+  have prefixEq : prefixCode = code := by
+    have h := congrArg Prod.fst (prefixCompiled.symm.trans exprCompiled)
+    simpa using h
+  subst prefixCode
+  have prefixWeight := LoopSteps.branchedProgram_weight_le_size (nestedSeq_branched code prefixShape)
   have sourceCount := CrepSteps.while_clock_consumed condition body bodyShape source sourceFinal result run
   have delta : source.clock + extra - sourceFinal.clock + 1 ≤
       CrepSteps.steps (.while condition body) source + extra + 1 := by omega

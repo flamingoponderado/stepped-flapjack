@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.ScalarLoopWeight
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopLive
 import SteppedFlapjack.LoopLiveSteps.ClockBound
 import SteppedFlapjack.LoopSteps.ClockConsumption
@@ -116,13 +117,13 @@ private theorem terminal_arith (start entry finish cost visits : Nat)
   nlinarith
 
 /-- A loop visit bound lifts a clock-consumption bound for its body. -/
-private theorem nested_loop_bound (live exits : NumSet) (body : HolLoopProg width)
+private theorem nested_loop_bound (live exits : NumSet) (body : HolLoopProg width) (cost : Nat)
     (bodyBound : ∀ (s post : LoopSemStateFiniteExact width F) (result : Option (LoopResultExact width)),
       evaluate body s = (result,post) →
-      steps body s ≤ sizeOf body * (s.clock - post.clock + 1))
+      steps body s ≤ cost * (s.clock - post.clock + 1))
     (s final : LoopSemStateFiniteExact width F) (result : Option (LoopResultExact width))
     (run : evaluate (.loop live body exits) s = (result,final)) :
-    steps (.loop live body exits) s ≤ (1 + sizeOf body) * (s.clock - final.clock + 1) := by
+    steps (.loop live body exits) s ≤ (1 + cost) * (s.clock - final.clock + 1) := by
   induction hs : s.clock using Nat.strongRecOn generalizing s final result with
   | _ clock ih =>
     rcases cut : cutRes live (none,s) with ⟨cutResult,entry⟩
@@ -153,7 +154,7 @@ private theorem nested_loop_bound (live exits : NumSet) (body : HolLoopProg widt
         have finalClock := evaluate_clock (.loop live body exits) middle result final recurRun
         have budget : entry.clock - middle.clock + 1 + (middle.clock - final.clock + 1) ≤
             s.clock - final.clock + 1 := by omega
-        have scaled := Nat.mul_le_mul_left (1 + sizeOf body) budget
+        have scaled := Nat.mul_le_mul_left (1 + cost) budget
         rcases continuing with h | h <;> rw [h] <;> simp only <;> nlinarith
       · have hnone : bodyResult ≠ none := fun h => continuing (Or.inl h)
         have hcont : bodyResult ≠ some (.continue 0) := fun h => continuing (Or.inr h)
@@ -173,26 +174,27 @@ private theorem nested_loop_bound (live exits : NumSet) (body : HolLoopProg widt
               rw [execution] at exitClock
               simp only at exitClock
               have budget : entry.clock - middle.clock + 1 ≤ s.clock - final.clock + 1 := by omega
-              have scaled := Nat.mul_le_mul_left (1 + sizeOf body) budget
+              have scaled := Nat.mul_le_mul_left (1 + cost) budget
               nlinarith
             | succ n => simp only at execution ⊢; cases execution; exact terminal_arith _ _ _ _ _ entryClock bodyClock bodyVisits
 
-/-- Visits are bounded by code size and the clock actually consumed, even for
+/-- Visits are bounded by control-node weight and the clock actually consumed, even for
 nested loops and branches. The bound is independent of unused input clock. -/
-theorem scalarLoop_consumption_bound {p : HolLoopProg width} (shape : ScalarLoop p)
+theorem scalarLoop_control_consumption_bound {p : HolLoopProg width} (shape : ScalarLoop p)
     (s post : LoopSemStateFiniteExact width F) (result : Option (LoopResultExact width))
     (run : evaluate p s = (result,post)) :
-    steps p s ≤ sizeOf p * (s.clock - post.clock + 1) := by
+    steps p s ≤ loopVisitWeight p * (s.clock - post.clock + 1) := by
   induction shape generalizing s post result with
   | branch h =>
-    have bound := branchedProgram_static_bound (branch_branched h) s
+    have bound := branchedProgram_structural_bound (branch_branched h) s
+    rw [branch_visitWeight h]
     nlinarith
   | @loop live exits body h ih =>
-    have bound := nested_loop_bound live exits body ih s post result run
-    have size : 1 + sizeOf body ≤ sizeOf (.loop live body exits : HolLoopProg width) := by simp_wf; omega
+    have bound := nested_loop_bound live exits body (loopVisitWeight body) ih s post result run
+    have size : 1 + loopVisitWeight body ≤ loopVisitWeight (.loop live body exits : HolLoopProg width) := by simp [loopVisitWeight]
     exact bound.trans (Nat.mul_le_mul_right _ size)
   | @seq a b ha hb iha ihb =>
-    have size : 1 + sizeOf a + sizeOf b ≤ sizeOf (.seq a b : HolLoopProg width) := by simp_wf
+    have size : 1 + loopVisitWeight a + loopVisitWeight b ≤ loopVisitWeight (.seq a b : HolLoopProg width) := by simp [loopVisitWeight]
     rw [steps_seq,evaluate_seq] at *
     rcases first : evaluate a s with ⟨out,middle⟩
     rw [first] at run
@@ -205,8 +207,8 @@ theorem scalarLoop_consumption_bound {p : HolLoopProg width} (shape : ScalarLoop
       have secondClock := evaluate_clock b middle result post run
       have budget1 : s.clock - middle.clock + 1 ≤ s.clock - post.clock + 1 := by omega
       have budget2 : middle.clock - post.clock + 1 ≤ s.clock - post.clock + 1 := by omega
-      have scaled1 := Nat.mul_le_mul_left (sizeOf a) budget1
-      have scaled2 := Nat.mul_le_mul_left (sizeOf b) budget2
+      have scaled1 := Nat.mul_le_mul_left (loopVisitWeight a) budget1
+      have scaled2 := Nat.mul_le_mul_left (loopVisitWeight b) budget2
       nlinarith
     | some x =>
       simp only [Prod.mk.injEq] at run
@@ -214,8 +216,8 @@ theorem scalarLoop_consumption_bound {p : HolLoopProg width} (shape : ScalarLoop
       simp only
       nlinarith
   | @ite cmp reg ri live a b ha hb iha ihb =>
-    have sizeA : 1 + sizeOf a ≤ sizeOf (.ite cmp reg ri a b live : HolLoopProg width) := by simp_wf; omega
-    have sizeB : 1 + sizeOf b ≤ sizeOf (.ite cmp reg ri a b live : HolLoopProg width) := by simp_wf; omega
+    have sizeA : 1 + loopVisitWeight a ≤ loopVisitWeight (.ite cmp reg ri a b live : HolLoopProg width) := by simp [loopVisitWeight]
+    have sizeB : 1 + loopVisitWeight b ≤ loopVisitWeight (.ite cmp reg ri a b live : HolLoopProg width) := by simp [loopVisitWeight]
     rw [steps_ite]
     simp only [evaluate] at run
     rcases hx : sptLookup reg s.locals with _ | (x | ⟨_,_⟩) <;>
@@ -232,7 +234,7 @@ theorem scalarLoop_consumption_bound {p : HolLoopProg width} (shape : ScalarLoop
       rw [ht] at hc
       simp only at hc
       have budget : s.clock - middle.clock + 1 ≤ s.clock - post.clock + 1 := by omega
-      have scaled := Nat.mul_le_mul_left (sizeOf a) budget
+      have scaled := Nat.mul_le_mul_left (loopVisitWeight a) budget
       nlinarith
     · simp only [hcmp,Bool.false_eq_true,if_false] at run ⊢
       rcases branch : evaluate b s with ⟨br,middle⟩
@@ -244,8 +246,16 @@ theorem scalarLoop_consumption_bound {p : HolLoopProg width} (shape : ScalarLoop
       rw [ht] at hc
       simp only at hc
       have budget : s.clock - middle.clock + 1 ≤ s.clock - post.clock + 1 := by omega
-      have scaled := Nat.mul_le_mul_left (sizeOf b) budget
+      have scaled := Nat.mul_le_mul_left (loopVisitWeight b) budget
       nlinarith
+
+/-- The control bound implies the coarser code-size bound. -/
+theorem scalarLoop_consumption_bound {p : HolLoopProg width} (shape : ScalarLoop p)
+    (s post : LoopSemStateFiniteExact width F) (result : Option (LoopResultExact width))
+    (run : evaluate p s = (result,post)) :
+    steps p s ≤ sizeOf p * (s.clock - post.clock + 1) := by
+  exact (scalarLoop_control_consumption_bound shape s post result run).trans
+    (Nat.mul_le_mul_right _ (scalarLoop_visitWeight_le_size shape))
 
 /-- The actual optimizer preserves a completed recursive scalar Loop run and
 its visits are bounded by optimized code size and original visits. -/

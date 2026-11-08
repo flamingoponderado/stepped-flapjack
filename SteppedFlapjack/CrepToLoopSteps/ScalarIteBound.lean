@@ -14,14 +14,14 @@ theorem scalarIte_programBound {width : Nat} [NeZero width] {σ : Type}
     (yesBound : @ProgramBound width _ σ yes ctxt live yesFactor)
     (noBound : @ProgramBound width _ σ no ctxt live noFactor) :
     @ProgramBound width _ σ (.ite condition yes no) ctxt live
-      (sizeOf (compileHOLExact ctxt live (.ite condition yes no)) *
-        (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
+      (loopVisitWeight (compileHOLExact ctxt live (.ite condition yes no)) *
+        (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
           2*max yesFactor noFactor+2)) := by
   classical
   intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
   let p := CrepProgHOL.ite condition yes no
   let factor := max yesFactor noFactor
-  let prefixSize := sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1)
+  let prefixSize := LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1)
   let code := compileHOLExact ctxt live p
   have shape : ScalarProgram p := .ite conditionShape yesShape noShape
   have loopShape := compile_scalar_program shape ctxt live
@@ -39,7 +39,7 @@ theorem scalarIte_programBound {width : Nat} [NeZero width] {σ : Type}
       obtain ⟨ck,st,exprRun,exprValue,exprState,exprMem,exprGlobals,exprCode,exprLocals⟩ :=
         crepToLoop_comp_exp_preserves_eval source condition (.word w) target ctxt (ctxt.vmax+1) live np value tmp outLive
           ⟨guard,stateRel,memRel,globalsRel,codeRel,localsRel,compiled,by omega⟩
-      have prefixBound := condition_extraClock_bound source target st np ck (by
+      have prefixBound := condition_extraClock_control_bound source target st np ck (by
         intro q hq
         obtain ⟨_,_,_,_,hc,hbranch,_⟩ := condition_prefix_shape conditionShape ctxt (ctxt.vmax+1) live
         rw [compiled] at hc
@@ -105,7 +105,7 @@ theorem scalarIte_programBound {width : Nat} [NeZero width] {σ : Type}
           dsimp only [chosen,p]
           rw [if_neg hw,sourceCount]
           exact Nat.add_comm _ _
-      have prefixEq : sizeOf (loopNestedSeqHOL np) = prefixSize := by
+      have prefixEq : LoopSteps.structuralWeight (loopNestedSeqHOL np) = prefixSize := by
         dsimp [prefixSize]
         rw [compiled]
       rw [prefixEq] at prefixBound
@@ -114,8 +114,8 @@ theorem scalarIte_programBound {width : Nat} [NeZero width] {σ : Type}
           (stateFinal : crepToLoopStateRelExact sourceFinal final)
           (extraBound : extra ≤ (prefixSize+2*factor+1)*(CrepSteps.steps p source+1)) :
           LoopSteps.steps code {target with clock := target.clock+extra} ≤
-            sizeOf code*(prefixSize+2*factor+2)*(CrepSteps.steps p source+1) := by
-        have visits := scalarLoop_consumption_bound loopShape _ final (resultToLoop result) targetRun
+            loopVisitWeight code*(prefixSize+2*factor+2)*(CrepSteps.steps p source+1) := by
+        have visits := scalarLoop_control_consumption_bound loopShape _ final (resultToLoop result) targetRun
         have initial := stateRel.2.2.1
         have last := stateFinal.2.2.1
         have delta : target.clock+extra-final.clock ≤ CrepSteps.steps p source+extra := by omega

@@ -183,7 +183,7 @@ theorem branchCondition_continue_run
     (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
     ∃ code value next outLive extra post,
       compileExpHOLExact ctxt (ctxt.vmax+1) live condition = (code,value,next,outLive) ∧
-      extra ≤ sizeOf (loopNestedSeqHOL code) + bodyCost (CrepSteps.steps body (decClockCrepSemHOL source)) ∧
+      extra ≤ LoopSteps.structuralWeight (loopNestedSeqHOL code) + bodyCost (CrepSteps.steps body (decClockCrepSemHOL source)) ∧
       crepToLoopStateRelExact sourcePost post ∧
       crepToLoopMemRelHOLExact sourcePost.memory post.memory sourcePost.memaddrs ∧
       crepToLoopGlobalsRelHOLExact sourcePost.globals post.globals ∧
@@ -211,7 +211,7 @@ theorem branchCondition_continue_run
     crepToLoop_comp_exp_preserves_eval (decClockCrepSemHOL source) condition (.word w) initial ctxt
       (ctxt.vmax+1) live code value next outLive
       ⟨guardDec,initialState,memRel,globalsRel,codeRel,initialLocals,compiled,by omega⟩
-  have conditionBound := condition_extraClock_bound (decClockCrepSemHOL source) initial afterCondition
+  have conditionBound := condition_extraClock_control_bound (decClockCrepSemHOL source) initial afterCondition
     code ck branch initialState exprRun exprState
   let bodyTarget := setVar next (.word w) afterCondition
   have bodyLocals : crepToLoopLocalsRelExact ctxt live (decClockCrepSemHOL source).locals bodyTarget.locals := by
@@ -294,7 +294,7 @@ theorem branchCondition_break_run
     (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
     ∃ code value next outLive extra post,
       compileExpHOLExact ctxt (ctxt.vmax+1) live condition = (code,value,next,outLive) ∧
-      extra ≤ sizeOf (loopNestedSeqHOL code) + bodyCost (CrepSteps.steps body (decClockCrepSemHOL source)) + 1 ∧
+      extra ≤ LoopSteps.structuralWeight (loopNestedSeqHOL code) + bodyCost (CrepSteps.steps body (decClockCrepSemHOL source)) + 1 ∧
       crepToLoopStateRelExact sourcePost post ∧
       crepToLoopMemRelHOLExact sourcePost.memory post.memory sourcePost.memaddrs ∧
       crepToLoopGlobalsRelHOLExact sourcePost.globals post.globals ∧
@@ -321,7 +321,7 @@ theorem branchCondition_break_run
     crepToLoop_comp_exp_preserves_eval (decClockCrepSemHOL source) condition (.word w) initial ctxt
       (ctxt.vmax+1) live code value next outLive
       ⟨guardDec,initialState,memRel,globalsRel,codeRel,initialLocals,compiled,by omega⟩
-  have conditionBound := condition_extraClock_bound (decClockCrepSemHOL source) initial afterCondition
+  have conditionBound := condition_extraClock_control_bound (decClockCrepSemHOL source) initial afterCondition
     code ck branch initialState exprRun exprState
   let bodyTarget := setVar next (.word w) afterCondition
   have bodyLocals : crepToLoopLocalsRelExact ctxt live (decClockCrepSemHOL source).locals bodyTarget.locals := by
@@ -409,7 +409,7 @@ theorem branchCondition_exit_run
     (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
     ∃ code value next outLive extra post,
       compileExpHOLExact ctxt (ctxt.vmax+1) live condition = (code,value,next,outLive) ∧
-      extra ≤ sizeOf (loopNestedSeqHOL code) + bodyCost (CrepSteps.steps body (decClockCrepSemHOL source)) ∧
+      extra ≤ LoopSteps.structuralWeight (loopNestedSeqHOL code) + bodyCost (CrepSteps.steps body (decClockCrepSemHOL source)) ∧
       crepToLoopStateRelExact sourcePost post ∧
       crepToLoopMemRelHOLExact sourcePost.memory post.memory sourcePost.memaddrs ∧
       crepToLoopGlobalsRelHOLExact sourcePost.globals post.globals ∧
@@ -436,7 +436,7 @@ theorem branchCondition_exit_run
     crepToLoop_comp_exp_preserves_eval (decClockCrepSemHOL source) condition (.word w) initial ctxt
       (ctxt.vmax+1) live code value next outLive
       ⟨guardDec,initialState,memRel,globalsRel,codeRel,initialLocals,compiled,by omega⟩
-  have conditionBound := condition_extraClock_bound (decClockCrepSemHOL source) initial afterCondition
+  have conditionBound := condition_extraClock_control_bound (decClockCrepSemHOL source) initial afterCondition
     code ck branch initialState exprRun exprState
   let bodyTarget := setVar next (.word w) afterCondition
   have bodyLocals : crepToLoopLocalsRelExact ctxt live (decClockCrepSemHOL source).locals bodyTarget.locals := by

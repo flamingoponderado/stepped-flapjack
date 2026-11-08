@@ -68,6 +68,25 @@ theorem nestedSeq_select {width : Nat} [NeZero width] (code : List (HolLoopProg 
     exact .seq (shape p (by simp)) (ih (by intro q hq; exact shape q (by simp [hq])))
 
 /-- Every correctness clock witness for a compiled branch condition prefix is
+bounded by that prefix's control-node weight. -/
+theorem condition_extraClock_control_bound {width : Nat} [NeZero width] {σ : Type}
+    (source : CrepSemHOLState width σ) (target post : LoopSemStateFiniteExact width σ)
+    (code : List (HolLoopProg width)) (extra : Nat)
+    (shape : ∀ p ∈ code, BranchedProgram p)
+    (stateRel : crepToLoopStateRelExact source target)
+    (run : evaluate (loopNestedSeqHOL code) {target with clock := target.clock+extra} = (none,post))
+    (postRel : crepToLoopStateRelExact source post) : extra ≤ LoopSteps.structuralWeight (loopNestedSeqHOL code) := by
+  have hshape := nestedSeq_branched code shape
+  have consumed := LoopSteps.branchedProgram_clock_consumed hshape
+    {target with clock := target.clock+extra} post none run
+  have visits := LoopSteps.branchedProgram_structural_bound hshape {target with clock := target.clock+extra}
+  have initial := stateRel.2.2.1
+  have final := postRel.2.2.1
+  simp only at consumed
+  omega
+
+
+/-- Every correctness clock witness for a compiled branch condition prefix is
 bounded by that prefix's syntax size. -/
 theorem condition_extraClock_bound {width : Nat} [NeZero width] {σ : Type}
     (source : CrepSemHOLState width σ) (target post : LoopSemStateFiniteExact width σ)
@@ -76,15 +95,8 @@ theorem condition_extraClock_bound {width : Nat} [NeZero width] {σ : Type}
     (stateRel : crepToLoopStateRelExact source target)
     (run : evaluate (loopNestedSeqHOL code) {target with clock := target.clock+extra} = (none,post))
     (postRel : crepToLoopStateRelExact source post) : extra ≤ sizeOf (loopNestedSeqHOL code) := by
-  have hshape := nestedSeq_branched code shape
-  have consumed := LoopSteps.branchedProgram_clock_consumed hshape
-    {target with clock := target.clock+extra} post none run
-  have visits := LoopSteps.branchedProgram_static_bound hshape {target with clock := target.clock+extra}
-  have initial := stateRel.2.2.1
-  have final := postRel.2.2.1
-  simp only at consumed
-  omega
-
+  exact (condition_extraClock_control_bound source target post code extra shape stateRel run postRel).trans
+    (LoopSteps.branchedProgram_weight_le_size (nestedSeq_branched code shape))
 
 /-- The actual loop body generated for a supported condition. -/
 def branchConditionWhileBody {width : Nat} [NeZero width]
