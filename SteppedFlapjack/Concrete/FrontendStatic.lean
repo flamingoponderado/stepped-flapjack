@@ -33,7 +33,7 @@ theorem falseComparisonLoop_crep_bound :
         (targetResult,targetFinal) ∧
       pcCompileCorrectResultRel emptyFrontendContext sourceTemplate targetFinal none targetResult ∧
       steps (compileProgExactHOLW emptyFrontendContext falseComparisonLoop) emptyFrontendCrep ≤
-        sizeOf (compileProgExactHOLW emptyFrontendContext falseComparisonLoop) := by
+        statementWeight (compileProgExactHOLW emptyFrontendContext falseComparisonLoop) := by
   have condition : FrontendScalar emptyFrontendContext (.cmp .lower (.const 1) (.const 0)) :=
     .cmp .lower (.const 1) (.const 0)
   have body : StaticProgram (compileProgExactHOLW emptyFrontendContext (.skip : ProgHOL 64)) := by

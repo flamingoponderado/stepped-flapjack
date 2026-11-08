@@ -50,30 +50,6 @@ theorem generated_callee_lookup (body : ProgHOL 64) (target : CrepProgHOL 64)
   simp [crepState,concreteDeclCrepState,code,alistToFmapCodeExact,
     HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,Ne.symm fresh]
 
-/-- A callee that falls through makes the generated tail call report an error. -/
-theorem tail_entry_fallthrough {width : Nat} [NeZero width] {σ : Type}
-    (state : CrepSemHOLState width σ) (name : MlString) (body : CrepProgHOL width)
-    (final : CrepSemHOLState width σ) (limit : Nat)
-    (lookup : state.code.lookup name = some ([],body)) (nonzero : state.clock ≠ 0)
-    (run : evalCrepSemHOLProgExact
-      (decClockCrepSemHOL {state with locals := HolFiniteMapExact.empty.updateList []}) body = (none,final))
-    (bound : CrepSteps.steps body (decClockCrepSemHOL {state with locals := HolFiniteMapExact.empty.updateList []}) ≤ limit) :
-    evalCrepSemHOLProgExact state (.seq .skip (.call none name [])) = (some .error,final) ∧
-    CrepSteps.steps (.seq .skip (.call none name [])) state ≤ 3 + limit := by
-  constructor
-  · rw [evalCrepSemHOLProgExact_seq_holShape,evalCrepSemHOLProgExact_skip]
-    simp only [if_true]
-    rw [evalCrepSemHOLProgExact_call_holShape]
-    simp [lookupCodeFiniteHOL,lookup,crepReturnInfoNodupError,nonzero,decClockCrepSemHOL] at run ⊢
-    rw [run]
-  · rw [CrepSteps.steps_seq]
-    simp only [evalCrepSemHOLProgExact_skip]
-    rw [CrepSteps.steps_call_tail name [] _ [] [] _ (by simp) lookup (by simp) (by simp) nonzero]
-    have one : CrepSteps.steps (.skip : CrepProgHOL width) state = 1 := CrepSteps.steps_leaf _ _ rfl
-    rw [one]
-    simp only [List.zip, List.zipWith] at bound ⊢
-    omega
-
 /-- Outcomes of a supported function body and the corresponding entry result. -/
 def bodyExitSource (exit : Option (BitVec 64)) : Option (PanSemResultExact 64) :=
   exit.map (fun word => .returned (.val (.word word)))
@@ -100,7 +76,7 @@ theorem supported_entry_crep_exit_from {σ : Type}
     let entry : CrepProgHOL 64 := .seq .skip (.call none (entryName body) [])
     ∃ targetFinal,
       evalCrepSemHOLProgExact (crepStateFrom source body) entry = (bodyExitEntry exit,targetFinal) ∧
-      CrepSteps.steps entry (crepStateFrom source body) ≤ 3 + sizeOf (compileProgExactHOLW callee body) * sourceLimit := by
+      CrepSteps.steps entry (crepStateFrom source body) ≤ 3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) * sourceLimit := by
   let body := progToHOL program
   let caller := frontendContext body
   let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
@@ -122,43 +98,16 @@ theorem supported_entry_crep_exit_from {σ : Type}
         simpa [bodyExitSource,pcCompileCorrectResultRel,flattenHOL] using resultRel
       exact h.1
     subst targetResult
-    have wrapper := tail_entry_fallthrough crep (entryName body) (compileProgExactHOLW callee body)
-      targetFinal _ lookup nonzero (by simpa [target,flattenHOL] using targetRun) bound
-    exact ⟨targetFinal,wrapper.1,wrapper.2⟩
+    have wrapper := CrepSteps.tail_entry crep (entryName body) (compileProgExactHOLW callee body)
+      none targetFinal _ lookup nonzero (by simpa [target,flattenHOL] using targetRun) bound
+    exact ⟨targetFinal,by simpa [CrepSteps.tailExit,bodyExitEntry] using wrapper.1,wrapper.2⟩
   | some word =>
     have result : targetResult = some (.return [.word word]) := by
       simpa [bodyExitSource,pcCompileCorrectResultRel,flattenHOL] using resultRel
     subst targetResult
-    have wrapper := CrepSteps.tail_entry_returned_word crep (entryName body) (compileProgExactHOLW callee body)
-      word targetFinal _ lookup nonzero (by simpa [target,flattenHOL] using targetRun) bound
-    exact ⟨targetFinal.emptyLocals,wrapper.1,wrapper.2⟩
-/-- Propagate a callee error through the generated tail entry. -/
-private theorem tail_entry_error {width : Nat} [NeZero width] {σ : Type}
-    (state : CrepSemHOLState width σ) (name : MlString) (body : CrepProgHOL width)
-    (final : CrepSemHOLState width σ) (limit : Nat)
-    (lookup : state.code.lookup name = some ([],body)) (nonzero : state.clock ≠ 0)
-    (run : evalCrepSemHOLProgExact
-      (decClockCrepSemHOL {state with locals := HolFiniteMapExact.empty.updateList []}) body =
-        (some .error,final))
-    (bound : CrepSteps.steps body (decClockCrepSemHOL {state with locals := HolFiniteMapExact.empty.updateList []}) ≤ limit) :
-    evalCrepSemHOLProgExact state (.seq .skip (.call none name [])) =
-      (some .error,final.emptyLocals) ∧
-    CrepSteps.steps (.seq .skip (.call none name [])) state ≤ 3 + limit := by
-  constructor
-  · rw [evalCrepSemHOLProgExact_seq_holShape,evalCrepSemHOLProgExact_skip]
-    simp only [if_true]
-    rw [evalCrepSemHOLProgExact_call_holShape]
-    simp [lookupCodeFiniteHOL,lookup,crepReturnInfoNodupError,nonzero,decClockCrepSemHOL] at run ⊢
-    rw [run]
-  · rw [CrepSteps.steps_seq]
-    simp only [evalCrepSemHOLProgExact_skip]
-    rw [CrepSteps.steps_call_tail name [] _ [] [] _ (by simp) lookup (by simp) (by simp) nonzero]
-    have one : CrepSteps.steps (.skip : CrepProgHOL width) state = 1 := CrepSteps.steps_leaf _ _ rfl
-    rw [one]
-    simp only [List.zip, List.zipWith] at bound ⊢
-    omega
-
-
+    have wrapper := CrepSteps.tail_entry crep (entryName body) (compileProgExactHOLW callee body)
+      (some (.return [.word word])) targetFinal _ lookup nonzero (by simpa [target,flattenHOL] using targetRun) bound
+    exact ⟨targetFinal.emptyLocals,by simpa [CrepSteps.tailExit,bodyExitEntry] using wrapper.1,wrapper.2⟩
 theorem supported_entry_crep_error_from {σ : Type}
     (program : Prog (RiscV.Word 64)) (supported : Supported program)
     (source : PanSemStateFiniteExact 64 σ)
@@ -175,7 +124,7 @@ theorem supported_entry_crep_error_from {σ : Type}
     let entry : CrepProgHOL 64 := .seq .skip (.call none (entryName body) [])
     ∃ targetFinal,
       evalCrepSemHOLProgExact (crepStateFrom source body) entry = (some .error,targetFinal) ∧
-      CrepSteps.steps entry (crepStateFrom source body) ≤ 3 + 3 * sizeOf (compileProgExactHOLW callee body) * sourceLimit := by
+      CrepSteps.steps entry (crepStateFrom source body) ≤ 3 + 3 * CrepSteps.statementWeight (compileProgExactHOLW callee body) * sourceLimit := by
   let body := progToHOL program
   let caller := frontendContext body
   let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
@@ -190,8 +139,8 @@ theorem supported_entry_crep_error_from {σ : Type}
     registered present stateRel codeRel excpRel localsRel run
   have nonzero : crep.clock ≠ 0 := by
     simp [crep,crepStateFrom,concreteDeclCrepState,loweredStateFrom,noGlobalsLoweredPreCall]
-  have wrapper := tail_entry_error crep (entryName body) (compileProgExactHOLW callee body)
-    targetFinal _ lookup nonzero (by simpa [target] using targetRun) bound
-  refine ⟨targetFinal.emptyLocals,wrapper.1,?_⟩
+  have wrapper := CrepSteps.tail_entry crep (entryName body) (compileProgExactHOLW callee body)
+    (some .error) targetFinal _ lookup nonzero (by simpa [target] using targetRun) bound
+  refine ⟨targetFinal.emptyLocals,by simpa [CrepSteps.tailExit,bodyExitEntry] using wrapper.1,?_⟩
   exact wrapper.2.trans (Nat.add_le_add_left (Nat.mul_le_mul_left _ sourceBound) 3)
 end SteppedFlapjack.Concrete

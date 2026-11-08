@@ -12,7 +12,7 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
     ∃ final,
       evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState program source) body) entry = (some .error,final) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program source) body) ≤
-        3 + sizeOf (compileProgExactHOLW callee body) * (sizeOf (compileProgExactHOLW callee body) * 2) := by
+        3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) * (CrepSteps.statementWeight (compileProgExactHOLW callee body) * 2) := by
   let program : Prog (RiscV.Word 64) := .skip
   let source := clockedFixtureSource program 1
   let production := clockedFixtureProduction program 1

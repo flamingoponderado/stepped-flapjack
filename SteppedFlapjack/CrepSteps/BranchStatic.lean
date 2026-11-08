@@ -12,6 +12,51 @@ inductive StaticProgram {width : Nat} [NeZero width] : CrepProgHOL width → Pro
   | seq {a b} : StaticProgram a → StaticProgram b → StaticProgram (.seq a b)
   | ite (condition : CrepExpHOL width) {a b} : StaticProgram a → StaticProgram b → StaticProgram (.ite condition a b)
 
+/-- Statement nodes visited by the Crep semantics. Literal values, register
+names and expressions do not contribute: expression evaluation is atomic at
+this stage. -/
+def statementWeight {width : Nat} [NeZero width] : CrepProgHOL width → Nat
+  | .dec _ _ body => 1 + statementWeight body
+  | .seq a b => 1 + statementWeight a + statementWeight b
+  | .ite _ a b => 1 + statementWeight a + statementWeight b
+  | .while _ body => 1 + statementWeight body
+  | _ => 1
+
+theorem statementWeight_pos {width : Nat} [NeZero width] (p : CrepProgHOL width) :
+    1 ≤ statementWeight p := by
+  cases p <;> simp [statementWeight] <;> omega
+
+/-- A loop-free program visits at most its structural statement weight. -/
+theorem staticProgram_statementWeight {width : Nat} [NeZero width] {σ : Type}
+    {p : CrepProgHOL width} (shape : StaticProgram p) (source : CrepSemHOLState width σ) :
+    steps p source ≤ statementWeight p := by
+  induction shape generalizing source with
+  | leaf p leaf =>
+    rw [steps_leaf p source leaf]
+    exact statementWeight_pos p
+  | @dec name value body hb ih =>
+    rw [steps_dec]
+    rcases evalCrepSemHOLExp source value with _ | v
+    · simp [statementWeight]
+    · have bound := ih (CrepSemHOLState.setVar name v source)
+      simp only [statementWeight]
+      omega
+  | @seq a b ha hb iha ihb =>
+    rw [steps_seq]
+    have first := iha source
+    rcases evalCrepSemHOLProgExact source a with ⟨out,post⟩
+    cases out with
+    | none => have second := ihb post; simp only [statementWeight]; omega
+    | some r => simp only [statementWeight]; omega
+  | @ite e a b ha hb iha ihb =>
+    rw [steps_ite]
+    have first := iha source
+    have second := ihb source
+    rcases evalCrepSemHOLExp source e with _ | ⟨v⟩
+    · simp [statementWeight]; omega
+    · cases v with
+      | word w => simp only [statementWeight]; split <;> omega
+
 /-- A loop-free Crep run visits no more statements than its syntax size,
 independently of the complexity of its expressions. -/
 theorem staticProgram_steps {width : Nat} [NeZero width] {σ : Type}

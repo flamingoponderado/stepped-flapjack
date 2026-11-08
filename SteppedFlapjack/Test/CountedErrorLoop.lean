@@ -3,41 +3,51 @@ namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact SteppedFlapjack.PanToCrepSteps
 
 def errorLoop : Prog (RiscV.Word 64) :=
-  .seq .skip (.while (.const 1) (.return (.shift .lsl (.const 1) (.const 64))))
+  .dec "x" .one (.const 2) (.while (.const 1)
+    (.ite (.var .local "x") (.assign .local "x" (.const 0))
+      (.return (.shift .lsl (.const 1) (.const 64)))))
 
 theorem errorLoop_supported : Supported errorLoop := by
   constructor
-  · exact .seq .skip (.while (.const _) (.ret (.shift .lsl (.const _) (.const _))))
-  · simp [errorLoop,ProgByteRanged,ExpByteRanged]
+  · exact .decl "x" (.const _) (.while (.const _) (.ite (.local "x" (by simp))
+      (.assign "x" (by simp) (.const _)) (.ret (.shift .lsl (.const _) (.const _)))))
+  · simp [errorLoop,ProgByteRanged,ExpByteRanged,NameRanged,ShapeByteRanged]
 
-def errorLoopProduction := clockedFixtureProduction errorLoop 4
-def errorLoopSource := clockedFixtureSource errorLoop 4
+def errorLoopProduction := clockedFixtureProduction errorLoop 12
+def errorLoopSource := clockedFixtureSource errorLoop 12
 
+set_option maxHeartbeats 3000000 in
+set_option maxRecDepth 4000 in
 private theorem errorLoopFacts (context : PanValueFfiContext (RiscV.Word 64))
     (primitive : PanPrimitiveHandler (RiscV.Word 64)) (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
     PanSemStateRelExec errorLoopProduction errorLoopSource.toExact ∧
     PanSemStateRelExecRanged errorLoopProduction ∧ WordLocals errorLoopProduction.locals ∧
     evalPanValueFfiProgSteps context primitive handler errorLoopProduction.structs []
-      errorLoopProduction.baseAddress errorLoopProduction.topAddress panSemBitVec64BytesInWord 3
+      errorLoopProduction.baseAddress errorLoopProduction.topAddress panSemBitVec64BytesInWord 7
       errorLoopProduction.locals errorLoopProduction.globals errorLoopProduction.memory errorLoopProduction.ffi errorLoop
       (memoryAccess := some (panSemBitVec64MemoryAccess errorLoopProduction)) =
-        some (.error errorLoopProduction.locals errorLoopProduction.globals errorLoopProduction.memory errorLoopProduction.ffi,4) := by
+        some (.error errorLoopProduction.locals errorLoopProduction.globals errorLoopProduction.memory errorLoopProduction.ffi,12) := by
   have rel : PanSemStateRelExec errorLoopProduction errorLoopSource.toExact := by
     obtain ⟨a,b,c,d,e,f,g,h,_,j,k,l,m⟩ := source_related (progToHOL errorLoop)
     exact ⟨a,b,c,d,e,f,g,h,rfl,j,k,l,m⟩
   have ranged : PanSemStateRelExecRanged errorLoopProduction :=
-    PanSemStateRelExecRanged.setClock (source_ranged (progToHOL errorLoop)) 4
+    PanSemStateRelExecRanged.setClock (source_ranged (progToHOL errorLoop)) 12
   have words : WordLocals errorLoopProduction.locals := by
     intro name value found
     simp [errorLoopProduction,clockedFixtureProduction,executableState,singleEntrySourceProduction,sourceProduction] at found
   have run : evalPanValueFfiProgSteps context primitive handler errorLoopProduction.structs []
-      errorLoopProduction.baseAddress errorLoopProduction.topAddress panSemBitVec64BytesInWord 3
+      errorLoopProduction.baseAddress errorLoopProduction.topAddress panSemBitVec64BytesInWord 7
       errorLoopProduction.locals errorLoopProduction.globals errorLoopProduction.memory errorLoopProduction.ffi errorLoop
       (memoryAccess := some (panSemBitVec64MemoryAccess errorLoopProduction)) =
-        some (.error errorLoopProduction.locals errorLoopProduction.globals errorLoopProduction.memory errorLoopProduction.ffi,4) := by
-    simp [errorLoop,evalPanValueFfiProgSteps,panValueIteCondition,panValueReturnSteps,evalPanValueExpCountedWith,
+        some (.error errorLoopProduction.locals errorLoopProduction.globals errorLoopProduction.memory errorLoopProduction.ffi,12) := by
+    simp (config := {maxSteps := 1000000}) [errorLoop,evalPanValueFfiProgSteps,panValueDecAccepted,
+      panValueAssignLocalSteps,panValueIteCondition,panValueReturnSteps,evalPanValueExpCountedWith,
       evalPanValueExpCounted,evalPanValueExp,panValueExpStepCost,panSemBitVec64MemoryAccess,
-      panValueMemoryAccessOfModel,panSemBitVec64WordModel,panSemWordModel,RiscV.panRiscVMemoryModel,RiscV.panRiscVShift]
+      panValueMemoryAccessOfModel,panSemBitVec64WordModel,panSemWordModel,errorLoopProduction,clockedFixtureProduction,executableState,singleEntrySourceProduction,sourceProduction,
+      RiscV.panRiscVMemoryModel,RiscV.panRiscVShift,updatePanValueMap,restorePanValueFfiLocal,
+      panShapeMatches,panValueShape,panValueAssignmentValid]
+    funext name
+    by_cases same : name = "x" <;> simp [restorePanValueLocal,updatePanValueMap,same]
   exact ⟨rel,ranged,words,run⟩
 
 theorem errorLoop_source_and_simp (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
@@ -45,11 +55,11 @@ theorem errorLoop_source_and_simp (context : PanValueFfiContext (RiscV.Word 64))
     ∃ final,
       errorLoopSource.evaluateHOLFiniteState (progToHOL errorLoop) = (some .error,final) ∧
       errorLoopSource.evaluateHOLFiniteState (progToHOL (panSimpProg errorLoop)) = (some .error,final) ∧
-      controlSteps (progToHOL errorLoop) errorLoopSource ≤ 5 := by
+      controlSteps (progToHOL errorLoop) errorLoopSource ≤ 13 := by
   let _ : DecidablePred errorLoopSource.memaddrs := by change DecidablePred ordinaryAddress; infer_instance
   obtain ⟨rel,ranged,words,run⟩ := errorLoopFacts context primitive handler
   obtain ⟨holResult,final,hol,outcome,bound,_⟩ := supported_counted_source errorLoop_supported.1 errorLoopProduction errorLoopSource
-    rel ranged words errorLoop_supported.2 context primitive handler [] 3 4 _ run (by rfl)
+    rel ranged words errorLoop_supported.2 context primitive handler [] 7 12 _ run (by rfl)
   cases outcome with
   | error l g m f final nextRel nextRanged nextWords =>
     refine ⟨final,hol,?_,by simpa [countedErrorBonus] using bound⟩
@@ -58,15 +68,22 @@ theorem errorLoop_source_and_simp (context : PanValueFfiContext (RiscV.Word 64))
 example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
     let body := progToHOL (panSimpProg errorLoop)
-    let caller := frontendContext body
-    let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
-    let lower := callEntryStateHOLFinite (loweredStateFrom (panSimpSourceState errorLoop errorLoopSource) body) HolFiniteMapExact.empty
-    ∃ final, lower.evaluateHOLFiniteState body = (some .error,final) ∧
-      controlSteps body lower ≤ sizeOf (compileProgExactHOLW callee body) * 5 := by
+    let entry : CrepProgHOL 64 := .seq .skip (.call none (entryName body) [])
+    ∃ final, evalCrepSemHOLProgExact
+      (crepStateFrom (panSimpSourceState errorLoop errorLoopSource) body) entry = (some .error,final) ∧
+      CrepSteps.steps entry (crepStateFrom (panSimpSourceState errorLoop errorLoopSource) body) ≤ 1914 := by
   let _ : DecidablePred errorLoopSource.memaddrs := by change DecidablePred ordinaryAddress; infer_instance
   obtain ⟨rel,ranged,words,run⟩ := errorLoopFacts context primitive handler
-  obtain ⟨holResult,sourceFinal,outcome,lowerRun,bound⟩ := supported_counted_frontend_prefix errorLoop errorLoop_supported
-    errorLoopProduction errorLoopSource rel ranged words rfl context primitive handler [] 3 4 4 _ run (by omega) rfl
+  obtain ⟨exit,final,outcome,target,bound⟩ := supported_counted_full_frontend_uniform errorLoop errorLoop_supported
+    errorLoopProduction errorLoopSource rel ranged words rfl rfl rfl rfl context primitive handler [] 7 12 12 _ run (by omega) rfl
   cases outcome with
-  | error l g m f final nextRel nextRanged nextWords => exact ⟨_,lowerRun,bound⟩
+  | error l g m f =>
+    have weight : CrepSteps.statementWeight (compileProgExactHOLW
+      (ctxtFcExactHOL (frontendContext (progToHOL (panSimpProg errorLoop))).funcs
+        (frontendContext (progToHOL (panSimpProg errorLoop))).eids [] [] [])
+      (progToHOL (panSimpProg errorLoop))) = 7 := by
+      simp only [errorLoop,panSimpProg,seqAssoc,smartSeq,retToTail,progToHOL,expToHOL,shapeToHOL]
+      simp_crep_code
+      simp [CrepSteps.statementWeight]
+    exact ⟨final,target,by simpa [weight] using bound⟩
 end SteppedFlapjack.Concrete

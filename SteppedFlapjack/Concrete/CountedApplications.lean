@@ -32,7 +32,7 @@ theorem fixture_counted_span (program : Prog (RiscV.Word 64)) (supported : Suppo
     ∃ final, evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState program (clockedFixtureSource program n)) body) entry =
       (some (.return [.word word]),final) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program (clockedFixtureSource program n)) body) ≤
-        3 + sizeOf (compileProgExactHOLW callee body) * (sizeOf (compileProgExactHOLW callee body) * (n+1)) := by
+        3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) * (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1)) := by
   let source := clockedFixtureSource program n
   let production := clockedFixtureProduction program n
   let _ : DecidablePred source.memaddrs := by
@@ -53,8 +53,8 @@ theorem fixture_counted_span (program : Prog (RiscV.Word 64)) (supported : Suppo
     simpa [production,clockedFixtureProduction,panSemBitVec64MemoryAccess] using run
   exact supported_counted_full_frontend program supported production source rel ranged words rfl rfl rfl rfl
     context primitive handler [] fuel count n postLocals postGlobals postMemory postFfi word run' budget rfl
-private theorem natural_compiled_size (n : Nat) (range : n < 2^64) :
-    sizeOf (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) = n+36 := by
+private theorem natural_compiled_size (n : Nat) :
+    CrepSteps.statementWeight (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) = 8 := by
   have lookup := (supported_callee_relations (naturalCountdown n) (naturalCountdown_supported n)).1
   change (crepState (naturalCountdownHOL n)).code.lookup (entryName (naturalCountdownHOL n)) =
     some ([],compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) at lookup
@@ -64,11 +64,8 @@ private theorem natural_compiled_size (n : Nat) (range : n < 2^64) :
       naturalCountdownCrepBody (BitVec.ofNat 64 n) := by
     rw [actual] at lookup
     exact (Prod.mk.inj (Option.some.inj lookup)).2.symm
-  have size : sizeOf (naturalCountdownCrepBody (BitVec.ofNat 64 n)) = n+36 := by
-    have h := (countdownCrepBody_sizes (BitVec.ofNat 64 n)).2
-    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt range] at h
-    exact h
-  rw [codeEq,size]
+  rw [codeEq]
+  simp [naturalCountdownCrepBody,CrepSteps.statementWeight]
 
 /-- The prefixed countdown through the full counted span. -/
 theorem countdown_counted_fixture (n : Nat) (range : n < 2^64)
@@ -80,7 +77,7 @@ theorem countdown_counted_fixture (n : Nat) (range : n < 2^64)
           (naturalCountdownHOL n)) (naturalCrepEntry n) = (some (.return [.word 0]),final) ∧
       CrepSteps.steps (naturalCrepEntry n)
         (crepStateFrom (panSimpSourceState (countdown n) (clockedFixtureSource (countdown n) (6*n+9)))
-          (naturalCountdownHOL n)) ≤ 3 + (n+36)*((n+36)*(6*n+10)) := by
+          (naturalCountdownHOL n)) ≤ 3 + 8*(8*(6*n+10)) := by
   obtain ⟨result,_,run,_,_,resultEq⟩ := countdown_run n range context primitive handler
   subst result
   have run' : evalPanValueFfiProgSteps context primitive handler (executableState (progToHOL (countdown n))).structs []
@@ -98,15 +95,15 @@ theorem countdown_counted_fixture (n : Nat) (range : n < 2^64)
     (executableState (progToHOL (countdown n))).globals (executableState (progToHOL (countdown n))).memory
     (executableState (progToHOL (countdown n))).ffi 0 run' (by omega)
   simp only [countdown_simp_program] at span
-  have size := natural_compiled_size n range
+  have size := natural_compiled_size n
   change ∃ final, evalCrepSemHOLProgExact
       (crepStateFrom (panSimpSourceState (countdown n) (clockedFixtureSource (countdown n) (6*n+9)))
         (naturalCountdownHOL n)) (naturalCrepEntry n) = (some (.return [.word 0]),final) ∧
     CrepSteps.steps (naturalCrepEntry n)
       (crepStateFrom (panSimpSourceState (countdown n) (clockedFixtureSource (countdown n) (6*n+9)))
         (naturalCountdownHOL n)) ≤
-    3 + sizeOf (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) *
-      (sizeOf (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) * (6*n+9+1)) at span
+    3 + CrepSteps.statementWeight (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) *
+      (CrepSteps.statementWeight (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) * (6*n+9+1)) at span
   rw [size] at span
   simpa [Nat.add_assoc] using span
 
@@ -120,7 +117,7 @@ theorem natural_countdown_counted_fixture (n : Nat) (range : n < 2^64)
           (naturalCountdownHOL n)) (naturalCrepEntry n) = (some (.return [.word 0]),final) ∧
       CrepSteps.steps (naturalCrepEntry n)
         (crepStateFrom (panSimpSourceState (naturalCountdown n) (clockedFixtureSource (naturalCountdown n) (6*n+7)))
-          (naturalCountdownHOL n)) ≤ 3 + (n+36)*((n+36)*(6*n+8)) := by
+          (naturalCountdownHOL n)) ≤ 3 + 8*(8*(6*n+8)) := by
   have actual := counted_decl_countdown_simplified n (executableState (naturalCountdownHOL n))
     (exactState (naturalCountdownHOL n)) (source_related _) (source_ranged _) "x" countdown_name_ranged range
     (by change n ≤ 2^64; omega) 0 context primitive handler [] 0
@@ -143,15 +140,15 @@ theorem natural_countdown_counted_fixture (n : Nat) (range : n < 2^64)
   have simpEq : panSimpProg (naturalCountdown n) = naturalCountdown n := by
     simp [panSimpProg,retToTail,seqAssoc,smartSeq,seqCallRet,naturalCountdown,countdownBody]
   simp only [simpEq] at span
-  have size := natural_compiled_size n range
+  have size := natural_compiled_size n
   change ∃ final, evalCrepSemHOLProgExact
       (crepStateFrom (panSimpSourceState (naturalCountdown n) (clockedFixtureSource (naturalCountdown n) (6*n+7)))
         (naturalCountdownHOL n)) (naturalCrepEntry n) = (some (.return [.word 0]),final) ∧
     CrepSteps.steps (naturalCrepEntry n)
       (crepStateFrom (panSimpSourceState (naturalCountdown n) (clockedFixtureSource (naturalCountdown n) (6*n+7)))
         (naturalCountdownHOL n)) ≤
-    3 + sizeOf (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) *
-      (sizeOf (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) * (6*n+7+1)) at span
+    3 + CrepSteps.statementWeight (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) *
+      (CrepSteps.statementWeight (compileProgExactHOLW (naturalCalleeContext n) (naturalCountdownHOL n)) * (6*n+7+1)) at span
   rw [size] at span
   simpa [Nat.add_assoc] using span
 
@@ -163,7 +160,7 @@ theorem branching_counted_fixture
       evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState branching (clockedFixtureSource branching 6)) branchingHOL)
         branchCrepEntry = (some (.return [.word 7]),final) ∧
       CrepSteps.steps branchCrepEntry
-        (crepStateFrom (panSimpSourceState branching (clockedFixtureSource branching 6)) branchingHOL) ≤ 10111 := by
+        (crepStateFrom (panSimpSourceState branching (clockedFixtureSource branching 6)) branchingHOL) ≤ 66 := by
   have run := branching_run context primitive handler
   have run' : evalPanValueFfiProgSteps context primitive handler (executableState (progToHOL branching)).structs []
       (executableState (progToHOL branching)).baseAddress (executableState (progToHOL branching)).topAddress
@@ -184,14 +181,14 @@ theorem branching_counted_fixture
   have codeEq : compileProgExactHOLW branchCalleeContext branchingHOL = branchCrepBody := by
     rw [branchCrepCode_lookup] at lookup
     exact (Prod.mk.inj (Option.some.inj lookup)).2.symm
-  have size : sizeOf branchCrepBody = 38 := by decide
+  have size : CrepSteps.statementWeight branchCrepBody = 3 := by decide
   change ∃ final,
       evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState branching (clockedFixtureSource branching 6)) branchingHOL)
         branchCrepEntry = (some (.return [.word 7]),final) ∧
       CrepSteps.steps branchCrepEntry
         (crepStateFrom (panSimpSourceState branching (clockedFixtureSource branching 6)) branchingHOL) ≤
-        3 + sizeOf (compileProgExactHOLW branchCalleeContext branchingHOL) *
-          (sizeOf (compileProgExactHOLW branchCalleeContext branchingHOL) * 7) at span
+        3 + CrepSteps.statementWeight (compileProgExactHOLW branchCalleeContext branchingHOL) *
+          (CrepSteps.statementWeight (compileProgExactHOLW branchCalleeContext branchingHOL) * 7) at span
   rw [codeEq,size] at span
   simpa using span
 
@@ -204,7 +201,7 @@ theorem branching_loop_counted_fixture
         (crepStateFrom (panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)) (progToHOL branchingLoop))
         branchingLoopCrepEntry = (some (.return [.word 7]),final) ∧
       CrepSteps.steps branchingLoopCrepEntry
-        (crepStateFrom (panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)) (progToHOL branchingLoop)) ≤ 57627 := by
+        (crepStateFrom (panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)) (progToHOL branchingLoop)) ≤ 2907 := by
   have run := branchingLoop_source_run context primitive handler
   have span := fixture_counted_span branchingLoop branchingLoop_supported context primitive handler 7 23 23
     (executableState (progToHOL branchingLoop)).locals (executableState (progToHOL branchingLoop)).globals
@@ -214,14 +211,14 @@ theorem branching_loop_counted_fixture
   have codeEq : compileProgExactHOLW branchingLoopCalleeContext (progToHOL branchingLoop) = branchingLoopCrepBody := by
     rw [branchingLoop_code_lookup] at lookup
     exact (Prod.mk.inj (Option.some.inj lookup)).2.symm
-  have size : sizeOf branchingLoopCrepBody = 49 := by decide
+  have size : CrepSteps.statementWeight branchingLoopCrepBody = 11 := by decide
   change ∃ final, evalCrepSemHOLProgExact
       (crepStateFrom (panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)) (progToHOL branchingLoop))
       branchingLoopCrepEntry = (some (.return [.word 7]),final) ∧
     CrepSteps.steps branchingLoopCrepEntry
       (crepStateFrom (panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)) (progToHOL branchingLoop)) ≤
-        3 + sizeOf (compileProgExactHOLW branchingLoopCalleeContext (progToHOL branchingLoop)) *
-          (sizeOf (compileProgExactHOLW branchingLoopCalleeContext (progToHOL branchingLoop)) * (23+1)) at span
+        3 + CrepSteps.statementWeight (compileProgExactHOLW branchingLoopCalleeContext (progToHOL branchingLoop)) *
+          (CrepSteps.statementWeight (compileProgExactHOLW branchingLoopCalleeContext (progToHOL branchingLoop)) * (23+1)) at span
   rw [codeEq,size] at span
   simpa using span
 

@@ -23,7 +23,7 @@ private theorem normal_bridge {σ : Type} {scope : List VarName} {program : Prog
       ScalarScopePresent scope middle ∧
       ScalarLocalsRel scope ctxt middle targetMiddle ∧
       CrepSteps.steps (compileProgExactHOLW ctxt (progToHOL program)) target ≤
-        sizeOf (compileProgExactHOLW ctxt (progToHOL program)) * controlSteps (progToHOL program) source := by
+        CrepSteps.statementWeight (compileProgExactHOLW ctxt (progToHOL program)) * controlSteps (progToHOL program) source := by
   have shape := supportedIn_frontend_shape supported ctxt registered
   obtain ⟨res,after,runTarget,finalRel,finalCode,finalExcp,resultRel,bound⟩ :=
     frontend_correct_with_steps ctxt (progToHOL program) shape source middle none target _
@@ -43,7 +43,7 @@ private def ErrorBridge (scope : List VarName) (program : Prog (RiscV.Word 64)) 
    source.evaluateHOLFiniteState (progToHOL program) = (some .error,sourceFinal) →
    ∃ targetFinal, evalCrepSemHOLProgExact target (compileProgExactHOLW ctxt (progToHOL program)) = (some .error,targetFinal) ∧
      CrepSteps.steps (compileProgExactHOLW ctxt (progToHOL program)) target ≤
-       3 * sizeOf (compileProgExactHOLW ctxt (progToHOL program)) * controlSteps (progToHOL program) source
+       3 * CrepSteps.statementWeight (compileProgExactHOLW ctxt (progToHOL program)) * controlSteps (progToHOL program) source
 
 private theorem errorSkip {scope : List VarName} : ErrorBridge scope .skip := by
  intro σ ctxt source sourceFinal target registered present stateRel codeRel excpRel localsRel run
@@ -66,8 +66,8 @@ private theorem errorReturn {scope : List VarName} {expression : Exp (RiscV.Word
    rw [pair.2]
    have count : controlSteps (.return (expToHOL expression)) source = 1 := by rw [controlSteps.eq_def]; rfl
    rw [count]
-   have positive : 0 < sizeOf (compileProgExactHOLW ctxt (.return (expToHOL expression))) := by
-     cases h : compileProgExactHOLW ctxt (.return (expToHOL expression)) <;> simp_wf
+   have positive : 0 < CrepSteps.statementWeight (compileProgExactHOLW ctxt (.return (expToHOL expression))) := by
+     exact CrepSteps.statementWeight_pos _
    omega
 
 private theorem errorAssign {scope : List VarName} (name : VarName) (member : name ∈ scope)
@@ -87,8 +87,8 @@ private theorem errorAssign {scope : List VarName} (name : VarName) (member : na
  · rw [show progToHOL (.assign .local name expression) = .assign .local (ofString name) (expToHOL expression) from by simp [progToHOL]]
    have count : controlSteps (.assign .local (ofString name) (expToHOL expression)) source = 1 := by rw [controlSteps.eq_def]; rfl
    rw [count]
-   have positive : 0 < sizeOf (compileProgExactHOLW ctxt (.assign .local (ofString name) (expToHOL expression))) := by
-     cases h : compileProgExactHOLW ctxt (.assign .local (ofString name) (expToHOL expression)) <;> simp_wf
+   have positive : 0 < CrepSteps.statementWeight (compileProgExactHOLW ctxt (.assign .local (ofString name) (expToHOL expression))) := by
+     exact CrepSteps.statementWeight_pos _
    omega
 
 private theorem errorSeq {scope : List VarName} {a b : Prog (RiscV.Word 64)}
@@ -99,17 +99,18 @@ private theorem errorSeq {scope : List VarName} {a b : Prog (RiscV.Word 64)}
  rw [firstRun] at run
  have sourceCount := controlSteps_seq (progToHOL a) (progToHOL b) source
  rw [firstRun] at sourceCount
- have leftSize : sizeOf (compileProgExactHOLW ctxt (progToHOL a)) ≤
-     sizeOf (compileProgExactHOLW ctxt (.seq (progToHOL a) (progToHOL b))) := by
+ have leftSize : CrepSteps.statementWeight (compileProgExactHOLW ctxt (progToHOL a)) ≤
+     CrepSteps.statementWeight (compileProgExactHOLW ctxt (.seq (progToHOL a) (progToHOL b))) := by
    simp only [compileProgExactHOLW]
-   simp_wf
+   simp only [CrepSteps.statementWeight]
    omega
- have rightSize : sizeOf (compileProgExactHOLW ctxt (progToHOL b)) ≤
-     sizeOf (compileProgExactHOLW ctxt (.seq (progToHOL a) (progToHOL b))) := by
+ have rightSize : CrepSteps.statementWeight (compileProgExactHOLW ctxt (progToHOL b)) ≤
+     CrepSteps.statementWeight (compileProgExactHOLW ctxt (.seq (progToHOL a) (progToHOL b))) := by
    simp only [compileProgExactHOLW]
-   simp_wf
+   simp only [CrepSteps.statementWeight]
+   omega
  simp only [compileProgExactHOLW] at leftSize rightSize
- have parentPositive : 0 < sizeOf (.seq (compileProgExactHOLW ctxt (progToHOL a)) (compileProgExactHOLW ctxt (progToHOL b)) : CrepProgHOL 64) := by simp_wf
+ have parentPositive : 0 < CrepSteps.statementWeight (.seq (compileProgExactHOLW ctxt (progToHOL a)) (compileProgExactHOLW ctxt (progToHOL b)) : CrepProgHOL 64) := by simp only [CrepSteps.statementWeight]; omega
  cases firstResult with
  | none =>
    obtain ⟨targetMiddle,firstTarget,midState,midCode,midExcp,midLocals,midPresent,_,firstBound⟩ :=
@@ -147,7 +148,7 @@ private theorem errorIte {scope : List VarName} {condition : Exp (RiscV.Word 64)
    · simpa [progToHOL] using targetRun
    · simp only [progToHOL,bound,sourceCount,evaluated]
      rw [comp]
-     simp_wf
+     simp only [CrepSteps.statementWeight]
      omega
  | some value =>
    obtain ⟨word,rfl⟩ := scalar_hol_word scalar source present value evaluated
@@ -158,8 +159,8 @@ private theorem errorIte {scope : List VarName} {condition : Exp (RiscV.Word 64)
      | some value => cases value with | word w => simp [h] at evaluated; subst w; rfl
    simp only [progToHOL,evaluateHOLFiniteState_ite,evaluated] at run
    simp only [evaluated] at sourceCount
-   have leftSize : sizeOf (compileProgExactHOLW ctxt (progToHOL a)) ≤ sizeOf (compileProgExactHOLW ctxt (.ite (expToHOL condition) (progToHOL a) (progToHOL b))) := by rw [comp]; simp_wf; omega
-   have rightSize : sizeOf (compileProgExactHOLW ctxt (progToHOL b)) ≤ sizeOf (compileProgExactHOLW ctxt (.ite (expToHOL condition) (progToHOL a) (progToHOL b))) := by rw [comp]; simp_wf
+   have leftSize : CrepSteps.statementWeight (compileProgExactHOLW ctxt (progToHOL a)) ≤ CrepSteps.statementWeight (compileProgExactHOLW ctxt (.ite (expToHOL condition) (progToHOL a) (progToHOL b))) := by rw [comp]; simp only [CrepSteps.statementWeight]; omega
+   have rightSize : CrepSteps.statementWeight (compileProgExactHOLW ctxt (progToHOL b)) ≤ CrepSteps.statementWeight (compileProgExactHOLW ctxt (.ite (expToHOL condition) (progToHOL a) (progToHOL b))) := by rw [comp]; simp only [CrepSteps.statementWeight]; omega
    by_cases zero : word = 0
    · simp only [zero] at run
      obtain ⟨after,targetRun,bound⟩ := bError ctxt source sourceFinal target registered present stateRel codeRel excpRel localsRel run
@@ -168,7 +169,7 @@ private theorem errorIte {scope : List VarName} {condition : Exp (RiscV.Word 64)
        exact targetRun
      · simp only [progToHOL,comp,CrepSteps.steps_ite,targetEval,zero,ne_eq,not_true_eq_false,if_false,sourceCount]
        rw [comp] at rightSize
-       have pos : 0 < sizeOf (.ite ce (compileProgExactHOLW ctxt (progToHOL a)) (compileProgExactHOLW ctxt (progToHOL b)) : CrepProgHOL 64) := by simp_wf
+       have pos : 0 < CrepSteps.statementWeight (.ite ce (compileProgExactHOLW ctxt (progToHOL a)) (compileProgExactHOLW ctxt (progToHOL b)) : CrepProgHOL 64) := by simp only [CrepSteps.statementWeight]; omega
        nlinarith [Nat.mul_le_mul_right (controlSteps (progToHOL b) source) rightSize]
    · simp only [if_neg zero] at run
      obtain ⟨after,targetRun,bound⟩ := aError ctxt source sourceFinal target registered present stateRel codeRel excpRel localsRel run
@@ -177,7 +178,7 @@ private theorem errorIte {scope : List VarName} {condition : Exp (RiscV.Word 64)
        exact targetRun
      · simp only [progToHOL,comp,CrepSteps.steps_ite,targetEval,if_pos zero,sourceCount]
        rw [comp] at leftSize
-       have pos : 0 < sizeOf (.ite ce (compileProgExactHOLW ctxt (progToHOL a)) (compileProgExactHOLW ctxt (progToHOL b)) : CrepProgHOL 64) := by simp_wf
+       have pos : 0 < CrepSteps.statementWeight (.ite ce (compileProgExactHOLW ctxt (progToHOL a)) (compileProgExactHOLW ctxt (progToHOL b)) : CrepProgHOL 64) := by simp only [CrepSteps.statementWeight]; omega
        nlinarith [Nat.mul_le_mul_right (controlSteps (progToHOL a) source) leftSize]
 
 private theorem errorDecl {scope : List VarName} (name : VarName) {initializer : Exp (RiscV.Word 64)} {body : Prog (RiscV.Word 64)}
@@ -196,7 +197,7 @@ private theorem errorDecl {scope : List VarName} (name : VarName) {initializer :
    · simp only [progToHOL,shapeToHOL,bound]
      have count : controlSteps (.dec (ofString name) .one (expToHOL initializer) (progToHOL body)) source = 1 := by rw [controlSteps.eq_def]; simp [evaluated]
      rw [count,comp]
-     simp_wf
+     simp only [CrepSteps.statementWeight]
      omega
  | some value =>
    obtain ⟨word,rfl⟩ := scalar_hol_word scalar source present value evaluated
@@ -246,9 +247,9 @@ private theorem errorDecl {scope : List VarName} (name : VarName) {initializer :
      rw [targetRun]
    · have count := controlSteps_dec (ofString name) .one (expToHOL initializer) (progToHOL body) source (.val (.word word)) evaluated valid
      simp only [progToHOL,shapeToHOL,comp,CrepSteps.steps_dec,targetEval,count]
-     have childSize : sizeOf (compileProgExactHOLW (scalarDeclContext ctxt (ofString name)) (progToHOL body)) ≤
-        sizeOf (.dec (ctxt.vmax+1) ce (compileProgExactHOLW (scalarDeclContext ctxt (ofString name)) (progToHOL body)) : CrepProgHOL 64) := by simp_wf
-     have pos : 0 < sizeOf (.dec (ctxt.vmax+1) ce (compileProgExactHOLW (scalarDeclContext ctxt (ofString name)) (progToHOL body)) : CrepProgHOL 64) := by simp_wf
+     have childSize : CrepSteps.statementWeight (compileProgExactHOLW (scalarDeclContext ctxt (ofString name)) (progToHOL body)) ≤
+        CrepSteps.statementWeight (.dec (ctxt.vmax+1) ce (compileProgExactHOLW (scalarDeclContext ctxt (ofString name)) (progToHOL body)) : CrepProgHOL 64) := by simp only [CrepSteps.statementWeight]; omega
+     have pos : 0 < CrepSteps.statementWeight (.dec (ctxt.vmax+1) ce (compileProgExactHOLW (scalarDeclContext ctxt (ofString name)) (progToHOL body)) : CrepProgHOL 64) := by simp only [CrepSteps.statementWeight]; omega
      nlinarith [Nat.mul_le_mul_right (controlSteps (progToHOL body) (setVarHOLFinite (ofString name) (.val (.word word)) source)) childSize]
 
 private theorem errorWhile {scope : List VarName} {condition : Exp (RiscV.Word 64)} {body : Prog (RiscV.Word 64)}
@@ -269,7 +270,7 @@ private theorem errorWhile {scope : List VarName} {condition : Exp (RiscV.Word 6
     refine ⟨target,targetRun,?_⟩
     simp only [bound,sourceCount,evaluated]
     rw [comp]
-    simp_wf
+    simp only [CrepSteps.statementWeight]
     omega
   | some value =>
     obtain ⟨word,rfl⟩ := scalar_hol_word scalar source present value evaluated
@@ -299,8 +300,8 @@ private theorem errorWhile {scope : List VarName} {condition : Exp (RiscV.Word 6
         rw [bodyRun] at bodyClock
         have smaller : sourcePost.clock < clock := by simp only [decClockHOLFinite] at bodyClock; omega
         simp only [if_pos (show word ≠ 0 ∧ source.clock ≠ 0 from ⟨zero,noClock⟩),bodyRun] at sourceCount
-        have childSize : sizeOf (compileProgExactHOLW ctxt (progToHOL body)) ≤ sizeOf (.while ce (compileProgExactHOLW ctxt (progToHOL body)) : CrepProgHOL 64) := by simp_wf
-        have pos : 0 < sizeOf (.while ce (compileProgExactHOLW ctxt (progToHOL body)) : CrepProgHOL 64) := by simp_wf
+        have childSize : CrepSteps.statementWeight (compileProgExactHOLW ctxt (progToHOL body)) ≤ CrepSteps.statementWeight (.while ce (compileProgExactHOLW ctxt (progToHOL body)) : CrepProgHOL 64) := by simp only [CrepSteps.statementWeight]; omega
+        have pos : 0 < CrepSteps.statementWeight (.while ce (compileProgExactHOLW ctxt (progToHOL body)) : CrepProgHOL 64) := by simp only [CrepSteps.statementWeight]; omega
         cases bodyResult with
         | none =>
           obtain ⟨targetPost,targetBody,postState,postCode,postExcp,postLocals,postPresent,_,bodyBound⟩ :=
@@ -355,6 +356,6 @@ theorem supported_compiler_error {σ : Type} {scope : List VarName} {program : P
     (run : source.evaluateHOLFiniteState (progToHOL program) = (some .error,sourceFinal)) :
     ∃ targetFinal, evalCrepSemHOLProgExact target (compileProgExactHOLW ctxt (progToHOL program)) = (some .error,targetFinal) ∧
       CrepSteps.steps (compileProgExactHOLW ctxt (progToHOL program)) target ≤
-        3 * sizeOf (compileProgExactHOLW ctxt (progToHOL program)) * controlSteps (progToHOL program) source :=
+        3 * CrepSteps.statementWeight (compileProgExactHOLW ctxt (progToHOL program)) * controlSteps (progToHOL program) source :=
   supportedErrorBridge supported ctxt source sourceFinal target registered present stateRel codeRel excpRel localsRel run
 end SteppedFlapjack.Concrete

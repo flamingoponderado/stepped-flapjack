@@ -31,7 +31,7 @@ theorem supported_counted_frontend_prefix {σ : Type}
       CountedOutcome production result holResult sourceFinal ∧
       lower.evaluateHOLFiniteState body =
         (holResult,{{sourceFinal with code := simplifiedSource.code} with code := (loweredStateFrom simplifiedSource body).code}) ∧
-      controlSteps body lower ≤ sizeOf (compileProgExactHOLW callee body) * (n+1) := by
+      controlSteps body lower ≤ CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1) := by
   let simplified := panSimpProg program
   let body := progToHOL simplified
   let caller := frontendContext body
@@ -96,8 +96,8 @@ theorem supported_counted_full_frontend_exit {σ : Type}
       evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState program source) body) entry =
         (bodyExitEntry exit,targetFinal) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program source) body) ≤
-        3 + countedFrontendFactor result * sizeOf (compileProgExactHOLW callee body) *
-          (sizeOf (compileProgExactHOLW callee body) * (n+1)) := by
+        3 + countedFrontendFactor result * CrepSteps.statementWeight (compileProgExactHOLW callee body) *
+          (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1)) := by
   let simplified := panSimpProg program
   let body := progToHOL simplified
   let caller := frontendContext body
@@ -115,17 +115,17 @@ theorem supported_counted_full_frontend_exit {σ : Type}
   cases outcome with
   | normal l g m f final finalRel finalRanged finalWords =>
     have span := supported_entry_crep_exit_from simplified shape simplifiedSource sourceLocals sourceGlobals sourceStructs sourceExceptions
-      lowerFinal none (sizeOf (compileProgExactHOLW callee body) * (n+1)) lowerRun control
+      lowerFinal none (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1)) lowerRun control
     obtain ⟨targetFinal,targetRun,bound⟩ := span
     exact ⟨none,targetFinal,.normal l g m f,targetRun,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
   | returned l g m f word final finalRel finalRanged finalWords =>
     have span := supported_entry_crep_exit_from simplified shape simplifiedSource sourceLocals sourceGlobals sourceStructs sourceExceptions
-      lowerFinal (some word) (sizeOf (compileProgExactHOLW callee body) * (n+1)) lowerRun control
+      lowerFinal (some word) (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1)) lowerRun control
     obtain ⟨targetFinal,targetRun,bound⟩ := span
     exact ⟨some word,targetFinal,.returned l g m f word,targetRun,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
   | error l g m f final finalRel finalRanged finalWords =>
     have span := supported_entry_crep_error_from simplified shape simplifiedSource sourceLocals sourceGlobals sourceStructs sourceExceptions
-      lowerFinal (sizeOf (compileProgExactHOLW callee body) * (n+1)) lowerRun control
+      lowerFinal (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1)) lowerRun control
     obtain ⟨targetFinal,targetRun,bound⟩ := span
     exact ⟨none,targetFinal,.error l g m f,targetRun,by simpa [countedFrontendFactor,countedErrorBonus,bodyExitEntry] using bound⟩
 
@@ -155,8 +155,8 @@ theorem supported_counted_full_frontend_uniform {σ : Type}
       evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState program source) body) entry =
         (bodyExitEntry exit,targetFinal) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program source) body) ≤
-        3 + 3 * sizeOf (compileProgExactHOLW callee body) *
-          (sizeOf (compileProgExactHOLW callee body) * (n+1)) := by
+        3 + 3 * CrepSteps.statementWeight (compileProgExactHOLW callee body) *
+          (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1)) := by
   obtain ⟨exit,targetFinal,outcome,targetRun,bound⟩ := supported_counted_full_frontend_exit
     program supported production source rel ranged words locals globals structs exceptions context primitive handler
     functions fuel count n result run countBound clock
@@ -164,12 +164,12 @@ theorem supported_counted_full_frontend_uniform {σ : Type}
   have factorBound : countedFrontendFactor result ≤ 3 := by
     cases result <;> simp [countedFrontendFactor,countedErrorBonus]
   have scaled := Nat.mul_le_mul_right
-    (sizeOf (compileProgExactHOLW (ctxtFcExactHOL
+    (CrepSteps.statementWeight (compileProgExactHOLW (ctxtFcExactHOL
       (frontendContext (progToHOL (panSimpProg program))).funcs
       (frontendContext (progToHOL (panSimpProg program))).eids [] [] []) (progToHOL (panSimpProg program))) *
       (n+1))
     (Nat.mul_le_mul_right
-      (sizeOf (compileProgExactHOLW (ctxtFcExactHOL
+      (CrepSteps.statementWeight (compileProgExactHOLW (ctxtFcExactHOL
         (frontendContext (progToHOL (panSimpProg program))).funcs
         (frontendContext (progToHOL (panSimpProg program))).eids [] [] []) (progToHOL (panSimpProg program))))
       factorBound)
@@ -203,8 +203,8 @@ theorem supported_counted_full_frontend {σ : Type}
       evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState program source) body) entry =
         (some (.return [.word word]),targetFinal) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program source) body) ≤
-        3 + sizeOf (compileProgExactHOLW callee body) *
-          (sizeOf (compileProgExactHOLW callee body) * (n+1)) := by
+        3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) *
+          (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1)) := by
   obtain ⟨exit,targetFinal,outcome,targetRun,bound⟩ := supported_counted_full_frontend_exit program supported production source
     rel ranged words locals globals structs exceptions context primitive handler functions fuel count n
     (.returned postLocals postGlobals postMemory postFfi [.word word]) run countBound clock
