@@ -73,34 +73,8 @@ def branchCalleeContext : PanToCrepContextExact 64 :=
   let caller := frontendContext branchingHOL
   ctxtFcExactHOL caller.funcs caller.eids [] [] []
 
-/-- The generated comparison entry bound follows from the general span. -/
-theorem branching_entry_span :
-    ∃ targetFinal,
-      evalCrepSemHOLProgExact (crepState branchingHOL) branchCrepEntry =
-        (some (.return [.word 7]),targetFinal) ∧
-      SteppedFlapjack.CrepSteps.steps branchCrepEntry (crepState branchingHOL) ≤
-        231 := by
-  obtain ⟨run,bound⟩ := branching_hol_run
-  have span := supported_original_entry_crep_return_fixture branching branching_supported _ 7 6
-    (by simpa [← branching_hol_eq] using run) (by simpa [← branching_hol_eq] using bound)
-  have relations := supported_callee_relations branching branching_supported
-  simp only [← branching_hol_eq] at relations
-  have lookup := relations.1
-  have codeEq : compileProgExactHOLW branchCalleeContext branchingHOL = branchCrepBody := by
-    rw [branchCrepCode_lookup] at lookup
-    exact (Prod.mk.inj (Option.some.inj lookup)).2.symm
-  have size : sizeOf branchCrepBody = 38 := by decide
-  simp only [← branching_hol_eq] at span
-  change ∃ final,
-    evalCrepSemHOLProgExact (crepState branchingHOL) branchCrepEntry =
-      (some (.return [.word 7]),final) ∧
-    CrepSteps.steps branchCrepEntry (crepState branchingHOL) ≤
-      3 + sizeOf (compileProgExactHOLW branchCalleeContext branchingHOL) * 6 at span
-  rw [codeEq,size] at span
-  simpa using span
-
 /-- Concrete source-to-Crep correspondence, obtained by directly checking
-both runs. The five-visit calculation cross-checks the general span bound above. -/
+both runs. The five-visit calculation cross-checks the general counted span. -/
 theorem branching_source_crep_correspondence
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
@@ -131,28 +105,4 @@ theorem branching_simp_source : panSimpSourceState branching (exactState branchi
 theorem branching_simp_declarations : panSimpDeclsHOL (declarations branchingHOL) = declarations branchingHOL := by
   simpa [← branching_hol_eq,branching_simp_program] using supported_panSimp_declarations branching branching_supported
 
-theorem branching_panSimp_crep (context : PanValueFfiContext (RiscV.Word 64))
-    (primitive : PanPrimitiveHandler (RiscV.Word 64)) (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
-    ∃ targetFinal,
-      evalPanValueFfiProgSteps context primitive handler (executableState branchingHOL).structs []
-        (executableState branchingHOL).baseAddress (executableState branchingHOL).topAddress
-        panSemBitVec64BytesInWord 2 (executableState branchingHOL).locals
-        (executableState branchingHOL).globals (executableState branchingHOL).memory
-        (executableState branchingHOL).ffi branching
-        (memoryAccess := some (panSemBitVec64MemoryAccess (executableState branchingHOL))) =
-          some (.returned (executableState branchingHOL).locals (executableState branchingHOL).globals
-            (executableState branchingHOL).memory (executableState branchingHOL).ffi [.word 7],6) ∧
-      evalCrepSemHOLProgExact
-        (crepStateFrom (panSimpSourceState branching (exactState branchingHOL))
-          (progToHOL (panSimpProg branching))) branchCrepEntry =
-        (some (.return [.word 7]),targetFinal) ∧
-      CrepSteps.steps branchCrepEntry
-        (crepStateFrom (panSimpSourceState branching (exactState branchingHOL))
-          (progToHOL (panSimpProg branching))) ≤ 231 := by
-  obtain ⟨targetFinal,targetRun,targetBound⟩ := branching_entry_span
-  refine ⟨targetFinal,branching_run context primitive handler,?_,?_⟩
-  · simpa [branching_simp_source,branching_simp_program,← branching_hol_eq,
-      crepStateFrom,loweredStateFrom,crepState,loweredState] using targetRun
-  · simpa [branching_simp_source,branching_simp_program,← branching_hol_eq,
-      crepStateFrom,loweredStateFrom,crepState,loweredState] using targetBound
 end SteppedFlapjack.Concrete
