@@ -1,5 +1,5 @@
 import SteppedFlapjack.Concrete.SimpRun
-import SteppedFlapjack.Concrete.ControlWeight
+import SteppedFlapjack.Concrete.CompiledClock
 
 /-! pan_simp (seqAssoc) adds at most a static number of control
 visits, charged only on an abnormal exit. -/

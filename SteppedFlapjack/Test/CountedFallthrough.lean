@@ -27,5 +27,7 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
   obtain ⟨exit,final,outcome,target,bound⟩ := supported_counted_full_frontend_exit program supported production source rel ranged words
     rfl rfl rfl rfl context primitive handler [] 1 1 1 _ run (by omega) rfl
   cases outcome with
-  | normal l g m f => exact ⟨final,target,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
+  | normal l g m f =>
+    simp only [countedFrontendFactor,countedErrorBonus,Nat.mul_zero,Nat.add_zero,Nat.one_mul] at bound
+    exact ⟨final,target,bound.trans (Nat.add_le_add_left (Nat.mul_le_mul_left _ (Nat.min_le_left _ _)) 3)⟩
 end SteppedFlapjack.Concrete
