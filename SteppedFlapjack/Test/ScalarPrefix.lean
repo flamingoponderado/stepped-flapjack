@@ -19,7 +19,18 @@ example (ctxt : CrepToLoopContextExact) (live : NumSet) :
   have shape : CompiledScalar nestedComparison :=
     .cmp .equal (.cmp .lower (.direct (.const _)) (.direct (.const _))) (.direct (.const _))
   obtain ⟨_,_,_,_,_,_,_,selected⟩ :=
-    branchCondition_compileWhile nestedComparison shape .skip (.expr (.leaf .skip)) ctxt live
+    branchCondition_compileWhile nestedComparison shape .skip (.branch (.expr (.leaf .skip))) ctxt live
+  exact selected
+
+/-- Comparisons in a loop body are accepted by the same compiler theorem. -/
+example (ctxt : CrepToLoopContextExact) (live : NumSet) :
+    SteppedFlapjack.LoopToWordSteps.LoopSelectProgram
+      (compileHOLExact ctxt live (.while (.const 1) (.ite nestedComparison .skip .skip))) := by
+  have condition : CompiledScalar (.const 1 : CrepExpHOL 64) := .direct (.const _)
+  have body : ScalarProgram (.ite nestedComparison .skip .skip) :=
+    .ite (.cmp .equal (.cmp .lower (.direct (.const _)) (.direct (.const _))) (.direct (.const _))) .skip .skip
+  obtain ⟨_,_,_,_,_,_,_,selected⟩ := branchCondition_compileWhile (.const 1) condition _
+    (.scalar body (by rfl)) ctxt live
   exact selected
 
 end SteppedFlapjack.CrepToLoopSteps
