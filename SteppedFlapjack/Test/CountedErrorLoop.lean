@@ -64,7 +64,7 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
     let entry : CrepProgHOL 64 := .seq .skip (.call none (entryName body) [])
     ∃ final, evalCrepSemHOLProgExact
       (crepStateFrom (panSimpSourceState errorLoop errorLoopSource) body) entry = (some .error,final) ∧
-      CrepSteps.steps entry (crepStateFrom (panSimpSourceState errorLoop errorLoopSource) body) ≤ 1914 := by
+      CrepSteps.steps entry (crepStateFrom (panSimpSourceState errorLoop errorLoopSource) body) ≤ 423 := by
   let _ : DecidablePred errorLoopSource.memaddrs := by change DecidablePred ordinaryAddress; infer_instance
   obtain ⟨rel,ranged,words,run⟩ := errorLoopFacts context primitive handler
   obtain ⟨exit,final,outcome,target,bound⟩ := supported_counted_full_frontend_uniform errorLoop errorLoop_supported

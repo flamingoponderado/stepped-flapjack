@@ -12,7 +12,7 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
     ∃ final,
       evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState program source) body) entry = (some .error,final) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program source) body) ≤
-        3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) * (1 + 1 + programWeight program) := by
+        3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) * (1 + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) := by
   let program : Prog (RiscV.Word 64) := .skip
   let source := clockedFixtureSource program 1
   let production := clockedFixtureProduction program 1
@@ -27,7 +27,5 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
   obtain ⟨exit,final,outcome,target,bound⟩ := supported_counted_full_frontend_exit program supported production source rel ranged words
     rfl rfl rfl rfl context primitive handler [] 1 1 1 _ run (by omega) rfl
   cases outcome with
-  | normal l g m f =>
-    simp only [countedFrontendFactor,countedErrorBonus,Nat.mul_zero,Nat.add_zero,Nat.one_mul] at bound
-    exact ⟨final,target,bound.trans (Nat.add_le_add_left (Nat.mul_le_mul_left _ (Nat.min_le_left _ _)) 3)⟩
+  | normal l g m f => exact ⟨final,target,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
 end SteppedFlapjack.Concrete

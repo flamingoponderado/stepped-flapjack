@@ -33,8 +33,7 @@ theorem supported_counted_frontend_prefix {σ : Type}
       CountedOutcome production result holResult sourceFinal ∧
       lower.evaluateHOLFiniteState body =
         (holResult,{{sourceFinal with code := simplifiedSource.code} with code := (loweredStateFrom simplifiedSource body).code}) ∧
-      controlSteps body lower ≤ min (n + 1 + programWeight program)
-        (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1)) := by
+      controlSteps body lower ≤ n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body) := by
   let simplified := panSimpProg program
   let body := progToHOL simplified
   let caller := frontendContext body
@@ -52,20 +51,16 @@ theorem supported_counted_frontend_prefix {σ : Type}
     simp [lower,loweredStateFrom,noGlobalsLoweredPreCall,callEntryStateHOLFinite,
       simplifiedSource,panSimpSourceState,locals]
   have independent := supported_control_code_irrel shape source lower.code
-  have simplifiedBound := SimpVisits.supported_panSimp_controlSteps_le program supported source
+  have simplifiedBound := SimpVisits.supported_panSimp_controlSteps_compiled program supported callee source
+  change controlSteps body source ≤ controlSteps (progToHOL program) source +
+    CrepSteps.statementWeight (compileProgExactHOLW callee body) at simplifiedBound
   have bonusBound : countedErrorBonus result ≤ 1 := by
     cases result <;> simp [countedErrorBonus]
   refine ⟨holResult,sourceFinal,outcome,lowerRun,?_⟩
-  change controlSteps body lower ≤ min (n + 1 + programWeight program)
-    (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1))
-  apply (Nat.le_min).2
-  constructor
-  · rw [lowerEq,independent]
-    omega
-  · have clockBound := supported_control_compiled_clock shape callee lower
-      {simplifiedFinal with code := (loweredStateFrom simplifiedSource body).code} holResult lowerRun
-    simpa [lower,loweredStateFrom,noGlobalsLoweredPreCall,callEntryStateHOLFinite,
-      simplifiedSource,panSimpSourceState,clock] using clockBound
+  change controlSteps body lower ≤ n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)
+  rw [lowerEq,independent]
+  change controlSteps body source ≤ n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)
+  omega
 
 /-- The observable result of a call to a supported body: a fallthrough is a
 call error; a word return is preserved. -/
@@ -114,7 +109,7 @@ theorem supported_counted_full_frontend_exit {σ : Type}
         (bodyExitEntry exit,targetFinal) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program source) body) ≤
         3 + countedFrontendFactor result * CrepSteps.statementWeight (compileProgExactHOLW callee body) *
-          (min (n + 1 + programWeight program) (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1))) := by
+          (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) := by
   let simplified := panSimpProg program
   let body := progToHOL simplified
   let caller := frontendContext body
@@ -132,17 +127,17 @@ theorem supported_counted_full_frontend_exit {σ : Type}
   cases outcome with
   | normal l g m f final finalRel finalRanged finalWords =>
     have span := supported_entry_crep_exit_from simplified shape simplifiedSource sourceLocals sourceGlobals sourceStructs sourceExceptions
-      lowerFinal none (min (n + 1 + programWeight program) (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1))) lowerRun control
+      lowerFinal none (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) lowerRun control
     obtain ⟨targetFinal,targetRun,bound⟩ := span
     exact ⟨none,targetFinal,.normal l g m f,targetRun,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
   | returned l g m f word final finalRel finalRanged finalWords =>
     have span := supported_entry_crep_exit_from simplified shape simplifiedSource sourceLocals sourceGlobals sourceStructs sourceExceptions
-      lowerFinal (some word) (min (n + 1 + programWeight program) (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1))) lowerRun control
+      lowerFinal (some word) (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) lowerRun control
     obtain ⟨targetFinal,targetRun,bound⟩ := span
     exact ⟨some word,targetFinal,.returned l g m f word,targetRun,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
   | error l g m f final finalRel finalRanged finalWords =>
     have span := supported_entry_crep_error_from simplified shape simplifiedSource sourceLocals sourceGlobals sourceStructs sourceExceptions
-      lowerFinal (min (n + 1 + programWeight program) (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1))) lowerRun control
+      lowerFinal (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) lowerRun control
     obtain ⟨targetFinal,targetRun,bound⟩ := span
     exact ⟨none,targetFinal,.error l g m f,targetRun,by simpa [countedFrontendFactor,countedErrorBonus,bodyExitEntry] using bound⟩
 
@@ -173,21 +168,23 @@ theorem supported_counted_full_frontend_uniform {σ : Type}
         (bodyExitEntry exit,targetFinal) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program source) body) ≤
         3 + 3 * CrepSteps.statementWeight (compileProgExactHOLW callee body) *
-          (CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n+1)) := by
+          (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) := by
   obtain ⟨exit,targetFinal,outcome,targetRun,bound⟩ := supported_counted_full_frontend_exit
     program supported production source rel ranged words locals globals structs exceptions context primitive handler
     functions fuel count n result run countBound clock
   refine ⟨exit,targetFinal,outcome,targetRun,?_⟩
   have factorBound : countedFrontendFactor result ≤ 3 := by
     cases result <;> simp [countedFrontendFactor,countedErrorBonus]
-  let K := CrepSteps.statementWeight (compileProgExactHOLW
-    (ctxtFcExactHOL (frontendContext (progToHOL (panSimpProg program))).funcs
-      (frontendContext (progToHOL (panSimpProg program))).eids [] [] []) (progToHOL (panSimpProg program)))
-  have chooseBound : min (n + 1 + programWeight program) (K * (n+1)) ≤ K * (n+1) := Nat.min_le_right _ _
-  have first := Nat.mul_le_mul_left (countedFrontendFactor result * K) chooseBound
-  have second := Nat.mul_le_mul_right (K * (n+1)) (Nat.mul_le_mul_right K factorBound)
-  exact bound.trans (Nat.add_le_add_left (first.trans second) 3)
-
+  have scaled := Nat.mul_le_mul_right
+    (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW (ctxtFcExactHOL
+      (frontendContext (progToHOL (panSimpProg program))).funcs
+      (frontendContext (progToHOL (panSimpProg program))).eids [] [] []) (progToHOL (panSimpProg program))))
+    (Nat.mul_le_mul_right
+      (CrepSteps.statementWeight (compileProgExactHOLW (ctxtFcExactHOL
+        (frontendContext (progToHOL (panSimpProg program))).funcs
+        (frontendContext (progToHOL (panSimpProg program))).eids [] [] []) (progToHOL (panSimpProg program))))
+      factorBound)
+  exact bound.trans (Nat.add_le_add_left scaled 3)
 
 /-- A counted source run bounded by `n` reaches the actual generated entry
 point within a bound calculated from `n` and the generated function body. -/
@@ -218,18 +215,12 @@ theorem supported_counted_full_frontend {σ : Type}
         (some (.return [.word word]),targetFinal) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program source) body) ≤
         3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) *
-          (n + 1 + programWeight program) := by
+          (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) := by
   obtain ⟨exit,targetFinal,outcome,targetRun,bound⟩ := supported_counted_full_frontend_exit program supported production source
     rel ranged words locals globals structs exceptions context primitive handler functions fuel count n
     (.returned postLocals postGlobals postMemory postFfi [.word word]) run countBound clock
   cases outcome with
   | returned l g m f value =>
-    refine ⟨targetFinal,targetRun,?_⟩
-    have chooseBound := Nat.min_le_left (n + 1 + programWeight program)
-      (CrepSteps.statementWeight (compileProgExactHOLW
-        (ctxtFcExactHOL (frontendContext (progToHOL (panSimpProg program))).funcs
-          (frontendContext (progToHOL (panSimpProg program))).eids [] [] []) (progToHOL (panSimpProg program))) * (n+1))
-    simp only [countedFrontendFactor,countedErrorBonus,Nat.mul_zero,Nat.add_zero,Nat.one_mul] at bound
-    exact bound.trans (Nat.add_le_add_left (Nat.mul_le_mul_left _ chooseBound) 3)
+    exact ⟨targetFinal,targetRun,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
 
 end SteppedFlapjack.Concrete
