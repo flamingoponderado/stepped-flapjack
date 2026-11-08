@@ -164,21 +164,14 @@ theorem scalarLoop_visitWeight_eq_skeleton {p : HolLoopProg width} (shape : Scal
     simp only [noMark] at unmarked
     simp only [loopVisitWeight,loopSkeletonWeight,ih unmarked]
 
-/-- The compiled scalar program’s visit weight is bounded by its optimized code size. -/
-theorem scalarProgram_control_le_output {p : CrepProgHOL width} (shape : ScalarProgram p)
+/-- Optimized code retains at least the source-compiled control-node count. -/
+theorem scalarProgram_control_le_optimized_control {p : CrepProgHOL width} (shape : ScalarProgram p)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     loopVisitWeight (compileHOLExact ctxt live p) ≤
-      sizeOf (optimiseHOL (compileHOLExact ctxt live p)) := by
+      loopVisitWeight (optimiseHOL (compileHOLExact ctxt live p)) := by
   let compiledShape := compile_scalar_program shape ctxt live
   rw [scalarLoop_visitWeight_eq_skeleton compiledShape (scalar_program_unmarked shape ctxt live)]
-  exact scalarLoop_weight_le_optimised_size compiledShape
+  rw [← scalarLoop_optimise_weight compiledShape]
+  exact scalarLoop_skeleton_le_visitWeight (scalarLoop_optimise compiledShape)
 
-/-- Loop-free compiled scalar code has structural weight bounded by the
-size of the actual optimized output. -/
-theorem scalarBranch_structural_le_output {p : CrepProgHOL width} (shape : ScalarProgram p)
-    (free : scalarNoWhile p = true) (ctxt : CrepToLoopContextExact) (live : NumSet) :
-    LoopSteps.structuralWeight (compileHOLExact ctxt live p) ≤
-      sizeOf (optimiseHOL (compileHOLExact ctxt live p)) := by
-  rw [← branch_visitWeight (compile_scalar_branch shape free ctxt live)]
-  exact scalarProgram_control_le_output shape ctxt live
 end SteppedFlapjack.CrepToLoopSteps

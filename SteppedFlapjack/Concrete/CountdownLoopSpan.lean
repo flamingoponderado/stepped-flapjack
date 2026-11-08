@@ -30,12 +30,12 @@ theorem naturalCountdown_entry_loop {σ : Type} (arch : AsmArchitecture)
     let c := ctxtFcExact ctxt.target ctxt.funcs [] []
     let p := naturalCountdownCrepBody (BitVec.ofNat 64 n)
     let code := compileHOLExact c .ln p
-    let bound := scalarOutputEnvelope (sizeOf (optimiseHOL code))*(limit+1)
+    let bound := scalarOutputEnvelope (loopVisitWeight (optimiseHOL code))*(limit+1)
     ∃ post,
       (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms (naturalCountdownHOL n)) ∧
       evaluate branchingLoopEntry {target with clock := target.clock+2*bound} = (some (.result [.word 0]),post) ∧
       LoopSteps.steps branchingLoopEntry {target with clock := target.clock+2*bound} ≤
-        sizeOf (optimiseHOL code)*(2*bound+1)+8 ∧
+        loopVisitWeight (optimiseHOL code)*(2*bound+1)+8 ∧
       crepToLoopStateRelExact entryFinal {post with clock := entryFinal.clock} ∧
       crepToLoopMemRelHOLExact entryFinal.memory post.memory entryFinal.memaddrs ∧
       crepToLoopGlobalsRelHOLExact entryFinal.globals post.globals ∧
@@ -76,14 +76,14 @@ theorem naturalCountdown_fixture_entry_loop (arch : AsmArchitecture) (n : Nat) (
     let c := ctxtFcExact ctxt.target ctxt.funcs [] []
     let p := naturalCountdownCrepBody (BitVec.ofNat 64 n)
     let code := compileHOLExact c .ln p
-    let bound := scalarOutputEnvelope (sizeOf (optimiseHOL code))*(3 + 8*(6*n+16)+1)
+    let bound := scalarOutputEnvelope (loopVisitWeight (optimiseHOL code))*(3 + 8*(6*n+16)+1)
     ∃ final post,
       evalCrepSemHOLProgExact (crepStateFrom source (naturalCountdownHOL n)) (naturalCrepEntry n) =
         (some (.return [.word 0]),final) ∧
       (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms (naturalCountdownHOL n)) ∧
       evaluate branchingLoopEntry {target with clock := target.clock+2*bound} = (some (.result [.word 0]),post) ∧
       LoopSteps.steps branchingLoopEntry {target with clock := target.clock+2*bound} ≤
-        sizeOf (optimiseHOL code)*(2*bound+1)+8 ∧
+        loopVisitWeight (optimiseHOL code)*(2*bound+1)+8 ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       crepToLoopMemRelHOLExact final.memory post.memory final.memaddrs ∧
       crepToLoopGlobalsRelHOLExact final.globals post.globals ∧
@@ -107,14 +107,14 @@ theorem countdown_fixture_entry_loop (arch : AsmArchitecture) (n : Nat) (range :
     let c := ctxtFcExact ctxt.target ctxt.funcs [] []
     let p := naturalCountdownCrepBody (BitVec.ofNat 64 n)
     let code := compileHOLExact c .ln p
-    let bound := scalarOutputEnvelope (sizeOf (optimiseHOL code))*(3 + 8*(6*n+18)+1)
+    let bound := scalarOutputEnvelope (loopVisitWeight (optimiseHOL code))*(3 + 8*(6*n+18)+1)
     ∃ final post,
       evalCrepSemHOLProgExact (crepStateFrom source (naturalCountdownHOL n)) (naturalCrepEntry n) =
         (some (.return [.word 0]),final) ∧
       (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms (naturalCountdownHOL n)) ∧
       evaluate branchingLoopEntry {target with clock := target.clock+2*bound} = (some (.result [.word 0]),post) ∧
       LoopSteps.steps branchingLoopEntry {target with clock := target.clock+2*bound} ≤
-        sizeOf (optimiseHOL code)*(2*bound+1)+8 ∧
+        loopVisitWeight (optimiseHOL code)*(2*bound+1)+8 ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       crepToLoopMemRelHOLExact final.memory post.memory final.memaddrs ∧
       crepToLoopGlobalsRelHOLExact final.globals post.globals ∧

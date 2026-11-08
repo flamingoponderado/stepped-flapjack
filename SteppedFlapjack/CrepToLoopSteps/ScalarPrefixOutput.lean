@@ -54,33 +54,6 @@ theorem dec_prefix_le_control (name : Nat) {init : CrepExpHOL width} (initShape 
   rw [← branched_visitWeight branch']
   exact inner
 
-/-- The optimized output bounds the compiled loop condition prefix. -/
-theorem while_prefix_le_output {condition : CrepExpHOL width} (conditionShape : CompiledScalar condition)
-    {body : CrepProgHOL width} (bodyShape : ScalarProgram body)
-    (ctxt : CrepToLoopContextExact) (live : NumSet) :
-    LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) ≤
-      sizeOf (optimiseHOL (compileHOLExact ctxt live (.while condition body))) :=
-  (while_prefix_le_control conditionShape bodyShape ctxt live).trans
-    (scalarProgram_control_le_output (.while conditionShape bodyShape) ctxt live)
-
-/-- The optimized output bounds the compiled conditional prefix. -/
-theorem ite_prefix_le_output {condition : CrepExpHOL width} (conditionShape : CompiledScalar condition)
-    {a b : CrepProgHOL width} (ha : ScalarProgram a) (hb : ScalarProgram b)
-    (ctxt : CrepToLoopContextExact) (live : NumSet) :
-    LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) ≤
-      sizeOf (optimiseHOL (compileHOLExact ctxt live (.ite condition a b))) :=
-  (ite_prefix_le_control conditionShape ha hb ctxt live).trans
-    (scalarProgram_control_le_output (.ite conditionShape ha hb) ctxt live)
-
-/-- The optimized output bounds the compiled declaration prefix. -/
-theorem dec_prefix_le_output (name : Nat) {init : CrepExpHOL width} (initShape : CompiledScalar init)
-    {body : CrepProgHOL width} (bodyShape : ScalarProgram body)
-    (ctxt : CrepToLoopContextExact) (live : NumSet) :
-    LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) ≤
-      sizeOf (optimiseHOL (compileHOLExact ctxt live (.dec name init body))) :=
-  (dec_prefix_le_control name initShape bodyShape ctxt live).trans
-    (scalarProgram_control_le_output (.dec name initShape bodyShape) ctxt live)
-
 private theorem nested_member (xs : List (HolLoopProg width)) (p : HolLoopProg width)
     (h : p ∈ xs) : loopVisitWeight p ≤ loopVisitWeight (loopNestedSeqHOL xs) := by
   induction xs with

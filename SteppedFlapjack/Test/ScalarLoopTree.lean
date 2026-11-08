@@ -8,12 +8,21 @@ open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 def nestedLoopExample : CrepProgHOL 64 :=
   .seq (.while (.const 1) (.seq (.while (.const 0) .skip) (.break 0))) (.return [.const 7])
 
+/-- Optimized control weights do not depend on literal magnitude. -/
+example (x : BitVec 64) :
+    loopVisitWeight (optimiseScalar (.assign 1 (.const x) : HolLoopProg 64)) = 2 := by rfl
+
+example (x : BitVec 64) :
+    loopVisitWeight (optimiseScalar (.seq (.assign 1 (.const x)) (.return [1]) : HolLoopProg 64)) = 6 := by
+  simp [optimiseScalar,scalarDepth,shrinkScalar,SteppedFlapjack.LoopLiveSteps.shrinkBranch,
+    markAllHOL,loopVisitWeight,sptListInsert,sptInsert,sptLookup,sptDelete]
+
 /-- The output-derived envelope computes to a concrete natural number. -/
 example : scalarOutputEnvelope 3 = 901 := by decide +kernel
 
-/-- The envelope evaluates for the nested loop's concrete output size. -/
-private theorem nestedLoopEnvelope : scalarOutputEnvelope 85 =
-    4420670586328058585068006191517899092307431585241266641839951574022704758131294049369026875602209861563778493762742453449955497861506768042693727100967663307 := by
+/-- The envelope evaluates for the nested loop's concrete output weight. -/
+private theorem nestedLoopEnvelope : scalarOutputEnvelope 46 =
+    85838975299478796137350471140065246905153223130317616185985232102213238409 := by
   decide +kernel
 
 /-- The recursive shape includes the reached inner loop and the outer break. -/
@@ -74,10 +83,10 @@ example {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64
     let target := SteppedFlapjack.Concrete.loopStateFrom arch source SteppedFlapjack.Concrete.branchingHOL
     let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
     let code := compileHOLExact ctxt .ln computedConditionalExample
-    let budget := scalarOutputEnvelope (sizeOf (optimiseHOL code)) * 9
+    let budget := scalarOutputEnvelope (loopVisitWeight (optimiseHOL code)) * 9
     ∃ post, evaluate (optimiseHOL code) {target with clock := target.clock+2*budget} = (some (.result [.word 7]),post) ∧
       LoopSteps.steps (optimiseHOL code) {target with clock := target.clock+2*budget} ≤
-        sizeOf (optimiseHOL code)*(2*budget+1) := by
+        loopVisitWeight (optimiseHOL code)*(2*budget+1) := by
   let crep := SteppedFlapjack.Concrete.crepStateFrom source SteppedFlapjack.Concrete.branchingHOL
   let target := SteppedFlapjack.Concrete.loopStateFrom arch source SteppedFlapjack.Concrete.branchingHOL
   let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
@@ -100,9 +109,9 @@ example {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64
     let target := SteppedFlapjack.Concrete.loopStateFrom arch source SteppedFlapjack.Concrete.branchingHOL
     let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
     ∃ post, evaluate (optimiseHOL (compileHOLExact ctxt .ln nestedLoopExample))
-        {target with clock := target.clock+61889388208592820190952086681250587292304042193377732985759322036317866613838116691166376258430938061892898912678394348299376970061094752597712179413547286298} = (some (.result [.word 7]),post) ∧
+        {target with clock := target.clock+1201745654192703145922906595960913456672145123824446626603793249430985337726} = (some (.result [.word 7]),post) ∧
       LoopSteps.steps (optimiseHOL (compileHOLExact ctxt .ln nestedLoopExample))
-        {target with clock := target.clock+61889388208592820190952086681250587292304042193377732985759322036317866613838116691166376258430938061892898912678394348299376970061094752597712179413547286298} ≤ 5260597997730389716230927367906299919845843586437107303789542373087018662176239918749141981966629735260896407577663519605447042455193053970805535250151519335415 := by
+        {target with clock := target.clock+1201745654192703145922906595960913456672145123824446626603793249430985337726} ≤ 55280300092864344712453703414202019006918675695924544823774489473825325535442 := by
   let crep := SteppedFlapjack.Concrete.crepStateFrom source SteppedFlapjack.Concrete.branchingHOL
   let target := SteppedFlapjack.Concrete.loopStateFrom arch source SteppedFlapjack.Concrete.branchingHOL
   let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
@@ -119,11 +128,11 @@ example {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64
     simp [ctxt,SteppedFlapjack.Concrete.witnessLoopContext,nestedLoopExample,loopCode,compileHOLExact,
       compileExpHOLExact,compileExpsHOLExact,loopNestedSeqHOL,genTemps,mkCtxtExact,makeVmapExact,
       HolFiniteMapExact.updateListEq]
-  have size : sizeOf (optimiseScalar (compileHOLExact ctxt .ln nestedLoopExample)) = 85 := by
+  have size : loopVisitWeight (optimiseScalar (compileHOLExact ctxt .ln nestedLoopExample)) = 46 := by
     rw [codeEq]
     dsimp only [loopCode]
     decide +kernel
-  have actualSize : sizeOf (optimiseHOL (compileHOLExact ctxt .ln nestedLoopExample)) = 85 := by
+  have actualSize : loopVisitWeight (optimiseHOL (compileHOLExact ctxt .ln nestedLoopExample)) = 46 := by
     rw [← optimiseScalar_eq (compile_scalar_program nestedLoop_shape ctxt .ln)]
     exact size
   obtain ⟨post,run,bound,_,_,_,_⟩ := scalarProgram_explicit nestedLoopExample nestedLoop_shape ctxt .ln

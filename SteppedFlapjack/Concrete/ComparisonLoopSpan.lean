@@ -18,14 +18,14 @@ theorem branching_fixture_entry_loop (arch : AsmArchitecture)
     let ctxt := witnessLoopContext arch branchingHOL
     let c := ctxtFcExact ctxt.target ctxt.funcs [] []
     let code := compileHOLExact c .ln branchCrepBody
-    let budget := scalarOutputEnvelope (sizeOf (optimiseHOL code))*(33+1)
+    let budget := scalarOutputEnvelope (loopVisitWeight (optimiseHOL code))*(33+1)
     CrepSteps.steps branchCrepEntry crep ≤ 33 ∧
     (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms branchingHOL) ∧
     ∃ final post,
       evalCrepSemHOLProgExact crep branchCrepEntry = (some (.return [.word 7]),final) ∧
       evaluate branchingLoopEntry {target with clock := target.clock+2*budget} = (some (.result [.word 7]),post) ∧
       LoopSteps.steps branchingLoopEntry {target with clock := target.clock+2*budget} ≤
-        sizeOf (optimiseHOL code)*(2*budget+1)+8 ∧
+        loopVisitWeight (optimiseHOL code)*(2*budget+1)+8 ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       crepToLoopMemRelHOLExact final.memory post.memory final.memaddrs ∧
       crepToLoopGlobalsRelHOLExact final.globals post.globals ∧

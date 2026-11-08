@@ -258,18 +258,18 @@ theorem scalarLoop_consumption_bound {p : HolLoopProg width} (shape : ScalarLoop
     (Nat.mul_le_mul_right _ (scalarLoop_visitWeight_le_size shape))
 
 /-- The actual optimizer preserves a completed recursive scalar Loop run and
-its visits are bounded by optimized code size and original visits. -/
+its visits are bounded by optimized control weight and original visits. -/
 theorem scalarLoop_optimise_source_steps {p : HolLoopProg 64} (shape : ScalarLoop p)
     (s post : LoopSemStateFiniteExact 64 F) (result : Option (LoopResultExact 64))
     (run : evaluate p s = (result,post)) (complete : CompleteLoopResult result) :
     evaluate (optimiseHOL p) s = (result,post) ∧
     ScalarLoop (optimiseHOL p) ∧
-    steps (optimiseHOL p) s ≤ sizeOf (optimiseHOL p) * (2 * steps p s + 1) := by
+    steps (optimiseHOL p) s ≤ loopVisitWeight (optimiseHOL p) * (2 * steps p s + 1) := by
   have optRun : evaluate (optimiseHOL p) s = (result,post) := by
     apply optimise_correct p s result post
     refine ⟨run,?_,?_,?_,?_⟩ <;> cases complete <;> simp_all
   have optShape := scalarLoop_optimise shape
-  have optBound := scalarLoop_consumption_bound optShape s post result optRun
+  have optBound := scalarLoop_control_consumption_bound optShape s post result optRun
   have used := scalarLoop_consumed shape s post result run
   exact ⟨optRun,optShape,optBound.trans (Nat.mul_le_mul_left _ (by omega))⟩
 

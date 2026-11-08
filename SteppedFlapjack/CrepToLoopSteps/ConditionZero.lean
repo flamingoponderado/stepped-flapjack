@@ -119,7 +119,7 @@ theorem branchCondition_false_run
   obtain ⟨ck,post,he,hval,hs,hm,hg,hc,hl⟩ :=
     crepToLoop_comp_exp_preserves_eval source condition (.word 0) initial ctxt (ctxt.vmax+1) live
       code value next outLive ⟨guard,initialState,memRel,globalsRel,codeRel,initialLocals,compiled,by omega⟩
-  have ckBound := condition_extraClock_control_bound source initial post code ck branch initialState he hs
+  have ckBound := condition_extraClock_bound source initial post code ck branch initialState he hs
   let B := branchConditionWhileBody ctxt live code value next body
   have hcomp : compileHOLExact ctxt live (.while condition body) = .loop live B live := by
     simp [compileHOLExact,compiled,B,branchConditionWhileBody]

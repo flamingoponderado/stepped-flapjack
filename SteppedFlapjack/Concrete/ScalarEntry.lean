@@ -27,19 +27,19 @@ theorem generatedScalar_entry_explicit {σ : Type}
     (label : findLabExact ctxt name = 65) :
     let c := ctxtFcExact ctxt.target ctxt.funcs [] []
     let code := compileHOLExact c .ln p
-    let budget := scalarOutputEnvelope (sizeOf (optimiseHOL code))*(limit+1)
+    let budget := scalarOutputEnvelope (loopVisitWeight (optimiseHOL code))*(limit+1)
     ∃ post,
       evaluate branchingLoopEntry {target with clock := target.clock+2*budget} =
         (some (.result (values.map wlabWlocExact)),post) ∧
       LoopSteps.steps branchingLoopEntry {target with clock := target.clock+2*budget} ≤
-        sizeOf (optimiseHOL code)*(2*budget+1)+8 ∧
+        loopVisitWeight (optimiseHOL code)*(2*budget+1)+8 ∧
       crepToLoopStateRelExact entryFinal {post with clock := entryFinal.clock} ∧
       crepToLoopMemRelHOLExact entryFinal.memory post.memory entryFinal.memaddrs ∧
       crepToLoopGlobalsRelHOLExact entryFinal.globals post.globals ∧
       crepToLoopCodeRelExact ctxt entryFinal.code post.code := by
   let c := ctxtFcExact ctxt.target ctxt.funcs [] []
   let code := compileHOLExact c .ln p
-  let budget := scalarOutputEnvelope (sizeOf (optimiseHOL code))*(limit+1)
+  let budget := scalarOutputEnvelope (loopVisitWeight (optimiseHOL code))*(limit+1)
   obtain ⟨sourceFinal,calleeRun,calleeBound,finalEq⟩ := CrepSteps.tail_entry_return_inv source entryFinal name p values limit
     found nonzero entryRun entryBound
   have rel := tailCall_nil_entry_relations ctxt .ln source target name p stateRel memRel globalsRel codeRel localsRel found
@@ -61,9 +61,9 @@ theorem generatedScalar_entry_explicit {σ : Type}
     rw [clockEq]
     simpa [code,c,resultToLoop] using run
   have cb : LoopSteps.steps (optimiseHOL code) {decClock {target with clock := target.clock+2*budget} with locals := .ln} ≤
-      sizeOf (optimiseHOL code)*(2*budget+1) := by rw [clockEq]; exact bound
+      loopVisitWeight (optimiseHOL code)*(2*budget+1) := by rw [clockEq]; exact bound
   have entry := generatedEntry_return {target with clock := target.clock+2*budget} post (optimiseHOL code) _
-    (sizeOf (optimiseHOL code)*(2*budget+1)) (by simp only; omega) lookup' cr cb
+    (loopVisitWeight (optimiseHOL code)*(2*budget+1)) (by simp only; omega) lookup' cr cb
   refine ⟨post,entry.1,entry.2,?_,?_,?_,?_⟩
   · rw [finalEq]; simpa [CrepSemHOLState.emptyLocals,crepToLoopStateRelExact] using finalState
   · rw [finalEq]; simpa [CrepSemHOLState.emptyLocals] using finalMem

@@ -69,7 +69,7 @@ theorem nestedSeq_select {width : Nat} [NeZero width] (code : List (HolLoopProg 
 
 /-- Every correctness clock witness for a compiled branch condition prefix is
 bounded by that prefix's control-node weight. -/
-theorem condition_extraClock_control_bound {width : Nat} [NeZero width] {σ : Type}
+theorem condition_extraClock_bound {width : Nat} [NeZero width] {σ : Type}
     (source : CrepSemHOLState width σ) (target post : LoopSemStateFiniteExact width σ)
     (code : List (HolLoopProg width)) (extra : Nat)
     (shape : ∀ p ∈ code, BranchedProgram p)
@@ -85,18 +85,6 @@ theorem condition_extraClock_control_bound {width : Nat} [NeZero width] {σ : Ty
   simp only at consumed
   omega
 
-
-/-- Every correctness clock witness for a compiled branch condition prefix is
-bounded by that prefix's syntax size. -/
-theorem condition_extraClock_bound {width : Nat} [NeZero width] {σ : Type}
-    (source : CrepSemHOLState width σ) (target post : LoopSemStateFiniteExact width σ)
-    (code : List (HolLoopProg width)) (extra : Nat)
-    (shape : ∀ p ∈ code, BranchedProgram p)
-    (stateRel : crepToLoopStateRelExact source target)
-    (run : evaluate (loopNestedSeqHOL code) {target with clock := target.clock+extra} = (none,post))
-    (postRel : crepToLoopStateRelExact source post) : extra ≤ sizeOf (loopNestedSeqHOL code) := by
-  exact (condition_extraClock_control_bound source target post code extra shape stateRel run postRel).trans
-    (LoopSteps.branchedProgram_weight_le_size (nestedSeq_branched code shape))
 
 /-- The actual loop body generated for a supported condition. -/
 def branchConditionWhileBody {width : Nat} [NeZero width]

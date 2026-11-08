@@ -211,7 +211,7 @@ theorem branchCondition_continue_run
     crepToLoop_comp_exp_preserves_eval (decClockCrepSemHOL source) condition (.word w) initial ctxt
       (ctxt.vmax+1) live code value next outLive
       ⟨guardDec,initialState,memRel,globalsRel,codeRel,initialLocals,compiled,by omega⟩
-  have conditionBound := condition_extraClock_control_bound (decClockCrepSemHOL source) initial afterCondition
+  have conditionBound := condition_extraClock_bound (decClockCrepSemHOL source) initial afterCondition
     code ck branch initialState exprRun exprState
   let bodyTarget := setVar next (.word w) afterCondition
   have bodyLocals : crepToLoopLocalsRelExact ctxt live (decClockCrepSemHOL source).locals bodyTarget.locals := by
@@ -321,7 +321,7 @@ theorem branchCondition_break_run
     crepToLoop_comp_exp_preserves_eval (decClockCrepSemHOL source) condition (.word w) initial ctxt
       (ctxt.vmax+1) live code value next outLive
       ⟨guardDec,initialState,memRel,globalsRel,codeRel,initialLocals,compiled,by omega⟩
-  have conditionBound := condition_extraClock_control_bound (decClockCrepSemHOL source) initial afterCondition
+  have conditionBound := condition_extraClock_bound (decClockCrepSemHOL source) initial afterCondition
     code ck branch initialState exprRun exprState
   let bodyTarget := setVar next (.word w) afterCondition
   have bodyLocals : crepToLoopLocalsRelExact ctxt live (decClockCrepSemHOL source).locals bodyTarget.locals := by
@@ -436,7 +436,7 @@ theorem branchCondition_exit_run
     crepToLoop_comp_exp_preserves_eval (decClockCrepSemHOL source) condition (.word w) initial ctxt
       (ctxt.vmax+1) live code value next outLive
       ⟨guardDec,initialState,memRel,globalsRel,codeRel,initialLocals,compiled,by omega⟩
-  have conditionBound := condition_extraClock_control_bound (decClockCrepSemHOL source) initial afterCondition
+  have conditionBound := condition_extraClock_bound (decClockCrepSemHOL source) initial afterCondition
     code ck branch initialState exprRun exprState
   let bodyTarget := setVar next (.word w) afterCondition
   have bodyLocals : crepToLoopLocalsRelExact ctxt live (decClockCrepSemHOL source).locals bodyTarget.locals := by

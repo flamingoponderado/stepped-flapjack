@@ -21,7 +21,7 @@ theorem scalarLoop_explicit_optimised {F : Type} {p : HolLoopProg 64} (shape : S
     let final := {post with clock := post.clock+(budget-extra)}
     evaluate (optimiseHOL p) {target with clock := target.clock+budget} = (result,final) ∧
     LoopSteps.steps (optimiseHOL p) {target with clock := target.clock+budget} ≤
-      sizeOf (optimiseScalar p) * (2*limit+1) := by
+      loopVisitWeight (optimiseHOL p) * (2*limit+1) := by
   have nonTimeout : result ≠ some .timeOut := by cases complete <;> simp_all
   let delta := budget-extra
   have shifted := evaluate_add_clock_eq p _ result post delta run nonTimeout
@@ -35,6 +35,5 @@ theorem scalarLoop_explicit_optimised {F : Type} {p : HolLoopProg 64} (shape : S
     omega
   obtain ⟨optRun,_,optBound⟩ := scalarLoop_optimise_source_steps shape _ _ result extended complete
   refine ⟨optRun,?_⟩
-  rw [optimiseScalar_eq shape]
   exact optBound.trans (Nat.mul_le_mul_left _ (by omega))
 end SteppedFlapjack.CrepToLoopSteps

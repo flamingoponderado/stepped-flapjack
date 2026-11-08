@@ -51,6 +51,16 @@ theorem scalarLoop_visitWeight_le_size {p : HolLoopProg width} (shape : ScalarLo
   | ite _ _ _ _ _ _ a b => simp only [loopVisitWeight]; simp_wf; omega
   | loop _ _ _ ih => simp only [loopVisitWeight]; simp_wf; omega
 
+/-- Ignoring marks cannot increase the control-node count. -/
+theorem scalarLoop_skeleton_le_visitWeight {p : HolLoopProg width} (shape : ScalarLoop p) :
+    loopSkeletonWeight p ≤ loopVisitWeight p := by
+  induction shape with
+  | branch h =>
+    induction h <;> simp_all [loopSkeletonWeight,loopVisitWeight] <;> omega
+  | seq _ _ a b => simp only [loopSkeletonWeight,loopVisitWeight]; omega
+  | ite _ _ _ _ _ _ a b => simp only [loopSkeletonWeight,loopVisitWeight]; omega
+  | loop _ _ _ ih => simp only [loopSkeletonWeight,loopVisitWeight]; omega
+
 private theorem branch_shrink_weight {p : HolLoopProg width} (shape : LoopBranch p) :
     ∀ lt live, loopSkeletonWeight (shrinkHOL lt p live).1 = loopSkeletonWeight p := by
   induction shape with
@@ -115,23 +125,5 @@ theorem scalarLoop_optimise_weight {p : HolLoopProg width} (shape : ScalarLoop p
     loopSkeletonWeight (optimiseHOL p) = loopSkeletonWeight p := by
   rw [optimiseHOL,scalarLoop_call shape .ln,compHOL]
   rw [scalarLoop_mark_weight (scalarLoop_shrink shape [] .ln), scalarLoop_shrink_weight shape [] .ln]
-
-private theorem branch_weight_le_size {p : HolLoopProg width} (shape : LoopBranch p) :
-    loopSkeletonWeight p ≤ sizeOf p := by
-  induction shape <;> simp_all [loopSkeletonWeight] <;> omega
-
-theorem scalarLoop_weight_le_size {p : HolLoopProg width} (shape : ScalarLoop p) :
-    loopSkeletonWeight p ≤ sizeOf p := by
-  induction shape with
-  | branch h => exact branch_weight_le_size h
-  | seq _ _ a b => simp only [loopSkeletonWeight]; simp_wf; omega
-  | ite _ _ _ _ _ _ a b => simp only [loopSkeletonWeight]; simp_wf; omega
-  | loop _ _ _ ih => simp only [loopSkeletonWeight]; simp_wf; omega
-
-/-- The complete optimized output bounds the original control-node count. -/
-theorem scalarLoop_weight_le_optimised_size {p : HolLoopProg width} (shape : ScalarLoop p) :
-    loopSkeletonWeight p ≤ sizeOf (optimiseHOL p) := by
-  rw [← scalarLoop_optimise_weight shape]
-  exact scalarLoop_weight_le_size (scalarLoop_optimise shape)
 
 end SteppedFlapjack.CrepToLoopSteps

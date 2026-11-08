@@ -39,7 +39,7 @@ theorem scalarIte_programBound {width : Nat} [NeZero width] {σ : Type}
       obtain ⟨ck,st,exprRun,exprValue,exprState,exprMem,exprGlobals,exprCode,exprLocals⟩ :=
         crepToLoop_comp_exp_preserves_eval source condition (.word w) target ctxt (ctxt.vmax+1) live np value tmp outLive
           ⟨guard,stateRel,memRel,globalsRel,codeRel,localsRel,compiled,by omega⟩
-      have prefixBound := condition_extraClock_control_bound source target st np ck (by
+      have prefixBound := condition_extraClock_bound source target st np ck (by
         intro q hq
         obtain ⟨_,_,_,_,hc,hbranch,_⟩ := condition_prefix_shape conditionShape ctxt (ctxt.vmax+1) live
         rw [compiled] at hc

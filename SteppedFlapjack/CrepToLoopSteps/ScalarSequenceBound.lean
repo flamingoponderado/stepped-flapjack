@@ -145,13 +145,13 @@ noncomputable def scalarProgramFactor {width : Nat} [NeZero width]
 
 
 
-/-- A code-size-derived envelope for recursive scalar compilation costs. -/
+/-- A code-control-derived envelope for recursive scalar compilation costs. -/
 def scalarOutputEnvelope : Nat → Nat
   | 0 => 1
   | n+1 => (n+2) * (n+2 + 2*scalarOutputEnvelope n+3) + 1
 
 /-- The optimized visit bound is linear in the source limit, with both
-coefficients calculated from optimized code size. -/
+coefficients calculated from optimized code control weight. -/
 theorem scalarOutputVisit_linear (codeSize limit : Nat) :
     codeSize * (2*(scalarOutputEnvelope codeSize*(limit+1))+1) =
       (2*codeSize*scalarOutputEnvelope codeSize)*limit +
@@ -320,24 +320,24 @@ theorem scalarProgram_explicit {σ : Type} (p : CrepProgHOL 64) (shape : ScalarP
     (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
     (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
     let code := compileHOLExact ctxt live p
-    let bound := scalarOutputEnvelope (sizeOf (optimiseHOL code))*(limit+1)
+    let bound := scalarOutputEnvelope (loopVisitWeight (optimiseHOL code))*(limit+1)
     ∃ post,
       evaluate (optimiseHOL code) {target with clock := target.clock+2*bound} = (resultToLoop result,post) ∧
       LoopSteps.steps (optimiseHOL code) {target with clock := target.clock+2*bound} ≤
-        sizeOf (optimiseHOL code)*(2*bound+1) ∧
+        loopVisitWeight (optimiseHOL code)*(2*bound+1) ∧
       crepToLoopStateRelExact sourceFinal {post with clock := sourceFinal.clock} ∧
       crepToLoopMemRelHOLExact sourceFinal.memory post.memory sourceFinal.memaddrs ∧
       crepToLoopGlobalsRelHOLExact sourceFinal.globals post.globals ∧
       crepToLoopCodeRelExact ctxt sourceFinal.code post.code := by
   let code := compileHOLExact ctxt live p
-  let bound := scalarOutputEnvelope (sizeOf (optimiseHOL code))*(limit+1)
+  let bound := scalarOutputEnvelope (loopVisitWeight (optimiseHOL code))*(limit+1)
   have scalar := shape
   obtain ⟨extra,oldPost,oldRun,hs,hm,hg,hc,_,visits⟩ :=
     scalarProgram_programBound shape ctxt live source sourceFinal result target run
       (completeCrep_nonerror complete) stateRel memRel globalsRel codeRel localsRel
-  have controlBound : loopVisitWeight code ≤ sizeOf (optimiseHOL code) :=
-    scalarProgram_control_le_output shape ctxt live
-  have factorBound : scalarProgramFactor ctxt live p ≤ scalarOutputEnvelope (sizeOf (optimiseHOL code)) :=
+  have controlBound : loopVisitWeight code ≤ loopVisitWeight (optimiseHOL code) :=
+    scalarProgram_control_le_optimized_control shape ctxt live
+  have factorBound : scalarProgramFactor ctxt live p ≤ scalarOutputEnvelope (loopVisitWeight (optimiseHOL code)) :=
     (scalarProgramFactor_scalarOutputEnvelope shape ctxt live).trans (scalarOutputEnvelope_mono controlBound)
   have visitBound : LoopSteps.steps code {target with clock := target.clock+extra} ≤ bound := by
     exact visits.trans (Nat.mul_le_mul factorBound (by omega))
@@ -349,7 +349,7 @@ theorem scalarProgram_explicit {σ : Type} (p : CrepProgHOL 64) (shape : ScalarP
   have optimized := scalarLoop_explicit_optimised loopShape target oldPost (resultToLoop result)
     extra (2*bound) bound oldRun (completeCrep_loop complete) extraBound visitBound
   refine ⟨{oldPost with clock := oldPost.clock+(2*bound-extra)},optimized.1,?_,?_,?_,?_,?_⟩
-  · simpa only [optimiseScalar_eq loopShape] using optimized.2
+  · exact optimized.2
   · simpa [crepToLoopStateRelExact,final] using hs
   · simpa using hm
   · simpa using hg
