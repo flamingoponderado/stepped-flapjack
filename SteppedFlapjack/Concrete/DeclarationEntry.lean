@@ -13,7 +13,7 @@ clock and visit bound from its Crep entry limit. -/
 theorem generatedDecl_entry_explicit {σ : Type}
     (ctxt : CrepToLoopContextExact) (name : MlString) (declName : Nat) (init condition : CrepExpHOL 64)
     (body tail : CrepProgHOL 64) (initShape : DirectExpression init) (conditionShape : DirectExpression condition)
-    (bodyShape : LoopFreeCrep body) (tailShape : BranchProgram tail)
+    (bodyShape : LoopFreeCrep body) (tailShape : LoopFreeCrep tail)
     (scalar : ScalarProgram (.dec declName init (.seq (.while condition body) tail)))
     (source : CrepSemHOLState 64 σ) (target : LoopSemStateFiniteExact 64 σ) (values : List (HolWordLab 64))
     (limit : Nat) (nonzero : source.clock ≠ 0)

@@ -64,7 +64,7 @@ theorem naturalCountdown_entry_loop {σ : Type} (arch : AsmArchitecture)
     (.while (.direct (.var _)) (.dec 2 (.direct (.op .sub (.var 1) (.const 1)))
       (.seq (.assign 1 (.direct (.var 2))) .skip))) (.ret (.direct (.const 0))))
   have result := generatedDecl_entry_explicit ctxt name 1 (.const (BitVec.ofNat 64 n)) (.var 1) body (.return [.const 0])
-    (.const _) (.var 1) bodyShape (.expr (.returnOne (.const 0))) scalar crep target [.word 0] limit
+    (.const _) (.var 1) bodyShape (.branch (.expr (.returnOne (.const 0)))) scalar crep target [.word 0] limit
     nonzero found entryRun entryBound rel.1 rel.2.1 rel.2.2 codeLocals.1 codeLocals.2 label
   obtain ⟨post,entry,steps⟩ := result
   refine ⟨post,naturalCountdown_loop_entry_code arch n,?_,?_⟩

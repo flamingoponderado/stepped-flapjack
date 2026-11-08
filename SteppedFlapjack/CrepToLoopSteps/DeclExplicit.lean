@@ -13,7 +13,7 @@ clock calculated from the source visit limit and compiler output. -/
 theorem directDecl_whileThenBranch_explicit {σ : Type}
     (name : Nat) (e : CrepExpHOL 64) (shape : DirectExpression e)
     (condition : CrepExpHOL 64) (body tail : CrepProgHOL 64)
-    (conditionShape : DirectExpression condition) (bodyShape : LoopFreeCrep body) (tailShape : BranchProgram tail)
+    (conditionShape : DirectExpression condition) (bodyShape : LoopFreeCrep body) (tailShape : LoopFreeCrep tail)
     (scalar : ScalarProgram (.dec name e (.seq (.while condition body) tail)))
     (ctxt : CrepToLoopContextExact) (live : NumSet)
     (source sourceFinal : CrepSemHOLState 64 σ) (result : Option (CrepResultHOLExact 64))

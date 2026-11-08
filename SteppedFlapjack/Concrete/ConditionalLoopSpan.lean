@@ -70,7 +70,7 @@ theorem branchingLoop_fixture_entry_loop (arch : AsmArchitecture)
     rw [branchingLoop_loop_code]
     exact twoLoopPrograms_entry_code arch _ _ _ (Ne.symm (entryName_fresh (progToHOL branchingLoop)))
   have result := generatedDecl_entry_explicit ctxt name 1 (.const 2) (.var 1) conditionalLoopBody (.return [.const 7])
-    (.const 2) (.var 1) conditionalLoop_body_shape (.expr (.returnOne (.const 7))) shape crep target [.word 7] 388
+    (.const 2) (.var 1) conditionalLoop_body_shape (.branch (.expr (.returnOne (.const 7)))) shape crep target [.word 7] 388
     nonzero found ⟨final,run⟩ bound rel.1 rel.2.1 rel.2.2 codeLocals.1 codeLocals.2 label
   obtain ⟨post,entry,steps⟩ := result
   refine ⟨bound,compiled,post,?_,?_⟩

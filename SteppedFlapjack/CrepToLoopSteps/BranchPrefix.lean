@@ -31,7 +31,7 @@ def ProgramBound {width : Nat} [NeZero width] {σ : Type}
 This is a compositional lemma; its continuation premise is discharged by
 specific program proofs. -/
 theorem branchPrefix_bound {width : Nat} [NeZero width] {σ : Type}
-    (headProg suffix : CrepProgHOL width) (shape : BranchProgram headProg)
+    (headProg suffix : CrepProgHOL width) (shape : LoopFreeCrep headProg)
     (ctxt : CrepToLoopContextExact) (live : NumSet) (factor : Nat)
     (continuation : @ProgramBound width _ σ suffix ctxt live factor) :
     @ProgramBound width _ σ (.seq headProg suffix) ctxt live
@@ -65,7 +65,7 @@ theorem branchPrefix_bound {width : Nat} [NeZero width] {σ : Type}
         {target with clock := target.clock+(firstExtra+secondExtra)} =
           (none,{firstTarget with clock := firstTarget.clock+secondExtra}) := by
       simpa [Nat.add_assoc] using lift
-    have firstBound := LoopSteps.branchedProgram_static_bound (compile_branchProgram shape ctxt live)
+    have firstBound := LoopSteps.branchedProgram_static_bound (compile_loopFreeCrep shape ctxt live)
       {target with clock := target.clock+(firstExtra+secondExtra)}
     have count := LoopSteps.steps_seq (compileHOLExact ctxt live headProg) (compileHOLExact ctxt live suffix)
       {target with clock := target.clock+(firstExtra+secondExtra)}
@@ -89,7 +89,7 @@ theorem branchPrefix_bound {width : Nat} [NeZero width] {σ : Type}
       | some v => simp [firstMap]
     · have count := LoopSteps.steps_seq (compileHOLExact ctxt live headProg) (compileHOLExact ctxt live suffix)
         {target with clock := target.clock+firstExtra}
-      have bound := LoopSteps.branchedProgram_static_bound (compile_branchProgram shape ctxt live)
+      have bound := LoopSteps.branchedProgram_static_bound (compile_loopFreeCrep shape ctxt live)
         {target with clock := target.clock+firstExtra}
       rw [firstTargetRun] at count
       cases firstTargetResult with
