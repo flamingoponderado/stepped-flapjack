@@ -1,4 +1,4 @@
-import SteppedFlapjack.Concrete.BranchLoopSpan
+import SteppedFlapjack.Concrete.WitnessLoopCode
 import SteppedFlapjack.LoopLiveSteps.TailEntryShape
 
 set_option maxRecDepth 10000
@@ -36,26 +36,6 @@ theorem branching_loop_entry_code (arch : AsmArchitecture) :
   exact twoLoopPrograms_entry_code arch _ _ _ (Ne.symm (entryName_fresh branchingHOL))
 
 
-/-- The entry uses the actual optimized callee from the generated code table. -/
-theorem branching_loop_callee_lookup {σ : Type} (arch : AsmArchitecture)
-    (source : PanSemStateFiniteExact 64 σ) :
-    findCode (some 65) [] (loopStateFrom arch source branchingHOL).code =
-      some (.ln,optimiseHOL (compileHOLExact (witnessLoopContext arch branchingHOL) .ln branchCrepBody)) := by
-  have shape : ScalarProgram branchCrepBody :=
-    .ite (.cmp .lower (.direct (.const _)) (.direct (.const _)))
-      (.ret (.direct (.const _))) (.ret (.direct (.const _)))
-  change findCode (some 65) [] (sptFromAList (compileProgHOLExact arch (crepPrograms branchingHOL))) = _
-  rw [branching_loop_code]
-  simp only [twoLoopPrograms,firstLoopName,findCode]
-  rw [optimiseScalar_eq (compile_scalar_program shape _ _)]
-  have ctxEq : witnessLoopContext arch branchingHOL =
-      mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable
-        (twoPrograms (ofString "main") (entryName branchingHOL) branchCrepBody)) 0 := by
-    simp [witnessLoopContext,branching_crep_code,twoPrograms,branchCrepBody]
-  rw [ctxEq]
-  simp only [sptFromAList, sptLookup_sptInsert_ne 64 65 _ _ (by decide), sptLookup_sptInsert_same]
-  rfl
-
 /-- A generated entry reaches a returning zero-argument callee, with eight
 wrapper visits in addition to the callee visits. -/
 theorem generatedEntry_return {σ : Type} (target post : LoopSemStateFiniteExact 64 σ)
@@ -91,34 +71,5 @@ theorem generatedEntry_return {σ : Type} (target post : LoopSemStateFiniteExact
     rw [markedCall,LoopSteps.steps_mark,callSteps]
     simp only at bound ⊢
     omega
-
-/-- The generated entry reaches its optimized callee and returns seven with an
-explicit clock and a code-derived bound. -/
-theorem branching_entry_loop {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64 σ) :
-    let target := loopStateFrom arch source branchingHOL
-    let code := compileHOLExact (witnessLoopContext arch branchingHOL) .ln branchCrepBody
-    CrepSteps.steps branchCrepEntry (crepState branchingHOL) = 5 ∧
-    (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms branchingHOL) ∧
-    ∃ post,
-      evaluate branchingLoopEntry {target with clock := target.clock+24} = (some (.result [.word 7]),post) ∧
-      LoopSteps.steps branchingLoopEntry {target with clock := target.clock+24} ≤ sizeOf (optimiseScalar code)*47 + 8 := by
-  let target := loopStateFrom arch source branchingHOL
-  let code := compileHOLExact (witnessLoopContext arch branchingHOL) .ln branchCrepBody
-  obtain ⟨_,post,_,_,bodyRun,bodyBound⟩ := branching_body_loop arch source
-  change evaluate (optimiseHOL code) {target with clock := target.clock+23} = (some (.result [.word 7]),post) at bodyRun
-  change LoopSteps.steps (optimiseHOL code) {target with clock := target.clock+23} ≤ sizeOf (optimiseScalar code)*47 at bodyBound
-  have locals : target.locals = .ln := rfl
-  have entryState : ({decClock {target with clock := target.clock+24} with locals := .ln} : LoopSemStateFiniteExact 64 σ) =
-      {target with clock := target.clock+23} := by
-    simp [decClock,locals]
-  have lookup : findCode (some 65) [] {target with clock := target.clock+24}.code = some (.ln,optimiseHOL code) :=
-    branching_loop_callee_lookup arch source
-  have calleeRun : evaluate (optimiseHOL code) {decClock {target with clock := target.clock+24} with locals := .ln} =
-      (some (.result [.word 7]),post) := by rw [entryState]; exact bodyRun
-  have calleeBound : LoopSteps.steps (optimiseHOL code) {decClock {target with clock := target.clock+24} with locals := .ln} ≤
-      sizeOf (optimiseScalar code)*47 := by rw [entryState]; exact bodyBound
-  have entry := generatedEntry_return {target with clock := target.clock+24} post (optimiseHOL code) [.word 7]
-    (sizeOf (optimiseScalar code)*47) (by simp) lookup calleeRun calleeBound
-  exact ⟨branchCrepEntry_steps,branching_loop_entry_code arch,post,entry.1,entry.2⟩
 
 end SteppedFlapjack.Concrete

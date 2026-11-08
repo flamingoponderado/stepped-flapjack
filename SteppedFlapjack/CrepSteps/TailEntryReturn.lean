@@ -16,7 +16,8 @@ theorem tail_entry_return_inv {width : Nat} [NeZero width] {σ : Type}
     ∃ calleeFinal,
       evalCrepSemHOLProgExact (decClockCrepSemHOL {state with locals := HolFiniteMapExact.empty.updateList []}) body =
         (some (.return values),calleeFinal) ∧
-      steps body (decClockCrepSemHOL {state with locals := HolFiniteMapExact.empty.updateList []}) ≤ limit := by
+      steps body (decClockCrepSemHOL {state with locals := HolFiniteMapExact.empty.updateList []}) ≤ limit ∧
+      final = calleeFinal.emptyLocals := by
   let entry := decClockCrepSemHOL {state with locals := HolFiniteMapExact.empty.updateList []}
   rcases callee : evalCrepSemHOLProgExact entry body with ⟨r,post⟩
   have wrapper := (tail_entry state name body r post (steps body entry) lookup nonzero callee le_rfl).1
@@ -27,6 +28,7 @@ theorem tail_entry_return_inv {width : Nat} [NeZero width] {σ : Type}
     | some r => cases r <;> simp_all [tailExit]
   have count := SteppedFlapjack.CrepToLoopSteps.tailEntry_callee_steps_le .skip name body state state
     (by rw [evalCrepSemHOLProgExact_skip]) lookup nonzero
-  refine ⟨post,?_,count.trans bound⟩
-  simp [entry,resultEq] at callee ⊢
+  refine ⟨post,?_,count.trans bound,?_⟩
+  · simp [entry,resultEq] at callee ⊢
+  · simpa [resultEq,tailExit] using congrArg Prod.snd wrapper
 end SteppedFlapjack.CrepSteps

@@ -13,11 +13,11 @@ clock and visit bound from its Crep entry limit. -/
 theorem generatedScalar_entry_explicit {σ : Type}
     (ctxt : CrepToLoopContextExact) (name : MlString) (p : CrepProgHOL 64)
     (scalar : ScalarProgram p)
-    (source : CrepSemHOLState 64 σ) (target : LoopSemStateFiniteExact 64 σ) (values : List (HolWordLab 64))
+    (source entryFinal : CrepSemHOLState 64 σ) (target : LoopSemStateFiniteExact 64 σ) (values : List (HolWordLab 64))
     (limit : Nat) (nonzero : source.clock ≠ 0)
     (found : source.code.lookup name = some ([],p))
-    (entryRun : ∃ final, evalCrepSemHOLProgExact source (.seq .skip (.call none name [])) =
-      (some (.return values),final))
+    (entryRun : evalCrepSemHOLProgExact source (.seq .skip (.call none name [])) =
+      (some (.return values),entryFinal))
     (entryBound : CrepSteps.steps (.seq .skip (.call none name [])) source ≤ limit)
     (stateRel : crepToLoopStateRelExact source target)
     (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
@@ -32,15 +32,17 @@ theorem generatedScalar_entry_explicit {σ : Type}
       evaluate branchingLoopEntry {target with clock := target.clock+2*budget} =
         (some (.result (values.map wlabWlocExact)),post) ∧
       LoopSteps.steps branchingLoopEntry {target with clock := target.clock+2*budget} ≤
-        sizeOf (optimiseScalar code)*(2*budget+1)+8 := by
+        sizeOf (optimiseScalar code)*(2*budget+1)+8 ∧
+      crepToLoopStateRelExact entryFinal {post with clock := entryFinal.clock} ∧
+      crepToLoopMemRelHOLExact entryFinal.memory post.memory entryFinal.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact entryFinal.globals post.globals := by
   let c := ctxtFcExact ctxt.target ctxt.funcs [] []
   let budget := scalarProgramFactor c .ln p*(limit+1)
   let code := compileHOLExact c .ln p
-  obtain ⟨entryFinal,entryRun⟩ := entryRun
-  obtain ⟨sourceFinal,calleeRun,calleeBound⟩ := CrepSteps.tail_entry_return_inv source entryFinal name p values limit
+  obtain ⟨sourceFinal,calleeRun,calleeBound,finalEq⟩ := CrepSteps.tail_entry_return_inv source entryFinal name p values limit
     found nonzero entryRun entryBound
   have rel := tailCall_nil_entry_relations ctxt .ln source target name p stateRel memRel globalsRel codeRel localsRel found
-  obtain ⟨post,run,bound,_,_,_,_⟩ := scalarProgram_explicit p scalar c .ln
+  obtain ⟨post,run,bound,finalState,finalMem,finalGlobals,_⟩ := scalarProgram_explicit p scalar c .ln
     _ sourceFinal _ _ limit calleeRun calleeBound (.return _)
     rel.1 rel.2.1 rel.2.2.1 rel.2.2.2.1 rel.2.2.2.2
   have targetNonzero : target.clock ≠ 0 := by have h := stateRel.2.2.1; omega
@@ -61,5 +63,8 @@ theorem generatedScalar_entry_explicit {σ : Type}
       sizeOf (optimiseScalar code)*(2*budget+1) := by rw [clockEq]; exact bound
   have entry := generatedEntry_return {target with clock := target.clock+2*budget} post (optimiseHOL code) _
     (sizeOf (optimiseScalar code)*(2*budget+1)) (by simp only; omega) lookup' cr cb
-  exact ⟨post,entry.1,entry.2⟩
+  refine ⟨post,entry.1,entry.2,?_,?_,?_⟩
+  · rw [finalEq]; simpa [CrepSemHOLState.emptyLocals,crepToLoopStateRelExact] using finalState
+  · rw [finalEq]; simpa [CrepSemHOLState.emptyLocals] using finalMem
+  · rw [finalEq]; simpa [CrepSemHOLState.emptyLocals] using finalGlobals
 end SteppedFlapjack.Concrete

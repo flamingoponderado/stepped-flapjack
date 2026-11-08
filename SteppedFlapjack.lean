@@ -1,14 +1,12 @@
+import SteppedFlapjack.Concrete.ComparisonLoopSpan
 import SteppedFlapjack.Concrete.ScalarEntry
 import SteppedFlapjack.CrepToLoopSteps.ScalarSequenceBound
 import SteppedFlapjack.Concrete.CrepLoopError
 import SteppedFlapjack.Concrete.ConditionalLoopSpan
 import SteppedFlapjack.CrepSteps.ScalarClock
 import SteppedFlapjack.Concrete.CountdownLoopSpan
-import SteppedFlapjack.CrepToLoopSteps.DeclExplicit
 import SteppedFlapjack.Concrete.BranchEntryLoop
 import SteppedFlapjack.CrepToLoopSteps.WhileExplicit
-import SteppedFlapjack.Concrete.BranchLoopSpan
-import SteppedFlapjack.CrepToLoopSteps.BranchExplicit
 import SteppedFlapjack.Concrete.WitnessLoopCode
 import SteppedFlapjack.CrepToLoopSteps.ScalarExecutable
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopConsumption
