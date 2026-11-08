@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.ScalarLoopWeight
 import SteppedFlapjack.Concrete.ComparisonLoopSpan
 import SteppedFlapjack.Concrete.ScalarEntry
 import SteppedFlapjack.CrepToLoopSteps.ScalarSequenceBound

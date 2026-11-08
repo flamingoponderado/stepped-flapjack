@@ -3,12 +3,13 @@ import SteppedFlapjack.LoopLiveSteps.OptimiseShape
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack SteppedFlapjack.LoopToWordSteps SteppedFlapjack.LoopLiveSteps
 variable {width : Nat} [NeZero width]
-private theorem fixedpoint_shape {body : HolLoopProg width}
-    (shape : ∀ lt live, ScalarLoop (shrinkHOL lt body live).1) :
-    ∀ lt liveIn l1 l2 out live, fixedpointHOL lt liveIn l1 l2 body = some (out,live) → ScalarLoop out := by
+/-- Any property preserved by shrinking is preserved by a successful fixed point. -/
+theorem scalarFixedpoint_preserves {body : HolLoopProg width} (property : HolLoopProg width → Prop)
+    (shape : ∀ lt live, property (shrinkHOL lt body live).1) :
+    ∀ lt liveIn l1 l2 out live, fixedpointHOL lt liveIn l1 l2 body = some (out,live) → property out := by
   have key : ∀ fuel lt liveIn l1 l2 out live,
       sptSize liveIn - sptSize l1 < fuel →
-      fixedpointHOL lt liveIn l1 l2 body = some (out,live) → ScalarLoop out := by
+      fixedpointHOL lt liveIn l1 l2 body = some (out,live) → property out := by
     intro fuel
     induction fuel with
     | zero => intro lt li l1 l2 out live enough; omega
@@ -59,7 +60,7 @@ theorem scalarLoop_shrink {p : HolLoopProg width} (shape : ScalarLoop p) :
     | some pair =>
       rcases pair with ⟨b,l⟩
       simp only
-      exact .loop _ _ (fixedpoint_shape ih lt li .ln _ b l heq)
+      exact .loop _ _ (scalarFixedpoint_preserves ScalarLoop ih lt li .ln _ b l heq)
 /-- The Loop call pass leaves recursive scalar programs unchanged. -/
 theorem scalarLoop_call {p : HolLoopProg width} (shape : ScalarLoop p) :
     ∀ env, (loopCallCompHOL env p).1 = p := by

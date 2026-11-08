@@ -38,7 +38,8 @@ theorem naturalCountdown_entry_loop {σ : Type} (arch : AsmArchitecture)
         sizeOf (optimiseScalar code)*(2*bound+1)+8 ∧
       crepToLoopStateRelExact entryFinal {post with clock := entryFinal.clock} ∧
       crepToLoopMemRelHOLExact entryFinal.memory post.memory entryFinal.memaddrs ∧
-      crepToLoopGlobalsRelHOLExact entryFinal.globals post.globals := by
+      crepToLoopGlobalsRelHOLExact entryFinal.globals post.globals ∧
+      crepToLoopCodeRelExact ctxt entryFinal.code post.code := by
   let crep := crepStateFrom source (naturalCountdownHOL n)
   let target := loopStateFrom arch source (naturalCountdownHOL n)
   let ctxt := witnessLoopContext arch (naturalCountdownHOL n)
@@ -59,8 +60,8 @@ theorem naturalCountdown_entry_loop {σ : Type} (arch : AsmArchitecture)
       (.seq (.assign 1 (.direct (.var 2))) .skip))) (.ret (.direct (.const 0))))
   have result := generatedScalar_entry_explicit ctxt name p scalar crep entryFinal target [.word 0] limit
     nonzero found entryRun entryBound rel.1 rel.2.1 rel.2.2 codeLocals.1 codeLocals.2 label
-  obtain ⟨post,entry,steps,finalState,finalMem,finalGlobals⟩ := result
-  refine ⟨post,naturalCountdown_loop_entry_code arch n,?_,?_,finalState,finalMem,finalGlobals⟩
+  obtain ⟨post,entry,steps,finalState,finalMem,finalGlobals,finalCode⟩ := result
+  refine ⟨post,naturalCountdown_loop_entry_code arch n,?_,?_,finalState,finalMem,finalGlobals,finalCode⟩
   · simpa [ctxt,name,target,crep,p,body,naturalCountdownCrepBody,wlabWlocExact] using entry
   · simpa [ctxt,name,target,crep,p,body,naturalCountdownCrepBody] using steps
 
@@ -85,14 +86,15 @@ theorem naturalCountdown_fixture_entry_loop (arch : AsmArchitecture) (n : Nat) (
         sizeOf (optimiseScalar code)*(2*bound+1)+8 ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       crepToLoopMemRelHOLExact final.memory post.memory final.memaddrs ∧
-      crepToLoopGlobalsRelHOLExact final.globals post.globals := by
+      crepToLoopGlobalsRelHOLExact final.globals post.globals ∧
+      crepToLoopCodeRelExact ctxt final.code post.code := by
   let source := panSimpSourceState (naturalCountdown n) (clockedFixtureSource (naturalCountdown n) (6*n+7))
   obtain ⟨final,run,bound⟩ := natural_countdown_counted_fixture n range context primitive handler
   have nonzero : (crepStateFrom source (naturalCountdownHOL n)).clock ≠ 0 := by
     simp [source,crepStateFrom,PanToCrepSteps.concreteDeclCrepState,panSimpSourceState,clockedFixtureSource,loweredStateFrom,PanToCrepSteps.noGlobalsLoweredPreCall]
-  obtain ⟨post,compiled,entry,steps,state,mem,globals⟩ :=
+  obtain ⟨post,compiled,entry,steps,state,mem,globals,codeRel⟩ :=
     naturalCountdown_entry_loop arch source final n (3+8*(6*n+16)) nonzero run bound
-  exact ⟨final,post,run,compiled,entry,steps,state,mem,globals⟩
+  exact ⟨final,post,run,compiled,entry,steps,state,mem,globals,codeRel⟩
 
 /-- The phase-one prefixed countdown fixture supplies the callee execution and
 its closed-form visit limit directly. -/
@@ -115,13 +117,14 @@ theorem countdown_fixture_entry_loop (arch : AsmArchitecture) (n : Nat) (range :
         sizeOf (optimiseScalar code)*(2*bound+1)+8 ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       crepToLoopMemRelHOLExact final.memory post.memory final.memaddrs ∧
-      crepToLoopGlobalsRelHOLExact final.globals post.globals := by
+      crepToLoopGlobalsRelHOLExact final.globals post.globals ∧
+      crepToLoopCodeRelExact ctxt final.code post.code := by
   let source := panSimpSourceState (countdown n) (clockedFixtureSource (countdown n) (6*n+9))
   obtain ⟨final,run,bound⟩ := countdown_counted_fixture n range context primitive handler
   have nonzero : (crepStateFrom source (naturalCountdownHOL n)).clock ≠ 0 := by
     simp [source,crepStateFrom,PanToCrepSteps.concreteDeclCrepState,panSimpSourceState,clockedFixtureSource,loweredStateFrom,PanToCrepSteps.noGlobalsLoweredPreCall]
-  obtain ⟨post,compiled,entry,steps,state,mem,globals⟩ :=
+  obtain ⟨post,compiled,entry,steps,state,mem,globals,codeRel⟩ :=
     naturalCountdown_entry_loop arch source final n (3+8*(6*n+18)) nonzero run bound
-  exact ⟨final,post,run,compiled,entry,steps,state,mem,globals⟩
+  exact ⟨final,post,run,compiled,entry,steps,state,mem,globals,codeRel⟩
 
 end SteppedFlapjack.Concrete

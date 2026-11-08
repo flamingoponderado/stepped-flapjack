@@ -28,7 +28,8 @@ theorem branching_fixture_entry_loop (arch : AsmArchitecture)
         sizeOf (optimiseScalar code)*(2*budget+1)+8 ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       crepToLoopMemRelHOLExact final.memory post.memory final.memaddrs ∧
-      crepToLoopGlobalsRelHOLExact final.globals post.globals := by
+      crepToLoopGlobalsRelHOLExact final.globals post.globals ∧
+      crepToLoopCodeRelExact ctxt final.code post.code := by
   let source := panSimpSourceState branching (clockedFixtureSource branching 6)
   let crep := crepStateFrom source branchingHOL
   let target := loopStateFrom arch source branchingHOL
@@ -55,8 +56,8 @@ theorem branching_fixture_entry_loop (arch : AsmArchitecture)
       (.ret (.direct (.const _))) (.ret (.direct (.const _)))
   have result := generatedScalar_entry_explicit ctxt name branchCrepBody branchScalar crep final target [.word 7] 33
     nonzero found run bound rel.1 rel.2.1 rel.2.2 codeLocals.1 codeLocals.2 label
-  obtain ⟨post,entry,steps,finalState,finalMem,finalGlobals⟩ := result
-  refine ⟨bound,compiled,final,post,run,?_,?_,finalState,finalMem,finalGlobals⟩
+  obtain ⟨post,entry,steps,finalState,finalMem,finalGlobals,finalCode⟩ := result
+  refine ⟨bound,compiled,final,post,run,?_,?_,finalState,finalMem,finalGlobals,finalCode⟩
   · simpa [ctxt,name,target,crep,branchCrepBody,wlabWlocExact] using entry
   · simpa [ctxt,name,target,crep,branchCrepBody] using steps
 end SteppedFlapjack.Concrete

@@ -10,8 +10,8 @@ def nestedLoopExample : CrepProgHOL 64 :=
 
 /-- The concrete factor is computable from code and architecture. -/
 example (arch : AsmArchitecture) :
-    scalarProgramFactor (mkCtxtExact arch (makeVmapExact []) HolFiniteMapExact.empty 0) .ln nestedLoopExample = 12532 := by
-  simp [nestedLoopExample,scalarProgramFactor,scalarNoWhile,compileHOLExact,compileExpHOLExact,compileExpsHOLExact,
+    scalarProgramFactor (mkCtxtExact arch (makeVmapExact []) HolFiniteMapExact.empty 0) .ln nestedLoopExample = 12518 := by
+  simp [nestedLoopExample,scalarProgramFactor,scalarNoWhile,LoopSteps.structuralWeight,compileHOLExact,compileExpHOLExact,compileExpsHOLExact,
     loopNestedSeqHOL,genTemps,mkCtxtExact,makeVmapExact,HolFiniteMapExact.updateListEq]
 
 /-- The recursive shape includes the reached inner loop and the outer break. -/
@@ -98,16 +98,16 @@ example {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64
     let target := SteppedFlapjack.Concrete.loopStateFrom arch source SteppedFlapjack.Concrete.branchingHOL
     let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
     ∃ post, evaluate (optimiseHOL (compileHOLExact ctxt .ln nestedLoopExample))
-        {target with clock := target.clock+175448} = (some (.result [.word 7]),post) ∧
+        {target with clock := target.clock+175252} = (some (.result [.word 7]),post) ∧
       LoopSteps.steps (optimiseHOL (compileHOLExact ctxt .ln nestedLoopExample))
-        {target with clock := target.clock+175448} ≤ 14913165 := by
+        {target with clock := target.clock+175252} ≤ 14896505 := by
   let crep := SteppedFlapjack.Concrete.crepStateFrom source SteppedFlapjack.Concrete.branchingHOL
   let target := SteppedFlapjack.Concrete.loopStateFrom arch source SteppedFlapjack.Concrete.branchingHOL
   let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
   have rel := SteppedFlapjack.Concrete.loopStateFrom_relations arch source SteppedFlapjack.Concrete.branchingHOL
   have codeLocals := SteppedFlapjack.Concrete.branching_loop_code_locals arch source
-  have factor : scalarProgramFactor ctxt .ln nestedLoopExample = 12532 := by
-    simp [ctxt,SteppedFlapjack.Concrete.witnessLoopContext,nestedLoopExample,scalarProgramFactor,scalarNoWhile,
+  have factor : scalarProgramFactor ctxt .ln nestedLoopExample = 12518 := by
+    simp [ctxt,SteppedFlapjack.Concrete.witnessLoopContext,nestedLoopExample,scalarProgramFactor,scalarNoWhile,LoopSteps.structuralWeight,
       compileHOLExact,compileExpHOLExact,compileExpsHOLExact,loopNestedSeqHOL,genTemps,mkCtxtExact,
       makeVmapExact,HolFiniteMapExact.updateListEq]
   let loopCode : HolLoopProg 64 := .seq

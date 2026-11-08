@@ -122,7 +122,7 @@ private theorem scalarSequence_programBound {width : Nat} [NeZero width] {σ : T
 /-- A syntax-derived factor for arbitrary nesting and sequencing of scalar loops. -/
 noncomputable def scalarProgramFactor {width : Nat} [NeZero width]
     (ctxt : CrepToLoopContextExact) (live : NumSet) (p : CrepProgHOL width) : Nat :=
-  if scalarNoWhile p then sizeOf (compileHOLExact ctxt live p)
+  if scalarNoWhile p then LoopSteps.structuralWeight (compileHOLExact ctxt live p)
   else match p with
     | .seq a b => 1 + scalarProgramFactor ctxt live a + scalarProgramFactor ctxt live b
     | .ite condition a b =>
@@ -144,13 +144,19 @@ noncomputable def scalarProgramFactor {width : Nat} [NeZero width]
 private theorem scalarBranch_programBound {width : Nat} [NeZero width] {σ : Type}
     (p : CrepProgHOL width) (shape : ScalarProgram p) (free : scalarNoWhile p = true)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
-    @ProgramBound width _ σ p ctxt live (sizeOf (compileHOLExact ctxt live p)) := by
+    @ProgramBound width _ σ p ctxt live (LoopSteps.structuralWeight (compileHOLExact ctxt live p)) := by
   intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
   obtain ⟨extra,out,final,eval,hs,hm,hg,hc,map,hl,steps,_⟩ :=
     branchProgram_correct_with_bounded_extra p (.scalar shape free) source sourceFinal result target ctxt live
       run nonerror stateRel memRel globalsRel codeRel localsRel
   subst out
-  exact ⟨extra,final,eval,hs,hm,hg,hc,hl,steps.trans (Nat.mul_le_mul_left _ (by omega))⟩
+  have static := LoopSteps.branchedProgram_structural_bound (compile_loopFreeCrep (.scalar shape free) ctxt live)
+    {target with clock := target.clock+extra}
+  have enough : LoopSteps.structuralWeight (compileHOLExact ctxt live p) ≤
+      LoopSteps.structuralWeight (compileHOLExact ctxt live p) * (CrepSteps.steps p source+1) := by
+    have := CrepSteps.steps_pos p source
+    nlinarith
+  exact ⟨extra,final,eval,hs,hm,hg,hc,hl,static.trans enough⟩
 
 private theorem scalarProgram_programBound {width : Nat} [NeZero width] {σ : Type}
     {p : CrepProgHOL width} (shape : ScalarProgram p) (ctxt : CrepToLoopContextExact) (live : NumSet) :
