@@ -1,4 +1,4 @@
-import SteppedFlapjack.CrepToLoopSteps.BranchExtraClock
+import SteppedFlapjack.CrepToLoopSteps.ScalarPrefix
 
 /-! Conditions whose compiled expression prefixes are loop-free. -/
 namespace SteppedFlapjack.CrepToLoopSteps
@@ -19,30 +19,13 @@ theorem condition_prefix_shape {width : Nat} [NeZero width] {e : CrepExpHOL widt
       compileExpHOLExact ctxt tmp live e = (code,value,next,outLive) ∧
       (∀ p ∈ code, BranchedProgram p) ∧
       (∀ p ∈ code, LoopSelectProgram p) := by
-  cases shape with
-  | direct h =>
-    obtain ⟨value,compiled⟩ := directExpression_noCode h ctxt tmp live
-    exact ⟨[],value,tmp,live,compiled,by simp,by simp⟩
-  | @cmp op a b ha hb =>
-    obtain ⟨va,ca⟩ := directExpression_noCode ha ctxt tmp live
-    obtain ⟨vb,cb⟩ := directExpression_noCode hb ctxt tmp live
-    refine ⟨[.assign (tmp+1) va, .assign (tmp+2) vb,
-      .ite op (tmp+1) (.reg (tmp+2)) (.assign (tmp+1) (.const 1))
-        (.assign (tmp+1) (.const 0)) (sptListInsert [tmp+1,tmp+2] live)],
-      .var (tmp+1),tmp+3,sptListInsert [tmp+1,tmp+2] live,?_,?_,?_⟩
-    · simp only [compileExpHOLExact,ca,cb,progIfHOLExact,List.nil_append]
-    · intro p hp
-      simp only [List.mem_cons,List.not_mem_nil,or_false] at hp
-      rcases hp with rfl | rfl | rfl
-      · exact .leaf (.assign _ _)
-      · exact .leaf (.assign _ _)
-      · exact .ite _ _ _ _ (.leaf (.assign _ _)) (.leaf (.assign _ _))
-    · intro p hp
-      simp only [List.mem_cons,List.not_mem_nil,or_false] at hp
-      rcases hp with rfl | rfl | rfl
-      · exact .assign _ _
-      · exact .assign _ _
-      · exact .ite _ _ _ _ (.assign _ _) (.assign _ _)
+  have scalar : CompiledScalar e := by
+    cases shape with
+    | direct h => exact .direct h
+    | cmp op a b => exact .cmp op (.direct a) (.direct b)
+  obtain ⟨code,value,next,outLive,compiled,branch,selected⟩ :=
+    compiledScalar_prefix scalar ctxt tmp live
+  exact ⟨code,value,next,outLive,compiled,branch,selected⟩
 
 /-- A nested sequence of loop-free statements is loop-free. -/
 theorem nestedSeq_branched {width : Nat} [NeZero width] (code : List (HolLoopProg width))
@@ -52,6 +35,19 @@ theorem nestedSeq_branched {width : Nat} [NeZero width] (code : List (HolLoopPro
   | cons p code ih =>
     simp only [loopNestedSeqHOL]
     exact .seq (shape p (by simp)) (ih (by intro q hq; exact shape q (by simp [hq])))
+
+/-- The actual Loop prefix for a generalized scalar expression has a
+literal-independent visit bound, with no execution or fuel premise. -/
+theorem compiledScalar_prefix_steps {width : Nat} [NeZero width] {σ : Type}
+    {e : CrepExpHOL width} (shape : CompiledScalar e)
+    (ctxt : CrepToLoopContextExact) (tmp : Nat) (live : NumSet)
+    (state : LoopSemStateFiniteExact width σ) :
+    let code := (compileExpHOLExact ctxt tmp live e).1
+    LoopSteps.steps (loopNestedSeqHOL code) state ≤
+      LoopSteps.structuralWeight (loopNestedSeqHOL code) := by
+  obtain ⟨code,value,next,outLive,compiled,branch,_⟩ := compiledScalar_prefix shape ctxt tmp live
+  have bounded := LoopSteps.branchedProgram_structural_bound (nestedSeq_branched code branch) state
+  simpa [compiled] using bounded
 
 /-- A nested sequence of selected statements is selected. -/
 theorem nestedSeq_select {width : Nat} [NeZero width] (code : List (HolLoopProg width))

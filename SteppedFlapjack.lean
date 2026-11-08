@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.ScalarToLoop
 import SteppedFlapjack.Concrete.ScopePreservation
 import SteppedFlapjack.Concrete.CrepErrorLeaf
 import SteppedFlapjack.Concrete.ScalarParity
@@ -435,6 +436,8 @@ import SteppedFlapjack.StackRemoveSteps.CompCorrect.Leaf
 The step-counted structured Pancake source semantics, split out of Flapjack in
 phase 4 of flapjack#1251:
 
+- `SteppedFlapjack.CrepToLoopSteps.ScalarPrefix`, `SteppedFlapjack.Concrete.ScalarToLoop`:
+  generalized scalar compilation prefixes and explicit structural Loop visit bounds;
 - `SteppedFlapjack.PanValueExpCounted`, `SteppedFlapjack.PanExpressionEvaluator`:
   expression evaluators that count steps;
 - `SteppedFlapjack.PanSteppedSemantics`, `SteppedFlapjack.PanValueFfiSemantics`:
