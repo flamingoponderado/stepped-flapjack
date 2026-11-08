@@ -1,5 +1,5 @@
 import SteppedFlapjack.Concrete.SourceRuns
-import SteppedFlapjack.PanToCrepSteps.DeclShape
+import SteppedFlapjack.PanToCrepSteps.FrontendProgram
 
 /-! Connect source scalar syntax to the frontend's singleton-result expressions. -/
 namespace SteppedFlapjack.Concrete
@@ -9,79 +9,6 @@ open SteppedFlapjack.PanToCrepSteps
 /-- Each in-scope source variable has a scalar register in the frontend context. -/
 def ScopeRelation (scope : List VarName) (ctxt : PanToCrepContextExact 64) : Prop :=
   ∀ name ∈ scope, ∃ reg, ctxt.vars.lookup (ofString name) = some (.one,[reg])
-
-/-- A scalar expression the Pancake frontend compiles to one Crep expression.
-The direct subset also supports the existing no-auxiliary-code Loop proofs;
-comparisons may generate additional Loop code in a later pass. -/
-inductive FrontendScalar (ctxt : PanToCrepContextExact 64) : ExpHOL 64 → Prop
-  | const (value) : FrontendScalar ctxt (.const value)
-  | local (name reg) : ctxt.vars.lookup name = some (.one,[reg]) → FrontendScalar ctxt (.var .local name)
-  | baseAddr : FrontendScalar ctxt .baseAddr
-  | topAddr : FrontendScalar ctxt .topAddr
-  | bytesInWord : FrontendScalar ctxt .bytesInWord
-  | op (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.op operator [a,b])
-  | cmp (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.cmp operator a b)
-  | shift (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.shift operator a b)
-
-/-- The existing direct-expression fragment embeds into the full scalar grammar. -/
-theorem frontendScalar_of_direct {ctxt : PanToCrepContextExact 64} {e : ExpHOL 64}
-    (shape : ScalarExpression ctxt e) : FrontendScalar ctxt e := by
-  induction shape with
-  | const v => exact .const v
-  | «local» name reg found => exact .local name reg found
-  | baseAddr => exact .baseAddr
-  | topAddr => exact .topAddr
-  | bytesInWord => exact .bytesInWord
-  | op op a b iha ihb => exact .op op iha ihb
-  | shift op a b iha ihb => exact .shift op iha ihb
-
-/-- Every frontend scalar produces exactly one Crep expression. -/
-theorem frontendScalar_compile {ctxt : PanToCrepContextExact 64} {e : ExpHOL 64}
-    (shape : FrontendScalar ctxt e) : ∃ value, compileExpExactHOLW ctxt e = ([value],.one) := by
-  induction shape with
-  | const v => exact ⟨.const v,by simp [compileExpExactHOLW]⟩
-  | «local» name reg found => exact ⟨.var reg,by simp [compileExpExactHOLW,found]⟩
-  | baseAddr => exact ⟨.baseAddr,by simp [compileExpExactHOLW]⟩
-  | topAddr => exact ⟨.topAddr,by simp [compileExpExactHOLW]⟩
-  | bytesInWord => exact ⟨.const 8,by simp [compileExpExactHOLW]⟩
-  | op op ha hb iha ihb =>
-    obtain ⟨a,ca⟩ := iha
-    obtain ⟨b,cb⟩ := ihb
-    exact ⟨.op op [a,b],by simp [compileExpExactHOLW,compileExpExactHOLWList,ca,cb,cexpHeads]⟩
-  | cmp op ha hb iha ihb =>
-    obtain ⟨a,ca⟩ := iha
-    obtain ⟨b,cb⟩ := ihb
-    exact ⟨.cmp op a b,by simp [compileExpExactHOLW,ca,cb]⟩
-  | shift op ha hb iha ihb =>
-    obtain ⟨a,ca⟩ := iha
-    obtain ⟨b,cb⟩ := ihb
-    exact ⟨.shift op a b,by simp [compileExpExactHOLW,ca,cb]⟩
-
-/-- Generalized scalar declarations compile with the actual extended context,
-including when the initializer contains comparisons. -/
-theorem frontendDecl_compile (ctxt : PanToCrepContextExact 64) (name : MlString)
-    (initializer : ExpHOL 64) (body : ProgHOL 64) (shape : FrontendScalar ctxt initializer) :
-    ∃ value, compileProgExactHOLW ctxt (.dec name .one initializer body) =
-      .dec (ctxt.vmax+1) value (compileProgExactHOLW (scalarDeclContext ctxt name) body) := by
-  obtain ⟨value,compiled⟩ := frontendScalar_compile shape
-  refine ⟨value,?_⟩
-  simp [compileProgExactHOLW,compileDecExactHOLW,compiled,nestedDecsHOL,scalarDeclContext]
-
-/-- Generalized scalar conditions are passed to the generated Crep conditional. -/
-theorem frontendIf_compile (ctxt : PanToCrepContextExact 64)
-    (condition : ExpHOL 64) (yes no : ProgHOL 64) (shape : FrontendScalar ctxt condition) :
-    ∃ value, compileProgExactHOLW ctxt (.ite condition yes no) =
-      .ite value (compileProgExactHOLW ctxt yes) (compileProgExactHOLW ctxt no) := by
-  obtain ⟨value,compiled⟩ := frontendScalar_compile shape
-  exact ⟨value,by simp [compileProgExactHOLW,compileIfExactHOLW,compiled]⟩
-
-/-- Generalized scalar conditions are passed to the generated Crep loop. -/
-theorem frontendWhile_compile (ctxt : PanToCrepContextExact 64)
-    (condition : ExpHOL 64) (body : ProgHOL 64) (shape : FrontendScalar ctxt condition) :
-    ∃ value, compileProgExactHOLW ctxt (.while condition body) =
-      .while value (compileProgExactHOLW ctxt body) := by
-  obtain ⟨value,compiled⟩ := frontendScalar_compile shape
-  exact ⟨value,by simp [compileProgExactHOLW,compileWhileExactHOLW,compiled]⟩
 
 /-- Source scalar syntax has the generalized frontend shape when its locals
 are represented in the compiler context. -/
@@ -112,39 +39,6 @@ theorem ScopeRelation.declare {scope : List VarName} {ctxt : PanToCrepContextExa
       refine ⟨reg,?_⟩
       simpa [scalarDeclContext,HolFiniteMapExact.lookup_update,FUPDATE,same,Ne.symm same] using found
 
-/-- The generalized Pancake frontend fragment, tracking the compiler context
-through declarations and allowing nested control flow and comparisons. -/
-inductive FrontendProgram : PanToCrepContextExact 64 → ProgHOL 64 → Prop
-  | skip {ctxt} : FrontendProgram ctxt .skip
-  | break {ctxt} : FrontendProgram ctxt .break
-  | continue {ctxt} : FrontendProgram ctxt .continue
-  | tick {ctxt} : FrontendProgram ctxt .tick
-  | store {ctxt a v} : FrontendScalar ctxt a → FrontendScalar ctxt v → FrontendProgram ctxt (.store a v)
-  | assign {ctxt name e} (reg : Nat) : ctxt.vars.lookup name = some (.one,[reg]) →
-      FrontendScalar ctxt e → FrontendProgram ctxt (.assign .local name e)
-  | decl {ctxt name e body} : FrontendScalar ctxt e →
-      FrontendProgram (scalarDeclContext ctxt name) body → FrontendProgram ctxt (.dec name .one e body)
-  | seq {ctxt a b} : FrontendProgram ctxt a → FrontendProgram ctxt b → FrontendProgram ctxt (.seq a b)
-  | ite {ctxt e a b} : FrontendScalar ctxt e → FrontendProgram ctxt a → FrontendProgram ctxt b →
-      FrontendProgram ctxt (.ite e a b)
-  | while {ctxt e body} : FrontendScalar ctxt e → FrontendProgram ctxt body → FrontendProgram ctxt (.while e body)
-  | ret {ctxt e} : FrontendScalar ctxt e → FrontendProgram ctxt (.return e)
-
-/-- The previously established loop-free frontend shape is a subset of the
-generalized shape. Its direct-expression guarantees are retained separately. -/
-theorem frontendProgram_of_branch {ctxt : PanToCrepContextExact 64} {program : ProgHOL 64}
-    (shape : BranchProgram ctxt program) : FrontendProgram ctxt program := by
-  induction shape with
-  | skip => exact .skip
-  | «break» => exact .break
-  | «continue» => exact .continue
-  | tick => exact .tick
-  | «return» e => exact .ret (frontendScalar_of_direct e)
-  | assign name reg found e => exact .assign reg found (frontendScalar_of_direct e)
-  | store a v => exact .store (frontendScalar_of_direct a) (frontendScalar_of_direct v)
-  | seq a b iha ihb => exact .seq iha ihb
-  | ite e a b iha ihb => exact .ite (frontendScalar_of_direct e) iha ihb
-
 /-- All supported source programs have the generalized frontend shape. -/
 theorem supportedIn_frontend_shape {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : SupportedIn scope program) : ∀ ctxt, ScopeRelation scope ctxt →
@@ -174,7 +68,7 @@ theorem supportedIn_frontend_shape {scope : List VarName} {program : Prog (RiscV
 
 theorem supported_frontend_shape {program : Prog (RiscV.Word 64)} (supported : Supported program)
     (ctxt : PanToCrepContextExact 64) : FrontendProgram ctxt (progToHOL program) :=
-  supportedIn_frontend_shape supported ctxt (by intro name member; simp at member)
+  supportedIn_frontend_shape supported.1 ctxt (by intro name member; simp at member)
 
 /-- A comparison is accepted in an actual conditional and compiles to a
 single Crep comparison expression. -/
@@ -185,6 +79,24 @@ theorem comparison_frontend_example (ctxt : PanToCrepContextExact 64) :
   constructor
   · exact .cmp .less (.const 0) (.const 1)
   · simp [compileExpExactHOLW]
+
+/-- Global lowering leaves the supported scalar expressions unchanged. -/
+theorem scalar_globals_fixed {scope : List VarName} {e : Exp (RiscV.Word 64)}
+    (scalar : Scalar scope e) (globals : PanGlobalsContextExact 64) :
+    compileExpExactHOL globals (expToHOL e) = expToHOL e := by
+  induction scalar <;> simp_all [expToHOL,compileExpExactHOL,compileExpExactHOLList]
+
+/-- Global lowering leaves every supported source body unchanged. -/
+theorem supportedIn_globals_fixed {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : SupportedIn scope program) (globals : PanGlobalsContextExact 64) :
+    compileProgExactHOL globals (progToHOL program) = progToHOL program := by
+  induction supported <;> simp_all [progToHOL,compileProgExactHOL,shapeToHOL] <;>
+    aesop (add safe scalar_globals_fixed)
+
+theorem supported_globals_fixed {program : Prog (RiscV.Word 64)}
+    (supported : Supported program) (globals : PanGlobalsContextExact 64) :
+    compileProgExactHOL globals (progToHOL program) = progToHOL program :=
+  supportedIn_globals_fixed supported.1 globals
 
 /-- The phase-zero witnesses instantiate the generalized frontend shape. -/
 theorem countdown_frontend_shape (n : Nat) (ctxt : PanToCrepContextExact 64) :

@@ -24,8 +24,16 @@ inductive SupportedIn : List VarName → Prog (RiscV.Word 64) → Prop
   | while {scope e body} : Scalar scope e → SupportedIn scope body → SupportedIn scope (.while e body)
   | ret {scope e} : Scalar scope e → SupportedIn scope (.return e)
 
-/-- A parameter-free single-function body begins with no local variables. -/
-def Supported (program : Prog (RiscV.Word 64)) : Prop := SupportedIn [] program
+/-- A parameter-free body begins with no locals and its identifiers are
+representable by HOL byte strings. -/
+def Supported (program : Prog (RiscV.Word 64)) : Prop :=
+  SupportedIn [] program ∧ ProgByteRanged program
+
+/-- Distinct Lean names can collapse to the same HOL byte string, so the
+representability condition above is necessary for an unrestricted bridge. -/
+theorem names_outside_byte_range_can_collide :
+    ∃ a b : String, a ≠ b ∧ ofString a = ofString b := by
+  refine ⟨String.singleton (Char.ofNat 0), String.singleton (Char.ofNat 256), ?_, ?_⟩ <;> decide
 
 /-- Function renaming leaves this call-free source fragment unchanged. -/
 theorem supportedIn_fperm {scope : List VarName} {program : Prog (RiscV.Word 64)}
@@ -36,23 +44,42 @@ theorem supportedIn_fperm {scope : List VarName} {program : Prog (RiscV.Word 64)
 theorem supported_fperm {program : Prog (RiscV.Word 64)}
     (supported : Supported program) (a b : MlString) :
     fpermHOL a b (progToHOL program) = progToHOL program :=
-  supportedIn_fperm supported a b
+  supportedIn_fperm supported.1 a b
 
 /-- The prefixed source body used by the existing countdown correspondence. -/
 def countdown (n : Nat) : Prog (RiscV.Word 64) :=
   .dec "x" .one (.const (BitVec.ofNat 64 n))
     (.seq .skip (.seq (.while (.var .local "x") (PanToCrepSteps.countdownBody "x")) (.return (.const 0))))
 
+/-- The natural countdown, without the compiler-oriented skip prefix. -/
+def naturalCountdown (n : Nat) : Prog (RiscV.Word 64) :=
+  .dec "x" .one (.const (BitVec.ofNat 64 n))
+    (.seq (.while (.var .local "x") (PanToCrepSteps.countdownBody "x")) (.return (.const 0)))
+
+def naturalCountdownHOL (n : Nat) : ProgHOL 64 := progToHOL (naturalCountdown n)
+
 /-- A parameter-free comparison whose conditional takes the first branch. -/
 def branching : Prog (RiscV.Word 64) :=
   .ite (.cmp .lower (.const 0) (.const 1)) (.return (.const 7)) (.return (.const 9))
 
 theorem countdown_supported (n : Nat) : Supported (countdown n) := by
-  exact .decl "x" (.const _) (.seq .skip (.seq
+  constructor
+  · exact .decl "x" (.const _) (.seq .skip (.seq
     (.while (.local "x" (by simp)) (.assign "x" (by simp)
       (.op .sub (.local "x" (by simp)) (.const _)))) (.ret (.const _))))
+  · simp [countdown,PanToCrepSteps.countdownBody,ProgByteRanged,ExpByteRanged,ListExpByteRanged,ShapeByteRanged,NameRanged]
+
+theorem naturalCountdown_supported (n : Nat) : Supported (naturalCountdown n) := by
+  constructor
+  · exact .decl "x" (.const _) (.seq
+      (.while (.local "x" (by simp)) (.assign "x" (by simp)
+        (.op .sub (.local "x" (by simp)) (.const _)))) (.ret (.const _)))
+  · simp [naturalCountdown,PanToCrepSteps.countdownBody,ProgByteRanged,ExpByteRanged,
+      ListExpByteRanged,ShapeByteRanged,NameRanged]
 
 theorem branching_supported : Supported branching := by
-  exact .ite (.cmp .lower (.const _) (.const _)) (.ret (.const _)) (.ret (.const _))
+  constructor
+  · exact .ite (.cmp .lower (.const _) (.const _)) (.ret (.const _)) (.ret (.const _))
+  · simp [branching,ProgByteRanged,ExpByteRanged]
 
 end SteppedFlapjack.Concrete
