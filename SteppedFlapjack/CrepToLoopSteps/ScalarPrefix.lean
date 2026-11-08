@@ -1,5 +1,5 @@
 import SteppedFlapjack.CrepToLoopSteps.BranchExtraClock
-import SteppedFlapjack.LoopToWordSteps.SelectedShape
+import SteppedFlapjack.LoopToWordSteps.WordSimpLoop
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.Pancake.PanLang SteppedFlapjack.LoopToWordSteps
 
@@ -12,13 +12,15 @@ inductive CompiledScalar {width : Nat} [NeZero width] : CrepExpHOL width → Pro
   | cmp (operator) {a b} : CompiledScalar a → CompiledScalar b → CompiledScalar (.cmp operator a b)
 
 def PrefixShape {width : Nat} [NeZero width] (code : List (HolLoopProg width)) : Prop :=
-  (∀ p ∈ code, BranchedProgram p) ∧ (∀ p ∈ code, LoopSelectProgram p)
+  (∀ p ∈ code, BranchedProgram p) ∧ (∀ p ∈ code, LoopSelectProgram p) ∧
+    (∀ p ∈ code, LoopBranch p)
 
 theorem PrefixShape.append {width : Nat} [NeZero width] {a b : List (HolLoopProg width)}
     (ha : PrefixShape a) (hb : PrefixShape b) : PrefixShape (a ++ b) := by
-  constructor <;> intro p member <;> simp only [List.mem_append] at member
+  refine ⟨?_,?_,?_⟩ <;> intro p member <;> simp only [List.mem_append] at member
   · exact member.elim (ha.1 p) (hb.1 p)
-  · exact member.elim (ha.2 p) (hb.2 p)
+  · exact member.elim (ha.2.1 p) (hb.2.1 p)
+  · exact member.elim (ha.2.2 p) (hb.2.2 p)
 
 theorem compiledScalar_prefix {width : Nat} [NeZero width] {e : CrepExpHOL width}
     (shape : CompiledScalar e) : ∀ (ctxt : CrepToLoopContextExact) (tmp : Nat) (live : NumSet),
@@ -48,12 +50,17 @@ theorem compiledScalar_prefix {width : Nat} [NeZero width] {e : CrepExpHOL width
       .ite operator (nb+1) (.reg (nb+2)) (.assign (nb+1) (.const 1))
         (.assign (nb+1) (.const 0)) (sptListInsert [nb+1,nb+2] lb)]
     have ps : PrefixShape suffix := by
-      constructor <;> intro p hp
+      refine ⟨?_,?_,?_⟩ <;> intro p hp
       · simp only [suffix,List.mem_cons,List.not_mem_nil,or_false] at hp
         rcases hp with rfl | rfl | rfl
         · exact .leaf (.assign _ _)
         · exact .leaf (.assign _ _)
         · exact .ite _ _ _ _ (.leaf (.assign _ _)) (.leaf (.assign _ _))
+      · simp only [suffix,List.mem_cons,List.not_mem_nil,or_false] at hp
+        rcases hp with rfl | rfl | rfl
+        · exact .assign _ _
+        · exact .assign _ _
+        · exact .ite _ _ _ _ (.assign _ _) (.assign _ _)
       · simp only [suffix,List.mem_cons,List.not_mem_nil,or_false] at hp
         rcases hp with rfl | rfl | rfl
         · exact .assign _ _

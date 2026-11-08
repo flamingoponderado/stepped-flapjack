@@ -10,7 +10,7 @@ open SteppedFlapjack.LoopToWordSteps
 /-- The while-and-continuation bound has a factor computed from compiled syntax,
 without an existential expression in the factor. -/
 theorem conditionWhileThenBranch_programBound {width : Nat} [NeZero width] {σ : Type}
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     @ProgramBound width _ σ (.seq (.while condition body) tail) ctxt live
@@ -40,7 +40,7 @@ theorem conditionWhileThenBranch_programBound {width : Nat} [NeZero width] {σ :
 source-step bound; no correctness hypothesis is required for a subprogram. -/
 theorem branchConditionWhileBranch_programBound {width : Nat} [NeZero width] {σ : Type}
     (init : CrepProgHOL width) (initShape : BranchProgram init)
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     @ProgramBound width _ σ (.seq init (.seq (.while condition body) tail)) ctxt live
@@ -53,7 +53,7 @@ theorem branchConditionWhileBranch_programBound {width : Nat} [NeZero width] {σ
 /-- The same compiled sequence lies in the selected RISC-V fragment. -/
 theorem branchConditionWhileBranch_select {width : Nat} [NeZero width]
     (init : CrepProgHOL width) (initShape : BranchProgram init)
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     LoopSelectProgram (compileHOLExact ctxt live (.seq init (.seq (.while condition body) tail))) := by

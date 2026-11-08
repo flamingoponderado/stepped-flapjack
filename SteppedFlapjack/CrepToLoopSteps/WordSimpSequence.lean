@@ -9,7 +9,7 @@ open Flapjack SteppedFlapjack.LoopToWordSteps
 shape proof, including generated comparison evaluation. -/
 theorem branchConditionWhileBranch_wordSimpShape {width : Nat} [NeZero width]
     (init : CrepProgHOL width) (initShape : BranchProgram init)
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     LoopSequenceSource (compileHOLExact ctxt live (.seq init (.seq (.while condition body) tail))) := by
@@ -23,7 +23,7 @@ theorem branchConditionWhileBranch_wordSimpShape {width : Nat} [NeZero width]
 instruction-selection theorem with no generated-program shape assumption. -/
 theorem branchConditionWhileBranch_wordSimpProgram {width : Nat} [NeZero width]
     (init : CrepProgHOL width) (initShape : BranchProgram init)
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
     (ctxt : CrepToLoopContextExact) (live : NumSet) (wordCtxt : Spt Nat) (labels : Nat × Nat) :
     WordInstSteps.Program (Flapjack.Compiler.Backend.WordSimp.compileExp

@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
 import SteppedFlapjack.CrepToLoopSteps.ScalarCorrect
 import SteppedFlapjack.Concrete.ScalarToLoop
 import SteppedFlapjack.Concrete.ScopePreservation

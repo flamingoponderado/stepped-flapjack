@@ -9,7 +9,7 @@ open SteppedFlapjack.LoopToWordSteps
 
 /-- The sequence is accepted by the existing Loop-to-RISC-V fragment. -/
 theorem conditionWhileThenBranch_select {width : Nat} [NeZero width]
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     LoopSelectProgram (compileHOLExact ctxt live (.seq (.while condition body) tail)) := by
@@ -20,7 +20,7 @@ theorem conditionWhileThenBranch_select {width : Nat} [NeZero width]
 /-- Actual compilation preserves a source-step bound for a direct Crep while
 followed by a supported branch, including early loop exits. -/
 theorem conditionWhileThenBranch_correct_with_steps {width : Nat} [NeZero width] {σ : Type}
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
     (source sourceFinal : CrepSemHOLState width σ) (result : Option (CrepResultHOLExact width))
     (target : LoopSemStateFiniteExact width σ) (ctxt : CrepToLoopContextExact) (live : NumSet)

@@ -75,12 +75,12 @@ theorem supportedCodeBody_simp_fixed {width : Nat} [NeZero width] {p : CrepProgH
   cases shape with
   | branch h => exact branchProgram_simp_fixed h
   | tail h name => simp [crepSimpProgHOL,branchProgram_simp_fixed h]
-  | loop hi hc hb ht => exact branchConditionWhileBranch_simp_fixed _ hi _ hc _ _ hb ht
+  | loop hi hc hb ht => exact branchConditionWhileBranch_simp_fixed _ hi _ (BranchCondition.toScalar hc) _ _ hb ht
   | declWhile hv hc hb ht =>
-    simp [crepSimpProgHOL,directExpression_simp_fixed hv,branchCondition_simp_fixed hc,
+    simp [crepSimpProgHOL,directExpression_simp_fixed hv,branchCondition_simp_fixed (BranchCondition.toScalar hc),
       branchProgram_simp_fixed hb,branchProgram_simp_fixed ht]
   | declLoop hv hi hc hb ht =>
-    simp [crepSimpProgHOL,directExpression_simp_fixed hv,branchConditionWhileBranch_simp_fixed _ hi _ hc _ _ hb ht]
+    simp [crepSimpProgHOL,directExpression_simp_fixed hv,branchConditionWhileBranch_simp_fixed _ hi _ (BranchCondition.toScalar hc) _ _ hb ht]
 
 /-- Supported syntax discharges the simplifier fixed-point condition for the
 actual executable Crep-to-Loop code relation. -/

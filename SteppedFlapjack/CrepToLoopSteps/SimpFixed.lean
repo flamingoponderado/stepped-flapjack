@@ -14,12 +14,14 @@ theorem directExpression_simp_fixed {width : Nat} [NeZero width]
     {e : CrepExpHOL width} (shape : DirectExpression e) : crepSimpExpHOL e = e := by
   induction shape <;> simp_all [crepSimpExpHOL]
 
-/-- Comparisons of direct expressions are also fixed. -/
+/-- The complete supported scalar fragment is fixed by Crep simplification. -/
 theorem branchCondition_simp_fixed {width : Nat} [NeZero width]
-    {e : CrepExpHOL width} (shape : BranchCondition e) : crepSimpExpHOL e = e := by
-  cases shape with
+    {e : CrepExpHOL width} (shape : CompiledScalar e) : crepSimpExpHOL e = e := by
+  induction shape with
   | direct h => exact directExpression_simp_fixed h
-  | cmp op ha hb => simp [crepSimpExpHOL,directExpression_simp_fixed ha,directExpression_simp_fixed hb]
+  | op operator a b iha ihb => simp [crepSimpExpHOL,iha,ihb]
+  | shift operator a b iha ihb => simp [crepSimpExpHOL,iha,ihb]
+  | cmp operator a b iha ihb => simp [crepSimpExpHOL,iha,ihb]
 
 /-- The expression-program fragment is unchanged by Crep simplification. -/
 theorem exprProgram_simp_fixed {width : Nat} [NeZero width]
@@ -45,7 +47,7 @@ theorem branchProgram_simp_fixed {width : Nat} [NeZero width]
 /-- The actual simplifier leaves the complete supported Crep loop shape intact. -/
 theorem branchConditionWhileBranch_simp_fixed {width : Nat} [NeZero width]
     (init : CrepProgHOL width) (initShape : BranchProgram init)
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail) :
     crepSimpProgHOL (.seq init (.seq (.while condition body) tail)) =
       .seq init (.seq (.while condition body) tail) := by
@@ -59,7 +61,7 @@ theorem supported_crepToWord_member {width : Nat} [NeZero width]
     (code : List (Basis.Pure.MlString.MlString × List Nat × CrepProgHOL width))
     (name : Basis.Pure.MlString.MlString)
     (init : CrepProgHOL width) (initShape : BranchProgram init)
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
     (member : (name,[],.seq init (.seq (.while condition body) tail)) ∈ code) :
     let p := .seq init (.seq (.while condition body) tail)
@@ -84,7 +86,7 @@ theorem supported_crepToWord_member_at {width : Nat} [NeZero width]
     (code : List (Basis.Pure.MlString.MlString × List Nat × CrepProgHOL width))
     (index : Nat) (hi : index < code.length) (name : Basis.Pure.MlString.MlString)
     (init : CrepProgHOL width) (initShape : BranchProgram init)
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
     (entry : code[index] = (name,[],.seq init (.seq (.while condition body) tail))) :
     let p := .seq init (.seq (.while condition body) tail)
@@ -109,7 +111,7 @@ theorem supported_crepToWord_member_at {width : Nat} [NeZero width]
 simplify/compile/optimize pipeline, measured against Crep source visits. -/
 theorem supported_optimised_loop_bound {F : Type}
     (init : CrepProgHOL 64) (initShape : BranchProgram init)
-    (condition : CrepExpHOL 64) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL 64) (conditionShape : CompiledScalar condition)
     (body tail : CrepProgHOL 64) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
     (ctxt : CrepToLoopContextExact) (live : NumSet)
     (source sourcePost : CrepSemHOLState 64 F) (result : Option (CrepResultHOLExact 64))

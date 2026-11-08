@@ -12,12 +12,15 @@ inductive BranchCondition {width : Nat} [NeZero width] : CrepExpHOL width → Pr
   | cmp (op) {a b} : DirectExpression a → DirectExpression b → BranchCondition (.cmp op a b)
 
 /-- Legacy simple conditions belong to the full scalar fragment. -/
+theorem BranchCondition.toScalar {width : Nat} [NeZero width] {e : CrepExpHOL width}
+    (shape : BranchCondition e) : CompiledScalar e := by
+  cases shape with
+  | direct h => exact .direct h
+  | cmp op a b => exact .cmp op (.direct a) (.direct b)
+
 instance {width : Nat} [NeZero width] {e : CrepExpHOL width} :
     Coe (BranchCondition e) (CompiledScalar e) where
-  coe shape := by
-    cases shape with
-    | direct h => exact .direct h
-    | cmp op a b => exact .cmp op (.direct a) (.direct b)
+  coe := BranchCondition.toScalar
 
 /-- Each generated prefix statement is loop-free and supported by instruction
 selection; this exposes the actual compiler output and fresh temporaries. -/
@@ -27,7 +30,7 @@ theorem condition_prefix_shape {width : Nat} [NeZero width] {e : CrepExpHOL widt
       compileExpHOLExact ctxt tmp live e = (code,value,next,outLive) ∧
       (∀ p ∈ code, BranchedProgram p) ∧
       (∀ p ∈ code, LoopSelectProgram p) := by
-  obtain ⟨code,value,next,outLive,compiled,branch,selected⟩ :=
+  obtain ⟨code,value,next,outLive,compiled,branch,selected,_⟩ :=
     compiledScalar_prefix shape ctxt tmp live
   exact ⟨code,value,next,outLive,compiled,branch,selected⟩
 
