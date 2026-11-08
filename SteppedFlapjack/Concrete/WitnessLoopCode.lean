@@ -1,13 +1,11 @@
 import SteppedFlapjack.CrepToLoopSteps.TwoEntryExecutable
 import SteppedFlapjack.Concrete.BranchingLoop
+import SteppedFlapjack.Concrete.CrepBranch
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.Compiler.Encoders.Asm
 open SteppedFlapjack.CrepToLoopSteps
 
-def branchingCrepBody : CrepProgHOL 64 :=
-  .ite (.cmp .lower (.const 0) (.const 1)) (.return [.const 7]) (.return [.const 9])
-
-private theorem branching_scalar : ScalarProgram branchingCrepBody := by
+private theorem branching_scalar : ScalarProgram branchCrepBody := by
   exact .ite (.cmp .lower (.direct (.const _)) (.direct (.const _)))
     (.ret (.direct (.const _))) (.ret (.direct (.const _)))
 
@@ -30,9 +28,9 @@ private theorem branchingLoop_scalar : ScalarProgram branchingLoopCrepBody := by
 /-- Kernel-computable optimized code for the comparison witness. -/
 theorem branching_loop_code (arch : AsmArchitecture) :
     compileProgHOLExact arch (crepPrograms branchingHOL) =
-      twoLoopPrograms arch (ofString "main") (entryName branchingHOL) branchingCrepBody := by
+      twoLoopPrograms arch (ofString "main") (entryName branchingHOL) branchCrepBody := by
   rw [branching_crep_code]
-  exact (twoLoopPrograms_eq arch _ _ branchingCrepBody branching_scalar).symm
+  exact (twoLoopPrograms_eq arch _ _ branchCrepBody branching_scalar).symm
 
 /-- Kernel-computable optimized code for the prefixed countdown witness. -/
 theorem countdown_loop_code (arch : AsmArchitecture) (n : Nat) :
@@ -95,8 +93,8 @@ theorem branching_loop_code_locals {σ : Type} (arch : AsmArchitecture) (source 
       (loopStateFrom arch source branchingHOL).code ∧
     crepToLoopLocalsRelExact (witnessLoopContext arch branchingHOL) .ln (crepStateFrom source branchingHOL).locals
       (loopStateFrom arch source branchingHOL).locals := by
-  apply loopStateFrom_code_locals arch source branchingHOL branchingCrepBody branching_scalar
-  simpa [twoPrograms,branchingCrepBody] using branching_crep_code
+  apply loopStateFrom_code_locals arch source branchingHOL branchCrepBody branching_scalar
+  simpa [twoPrograms,branchCrepBody] using branching_crep_code
 
 /-- The countdown witness needs no separate code or locals premises. -/
 theorem countdown_loop_code_locals {σ : Type} (arch : AsmArchitecture)

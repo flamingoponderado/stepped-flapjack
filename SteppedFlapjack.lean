@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.BranchLoopSpan
 import SteppedFlapjack.CrepToLoopSteps.BranchExplicit
 import SteppedFlapjack.Concrete.WitnessLoopCode
 import SteppedFlapjack.CrepToLoopSteps.ScalarExecutable
