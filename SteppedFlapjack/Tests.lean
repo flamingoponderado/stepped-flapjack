@@ -1,3 +1,4 @@
+import SteppedFlapjack.Test.ScalarExecutable
 import SteppedFlapjack.Test.ScalarPrefix
 import SteppedFlapjack.Test.CountedInvert
 import SteppedFlapjack.Test.Ffi
