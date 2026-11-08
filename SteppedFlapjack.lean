@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.ScalarEntry
 import SteppedFlapjack.CrepToLoopSteps.ScalarSequenceBound
 import SteppedFlapjack.Concrete.CrepLoopError
 import SteppedFlapjack.Concrete.ConditionalLoopSpan
