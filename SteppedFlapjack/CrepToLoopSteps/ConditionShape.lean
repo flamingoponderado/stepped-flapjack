@@ -77,37 +77,6 @@ theorem condition_extraClock_bound {width : Nat} [NeZero width] {σ : Type}
   omega
 
 
-/-- The existing expression-correctness witness has a statically bounded
-extra clock for both direct and comparison conditions. -/
-theorem condition_correct_with_bounded_extra {width : Nat} [NeZero width] {σ : Type}
-    (e : CrepExpHOL width) (shape : BranchCondition e) (source : CrepSemHOLState width σ)
-    (v : HolWordLab width) (target : LoopSemStateFiniteExact width σ)
-    (ctxt : CrepToLoopContextExact) (tmp : Nat) (live : NumSet)
-    (evalSource : evalCrepSemHOLExp source e = some v)
-    (stateRel : crepToLoopStateRelExact source target)
-    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
-    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
-    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
-    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
-    (fresh : ctxt.vmax < tmp) :
-    ∃ code value next outLive extra post,
-      compileExpHOLExact ctxt tmp live e = (code,value,next,outLive) ∧
-      (∀ p ∈ code, BranchedProgram p) ∧ (∀ p ∈ code, LoopSelectProgram p) ∧
-      evaluate (loopNestedSeqHOL code) {target with clock := target.clock+extra} = (none,post) ∧
-      LoopSemStateFiniteExact.eval post value = some (wlabWlocExact v) ∧
-      crepToLoopStateRelExact source post ∧
-      crepToLoopMemRelHOLExact source.memory post.memory source.memaddrs ∧
-      crepToLoopGlobalsRelHOLExact source.globals post.globals ∧
-      crepToLoopCodeRelExact ctxt source.code post.code ∧
-      crepToLoopLocalsRelExact ctxt outLive source.locals post.locals ∧
-      extra ≤ sizeOf (loopNestedSeqHOL code) := by
-  obtain ⟨code,value,next,outLive,compiled,branch,selected⟩ := condition_prefix_shape shape ctxt tmp live
-  obtain ⟨extra,post,run,he,hs,hm,hg,hc,hl⟩ :=
-    crepToLoop_comp_exp_preserves_eval source e v target ctxt tmp live code value next outLive
-      ⟨evalSource,stateRel,memRel,globalsRel,codeRel,localsRel,compiled,fresh⟩
-  exact ⟨code,value,next,outLive,extra,post,compiled,branch,selected,run,he,hs,hm,hg,hc,hl,
-    condition_extraClock_bound source target post code extra branch stateRel run hs⟩
-
 /-- The actual loop body generated for a supported condition. -/
 def branchConditionWhileBody {width : Nat} [NeZero width]
     (ctxt : CrepToLoopContextExact) (live : NumSet) (code : List (HolLoopProg width))

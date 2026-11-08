@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.ScalarCorrect
 import SteppedFlapjack.Concrete.ScalarToLoop
 import SteppedFlapjack.Concrete.ScopePreservation
 import SteppedFlapjack.Concrete.CrepErrorLeaf
@@ -853,3 +854,4 @@ Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
 `SteppedFlapjackTests` library, rooted at `SteppedFlapjack.Tests`.
 -/
+
