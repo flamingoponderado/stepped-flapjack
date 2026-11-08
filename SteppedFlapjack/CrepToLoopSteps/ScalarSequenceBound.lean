@@ -1,5 +1,6 @@
+import SteppedFlapjack.CrepToLoopSteps.ScalarIteBound
 import SteppedFlapjack.CrepToLoopSteps.ConditionPrefix
-import SteppedFlapjack.CrepToLoopSteps.DeclTerminal
+import SteppedFlapjack.CrepToLoopSteps.ScalarDeclBound
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopShape
 import SteppedFlapjack.CrepToLoopSteps.ScalarClockShift
 import SteppedFlapjack.CrepToLoopSteps.ExplicitFromVisits
@@ -118,78 +119,26 @@ private theorem scalarSequence_programBound {width : Nat} [NeZero width] {σ : T
         rw [compileHOLExact]
         nlinarith
 
-/-- A direct declaration preserves the body simulation, including restored
-locals, when its body proof is available at the extended context. -/
-private theorem scalarDecl_programBound {width : Nat} [NeZero width] {σ : Type}
-    (name : Nat) (init : CrepExpHOL width) (initShape : DirectExpression init)
-    (body : CrepProgHOL width) (ctxt : CrepToLoopContextExact) (live : NumSet) (factor : Nat)
-    (bodyBound : @ProgramBound width _ σ body
-      {ctxt with vars := ctxt.vars.updateEq (name,ctxt.vmax+1), vmax := ctxt.vmax+1}
-      (sptInsert (ctxt.vmax+1) () live) factor) :
-    @ProgramBound width _ σ (.dec name init body) ctxt live (factor+4) := by
-  intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
-  let p := CrepProgHOL.dec name init body
-  let code := compileHOLExact ctxt live p
-  obtain ⟨extra,post,targetRun,hs,hm,hg,hc,bound⟩ :=
-    directDecl_terminal_bound name init initShape body ctxt live factor bodyBound source sourceFinal result target
-      run nonerror stateRel memRel globalsRel codeRel localsRel
-  obtain ⟨other,out,otherPost,otherRun,_,_,_,_,map,otherLocals⟩ :=
-    crepToLoop_ncompile_correct p source result sourceFinal target ctxt live
-      ⟨run,nonerror,stateRel,memRel,globalsRel,codeRel,localsRel⟩
-  subst out
-  have locals : localsResultRel ctxt live result sourceFinal post := by
-    by_cases nontimeout : resultToLoop result ≠ some .timeOut
-    · let reserve := max extra other
-      have lift₁ := evaluate_add_clock_eq code {target with clock := target.clock+extra}
-        (resultToLoop result) post (reserve-extra) targetRun nontimeout
-      have lift₂ := evaluate_add_clock_eq code {target with clock := target.clock+other}
-        (resultToLoop result) otherPost (reserve-other) otherRun nontimeout
-      have clk₁ : target.clock+extra+(reserve-extra) = target.clock+reserve := by dsimp [reserve]; omega
-      have clk₂ : target.clock+other+(reserve-other) = target.clock+reserve := by dsimp [reserve]; omega
-      have equalPost : {post with clock := post.clock+(reserve-extra)} =
-          {otherPost with clock := otherPost.clock+(reserve-other)} := by
-        have h₁ : evaluate code {target with clock := target.clock+reserve} =
-            (resultToLoop result,{post with clock := post.clock+(reserve-extra)}) := by simpa [clk₁] using lift₁
-        have h₂ : evaluate code {target with clock := target.clock+reserve} =
-            (resultToLoop result,{otherPost with clock := otherPost.clock+(reserve-other)}) := by simpa [clk₂] using lift₂
-        exact (Prod.mk.inj (h₁.symm.trans h₂)).2
-      have localEq : post.locals = otherPost.locals := congrArg (fun s => s.locals) equalPost
-      cases result with
-      | none => simpa [localsResultRel,localEq] using otherLocals
-      | some r => cases r <;> simp [localsResultRel,localEq] at otherLocals ⊢ <;> assumption
-    · cases result with
-      | none => simp [resultToLoop] at nontimeout
-      | some r => cases r <;> simp_all [resultToLoop,localsResultRel]
-  exact ⟨extra,post,targetRun,hs,hm,hg,hc,locals,bound⟩
-
-/-- Scalar loops and sequences built around loop-free scalar leaves. -/
-inductive ScalarLoopTree {width : Nat} [NeZero width] : CrepProgHOL width → Prop
-  | branch {p} : ScalarProgram p → scalarNoWhile p = true → ScalarLoopTree p
-  | seq {a b} : ScalarLoopTree a → ScalarLoopTree b → ScalarLoopTree (.seq a b)
-  | dec (name) {init body} : DirectExpression init → ScalarLoopTree body → ScalarLoopTree (.dec name init body)
-  | while {condition body} : CompiledScalar condition → ScalarLoopTree body → ScalarLoopTree (.while condition body)
-
-theorem scalarLoopTree_scalar {width : Nat} [NeZero width] {p : CrepProgHOL width}
-    (shape : ScalarLoopTree p) : ScalarProgram p := by
-  induction shape with
-  | branch shape _ => exact shape
-  | seq _ _ a b => exact .seq a b
-  | dec name init _ ih => exact .dec name (.direct init) ih
-  | «while» h _ ih => exact .while h ih
-
 /-- A syntax-derived factor for arbitrary nesting and sequencing of scalar loops. -/
-noncomputable def scalarLoopTreeFactor {width : Nat} [NeZero width]
+noncomputable def scalarProgramFactor {width : Nat} [NeZero width]
     (ctxt : CrepToLoopContextExact) (live : NumSet) (p : CrepProgHOL width) : Nat :=
   if scalarNoWhile p then sizeOf (compileHOLExact ctxt live p)
   else match p with
-    | .seq a b => 1 + scalarLoopTreeFactor ctxt live a + scalarLoopTreeFactor ctxt live b
-    | .dec name _ body => 4 + scalarLoopTreeFactor
-        {ctxt with vars := ctxt.vars.updateEq (name,ctxt.vmax+1), vmax := ctxt.vmax+1}
-        (sptInsert (ctxt.vmax+1) () live) body
+    | .seq a b => 1 + scalarProgramFactor ctxt live a + scalarProgramFactor ctxt live b
+    | .ite condition a b =>
+        sizeOf (compileHOLExact ctxt live p) *
+          (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
+            2*max (scalarProgramFactor ctxt live a) (scalarProgramFactor ctxt live b)+2)
+    | .dec name init body =>
+        let tmp := (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1
+        sizeOf (compileHOLExact ctxt live p) *
+          (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) +
+            2*scalarProgramFactor {ctxt with vars := ctxt.vars.updateEq (name,tmp), vmax := tmp}
+              (sptInsert tmp () live) body+1)
     | .while condition body =>
         sizeOf (compileHOLExact ctxt live p) *
           (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
-            2*scalarLoopTreeFactor ctxt live body+3)
+            2*scalarProgramFactor ctxt live body+3)
     | _ => sizeOf (compileHOLExact ctxt live p)
 
 private theorem scalarBranch_programBound {width : Nat} [NeZero width] {σ : Type}
@@ -203,35 +152,35 @@ private theorem scalarBranch_programBound {width : Nat} [NeZero width] {σ : Typ
   subst out
   exact ⟨extra,final,eval,hs,hm,hg,hc,hl,steps.trans (Nat.mul_le_mul_left _ (by omega))⟩
 
-private theorem scalarLoopTree_programBound {width : Nat} [NeZero width] {σ : Type}
-    {p : CrepProgHOL width} (shape : ScalarLoopTree p) (ctxt : CrepToLoopContextExact) (live : NumSet) :
-    @ProgramBound width _ σ p ctxt live (scalarLoopTreeFactor ctxt live p) := by
+private theorem scalarProgram_programBound {width : Nat} [NeZero width] {σ : Type}
+    {p : CrepProgHOL width} (shape : ScalarProgram p) (ctxt : CrepToLoopContextExact) (live : NumSet) :
+    @ProgramBound width _ σ p ctxt live (scalarProgramFactor ctxt live p) := by
   induction shape generalizing ctxt live with
-  | @branch p scalar free =>
-    have factorEq : scalarLoopTreeFactor ctxt live p = sizeOf (compileHOLExact ctxt live p) := by
-      cases p <;> simp_all [scalarLoopTreeFactor]
-    rw [factorEq]
-    exact scalarBranch_programBound (σ := σ) p scalar free ctxt live
+  | skip => simpa [scalarProgramFactor,scalarNoWhile] using scalarBranch_programBound (σ := σ) .skip .skip rfl ctxt live
+  | «break» n => simpa [scalarProgramFactor,scalarNoWhile] using scalarBranch_programBound (σ := σ) (.break n) (.break n) rfl ctxt live
+  | «continue» n => simpa [scalarProgramFactor,scalarNoWhile] using scalarBranch_programBound (σ := σ) (.continue n) (.continue n) rfl ctxt live
+  | tick => simpa [scalarProgramFactor,scalarNoWhile] using scalarBranch_programBound (σ := σ) .tick .tick rfl ctxt live
+  | @ret e h => simpa [scalarProgramFactor,scalarNoWhile] using scalarBranch_programBound (σ := σ) (.return [e]) (.ret h) rfl ctxt live
+  | @assign n e h => simpa [scalarProgramFactor,scalarNoWhile] using scalarBranch_programBound (σ := σ) (.assign n e) (.assign n h) rfl ctxt live
+  | @store a b ha hb => simpa [scalarProgramFactor,scalarNoWhile] using scalarBranch_programBound (σ := σ) (.store a b) (.store ha hb) rfl ctxt live
   | @seq a b ha hb iha ihb =>
     by_cases free : scalarNoWhile (.seq a b) = true
-    · simpa [scalarLoopTreeFactor,free] using
-        scalarBranch_programBound (σ := σ) (.seq a b) (.seq (scalarLoopTree_scalar ha) (scalarLoopTree_scalar hb)) free ctxt live
-    · simpa [scalarLoopTreeFactor,free] using
-        scalarSequence_programBound a b (scalarLoopTree_scalar ha) ctxt live _ _ (iha ctxt live) (ihb ctxt live)
-  | @dec name init body initShape bodyTree ih =>
+    · simpa [scalarProgramFactor,free] using scalarBranch_programBound (σ := σ) (.seq a b) (.seq ha hb) free ctxt live
+    · simpa [scalarProgramFactor,free] using scalarSequence_programBound a b ha ctxt live _ _ (iha ctxt live) (ihb ctxt live)
+  | @ite condition a b cond ha hb iha ihb =>
+    by_cases free : scalarNoWhile (.ite condition a b) = true
+    · simpa [scalarProgramFactor,free] using scalarBranch_programBound (σ := σ) (.ite condition a b) (.ite cond ha hb) free ctxt live
+    · simpa [scalarProgramFactor,free] using scalarIte_programBound condition cond a b ha hb ctxt live _ _ (iha ctxt live) (ihb ctxt live)
+  | @dec name init body initShape bodyShape ih =>
     by_cases free : scalarNoWhile (.dec name init body) = true
-    · simpa [scalarLoopTreeFactor,free] using
-        scalarBranch_programBound (σ := σ) (.dec name init body)
-          (.dec name (.direct initShape) (scalarLoopTree_scalar bodyTree)) free ctxt live
-    · simpa [scalarLoopTreeFactor,free,Nat.add_comm] using
-        scalarDecl_programBound name init initShape body ctxt live _ (ih _ _)
-  | @«while» condition body cond bodyTree ih =>
-    simpa [scalarLoopTreeFactor,scalarNoWhile] using
-      scalarWhile_programBound condition cond body (scalarLoopTree_scalar bodyTree) ctxt live _ (ih ctxt live)
+    · simpa [scalarProgramFactor,free] using scalarBranch_programBound (σ := σ) (.dec name init body) (.dec name initShape bodyShape) free ctxt live
+    · simpa [scalarProgramFactor,free] using scalarDecl_programBound name init initShape body bodyShape ctxt live _ (ih _ _)
+  | @«while» condition body cond bodyShape ih =>
+    simpa [scalarProgramFactor,scalarNoWhile] using scalarWhile_programBound condition cond body bodyShape ctxt live _ (ih ctxt live)
 
-/-- A completed scalar loop tree executes as optimized Loop code with a
+/-- A completed scalar program executes as optimized Loop code with a
 concrete clock and visit bound calculated from source syntax and a Crep limit. -/
-theorem scalarLoopTree_explicit {σ : Type} (p : CrepProgHOL 64) (shape : ScalarLoopTree p)
+theorem scalarProgram_explicit {σ : Type} (p : CrepProgHOL 64) (shape : ScalarProgram p)
     (ctxt : CrepToLoopContextExact) (live : NumSet)
     (source sourceFinal : CrepSemHOLState 64 σ) (result : Option (CrepResultHOLExact 64))
     (target : LoopSemStateFiniteExact 64 σ) (limit : Nat)
@@ -242,7 +191,7 @@ theorem scalarLoopTree_explicit {σ : Type} (p : CrepProgHOL 64) (shape : Scalar
     (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
     (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
     (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
-    let bound := scalarLoopTreeFactor ctxt live p*(limit+1)
+    let bound := scalarProgramFactor ctxt live p*(limit+1)
     let code := compileHOLExact ctxt live p
     ∃ post,
       evaluate (optimiseHOL code) {target with clock := target.clock+2*bound} = (resultToLoop result,post) ∧
@@ -252,11 +201,11 @@ theorem scalarLoopTree_explicit {σ : Type} (p : CrepProgHOL 64) (shape : Scalar
       crepToLoopMemRelHOLExact sourceFinal.memory post.memory sourceFinal.memaddrs ∧
       crepToLoopGlobalsRelHOLExact sourceFinal.globals post.globals ∧
       crepToLoopCodeRelExact ctxt sourceFinal.code post.code := by
-  let bound := scalarLoopTreeFactor ctxt live p*(limit+1)
+  let bound := scalarProgramFactor ctxt live p*(limit+1)
   let code := compileHOLExact ctxt live p
-  have scalar := scalarLoopTree_scalar shape
+  have scalar := shape
   obtain ⟨extra,oldPost,oldRun,hs,hm,hg,hc,_,visits⟩ :=
-    scalarLoopTree_programBound shape ctxt live source sourceFinal result target run
+    scalarProgram_programBound shape ctxt live source sourceFinal result target run
       (completeCrep_nonerror complete) stateRel memRel globalsRel codeRel localsRel
   have visitBound : LoopSteps.steps code {target with clock := target.clock+extra} ≤ bound := by
     exact visits.trans (Nat.mul_le_mul_left _ (by omega))

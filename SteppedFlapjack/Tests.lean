@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.ScalarEntry
 import SteppedFlapjack.Test.ScalarLoopTree
 import SteppedFlapjack.Test.ScalarExecutable
 import SteppedFlapjack.Test.ScalarPrefix

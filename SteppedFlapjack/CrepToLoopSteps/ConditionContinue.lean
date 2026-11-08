@@ -68,7 +68,7 @@ private theorem loop_step_exit {L L' : NumSet} {B : HolLoopProg width}
       simp_all [LoopSemStateFiniteExact.exitLoop]
   next h => exact absurd hc (h X1)
 
-private theorem locals_rel_inter (ctxt : CrepToLoopContextExact) (l : NumSet)
+theorem condition_locals_rel_inter (ctxt : CrepToLoopContextExact) (l : NumSet)
     (sl : HolFiniteMapExact Nat (HolWordLab width)) (tl : Spt (WordLocW width))
     (h : crepToLoopLocalsRelExact ctxt l sl tl) :
     crepToLoopLocalsRelExact ctxt l sl (sptInter tl l) := by
@@ -86,7 +86,7 @@ private theorem locals_rel_inter (ctxt : CrepToLoopContextExact) (l : NumSet)
 
 /-- `locals_rel ctxt l` survives the compiled condition (whose output live set
     `nl` contains `l`) and the write of the fresh temporary `tmp > vmax`. -/
-private theorem locals_rel_insert_of (ctxt : CrepToLoopContextExact) (l nl : NumSet)
+theorem condition_locals_rel_insert_of (ctxt : CrepToLoopContextExact) (l nl : NumSet)
     (sl : HolFiniteMapExact Nat (HolWordLab width)) (tl tl' : Spt (WordLocW width))
     (hl : crepToLoopLocalsRelExact ctxt l sl tl) (h1l : crepToLoopLocalsRelExact ctxt nl sl tl')
     (hsub : ∀ k, sptDomain l k → sptDomain nl k) (tmp : Nat) (htmp : ctxt.vmax < tmp)
@@ -195,7 +195,7 @@ theorem branchCondition_continue_run
   have targetNonzero : target.clock ≠ 0 := stateRel.2.2.1 ▸ clockNonzero
   let initial := {target with locals := sptInter target.locals live, clock := target.clock-1}
   have initialLocals : crepToLoopLocalsRelExact ctxt live source.locals initial.locals :=
-    locals_rel_inter ctxt live source.locals target.locals localsRel
+    condition_locals_rel_inter ctxt live source.locals target.locals localsRel
   have initialState : crepToLoopStateRelExact (decClockCrepSemHOL source) initial := by
     simp only [crepToLoopStateRelExact,decClockCrepSemHOL,initial] at *
     exact ⟨stateRel.1,stateRel.2.1,by omega,stateRel.2.2.2⟩
@@ -215,7 +215,7 @@ theorem branchCondition_continue_run
     code ck branch initialState exprRun exprState
   let bodyTarget := setVar next (.word w) afterCondition
   have bodyLocals : crepToLoopLocalsRelExact ctxt live (decClockCrepSemHOL source).locals bodyTarget.locals := by
-    exact locals_rel_insert_of ctxt live outLive source.locals _ afterCondition.locals initialLocals exprLocals hsub next hfresh _
+    exact condition_locals_rel_insert_of ctxt live outLive source.locals _ afterCondition.locals initialLocals exprLocals hsub next hfresh _
   have bodyNonerror : bodyResult ≠ some .error := by rcases continues with h | h <;> simp [h]
   obtain ⟨bodyExtra,out,post,hbody,hstate,hmem,hglobals,hcode,hresult,hlocals,hbodyBound⟩ :=
     bodySim (decClockCrepSemHOL source) sourcePost bodyResult
@@ -305,7 +305,7 @@ theorem branchCondition_break_run
   have targetNonzero : target.clock ≠ 0 := stateRel.2.2.1 ▸ clockNonzero
   let initial := {target with locals := sptInter target.locals live, clock := target.clock-1}
   have initialLocals : crepToLoopLocalsRelExact ctxt live source.locals initial.locals :=
-    locals_rel_inter ctxt live source.locals target.locals localsRel
+    condition_locals_rel_inter ctxt live source.locals target.locals localsRel
   have initialState : crepToLoopStateRelExact (decClockCrepSemHOL source) initial := by
     simp only [crepToLoopStateRelExact,decClockCrepSemHOL,initial] at *
     exact ⟨stateRel.1,stateRel.2.1,by omega,stateRel.2.2.2⟩
@@ -325,7 +325,7 @@ theorem branchCondition_break_run
     code ck branch initialState exprRun exprState
   let bodyTarget := setVar next (.word w) afterCondition
   have bodyLocals : crepToLoopLocalsRelExact ctxt live (decClockCrepSemHOL source).locals bodyTarget.locals := by
-    exact locals_rel_insert_of ctxt live outLive source.locals _ afterCondition.locals initialLocals exprLocals hsub next hfresh _
+    exact condition_locals_rel_insert_of ctxt live outLive source.locals _ afterCondition.locals initialLocals exprLocals hsub next hfresh _
   obtain ⟨bodyExtra,out,post,hbody,hstate,hmem,hglobals,hcode,hresult,hlocals,hbodyBound⟩ :=
     bodySim (decClockCrepSemHOL source) sourcePost (some (.break 0))
       bodyTarget bodyRun (by simp) exprState exprMem exprGlobals exprCode bodyLocals
@@ -339,7 +339,7 @@ theorem branchCondition_break_run
   · simpa [final] using hmem
   · simpa [final] using hglobals
   · simpa [final] using hcode
-  · exact locals_rel_inter ctxt live sourcePost.locals post.locals hlocals'
+  · exact condition_locals_rel_inter ctxt live sourcePost.locals post.locals hlocals'
   let k := 1
   let B := branchConditionWhileBody ctxt live code value next body
   have hcomp : compileHOLExact ctxt live (.while condition body) = .loop live B live := by
@@ -420,7 +420,7 @@ theorem branchCondition_exit_run
   have targetNonzero : target.clock ≠ 0 := stateRel.2.2.1 ▸ clockNonzero
   let initial := {target with locals := sptInter target.locals live, clock := target.clock-1}
   have initialLocals : crepToLoopLocalsRelExact ctxt live source.locals initial.locals :=
-    locals_rel_inter ctxt live source.locals target.locals localsRel
+    condition_locals_rel_inter ctxt live source.locals target.locals localsRel
   have initialState : crepToLoopStateRelExact (decClockCrepSemHOL source) initial := by
     simp only [crepToLoopStateRelExact,decClockCrepSemHOL,initial] at *
     exact ⟨stateRel.1,stateRel.2.1,by omega,stateRel.2.2.2⟩
@@ -440,7 +440,7 @@ theorem branchCondition_exit_run
     code ck branch initialState exprRun exprState
   let bodyTarget := setVar next (.word w) afterCondition
   have bodyLocals : crepToLoopLocalsRelExact ctxt live (decClockCrepSemHOL source).locals bodyTarget.locals := by
-    exact locals_rel_insert_of ctxt live outLive source.locals _ afterCondition.locals initialLocals exprLocals hsub next hfresh _
+    exact condition_locals_rel_insert_of ctxt live outLive source.locals _ afterCondition.locals initialLocals exprLocals hsub next hfresh _
   obtain ⟨bodyExtra,out,post,hbody,hstate,hmem,hglobals,hcode,hresult,hlocals,hbodyBound⟩ :=
     bodySim (decClockCrepSemHOL source) sourcePost (some r)
       bodyTarget bodyRun (by simpa using notError) exprState exprMem exprGlobals exprCode bodyLocals

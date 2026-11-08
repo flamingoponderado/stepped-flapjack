@@ -10,14 +10,14 @@ def nestedLoopExample : CrepProgHOL 64 :=
 
 /-- The concrete factor is computable from code and architecture. -/
 example (arch : AsmArchitecture) :
-    scalarLoopTreeFactor (mkCtxtExact arch (makeVmapExact []) HolFiniteMapExact.empty 0) .ln nestedLoopExample = 12532 := by
-  simp [nestedLoopExample,scalarLoopTreeFactor,scalarNoWhile,compileHOLExact,compileExpHOLExact,compileExpsHOLExact,
+    scalarProgramFactor (mkCtxtExact arch (makeVmapExact []) HolFiniteMapExact.empty 0) .ln nestedLoopExample = 12532 := by
+  simp [nestedLoopExample,scalarProgramFactor,scalarNoWhile,compileHOLExact,compileExpHOLExact,compileExpsHOLExact,
     loopNestedSeqHOL,genTemps,mkCtxtExact,makeVmapExact,HolFiniteMapExact.updateListEq]
 
 /-- The recursive shape includes the reached inner loop and the outer break. -/
-theorem nestedLoop_shape : ScalarLoopTree nestedLoopExample := by
-  exact .seq (.while (.direct (.const 1)) (.seq (.while (.direct (.const 0)) (.branch .skip rfl)) (.branch (.break 0) rfl)))
-    (.branch (.ret (.direct (.const 7))) rfl)
+theorem nestedLoop_shape : ScalarProgram nestedLoopExample := by
+  exact .seq (.while (.direct (.const 1)) (.seq (.while (.direct (.const 0)) .skip) (.break 0)))
+    (.ret (.direct (.const 7)))
 
 /-- The example has a completed source run when its initial clock is positive. -/
 theorem nestedLoop_run {σ : Type} (state : CrepSemHOLState 64 σ) (positive : state.clock ≠ 0) :
@@ -34,8 +34,8 @@ theorem nestedLoop_steps {σ : Type} (state : CrepSemHOLState 64 σ) (positive :
     CrepSteps.steps_seq,CrepSteps.steps_leaf]
 
 /-- A declaration may enclose the recursive loop tree. -/
-example : ScalarLoopTree (.dec 3 (.const 0) nestedLoopExample) :=
-  .dec 3 (.const 0) nestedLoop_shape
+example : ScalarProgram (.dec 3 (.const 0) nestedLoopExample) :=
+  .dec 3 (.direct (.const 0)) nestedLoop_shape
 
 /-- That declaration has a completed return on the same positive-clock states. -/
 example {σ : Type} (state : CrepSemHOLState 64 σ) (positive : state.clock ≠ 0) :
@@ -45,6 +45,14 @@ example {σ : Type} (state : CrepSemHOLState 64 σ) (positive : state.clock ≠ 
   simp only [evalCrepSemHOLExp]
   have run := nestedLoop_run (CrepSemHOLState.setVar 3 (.word 0) state) (by simpa [CrepSemHOLState.setVar] using positive)
   simpa [CrepSemHOLState.setVar] using congrArg Prod.fst run
+
+/-- A computed initializer and a conditional can both enclose a nested loop. -/
+def computedConditionalExample : CrepProgHOL 64 :=
+  .dec 3 (.cmp .equal (.const 1) (.const 1)) (.ite (.const 1) nestedLoopExample .skip)
+
+example : ScalarProgram computedConditionalExample :=
+  .dec 3 (.cmp .equal (.direct (.const 1)) (.direct (.const 1)))
+    (.ite (.direct (.const 1)) nestedLoop_shape .skip)
 
 /-- Instantiation supplies a numeric target clock and optimized visit bound. -/
 example {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64 σ)
@@ -60,8 +68,8 @@ example {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64
   let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
   have rel := SteppedFlapjack.Concrete.loopStateFrom_relations arch source SteppedFlapjack.Concrete.branchingHOL
   have codeLocals := SteppedFlapjack.Concrete.branching_loop_code_locals arch source
-  have factor : scalarLoopTreeFactor ctxt .ln nestedLoopExample = 12532 := by
-    simp [ctxt,SteppedFlapjack.Concrete.witnessLoopContext,nestedLoopExample,scalarLoopTreeFactor,scalarNoWhile,
+  have factor : scalarProgramFactor ctxt .ln nestedLoopExample = 12532 := by
+    simp [ctxt,SteppedFlapjack.Concrete.witnessLoopContext,nestedLoopExample,scalarProgramFactor,scalarNoWhile,
       compileHOLExact,compileExpHOLExact,compileExpsHOLExact,loopNestedSeqHOL,genTemps,mkCtxtExact,
       makeVmapExact,HolFiniteMapExact.updateListEq]
   let loopCode : HolLoopProg 64 := .seq
@@ -79,7 +87,7 @@ example {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64
     rw [codeEq]
     dsimp only [loopCode]
     decide +kernel
-  obtain ⟨post,run,bound,_,_,_,_⟩ := scalarLoopTree_explicit nestedLoopExample nestedLoop_shape ctxt .ln
+  obtain ⟨post,run,bound,_,_,_,_⟩ := scalarProgram_explicit nestedLoopExample nestedLoop_shape ctxt .ln
     crep (decClockCrepSemHOL crep).emptyLocals (some (.return [.word 7])) target 6
     (nestedLoop_run crep positive) (by rw [nestedLoop_steps crep positive]) (.return _)
     rel.1 rel.2.1 rel.2.2 codeLocals.1 codeLocals.2
