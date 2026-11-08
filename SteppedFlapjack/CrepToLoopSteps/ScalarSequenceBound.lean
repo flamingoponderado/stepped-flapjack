@@ -227,7 +227,7 @@ theorem scalarProgramFactor_scalarOutputEnvelope {width : Nat} [NeZero width] {p
       have bmax : scalarProgramFactor ctxt live b ≤ scalarOutputEnvelope (w-1) := bb.trans (scalarOutputEnvelope_mono (by omega))
       have maxBound : max (scalarProgramFactor ctxt live a) (scalarProgramFactor ctxt live b) ≤ scalarOutputEnvelope (w-1) := max_le amax bmax
       have wp : 0 < w := by have := loopVisitWeight_pos (compileHOLExact ctxt live (.ite condition a b)); omega
-      have prefBound := ite_prefix_le_control cond ha hb ctxt live
+      have prefBound := ite_prefix_le_control cond (a := a) (b := b) ctxt live
       have bound := scalarOutputEnvelope_step w (w-1) (by omega)
       change w * (_ + 2*max (scalarProgramFactor ctxt live a) (scalarProgramFactor ctxt live b)+2) ≤ scalarOutputEnvelope w
       nlinarith
@@ -244,7 +244,7 @@ theorem scalarProgramFactor_scalarOutputEnvelope {width : Nat} [NeZero width] {p
       have bodyBound := ih bc bl
       have bodyMax : scalarProgramFactor bc bl body ≤ scalarOutputEnvelope (w-1) := bodyBound.trans (scalarOutputEnvelope_mono (by omega))
       have wp : 0 < w := by have := loopVisitWeight_pos (compileHOLExact ctxt live (.dec name init body)); omega
-      have prefBound := dec_prefix_le_control name initShape bodyShape ctxt live
+      have prefBound := dec_prefix_le_control name initShape (body := body) ctxt live
       have bound := scalarOutputEnvelope_step w (w-1) (by omega)
       change w * (_ + 2*scalarProgramFactor bc bl body+1) ≤ scalarOutputEnvelope w
       nlinarith
@@ -256,7 +256,7 @@ theorem scalarProgramFactor_scalarOutputEnvelope {width : Nat} [NeZero width] {p
     have bodyBound := ih ctxt live
     have bodyMax : scalarProgramFactor ctxt live body ≤ scalarOutputEnvelope (w-1) := bodyBound.trans (scalarOutputEnvelope_mono (by omega))
     have wp : 0 < w := by have := loopVisitWeight_pos (compileHOLExact ctxt live (.while condition body)); omega
-    have prefBound := while_prefix_le_control cond bodyShape ctxt live
+    have prefBound := while_prefix_le_control cond (body := body) ctxt live
     have bound := scalarOutputEnvelope_step w (w-1) (by omega)
     change w * (_ + 2*scalarProgramFactor ctxt live body+3) ≤ scalarOutputEnvelope w
     nlinarith

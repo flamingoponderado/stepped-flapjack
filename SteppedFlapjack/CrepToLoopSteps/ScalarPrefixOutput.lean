@@ -5,7 +5,7 @@ open Flapjack SteppedFlapjack.LoopToWordSteps
 variable {width : Nat} [NeZero width]
 
 theorem while_prefix_le_control {condition : CrepExpHOL width} (conditionShape : CompiledScalar condition)
-    {body : CrepProgHOL width} (_bodyShape : ScalarProgram body)
+    {body : CrepProgHOL width}
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) ≤
       loopVisitWeight (compileHOLExact ctxt live (.while condition body)) := by
@@ -22,7 +22,7 @@ theorem while_prefix_le_control {condition : CrepExpHOL width} (conditionShape :
   rw [← branched_visitWeight branch']
   exact inner
 theorem ite_prefix_le_control {condition : CrepExpHOL width} (conditionShape : CompiledScalar condition)
-    {a b : CrepProgHOL width} (_ha : ScalarProgram a) (_hb : ScalarProgram b)
+    {a b : CrepProgHOL width}
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) ≤
       loopVisitWeight (compileHOLExact ctxt live (.ite condition a b)) := by
@@ -40,7 +40,7 @@ theorem ite_prefix_le_control {condition : CrepExpHOL width} (conditionShape : C
   exact inner
 
 theorem dec_prefix_le_control (name : Nat) {init : CrepExpHOL width} (initShape : CompiledScalar init)
-    {body : CrepProgHOL width} (_bodyShape : ScalarProgram body)
+    {body : CrepProgHOL width}
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) ≤
       loopVisitWeight (compileHOLExact ctxt live (.dec name init body)) := by
