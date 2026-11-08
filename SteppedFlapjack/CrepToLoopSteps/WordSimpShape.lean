@@ -68,7 +68,7 @@ theorem branchConditionWhile_loopBranch {width : Nat} [NeZero width]
         .loop live (branchConditionWhileBody ctxt live code value next body) live ∧
       LoopBranch (branchConditionWhileBody ctxt live code value next body) := by
   obtain ⟨code,value,next,outLive,compiled,_,_⟩ :=
-    condition_prefix_shape conditionShape ctxt (ctxt.vmax+1) live
+    condition_prefix_shape (e := condition) conditionShape ctxt (ctxt.vmax+1) live
   have hprefix : ∀ p ∈ code, LoopBranch p := by
     cases conditionShape with
     | direct h =>

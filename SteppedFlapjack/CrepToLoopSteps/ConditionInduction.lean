@@ -24,7 +24,7 @@ private theorem loop_timeout {width : Nat} [NeZero width] {F : Type}
 /-- Branch-condition loops with branch bodies admit a compiler clock bounded by
 source evaluator visits and compiled-body syntax. -/
 theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Type}
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body : CrepProgHOL width) (bodyShape : BranchProgram body)
     (source sourceFinal : CrepSemHOLState width F) (result : Option (CrepResultHOLExact width))
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet)
@@ -153,7 +153,7 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
 /-- The same correctness witness bounds actual compiled Loop visits by a
 source-step expression with factors computed from the compiled loop body. -/
 theorem branchConditionWhile_bounded_steps {width : Nat} [NeZero width] {F : Type}
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body : CrepProgHOL width) (bodyShape : BranchProgram body)
     (source sourceFinal : CrepSemHOLState width F) (result : Option (CrepResultHOLExact width))
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet)

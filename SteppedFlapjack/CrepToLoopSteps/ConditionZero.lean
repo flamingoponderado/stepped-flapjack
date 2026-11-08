@@ -86,7 +86,7 @@ private theorem while_body_eval (np : List (HolLoopProg width)) (le : HolLoopExp
 /-- A false branch condition exits the compiled loop with clock bounded by the
 condition-prefix size plus the two loop cuts. -/
 theorem branchCondition_false_run
-    (condition : CrepExpHOL width) (shape : BranchCondition condition)
+    (condition : CrepExpHOL width) (shape : CompiledScalar condition)
     (body : CrepProgHOL width) (source : CrepSemHOLState width F)
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet)
     (guard : evalCrepSemHOLExp source condition = some (.word 0))

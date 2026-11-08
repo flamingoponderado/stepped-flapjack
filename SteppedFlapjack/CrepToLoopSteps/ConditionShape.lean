@@ -1,6 +1,6 @@
 import SteppedFlapjack.CrepToLoopSteps.ScalarPrefix
 
-/-! Conditions whose compiled expression prefixes are loop-free. -/
+/-! Scalar conditions whose compiled expression prefixes are loop-free. -/
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.LoopSemStateFiniteExact
 open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
@@ -11,20 +11,24 @@ inductive BranchCondition {width : Nat} [NeZero width] : CrepExpHOL width → Pr
   | direct {e} : DirectExpression e → BranchCondition e
   | cmp (op) {a b} : DirectExpression a → DirectExpression b → BranchCondition (.cmp op a b)
 
+/-- Legacy simple conditions belong to the full scalar fragment. -/
+instance {width : Nat} [NeZero width] {e : CrepExpHOL width} :
+    Coe (BranchCondition e) (CompiledScalar e) where
+  coe shape := by
+    cases shape with
+    | direct h => exact .direct h
+    | cmp op a b => exact .cmp op (.direct a) (.direct b)
+
 /-- Each generated prefix statement is loop-free and supported by instruction
 selection; this exposes the actual compiler output and fresh temporaries. -/
 theorem condition_prefix_shape {width : Nat} [NeZero width] {e : CrepExpHOL width}
-    (shape : BranchCondition e) (ctxt : CrepToLoopContextExact) (tmp : Nat) (live : NumSet) :
+    (shape : CompiledScalar e) (ctxt : CrepToLoopContextExact) (tmp : Nat) (live : NumSet) :
     ∃ code value next outLive,
       compileExpHOLExact ctxt tmp live e = (code,value,next,outLive) ∧
       (∀ p ∈ code, BranchedProgram p) ∧
       (∀ p ∈ code, LoopSelectProgram p) := by
-  have scalar : CompiledScalar e := by
-    cases shape with
-    | direct h => exact .direct h
-    | cmp op a b => exact .cmp op (.direct a) (.direct b)
   obtain ⟨code,value,next,outLive,compiled,branch,selected⟩ :=
-    compiledScalar_prefix scalar ctxt tmp live
+    compiledScalar_prefix shape ctxt tmp live
   exact ⟨code,value,next,outLive,compiled,branch,selected⟩
 
 /-- A nested sequence of loop-free statements is loop-free. -/
@@ -85,10 +89,10 @@ def branchConditionWhileBody {width : Nat} [NeZero width]
     .ite .notEqual next (.imm (0 : BitVec width))
       (.seq (compileHOLExact ctxt live body) (.continue 0)) (.break 0) live])
 
-/-- Comparison conditions still compile to a loop whose body is loop-free
+/-- Scalar conditions compile to a loop whose body is loop-free
 and accepted by the selected RISC-V backend. -/
 theorem branchCondition_compileWhile {width : Nat} [NeZero width]
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body : CrepProgHOL width) (bodyShape : BranchProgram body)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     ∃ code value next outLive,
