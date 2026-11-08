@@ -27,14 +27,7 @@ private theorem errorLoopFacts (context : PanValueFfiContext (RiscV.Word 64))
       errorLoopProduction.locals errorLoopProduction.globals errorLoopProduction.memory errorLoopProduction.ffi errorLoop
       (memoryAccess := some (panSemBitVec64MemoryAccess errorLoopProduction)) =
         some (.error errorLoopProduction.locals errorLoopProduction.globals errorLoopProduction.memory errorLoopProduction.ffi,12) := by
-  have rel : PanSemStateRelExec errorLoopProduction errorLoopSource.toExact := by
-    obtain ⟨a,b,c,d,e,f,g,h,_,j,k,l,m⟩ := source_related (progToHOL errorLoop)
-    exact ⟨a,b,c,d,e,f,g,h,rfl,j,k,l,m⟩
-  have ranged : PanSemStateRelExecRanged errorLoopProduction :=
-    PanSemStateRelExecRanged.setClock (source_ranged (progToHOL errorLoop)) 12
-  have words : WordLocals errorLoopProduction.locals := by
-    intro name value found
-    simp [errorLoopProduction,clockedFixtureProduction,executableState,singleEntrySourceProduction,sourceProduction] at found
+  obtain ⟨rel,ranged,words⟩ := clockedFixture_premises errorLoop 12
   have run : evalPanValueFfiProgSteps context primitive handler errorLoopProduction.structs []
       errorLoopProduction.baseAddress errorLoopProduction.topAddress panSemBitVec64BytesInWord 7
       errorLoopProduction.locals errorLoopProduction.globals errorLoopProduction.memory errorLoopProduction.ffi errorLoop

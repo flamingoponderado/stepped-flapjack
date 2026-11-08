@@ -18,14 +18,7 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
   let production := clockedFixtureProduction program 1
   let _ : DecidablePred source.memaddrs := by change DecidablePred ordinaryAddress; infer_instance
   have supported : Supported program := ⟨.skip, by simp [program,ProgByteRanged]⟩
-  have rel : PanSemStateRelExec production source.toExact := by
-    obtain ⟨a,b,c,d,e,f,g,h,_,j,k,l,m⟩ := source_related (progToHOL program)
-    exact ⟨a,b,c,d,e,f,g,h,rfl,j,k,l,m⟩
-  have ranged : PanSemStateRelExecRanged production :=
-    PanSemStateRelExecRanged.setClock (source_ranged (progToHOL program)) 1
-  have words : WordLocals production.locals := by
-    intro name value found
-    simp [production,clockedFixtureProduction,executableState,singleEntrySourceProduction,sourceProduction] at found
+  obtain ⟨rel,ranged,words⟩ := clockedFixture_premises program 1
   have run : evalPanValueFfiProgSteps context primitive handler production.structs [] production.baseAddress production.topAddress
       panSemBitVec64BytesInWord 1 production.locals production.globals production.memory production.ffi program
       (memoryAccess := some (panSemBitVec64MemoryAccess production)) =

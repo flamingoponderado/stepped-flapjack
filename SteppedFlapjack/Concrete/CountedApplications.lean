@@ -13,6 +13,20 @@ def clockedFixtureSource (program : Prog (RiscV.Word 64)) (n : Nat) :=
 def clockedFixtureProduction (program : Prog (RiscV.Word 64)) (n : Nat) :=
   {(executableState (progToHOL program)) with clock := n}
 
+/-- The clocked fixture satisfies the source relation and scalar-local
+premises uniformly for any supported source body. -/
+theorem clockedFixture_premises (program : Prog (RiscV.Word 64)) (n : Nat) :
+    PanSemStateRelExec (clockedFixtureProduction program n) (clockedFixtureSource program n).toExact ∧
+    PanSemStateRelExecRanged (clockedFixtureProduction program n) ∧
+    WordLocals (clockedFixtureProduction program n).locals := by
+  constructor
+  · obtain ⟨a,b,c,d,e,f,g,h,_,j,k,l,m⟩ := source_related (progToHOL program)
+    exact ⟨a,b,c,d,e,f,g,h,rfl,j,k,l,m⟩
+  constructor
+  · exact PanSemStateRelExecRanged.setClock (source_ranged (progToHOL program)) n
+  · intro name value found
+    simp [clockedFixtureProduction,executableState,singleEntrySourceProduction,sourceProduction] at found
+
 /-- Specialize the general span to the init-e-shaped fixture at a chosen clock. -/
 theorem fixture_counted_span (program : Prog (RiscV.Word 64)) (supported : Supported program)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
@@ -38,14 +52,7 @@ theorem fixture_counted_span (program : Prog (RiscV.Word 64)) (supported : Suppo
   let _ : DecidablePred source.memaddrs := by
     change DecidablePred ordinaryAddress
     infer_instance
-  have rel : PanSemStateRelExec production source.toExact := by
-    obtain ⟨a,b,c,d,e,f,g,h,_,j,k,l,m⟩ := source_related (progToHOL program)
-    exact ⟨a,b,c,d,e,f,g,h,rfl,j,k,l,m⟩
-  have ranged : PanSemStateRelExecRanged production :=
-    PanSemStateRelExecRanged.setClock (source_ranged (progToHOL program)) n
-  have words : WordLocals production.locals := by
-    intro name value found
-    simp [production,clockedFixtureProduction,executableState,singleEntrySourceProduction,sourceProduction] at found
+  obtain ⟨rel,ranged,words⟩ := clockedFixture_premises program n
   have run' : evalPanValueFfiProgSteps context primitive handler production.structs [] production.baseAddress
       production.topAddress panSemBitVec64BytesInWord fuel production.locals production.globals production.memory production.ffi program
       (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
