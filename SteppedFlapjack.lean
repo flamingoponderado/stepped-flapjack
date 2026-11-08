@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.CrepLoopError
 import SteppedFlapjack.Concrete.ConditionalLoopSpan
 import SteppedFlapjack.CrepSteps.ScalarClock
 import SteppedFlapjack.Concrete.CountdownLoopSpan
