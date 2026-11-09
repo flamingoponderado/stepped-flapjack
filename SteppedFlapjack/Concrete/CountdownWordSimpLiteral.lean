@@ -39,4 +39,10 @@ theorem countdown_instruction_literal (x : BitVec 64) : WordInst.instSelectExecu
   simp only [maxVarHOL,maxVarExpHOL,WordInst.instSelectExecutable,WordInst.ExecutablePullExp.pullExpExecutable,WordInst.flattenExp,WordInst.instSelectExp]
   with_unfolding_all rfl
 
+/-- SSA starts allocating after the same register limit for every count. -/
+theorem countdownSelectedWord_limit (x : BitVec 64) : WordAlloc.limitVar (countdownSelectedWord x) = 9 := by
+  unfold WordAlloc.limitVar countdownSelectedWord
+  simp only [maxVarHOL]
+  with_unfolding_all rfl
+
 end SteppedFlapjack.Concrete
