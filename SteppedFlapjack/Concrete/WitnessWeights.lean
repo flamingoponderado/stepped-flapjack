@@ -1,8 +1,9 @@
 import SteppedFlapjack.Concrete.ScalarEntry
+/-! Concrete optimized control weights and envelope values for the phase-one witnesses. -/
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Compiler.Encoders.Asm
 open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps
-set_option maxRecDepth 10000
+set_option maxRecDepth 10000 in
 theorem comparison_weight (arch : AsmArchitecture) :
   let ctxt := witnessLoopContext arch branchingHOL
   let c := ctxtFcExact ctxt.target ctxt.funcs [] []
@@ -12,6 +13,7 @@ theorem comparison_weight (arch : AsmArchitecture) :
     genTemps,List.length_cons,List.length_nil,List.range_succ,List.range_zero,List.map_cons,List.map_nil,
     List.append_nil,List.nil_append,List.zipWith_cons_cons,List.zipWith_nil_left,Nat.add_zero]
   decide +kernel
+set_option maxRecDepth 10000 in
 theorem countdown_weight (arch : AsmArchitecture) (n : Nat) :
   let ctxt := witnessLoopContext arch (naturalCountdownHOL n)
   let c := ctxtFcExact ctxt.target ctxt.funcs [] []
@@ -24,6 +26,7 @@ theorem countdown_weight (arch : AsmArchitecture) (n : Nat) :
     markAllHOL, loopVisitWeight, varsOfExpHOL, varsOfExpListHOL, loopNestedSeqHOL, FUPDATE_HOL,
     HolFiniteMapExact.updateEq, HolFiniteMapExact.empty, sptInsert, sptUnion, sptInter, sptSize, sptLookup, sptListInsert, sptDelete, sptOel, sptMkBN]
 
+set_option maxRecDepth 10000 in
 theorem conditional_weight (arch : AsmArchitecture) :
   let ctxt := witnessLoopContext arch (progToHOL branchingLoop)
   let c := ctxtFcExact ctxt.target ctxt.funcs [] []

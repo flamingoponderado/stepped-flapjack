@@ -1,5 +1,5 @@
 import SteppedFlapjack.CrepToLoopSteps.ScalarSequenceBound
-import SteppedFlapjack.Concrete.WitnessLoopCode
+import SteppedFlapjack.Concrete.WitnessWeights
 
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.LoopSemStateFiniteExact Flapjack.Compiler.Encoders.Asm
@@ -19,11 +19,6 @@ example (x : BitVec 64) :
 
 /-- The output-derived envelope computes to a concrete natural number. -/
 example : scalarOutputEnvelope 3 = 901 := by decide +kernel
-
-/-- The envelope evaluates for the nested loop's concrete output weight. -/
-private theorem nestedLoopEnvelope : scalarOutputEnvelope 46 =
-    85838975299478796137350471140065246905153223130317616185985232102213238409 := by
-  decide +kernel
 
 /-- The recursive shape includes the reached inner loop and the outer break. -/
 theorem nestedLoop_shape : ScalarProgram nestedLoopExample := by
@@ -140,7 +135,7 @@ example {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64
     (nestedLoop_run crep positive) (by rw [nestedLoop_steps crep positive]) (.return _)
     rel.1 rel.2.1 rel.2.2 codeLocals.1 codeLocals.2
   refine ⟨post,?_,?_⟩
-  · simpa [actualSize,nestedLoopEnvelope,resultToLoop,wlabWlocExact] using run
-  · simpa [actualSize,nestedLoopEnvelope] using bound
+  · simpa [actualSize,SteppedFlapjack.Concrete.envelope_46,resultToLoop,wlabWlocExact] using run
+  · simpa [actualSize,SteppedFlapjack.Concrete.envelope_46] using bound
 
 end SteppedFlapjack.CrepToLoopSteps
