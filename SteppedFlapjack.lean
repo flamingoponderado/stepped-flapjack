@@ -45,7 +45,7 @@ import SteppedFlapjack.Concrete.FrontendShape
 import SteppedFlapjack.Concrete.FrontendState
 import SteppedFlapjack.Concrete.SourceRuns
 import SteppedFlapjack.PanToCrepSteps.AssignLoopEntryDefs
-import SteppedFlapjack.PanToCrepSteps.CountdownZeroStackMax
+import SteppedFlapjack.Concrete.CountdownStackSafety
 import SteppedFlapjack.PanToCrepSteps.CountdownZeroEntry
 import SteppedFlapjack.PanToCrepSteps.NoFfiCountdown
 import SteppedFlapjack.PanToCrepSteps.CountdownExecutableCompiler
@@ -886,3 +886,5 @@ their names in the `Flapjack` namespace. The tests are in the separate
 -/
 
 
+
+import SteppedFlapjack.StackAllocSteps.LoopClockLinear
