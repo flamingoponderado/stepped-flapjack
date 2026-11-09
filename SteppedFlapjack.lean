@@ -12,6 +12,7 @@ import SteppedFlapjack.Concrete.WordTables
 import SteppedFlapjack.Concrete.WordSpan
 import SteppedFlapjack.Concrete.CountdownWordSpan
 import SteppedFlapjack.Concrete.CountdownLiteral
+import SteppedFlapjack.Concrete.CountdownWordSimpLiteral
 import SteppedFlapjack.Concrete.NaturalCountdownWordSpan
 import SteppedFlapjack.Concrete.BranchingWordSpan
 import SteppedFlapjack.Concrete.ComparisonWordSpan
