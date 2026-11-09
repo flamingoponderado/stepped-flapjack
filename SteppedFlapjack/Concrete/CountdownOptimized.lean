@@ -37,13 +37,11 @@ set_option maxRecDepth 100000 in
 theorem countdown_optimized_literal (n : Nat) :
  (compile countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n)).2 =
     countdownOptimizedLiteral (BitVec.ofNat 64 n) := by
-  have h := twoProgram_optimized_executable riscvConfig.isa (ofString "main")
-    (entryName (naturalCountdownHOL n)) (phase3CountdownCrepBody n) (naturalCountdown_scalar n)
-    phase3WordConfig riscvConfig
-  rw [countdownTwoLoops_literal,countdownLoopLiteral_toWord] at h
-  change compile phase3WordConfig riscvConfig (countdownWordPrograms n) = _ at h
-  rw [← phase3WordConfig_eq]
-  rw [h]
+  have allocator : regAllocExecutable = regAlloc := by
+    funext a b c d e f g
+    exact regAllocExecutable_eq a b c d e f g
+  rw [← phase3WordConfig_eq, countdownWordPrograms_literal,
+    ← compileWith_eq_compile _ allocator]
   exact countdownExecutableTable (BitVec.ofNat 64 n)
 
 set_option maxHeartbeats 1000000 in
