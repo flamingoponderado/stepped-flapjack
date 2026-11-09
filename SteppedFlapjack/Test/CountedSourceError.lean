@@ -16,7 +16,7 @@ theorem badShift_source_run (context : PanValueFfiContext (RiscV.Word 64)) (prim
       (memoryAccess := some (panSemBitVec64MemoryAccess (executableState (progToHOL badShift)))) =
       some (.error (executableState (progToHOL badShift)).locals (executableState (progToHOL badShift)).globals
         (executableState (progToHOL badShift)).memory (executableState (progToHOL badShift)).ffi,0) := by
-  simp [badShift,evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith,evalPanValueExpCounted,
+  simp [badShift,evalPanValueFfiProgSteps,panValueReturnResult,evalPanValueExpCountedWith,evalPanValueExpCounted,
     evalPanValueExp,panSemBitVec64MemoryAccess,panValueMemoryAccessOfModel,panSemBitVec64WordModel,
     panSemWordModel,RiscV.panRiscVMemoryModel,RiscV.panRiscVShift]
 theorem badShift_simp : panSimpProg badShift = badShift := by

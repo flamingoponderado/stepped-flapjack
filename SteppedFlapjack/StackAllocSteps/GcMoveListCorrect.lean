@@ -149,13 +149,13 @@ theorem gcMoveListBoundedClock {width : Nat} [NeZero width] {C F : Type} {conf :
             { s with clock := s.clock + (ck + ck' + 1) }) =
             (none, { t with clock := t.clock + (ck' + 1) }) := by
           rw [evaluate_seq_none _ _ _ _
-              (loadInst_eval { s with clock := s.clock + (ck + ck' + 1) } 5 8 a h8 hda) le_rfl,
+              (loadInst_eval { s with clock := s.clock + (ck + ck' + 1) } 5 8 a h8 hda) (by simp [setVar]),
             evaluate_seq_none _ _ _ _
               (sub1Inst_eval (setVar 5 (s.memory a) { s with clock := s.clock + (ck + ck' + 1) }) 7
                 (BitVec.ofNat width (n + 1))
-                (by simp [setVar, FUPDATE_HOL, HolFiniteMapExact.lookup_updateEq, h7])) le_rfl,
+                (by simp [setVar, FUPDATE_HOL, HolFiniteMapExact.lookup_updateEq, h7])) (by simp [setVar]),
             hsb, evaluate_seq_none _ _ _ _ hadd (by simp [SB, setVar]),
-            evaluate_seq_none _ _ _ _ (storeInst_eval _ 5 8 a w1 ?_ ?_ ?_) le_rfl,
+            evaluate_seq_none _ _ _ _ (storeInst_eval _ 5 8 a w1 ?_ ?_ ?_) (by simp),
             addBytesInWordInst_eval _ 8 a ?_]
           · rfl
           · exact h8c

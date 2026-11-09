@@ -1,3 +1,5 @@
+import Mathlib.Tactic.Ring
+import Mathlib.Tactic.Linarith
 import Flapjack.Compiler.Backend.StackRemove.Proofs.CopyLoop
 import Flapjack.Compiler.Backend.StackProps.EvaluateAddClock
 import SteppedFlapjack.StackRemoveSteps.CopyEachSteps

@@ -111,7 +111,7 @@ private theorem returnBridge {scope : List VarName} {expression : Exp (RiscV.Wor
   | zero => simp [evalPanValueFfiProgSteps] at run
   | succ fuel =>
     have originalRun := run
-    simp only [evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith,evalPanValueExpCounted] at run
+    simp only [evalPanValueFfiProgSteps,panValueReturnResult,evalPanValueExpCounted] at run
     cases evaluated : evalPanValueExp production.structs production.locals production.globals production.memory
         production.baseAddress production.topAddress panSemBitVec64BytesInWord expression
         (memoryAccess := some (panSemBitVec64MemoryAccess production)) with
@@ -159,7 +159,7 @@ private theorem assignBridge {scope : List VarName} (name : VarName) {expression
   | zero => simp [evalPanValueFfiProgSteps] at run
   | succ fuel =>
     have originalRun := run
-    simp only [evalPanValueFfiProgSteps,panValueAssignLocalSteps,evalPanValueExpCountedWith,evalPanValueExpCounted] at run
+    simp only [evalPanValueFfiProgSteps,panValueAssignLocalResult,evalPanValueExpCounted] at run
     cases evaluated : evalPanValueExp production.structs production.locals production.globals production.memory
         production.baseAddress production.topAddress panSemBitVec64BytesInWord expression
         (memoryAccess := some (panSemBitVec64MemoryAccess production)) with

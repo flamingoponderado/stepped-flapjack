@@ -14,7 +14,6 @@ theorem copyInst_branch (i : WordLangInst (BitVec width)) (cs : CopyState) : Bra
   | const dst value => exact .inst _
   | arith a => cases a <;> simp only [copyPropInst] <;> exact .inst _
   | mem op dst addr => cases op <;> cases addr <;> simp only [copyPropInst] <;> exact .inst _
-  | fp op => cases op <;> simp only [copyPropInst] <;> exact .inst _
 
 /-- Copy propagation preserves loop-free branch shape for any copy state. -/
 theorem copyBranch_shape {p : WordLangProgHOL (BitVec width)} (shape : Branch p) :

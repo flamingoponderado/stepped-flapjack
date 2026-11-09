@@ -38,7 +38,7 @@ theorem counted_return_word {σ : Type}
     | nStruct name fields => simp at hvalue
   subst v
   constructor
-  · simp [evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith,evalCounted,
+  · simp [evalPanValueFfiProgSteps,panValueReturnResult,evalCounted,
       panValuePayloadWithinLimit,panValuePayloadSizeFuel]
   · constructor
     · rw [PanSemStateFiniteExact.evaluateHOLFiniteState_return]

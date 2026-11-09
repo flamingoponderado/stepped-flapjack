@@ -47,7 +47,7 @@ theorem counted_return_invert {σ : Type}
   cases fuel with
   | zero => simp [evalPanValueFfiProgSteps] at run
   | succ fuel =>
-    simp only [evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith,
+    simp only [evalPanValueFfiProgSteps,panValueReturnResult,
       evalPanValueExpCounted] at run
     cases evaluated : evalPanValueExp production.structs production.locals production.globals production.memory
         production.baseAddress production.topAddress panSemBitVec64BytesInWord expression
@@ -93,7 +93,7 @@ theorem counted_assign_invert {σ : Type}
   cases fuel with
   | zero => simp [evalPanValueFfiProgSteps] at run
   | succ fuel =>
-    simp only [evalPanValueFfiProgSteps,panValueAssignLocalSteps,evalPanValueExpCountedWith,
+    simp only [evalPanValueFfiProgSteps,panValueAssignLocalResult,
       evalPanValueExpCounted] at run
     cases evaluated : evalPanValueExp production.structs production.locals production.globals production.memory
         production.baseAddress production.topAddress panSemBitVec64BytesInWord expression

@@ -311,7 +311,7 @@ theorem allocSimpleBoundedClock {width : Nat} [NeZero width] {C F : Type} {conf 
     rw [evaluate_seq_none _ _ _ _ (stackLoadAny_eval { S2a with clock := k } 9 8 0 rfl
         (by simp [S2a, SG, S1, setVar, setStore, HolFiniteMapExact.lookup_updateEq, FUPDATE_HOL,
           HolFiniteMapExact.lookup_updateListEq, FUPDATE_LIST_HOL])
-        hg (by simp) hj) le_rfl]
+        hg (by exact Nat.two_pow_pos _) hj) le_rfl]
     rw [show ({ S2a with clock := k } : StackSemStateFiniteExact width C F).stack[
         ({ S2a with clock := k } : StackSemStateFiniteExact width C F).stackSpace + 0]'hj =
         holHd (s.stack.drop s.stackSpace) from hv]

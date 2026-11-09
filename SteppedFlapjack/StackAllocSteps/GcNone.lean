@@ -38,19 +38,19 @@ theorem noneGcSteps (conf : Config) (hk : conf.gcKind = .none)
     (s : StackSemStateFiniteExact width C F) : steps (wordGcCode conf, s) ≤ 15 := by
   simp only [wordGcCode, hk, listSeqHOL, constInst]
   refine stepsSeqLe _ _ 1 13 ?_ ?_ s
-  · intro t; exact (steps_leaf _ t rfl).le
+  · intro t; exact Nat.le_of_eq (steps_leaf _ t rfl)
   · intro t; refine stepsSeqLe _ _ 1 11 ?_ ?_ t
-    · intro t; exact (steps_leaf _ t rfl).le
+    · intro t; exact Nat.le_of_eq (steps_leaf _ t rfl)
     · intro t; refine stepsSeqLe _ _ 1 9 ?_ ?_ t
-      · intro t; exact (steps_leaf _ t rfl).le
+      · intro t; exact Nat.le_of_eq (steps_leaf _ t rfl)
       · intro t; refine stepsSeqLe _ _ 1 7 ?_ ?_ t
-        · intro t; exact (steps_leaf _ t rfl).le
+        · intro t; exact Nat.le_of_eq (steps_leaf _ t rfl)
         · intro t; refine stepsSeqLe _ _ 1 5 ?_ ?_ t
-          · intro t; exact (steps_leaf _ t rfl).le
+          · intro t; exact Nat.le_of_eq (steps_leaf _ t rfl)
           · intro t; refine stepsIteLe _ _ _ _ _ 1 3 ?_ ?_ t
-            · intro u; exact (steps_leaf _ u rfl).le
+            · intro u; exact Nat.le_of_eq (steps_leaf _ u rfl)
             · intro u; refine stepsSeqLe _ _ 1 1 ?_ ?_ u
-              · intro v; exact (steps_leaf _ v rfl).le
-              · intro v; exact (steps_leaf _ v rfl).le
+              · intro v; exact Nat.le_of_eq (steps_leaf _ v rfl)
+              · intro v; exact Nat.le_of_eq (steps_leaf _ v rfl)
 
 end SteppedFlapjack.StackAllocSteps

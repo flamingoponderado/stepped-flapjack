@@ -47,11 +47,6 @@ theorem wInst_noFfi {width : Nat} [NeZero width]
   have write1 (g : Nat → HolInst width) (r : Nat) :
       stackNoFfi (wRegWrite1Native (fun reg => .inst (g reg)) r frame) = true :=
     wRegWrite1_noFfi _ r frame (fun _ => rfl)
-  have write21 (g : Nat → Nat → HolInst width) (r1 r2 : Nat) :
-      stackNoFfi (wRegWrite2Native
-        (fun reg2 => wRegWrite1Native (fun reg1 => .inst (g reg1 reg2)) r1 frame)
-        r2 frame) = true :=
-    wRegWrite2_noFfi _ r2 frame (fun reg2 => write1 (fun reg1 => g reg1 reg2) r1)
   cases instruction with
   | arith a =>
     cases a <;> try (rename_i op d s ri; cases ri)
@@ -60,12 +55,6 @@ theorem wInst_noFfi {width : Nat} [NeZero width]
     cases addr
     cases op <;> simp [wInstNative, wStackLoad_noFfi,
       write1, stackNoFfi]
-  | fp f =>
-    cases f
-    all_goals
-      by_cases hw : width = 64
-      all_goals simp [wInstNative, hw, wStackLoad_noFfi,
-        write1, write21, stackNoFfi]
   | skip => rfl
   | const n c => simp [wInstNative, write1]
 

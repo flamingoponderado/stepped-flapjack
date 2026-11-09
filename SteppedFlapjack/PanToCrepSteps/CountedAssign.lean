@@ -52,7 +52,7 @@ theorem counted_assign_local {σ : Type}
     rfl
   refine ⟨?_,?_,PanSemStateRelExec.updateLocals rel name nameRanged value,
     PanSemStateRelExecRanged.updateLocals ranged name value vranged,?_⟩
-  · simp [evalPanValueFfiProgSteps,panValueAssignLocalSteps,evalPanValueExpCountedWith,counted,prodValid]
+  · simp [evalPanValueFfiProgSteps,panValueAssignLocalResult,counted,prodValid]
   · rw [PanSemStateFiniteExact.evaluateHOLFiniteState_assign,exactEval]
     change (if exact.isValidValueHOLFinite .local (ofString name) (panValueToHOL value) = true then
       (none,setVarHOLFinite (ofString name) (panValueToHOL value) exact) else (some PanSemResultExact.error,exact)) = _
@@ -98,7 +98,7 @@ theorem counted_return_word_related {σ : Type}
     rw [evalHOLFinite_eq_classical,← valueAgree,evaluated]
     simp
   refine ⟨?_,?_,PanSemStateRelExec.emptyLocals rel,?_⟩
-  · simp [evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith,counted,
+  · simp [evalPanValueFfiProgSteps,panValueReturnResult,counted,
       panValuePayloadWithinLimit,panValuePayloadSizeFuel]
   · rw [evaluateHOLFiniteState_return,exactEval]
     simp [shapeOfHOLExact]

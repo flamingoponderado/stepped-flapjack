@@ -60,7 +60,7 @@ theorem counted_scalar_return_invert {σ : Type} {scope : List VarName}
   | zero => simp [evalPanValueFfiProgSteps] at run
   | succ fuel =>
     have originalRun := run
-    simp only [evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith,
+    simp only [evalPanValueFfiProgSteps,panValueReturnResult,
       evalPanValueExpCounted] at run
     cases evaluated : evalPanValueExp production.structs production.locals production.globals production.memory
         production.baseAddress production.topAddress panSemBitVec64BytesInWord expression
@@ -121,7 +121,7 @@ theorem counted_scalar_return_error {σ : Type} {scope : List VarName}
   cases fuel with
   | zero => simp [evalPanValueFfiProgSteps] at run
   | succ fuel =>
-    simp only [evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith,evalPanValueExpCounted] at run
+    simp only [evalPanValueFfiProgSteps,panValueReturnResult,evalPanValueExpCounted] at run
     cases evaluated : evalPanValueExp production.structs production.locals production.globals production.memory
         production.baseAddress production.topAddress panSemBitVec64BytesInWord expression
         (memoryAccess := some (panSemBitVec64MemoryAccess production)) with
@@ -209,7 +209,7 @@ theorem counted_assign_error {σ : Type}
   cases fuel with
   | zero => simp [evalPanValueFfiProgSteps] at run
   | succ fuel =>
-    simp only [evalPanValueFfiProgSteps,panValueAssignLocalSteps,evalPanValueExpCountedWith,evalPanValueExpCounted] at run
+    simp only [evalPanValueFfiProgSteps,panValueAssignLocalResult,evalPanValueExpCounted] at run
     cases evaluated : evalPanValueExp production.structs production.locals production.globals production.memory
         production.baseAddress production.topAddress panSemBitVec64BytesInWord expression
         (memoryAccess := some (panSemBitVec64MemoryAccess production)) with
