@@ -17,15 +17,36 @@ jobs:
     runs-on: first-large
     steps:
       - uses: actions/checkout@v5
+      # Share only the project build artifacts; caching all of .lake also stores
+      # dependencies and can evict the main-branch cache from the repository.
+      - name: Restore Lake build cache
+        id: lake-cache
+        uses: actions/cache/restore@v5.1.0
+        with:
+          path: .lake/build
+          key: lake-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}
+          restore-keys: |
+            lake-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
       - uses: leanprover/lean-action@v1
         with:
+          use-github-cache: false
           use-mathlib-cache: true
 
-      # The axiom audit also runs inside the build above, but lean-action restores
-      # .lake from earlier commits, and Lake does not see a newly added unimported
+      # The axiom audit also runs inside the build above, but CI restores
+      # build artifacts from earlier commits, and Lake does not see a newly added unimported
       # source file as a reason to rebuild it. Elaborate it afresh here.
       - name: Audit axioms of every SteppedFlapjack declaration
         run: lake lean SteppedFlapjack/Test/Axioms.lean
 
       - name: Check non-test modules are warning-free
         run: ./scripts/check-warnings.sh
+
+      - name: Save Lake build cache
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
+          && steps.lake-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5.1.0
+        with:
+          path: .lake/build
+          key: ${{ steps.lake-cache.outputs.cache-primary-key }}
