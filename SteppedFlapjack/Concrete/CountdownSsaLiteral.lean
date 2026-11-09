@@ -49,4 +49,97 @@ theorem countdown_ssa_constant (x : BitVec 64) :
     WordLangProgHOL.seq setup.1 (countdownSsaReplaceConstant x (WordAlloc.ssaCcTrans (inSpine 5 .tick loop .tick (.inst (.const 4 0)) (.return 0 [4])) setup.2.1 setup.2.2 []).1)
   exact congrArg (fun body => WordLangProgHOL.seq setup.1 body) q
 
+/-- Replace the count in the SSA entry's constant instruction. -/
+private def replaceSsaRoot (x : BitVec 64) : WordLangProgHOL (BitVec 64) → WordLangProgHOL (BitVec 64)
+  | .seq entry body => .seq entry (countdownSsaReplaceConstant x body)
+  | p => p
+
+private theorem countdown_ssa_replace (x : BitVec 64) :
+    WordAlloc.fullSsaCcTrans 1 (countdownSelectedWord x) =
+      replaceSsaRoot x (WordAlloc.fullSsaCcTrans 1 (countdownSelectedWord 5)) := by
+  rw [ssaUnfold (countdownSelectedWord 5), countdownSelectedWord_limit]
+  exact countdown_ssa_constant x
+
+/-- Exact SSA countdown code; the count occurs in one constant instruction. -/
+def countdownSsaWord (x : BitVec 64) : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.seq
+  (Flapjack.WordLangProgHOL.move 1 [(9, 0)])
+  (Flapjack.WordLangProgHOL.seq
+    (Flapjack.WordLangProgHOL.seq
+      (Flapjack.WordLangProgHOL.seq
+        (Flapjack.WordLangProgHOL.seq
+          (Flapjack.WordLangProgHOL.seq
+            (Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 13 x))
+            (Flapjack.WordLangProgHOL.tick))
+          (Flapjack.WordLangProgHOL.seq
+            (Flapjack.WordLangProgHOL.seq
+              (Flapjack.WordLangProgHOL.skip)
+              (Flapjack.WordLangProgHOL.move 0 [(17, 9), (21, 13)]))
+            (Flapjack.WordLangProgHOL.loop
+              (Flapjack.Spt.bn
+                (Flapjack.Spt.ln)
+                (Flapjack.Spt.bn
+                  (Flapjack.Spt.bn
+                    (Flapjack.Spt.bn (Flapjack.Spt.ln) (Flapjack.Spt.ls ()))
+                    (Flapjack.Spt.bn (Flapjack.Spt.ln) (Flapjack.Spt.ls ())))
+                  (Flapjack.Spt.ln)))
+              (Flapjack.WordLangProgHOL.seq
+                (Flapjack.WordLangProgHOL.seq
+                  (Flapjack.WordLangProgHOL.seq
+                    (Flapjack.WordLangProgHOL.move 0 [(25, 21)])
+                    (Flapjack.WordLangProgHOL.ite
+                      (Flapjack.Cmp.notEqual)
+                      25
+                      (Flapjack.WordRegImm.imm 0x0000000000000000#64)
+                      (Flapjack.WordLangProgHOL.seq
+                        (Flapjack.WordLangProgHOL.seq
+                          (Flapjack.WordLangProgHOL.seq
+                            (Flapjack.WordLangProgHOL.seq
+                              (Flapjack.WordLangProgHOL.move 0 [(29, 25)])
+                              (Flapjack.WordLangProgHOL.inst
+                                (Flapjack.WordLangInst.arith
+                                  (Flapjack.WordLangArith.binop
+                                    (Flapjack.BinOp.add)
+                                    33
+                                    29
+                                    (Flapjack.WordRegImm.imm 0xffffffffffffffff#64)))))
+                            (Flapjack.WordLangProgHOL.move 0 [(37, 33)]))
+                          (Flapjack.WordLangProgHOL.seq
+                            (Flapjack.WordLangProgHOL.move 1 [(21, 37)])
+                            (Flapjack.WordLangProgHOL.continue 0)))
+                        (Flapjack.WordLangProgHOL.seq
+                          (Flapjack.WordLangProgHOL.move 1 [(45, 37), (41, 37)])
+                          (Flapjack.WordLangProgHOL.seq
+                            (Flapjack.WordLangProgHOL.skip)
+                            (Flapjack.WordLangProgHOL.move 1 [(49, 29)]))))
+                      (Flapjack.WordLangProgHOL.seq
+                        (Flapjack.WordLangProgHOL.break 0)
+                        (Flapjack.WordLangProgHOL.seq
+                          (Flapjack.WordLangProgHOL.move 1 [(45, 25), (41, 25)])
+                          (Flapjack.WordLangProgHOL.seq
+                            (Flapjack.WordLangProgHOL.skip)
+                            (Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 49 0x0000000000000000#64)))))))
+                  (Flapjack.WordLangProgHOL.tick))
+                (Flapjack.WordLangProgHOL.move 1 [(21, 41)]))
+              (Flapjack.Spt.bn
+                (Flapjack.Spt.ln)
+                (Flapjack.Spt.bn
+                  (Flapjack.Spt.bn (Flapjack.Spt.ln) (Flapjack.Spt.bn (Flapjack.Spt.ln) (Flapjack.Spt.ls ())))
+                  (Flapjack.Spt.ln))))))
+        (Flapjack.WordLangProgHOL.tick))
+      (Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 53 0x0000000000000000#64)))
+    (Flapjack.WordLangProgHOL.seq (Flapjack.WordLangProgHOL.move 0 [(2, 53)]) (Flapjack.WordLangProgHOL.return 17 [2])))
+
+set_option maxHeartbeats 1000000 in
+set_option maxRecDepth 100000 in
+private theorem countdown_ssa_baseline :
+    WordAlloc.fullSsaCcTrans 1 (countdownSelectedWord 5) = countdownSsaWord 5 := by
+  with_unfolding_all rfl
+
+/-- The SSA pass emits the literal for every countdown value. -/
+theorem countdown_ssa_literal (x : BitVec 64) :
+    WordAlloc.fullSsaCcTrans 1 (countdownSelectedWord x) = countdownSsaWord x := by
+  rw [countdown_ssa_replace, countdown_ssa_baseline]
+  rfl
+
 end SteppedFlapjack.Concrete
