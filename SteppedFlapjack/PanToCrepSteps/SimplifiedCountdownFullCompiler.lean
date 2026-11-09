@@ -50,7 +50,7 @@ theorem counted_simplifiedCountdown_fullCompiler_riscv {σ : Type}
     (targetDef : target = {concreteDeclLoopState arch crep (compileProgDeclsHOLW (compileTopExactHOL declarations start)) with memory := target.memory})
     (memoryRel : crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs)
     (native : FullInitAssignLoopInputs declarations start caller loopCtxt (assignLoopEntryProgram declarations initializers caller loopCtxt .ln)
-      (declWhileSourceLoopLimit declarations initializers globals caller (ofString name) (.const (BitVec.ofNat 64 count)) (.var .local (ofString name)) (.assign .local (ofString name) (.op .sub [.var .local (ofString name),.const 1])) (.return (.const returned)) budget pan loopCtxt .ln) target) :
+      (declWhileSourceLoopLimit declarations initializers globals caller (ofString name) (.const (BitVec.ofNat 64 count)) (.var .local (ofString name)) (.assign .local (ofString name) (.op .sub [.var .local (ofString name),.const 1])) (.return (.const returned)) budget loopCtxt .ln) target) :
     let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
     ∃ originalResult,
       evalPanValueFfiProgSteps context primitive handler production.structs functions
@@ -72,7 +72,7 @@ theorem counted_simplifiedCountdown_fullCompiler_riscv {σ : Type}
             (.dec (ofString name) .one (.const (BitVec.ofNat 64 count)) (.seq .skip
               (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))))))
           entry (assignLoopEntryWordContext entry) (firstLoopName,2)
-          (declWhileSourceLoopLimit declarations initializers globals caller (ofString name) (.const (BitVec.ofNat 64 count)) (.var .local (ofString name)) (.assign .local (ofString name) (.op .sub [.var .local (ofString name),.const 1])) (.return (.const returned)) budget pan loopCtxt .ln)) native.backend.resourceTickLimit ∧
+          (declWhileSourceLoopLimit declarations initializers globals caller (ofString name) (.const (BitVec.ofNat 64 count)) (.var .local (ofString name)) (.assign .local (ofString name) (.op .sub [.var .local (ofString name),.const 1])) (.return (.const returned)) budget loopCtxt .ln)) native.backend.resourceTickLimit ∧
       evaluateTargetHOL native.backend.mc native.backend.lab.ffi ticks native.backend.machine =
           (.halt outcome,finalMachine,finalFfi) ∧
       ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨

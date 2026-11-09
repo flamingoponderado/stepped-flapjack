@@ -23,17 +23,18 @@ open Flapjack.Compiler.Backend.Semantics.TargetProps Flapjack.Compiler.Encoders.
 open Flapjack.Compiler.Encoders.Asm
 open SteppedFlapjack.WordAllocSteps SteppedFlapjack.LabToTargetSteps
 
-/-- The source-derived Loop budget for a declaration, loop, and return. -/
-noncomputable def declWhileSourceLoopLimit {σ : Type}
+/-- The Loop budget for a declaration, loop, and return, computed from the
+source budget and compiler inputs without inspecting source state. -/
+noncomputable def declWhileSourceLoopLimit
     (declarations : List (DeclHOL 64)) (initializers : List (ProgHOL 64))
     (globals : PanGlobalsContextExact 64) (caller : PanToCrepContextExact 64)
     (name : MlS) (initializer condition : ExpHOL 64) (body tail : ProgHOL 64)
-    (sourceBudget : Nat) (pan : PanSemStateFiniteExact 64 σ)
+    (sourceBudget : Nat)
     (loopCtxt : CrepToLoopContextExact) (live : NumSet) : Nat :=
   let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
   let inner := scalarDeclContext callee name
   let crepInit := compileProgExactHOLW caller (nestedSeqHOL initializers)
-  let globalLimit := controlSteps (nestedSeqHOL initializers) pan +
+  let globalLimit := sizeOf (nestedSeqHOL initializers) +
     (3 + sizeOf (compileProgExactHOL globals body) + sizeOf (compileProgExactHOL globals tail)) * sourceBudget + 2
   let crepLimit := sizeOf crepInit + 2 +
     (3 + sizeOf (compileProgExactHOLW inner (compileProgExactHOL globals body)) +
@@ -81,7 +82,7 @@ theorem declWhile_source_loop_ready {σ : Type}
     let entry := optimiseHOL (compileHOLExact loopCtxt live
       (.seq (compileProgExactHOLW caller (nestedSeqHOL initializers)) (.call none (newMainNameHOL declarations) [])))
     let limit := declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body
-      (.return (.const returned)) budget pan loopCtxt live
+      (.return (.const returned)) budget loopCtxt live
     ∃ extra,
       FullInitReturnedReady entry {target with clock := target.clock+extra}
         {word with clock := word.clock+extra} limit sourceFinal := by
@@ -120,8 +121,9 @@ theorem declWhile_source_loop_ready {σ : Type}
   have crepLimitBound : CrepSteps.steps (.seq crepInit (.call none (newMainNameHOL declarations) [])) crep ≤
       sizeOf crepInit + 2 + (3 + sizeOf (compileProgExactHOLW inner (compileProgExactHOL globals body)) +
         sizeOf (compileProgExactHOLW inner (compileProgExactHOL globals (.return (.const returned))))) *
-        (controlSteps (nestedSeqHOL initializers) pan + (3 + sizeOf (compileProgExactHOL globals body) +
+        (sizeOf (nestedSeqHOL initializers) + (3 + sizeOf (compileProgExactHOL globals body) +
           sizeOf (compileProgExactHOL globals (.return (.const returned)))) * budget + 2) := by
+    have initBound := branch_control_static initShape pan
     have scaled := Nat.mul_le_mul_left (3 + sizeOf (compileProgExactHOLW inner (compileProgExactHOL globals body)) +
       sizeOf (compileProgExactHOLW inner (compileProgExactHOL globals (.return (.const returned))))) globalBound
     have scaledSource := Nat.mul_le_mul_left (3 + sizeOf (compileProgExactHOL globals body) +
@@ -131,7 +133,7 @@ theorem declWhile_source_loop_ready {σ : Type}
       controlSteps (nestedSeqHOL initializers) pan + (3 + sizeOf (compileProgExactHOL globals body) +
         sizeOf (compileProgExactHOL globals (.return (.const returned)))) *
         controlSteps originalBody source + 2 ≤
-      controlSteps (nestedSeqHOL initializers) pan + (3 + sizeOf (compileProgExactHOL globals body) +
+      sizeOf (nestedSeqHOL initializers) + (3 + sizeOf (compileProgExactHOL globals body) +
         sizeOf (compileProgExactHOL globals (.return (.const returned)))) * budget + 2)
     dsimp only [inner,originalBody] at scaled scaledBudget ⊢
     omega
@@ -201,10 +203,10 @@ theorem declWhile_source_fullInit_riscv {σ : Type}
     (native : FullInitAssignLoopInputs declarations start caller loopCtxt
       (assignLoopEntryProgram declarations initializers caller loopCtxt .ln)
       (declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body
-        (.return (.const returned)) budget pan loopCtxt .ln) target) :
+        (.return (.const returned)) budget loopCtxt .ln) target) :
     let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
     let limit := declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body
-      (.return (.const returned)) budget pan loopCtxt .ln
+      (.return (.const returned)) budget loopCtxt .ln
     ∃ outcome ticks finalMachine finalFfi,
       ticks ≤ max (native.backend.successTickLimit native.wc native.ac
         (loopToWordCompileHOL (compileProgHOLExact native.arch native.crepPrograms))
@@ -216,7 +218,7 @@ theorem declWhile_source_fullInit_riscv {σ : Type}
           (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = native.stack.ffi.ioEvents))) := by
   let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
   let limit := declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body
-    (.return (.const returned)) budget pan loopCtxt .ln
+    (.return (.const returned)) budget loopCtxt .ln
   obtain ⟨panCodeRel,programShapes,codeRel,entryMember⟩ := native.toAssignLoopCompilerInputs.frontendFacts
     declarations start initializers globals caller loopCtxt entry limit pan crep target rfl
     (.dec name .one initializer (.seq (.while condition body) (.return (.const returned)))) .one
@@ -280,13 +282,13 @@ theorem declWhile_noGlobals_source_fullInit_riscv {σ : Type}
     (targetDef : target = {concreteDeclLoopState arch crep (compileProgDeclsHOLW (compileTopExactHOL declarations start)) with memory := target.memory})
     (memoryRel : crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs)
     (native : FullInitAssignLoopInputs declarations start caller loopCtxt (assignLoopEntryProgram declarations initializers caller loopCtxt .ln)
-      (declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body (.return (.const returned)) budget pan loopCtxt .ln) target) :
+      (declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body (.return (.const returned)) budget loopCtxt .ln) target) :
     let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
     ∃ outcome ticks finalMachine finalFfi,
       ticks ≤ max (native.backend.successTickLimit native.wc native.ac
           (loopToWordCompileHOL (compileProgHOLExact native.arch native.crepPrograms))
           entry (assignLoopEntryWordContext entry) (firstLoopName,2)
-          (declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body (.return (.const returned)) budget pan loopCtxt .ln)) native.backend.resourceTickLimit ∧
+          (declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body (.return (.const returned)) budget loopCtxt .ln)) native.backend.resourceTickLimit ∧
       evaluateTargetHOL native.backend.mc native.backend.lab.ffi ticks native.backend.machine =
           (.halt outcome,finalMachine,finalFfi) ∧
       ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨

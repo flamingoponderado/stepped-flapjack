@@ -1,3 +1,7 @@
+import SteppedFlapjack.Concrete.ScalarEntry
+import SteppedFlapjack.Test.ScalarLoopTree
+import SteppedFlapjack.Test.ScalarExecutable
+import SteppedFlapjack.Test.ScalarPrefix
 import SteppedFlapjack.Test.CountedInvert
 import SteppedFlapjack.Test.Ffi
 import SteppedFlapjack.Test.GlobalEntryExample

@@ -7,27 +7,14 @@ namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.LoopSemStateFiniteExact
 open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 
-private theorem loop_timeout {width : Nat} [NeZero width] {F : Type}
-    (live : NumSet) (body : HolLoopProg width) (target : LoopSemStateFiniteExact width F)
-    (clockZero : target.clock = 0) (subset : sptSubsetLive live target.locals) :
-    evaluate (.loop live body live) target = (some .timeOut,{target with locals := .ln}) := by
-  have cut : cutRes live (none,target) = (some .timeOut,{target with locals := .ln}) := by
-    rw [cutRes]
-    simp only
-    rw [cutState_of_subset live target subset]
-    simp [clockZero]
-  rw [evaluate]
-  split
-  next x h => rw [cut] at h; simp at h
-  next h => exact cut
-
 /-- Branch-condition loops with branch bodies admit a compiler clock bounded by
 source evaluator visits and compiled-body syntax. -/
 theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Type}
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
-    (body : CrepProgHOL width) (bodyShape : BranchProgram body)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
+    (body : CrepProgHOL width) (bodyFactor : Nat)
     (source sourceFinal : CrepSemHOLState width F) (result : Option (CrepResultHOLExact width))
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (bodySim : @BodySimulation width _ F body ctxt live (fun n => bodyFactor*(n+1)))
     (run : evalCrepSemHOLProgExact source (.while condition body) = (result,sourceFinal))
     (nonerror : result ≠ some .error)
     (stateRel : crepToLoopStateRelExact source target)
@@ -36,7 +23,7 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
     (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
     (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
     ∃ extra post,
-      extra ≤ (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) + sizeOf (compileHOLExact ctxt live body)+2) * (CrepSteps.steps (.while condition body) source+1) ∧
+      extra ≤ (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) + bodyFactor+2) * (CrepSteps.steps (.while condition body) source+1) ∧
       evaluate (compileHOLExact ctxt live (.while condition body)) {target with clock := target.clock+extra} =
         (resultToLoop result,post) ∧
       crepToLoopStateRelExact sourceFinal post ∧
@@ -56,9 +43,12 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
         by_cases zero : source.clock = 0
         · simp only [zero,if_true,Prod.mk.injEq] at run
           obtain ⟨rfl,rfl⟩ := run
-          obtain ⟨code,value,next,outLive,_,compiled,_,_⟩ := branchCondition_compileWhile condition conditionShape body bodyShape ctxt live
+          obtain ⟨code,value,next,outLive,exprCompiled,_,_⟩ := condition_prefix_shape conditionShape ctxt (ctxt.vmax+1) live
+          have compiled : compileHOLExact ctxt live (.while condition body) =
+              .loop live (branchConditionWhileBody ctxt live code value next body) live := by
+            simp only [compileHOLExact,exprCompiled,branchConditionWhileBody]
           have tz : target.clock = 0 := stateRel.2.2.1 ▸ zero
-          have h := loop_timeout live (branchConditionWhileBody ctxt live code value next body) target tz localsRel.2.2.1
+          have h := loop_timeout_of_subset live (branchConditionWhileBody ctxt live code value next body) target tz localsRel.2.2.1
           refine ⟨0,{target with locals := .ln},by omega,?_,?_,?_,?_,?_,?_⟩
           · simpa [compiled,resultToLoop] using h
           · simpa [crepToLoopStateRelExact,CrepSemHOLState.emptyLocals] using stateRel
@@ -77,7 +67,7 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
           have continueCase (hcontinue : bodyResult = none ∨ bodyResult = some (.continue 0))
               (rest : evalCrepSemHOLProgExact postSource (.while condition body) = (result,sourceFinal)) :
               ∃ extra post,
-                extra ≤ (sizeOf (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) + sizeOf (compileHOLExact ctxt live body)+2) * (CrepSteps.steps (.while condition body) source+1) ∧
+                extra ≤ (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) + bodyFactor+2) * (CrepSteps.steps (.while condition body) source+1) ∧
                 evaluate (compileHOLExact ctxt live (.while condition body)) {target with clock := target.clock+extra} =
                   (resultToLoop result,post) ∧
                 crepToLoopStateRelExact sourceFinal post ∧
@@ -86,16 +76,16 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
                 crepToLoopCodeRelExact ctxt sourceFinal.code post.code ∧
                 localsResultRel ctxt live result sourceFinal post := by
             obtain ⟨code,value,next,outLive,first,middle,hcompiled,hfirst,hs,hm,hg,hcode,hl,step⟩ :=
-              branchCondition_continue_run condition conditionShape body bodyShape source postSource bodyResult target ctxt live
-                w.1 guard nz zero bodyRun hcontinue stateRel memRel globalsRel codeRel localsRel
+              branchCondition_continue_run condition conditionShape body (fun n => bodyFactor*(n+1)) source postSource bodyResult target ctxt live
+                bodySim w.1 guard nz zero bodyRun hcontinue stateRel memRel globalsRel codeRel localsRel
             have codeEq : code = (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1 := by
               simpa using congrArg Prod.fst hcompiled.symm
             rw [codeEq] at hfirst
             obtain ⟨tail,post,htail,he,hstate,hmem,hglobal,hcode',hlocal⟩ :=
               ih postSource.clock smaller postSource sourceFinal result middle rest nonerror hs hm hg hcode hl rfl
-            have counts : CrepSteps.steps (.while condition body) postSource + 1 ≤ CrepSteps.steps (.while condition body) source := by
-              rcases hcontinue with h | h <;> simp only [h] at count <;> rw [count] <;>
-                simp [Nat.add_comm]
+            have counts : CrepSteps.steps body (decClockCrepSemHOL source) +
+                CrepSteps.steps (.while condition body) postSource + 1 ≤ CrepSteps.steps (.while condition body) source := by
+              rcases hcontinue with h | h <;> simp only [h] at count <;> rw [count] <;> exact Nat.le_of_eq (Nat.add_comm _ _)
             refine ⟨first+tail,post,?_,?_,hstate,hmem,hglobal,hcode',hlocal⟩
             · nlinarith
             · exact (step tail).trans he
@@ -110,8 +100,8 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
                 simp only [Prod.mk.injEq] at run
                 obtain ⟨rfl,rfl⟩ := run
                 obtain ⟨code,value,next,outLive,extra,post,hcompiled,hbound,hs,hm,hg,hcode,hl,he⟩ :=
-                  branchCondition_break_run condition conditionShape body bodyShape source postSource target ctxt live
-                    w.1 guard nz zero bodyRun stateRel memRel globalsRel codeRel localsRel
+                  branchCondition_break_run condition conditionShape body (fun n => bodyFactor*(n+1)) source postSource target ctxt live
+                    bodySim w.1 guard nz zero bodyRun stateRel memRel globalsRel codeRel localsRel
                 have codeEq : code = (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1 := by
                   simpa using congrArg Prod.fst hcompiled.symm
                 rw [codeEq] at hbound
@@ -125,8 +115,8 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
                 obtain ⟨rfl,rfl⟩ := eq
                 have ne : r ≠ .error := by intro h; subst r; exact nonerror rfl
                 obtain ⟨code,value,next,outLive,extra,post,hcompiled,hbound,hs,hm,hg,hcode,hl,he⟩ :=
-                  branchCondition_exit_run condition conditionShape body bodyShape source postSource r target ctxt live
-                    w.1 guard nz zero bodyRun hcont hbreak ne stateRel memRel globalsRel codeRel localsRel
+                  branchCondition_exit_run condition conditionShape body (fun n => bodyFactor*(n+1)) source postSource r target ctxt live
+                    bodySim w.1 guard nz zero bodyRun hcont hbreak ne stateRel memRel globalsRel codeRel localsRel
                 have codeEq : code = (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1 := by
                   simpa using congrArg Prod.fst hcompiled.symm
                 rw [codeEq] at hbound
@@ -153,8 +143,8 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
 /-- The same correctness witness bounds actual compiled Loop visits by a
 source-step expression with factors computed from the compiled loop body. -/
 theorem branchConditionWhile_bounded_steps {width : Nat} [NeZero width] {F : Type}
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
-    (body : CrepProgHOL width) (bodyShape : BranchProgram body)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
+    (body : CrepProgHOL width) (bodyShape : LoopFreeCrep body)
     (source sourceFinal : CrepSemHOLState width F) (result : Option (CrepResultHOLExact width))
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet)
     (run : evalCrepSemHOLProgExact source (.while condition body) = (result,sourceFinal))
@@ -179,8 +169,8 @@ theorem branchConditionWhile_bounded_steps {width : Nat} [NeZero width] {F : Typ
         ((sizeOf (loopNestedSeqHOL code) + sizeOf (compileHOLExact ctxt live body)+3) * (CrepSteps.steps (.while condition body) source+1)) := by
   obtain ⟨code,value,next,outLive,exprCompiled,compiled,bodyLoop,_⟩ := branchCondition_compileWhile condition conditionShape body bodyShape ctxt live
   obtain ⟨extra,post,clockBound,targetRun,hs,hm,hg,hc,hl⟩ :=
-    branchConditionWhile_bounded_clock condition conditionShape body bodyShape source sourceFinal result target ctxt live
-      run nonerror stateRel memRel globalsRel codeRel localsRel
+    branchConditionWhile_bounded_clock condition conditionShape body (sizeOf (compileHOLExact ctxt live body)) source sourceFinal result target ctxt live
+      (loopFree_linearBodySimulation body bodyShape ctxt live) run nonerror stateRel memRel globalsRel codeRel localsRel
   refine ⟨code,value,next,outLive,extra,post,exprCompiled,compiled,targetRun,hs,hm,hg,hc,hl,?_⟩
   have loopRun : evaluate (.loop live (branchConditionWhileBody ctxt live code value next body) live)
       {target with clock := target.clock+extra} = (resultToLoop result,post) := by
@@ -190,6 +180,13 @@ theorem branchConditionWhile_bounded_steps {width : Nat} [NeZero width] {F : Typ
   have codeEq : code = (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1 := by
     simpa using congrArg Prod.fst exprCompiled.symm
   rw [← codeEq] at clockBound
+  obtain ⟨prefixCode,_,_,_,prefixCompiled,prefixShape,_⟩ :=
+    condition_prefix_shape conditionShape ctxt (ctxt.vmax+1) live
+  have prefixEq : prefixCode = code := by
+    have h := congrArg Prod.fst (prefixCompiled.symm.trans exprCompiled)
+    simpa using h
+  subst prefixCode
+  have prefixWeight := LoopSteps.branchedProgram_weight_le_size (nestedSeq_branched code prefixShape)
   have sourceCount := CrepSteps.while_clock_consumed condition body bodyShape source sourceFinal result run
   have delta : source.clock + extra - sourceFinal.clock + 1 ≤
       CrepSteps.steps (.while condition body) source + extra + 1 := by omega

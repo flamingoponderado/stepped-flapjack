@@ -1,3 +1,5 @@
+import SteppedFlapjack.CrepToLoopSteps.BranchExtraClock
+import SteppedFlapjack.CrepSteps.ScalarClock
 import SteppedFlapjack.CrepSteps.BranchClock
 
 /-! Source clock consumption for loops with branch-program bodies. -/
@@ -7,7 +9,7 @@ open SteppedFlapjack.CrepToLoopSteps
 
 /-- A Crep while loop consumes no more source clock than its actual visits. -/
 theorem while_clock_consumed {width : Nat} [NeZero width] {σ : Type}
-    (condition : CrepExpHOL width) (body : CrepProgHOL width) (shape : BranchProgram body)
+    (condition : CrepExpHOL width) (body : CrepProgHOL width) (shape : LoopFreeCrep body)
     (source final : CrepSemHOLState width σ) (result : Option (CrepResultHOLExact width))
     (run : evalCrepSemHOLProgExact source (.while condition body) = (result,final)) :
     source.clock - final.clock ≤ steps (.while condition body) source := by
@@ -31,7 +33,11 @@ theorem while_clock_consumed {width : Nat} [NeZero width] {σ : Type}
         · simp only [if_neg clockZero] at run
           simp only [if_pos (show w.1 ≠ 0 ∧ source.clock ≠ 0 from ⟨nz,clockZero⟩)]
           rcases bodyRun : evalCrepSemHOLProgExact (decClockCrepSemHOL source) body with ⟨bodyResult,post⟩
-          have bodyBound := branchProgram_clock_consumed shape (decClockCrepSemHOL source) post bodyResult bodyRun
+          have bodyBound : (decClockCrepSemHOL source).clock - post.clock ≤
+              steps body (decClockCrepSemHOL source) := by
+            cases shape with
+            | branch h => exact branchProgram_clock_consumed h _ _ _ bodyRun
+            | scalar h _ => exact scalarProgram_clock_consumed h _ _ _ bodyRun
           have bodyClock := evalCrepSemHOLProgExact_clock_le (decClockCrepSemHOL source) body
           rw [bodyRun] at bodyClock
           simp only [decClockCrepSemHOL] at bodyClock

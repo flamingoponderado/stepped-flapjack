@@ -1,3 +1,4 @@
+import SteppedFlapjack.CrepToLoopSteps.ProgramBound
 import SteppedFlapjack.CrepToLoopSteps.WhileSequence
 
 /-! Compositional bounds for a loop-free prefix. -/
@@ -6,32 +7,11 @@ open Flapjack Flapjack.LoopSemStateFiniteExact
 open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open SteppedFlapjack.LoopToWordSteps
 
-/-- Semantic and quantitative correctness for one fixed compiled program. -/
-def ProgramBound {width : Nat} [NeZero width] {σ : Type}
-    (p : CrepProgHOL width) (ctxt : CrepToLoopContextExact) (live : NumSet) (factor : Nat) : Prop :=
-  ∀ (source sourceFinal : CrepSemHOLState width σ) (result : Option (CrepResultHOLExact width))
-    (target : LoopSemStateFiniteExact width σ),
-    evalCrepSemHOLProgExact source p = (result,sourceFinal) → result ≠ some .error →
-    crepToLoopStateRelExact source target →
-    crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs →
-    crepToLoopGlobalsRelHOLExact source.globals target.globals →
-    crepToLoopCodeRelExact ctxt source.code target.code →
-    crepToLoopLocalsRelExact ctxt live source.locals target.locals →
-    ∃ extra targetFinal,
-      evaluate (compileHOLExact ctxt live p) {target with clock := target.clock+extra} = (resultToLoop result,targetFinal) ∧
-      crepToLoopStateRelExact sourceFinal targetFinal ∧
-      crepToLoopMemRelHOLExact sourceFinal.memory targetFinal.memory sourceFinal.memaddrs ∧
-      crepToLoopGlobalsRelHOLExact sourceFinal.globals targetFinal.globals ∧
-      crepToLoopCodeRelExact ctxt sourceFinal.code targetFinal.code ∧
-      localsResultRel ctxt live result sourceFinal targetFinal ∧
-      LoopSteps.steps (compileHOLExact ctxt live p) {target with clock := target.clock+extra} ≤
-        factor * (CrepSteps.steps p source+1)
-
 /-- Prepending a supported branch preserves a continuation's proved bound.
 This is a compositional lemma; its continuation premise is discharged by
 specific program proofs. -/
 theorem branchPrefix_bound {width : Nat} [NeZero width] {σ : Type}
-    (headProg suffix : CrepProgHOL width) (shape : BranchProgram headProg)
+    (headProg suffix : CrepProgHOL width) (shape : LoopFreeCrep headProg)
     (ctxt : CrepToLoopContextExact) (live : NumSet) (factor : Nat)
     (continuation : @ProgramBound width _ σ suffix ctxt live factor) :
     @ProgramBound width _ σ (.seq headProg suffix) ctxt live
@@ -65,7 +45,7 @@ theorem branchPrefix_bound {width : Nat} [NeZero width] {σ : Type}
         {target with clock := target.clock+(firstExtra+secondExtra)} =
           (none,{firstTarget with clock := firstTarget.clock+secondExtra}) := by
       simpa [Nat.add_assoc] using lift
-    have firstBound := LoopSteps.branchedProgram_static_bound (compile_branchProgram shape ctxt live)
+    have firstBound := LoopSteps.branchedProgram_static_bound (compile_loopFreeCrep shape ctxt live)
       {target with clock := target.clock+(firstExtra+secondExtra)}
     have count := LoopSteps.steps_seq (compileHOLExact ctxt live headProg) (compileHOLExact ctxt live suffix)
       {target with clock := target.clock+(firstExtra+secondExtra)}
@@ -89,7 +69,7 @@ theorem branchPrefix_bound {width : Nat} [NeZero width] {σ : Type}
       | some v => simp [firstMap]
     · have count := LoopSteps.steps_seq (compileHOLExact ctxt live headProg) (compileHOLExact ctxt live suffix)
         {target with clock := target.clock+firstExtra}
-      have bound := LoopSteps.branchedProgram_static_bound (compile_branchProgram shape ctxt live)
+      have bound := LoopSteps.branchedProgram_static_bound (compile_loopFreeCrep shape ctxt live)
         {target with clock := target.clock+firstExtra}
       rw [firstTargetRun] at count
       cases firstTargetResult with

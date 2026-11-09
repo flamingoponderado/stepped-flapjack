@@ -1,3 +1,19 @@
+import SteppedFlapjack.CrepToLoopSteps.ScalarPrefixOutput
+import SteppedFlapjack.CrepToLoopSteps.ScalarLoopWeight
+import SteppedFlapjack.Concrete.ComparisonLoopSpan
+import SteppedFlapjack.Concrete.ScalarEntry
+import SteppedFlapjack.CrepToLoopSteps.ScalarSequenceBound
+import SteppedFlapjack.Concrete.CrepLoopError
+import SteppedFlapjack.Concrete.ConditionalLoopSpan
+import SteppedFlapjack.CrepSteps.ScalarClock
+import SteppedFlapjack.Concrete.CountdownLoopSpan
+import SteppedFlapjack.Concrete.BranchEntryLoop
+import SteppedFlapjack.Concrete.WitnessLoopCode
+import SteppedFlapjack.CrepToLoopSteps.ScalarExecutable
+import SteppedFlapjack.CrepToLoopSteps.ScalarLoopConsumption
+import SteppedFlapjack.CrepToLoopSteps.ScalarLoopLive
+import SteppedFlapjack.CrepToLoopSteps.ScalarLoopShape
+import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
 import SteppedFlapjack.Concrete.ScopePreservation
 import SteppedFlapjack.Concrete.CrepErrorLeaf
 import SteppedFlapjack.Concrete.ScalarParity
@@ -435,6 +451,8 @@ import SteppedFlapjack.StackRemoveSteps.CompCorrect.Leaf
 The step-counted structured Pancake source semantics, split out of Flapjack in
 phase 4 of flapjack#1251:
 
+- `SteppedFlapjack.CrepToLoopSteps.ScalarPrefix`:
+  generalized scalar compilation prefixes and explicit structural Loop visit bounds;
 - `SteppedFlapjack.PanValueExpCounted`, `SteppedFlapjack.PanExpressionEvaluator`:
   expression evaluators that count steps;
 - `SteppedFlapjack.PanSteppedSemantics`, `SteppedFlapjack.PanValueFfiSemantics`:
@@ -850,3 +868,5 @@ Module names moved from `Flapjack.*` to `SteppedFlapjack.*`; declarations keep
 their names in the `Flapjack` namespace. The tests are in the separate
 `SteppedFlapjackTests` library, rooted at `SteppedFlapjack.Tests`.
 -/
+
+

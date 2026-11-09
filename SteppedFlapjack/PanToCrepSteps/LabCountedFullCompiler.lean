@@ -90,12 +90,10 @@ theorem labInitialized_counted_declared_fullCompiler_riscv {σ : Type}
     (wordMemory : ∀ address, (labInitializedOriginal template stack backend).memaddrs address →
       ∃ word, backend.lab.memory address = .word word) :
     let source := labInitializedOriginal template stack backend
-    let pan := noGlobalsLoweredPreCall source (HolFiniteMapExact.empty.updateList
-      (functionsHOL (compileTopExactHOL declarations start)).reverse)
     let entry := assignLoopEntryProgram declarations [] caller loopCtxt .ln
     let limit := declWhileSourceLoopLimit declarations [] emptyGlobalsContext caller (ofString name)
       (.const initial) (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment))
-      (.return (.const returned)) budget pan loopCtxt .ln
+      (.return (.const returned)) budget loopCtxt .ln
     ∃ sourceFinal,
       source.evaluateHOLFiniteState (.dec (ofString name) .one (.const initial) (.seq .skip (.seq
         (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment))) (.return (.const returned))))) =
@@ -120,7 +118,7 @@ theorem labInitialized_counted_declared_fullCompiler_riscv {σ : Type}
   let entry := assignLoopEntryProgram declarations [] caller loopCtxt .ln
   let limit := declWhileSourceLoopLimit declarations [] emptyGlobalsContext caller (ofString name)
     (.const initial) (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment))
-    (.return (.const returned)) budget pan loopCtxt .ln
+    (.return (.const returned)) budget loopCtxt .ln
   have preCall : pan = {labInitializedSource template stack backend with code := panCode} := by
     exact labInitializedOriginal_preCall template stack backend panCode clockPositive
   have memRel : crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs := by

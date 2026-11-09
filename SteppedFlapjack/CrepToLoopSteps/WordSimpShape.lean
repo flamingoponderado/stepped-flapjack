@@ -59,7 +59,7 @@ theorem compile_branchProgram_loopBranch {width : Nat} [NeZero width] {p : CrepP
 
 /-- The compiler-generated condition prefix and body form a Loop branch. -/
 theorem branchConditionWhile_loopBranch {width : Nat} [NeZero width]
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (body : CrepProgHOL width) (bodyShape : BranchProgram body)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     ∃ code value next outLive,
@@ -67,27 +67,8 @@ theorem branchConditionWhile_loopBranch {width : Nat} [NeZero width]
       compileHOLExact ctxt live (.while condition body) =
         .loop live (branchConditionWhileBody ctxt live code value next body) live ∧
       LoopBranch (branchConditionWhileBody ctxt live code value next body) := by
-  obtain ⟨code,value,next,outLive,compiled,_,_⟩ :=
-    condition_prefix_shape conditionShape ctxt (ctxt.vmax+1) live
-  have hprefix : ∀ p ∈ code, LoopBranch p := by
-    cases conditionShape with
-    | direct h =>
-      obtain ⟨v,hv⟩ := directExpression_noCode h ctxt (ctxt.vmax+1) live
-      rw [hv] at compiled
-      cases compiled
-      simp
-    | @cmp op a b ha hb =>
-      obtain ⟨va,ca⟩ := directExpression_noCode ha ctxt (ctxt.vmax+1) live
-      obtain ⟨vb,cb⟩ := directExpression_noCode hb ctxt (ctxt.vmax+1) live
-      have actual := compiled
-      simp only [compileExpHOLExact,ca,cb,progIfHOLExact,List.nil_append] at actual
-      cases actual
-      intro p hp
-      simp only [List.mem_cons,List.not_mem_nil,or_false] at hp
-      rcases hp with rfl | rfl | rfl
-      · exact .assign _ _
-      · exact .assign _ _
-      · exact .ite _ _ _ _ (.assign _ _) (.assign _ _)
+  obtain ⟨code,value,next,outLive,compiled,_,_,hprefix⟩ :=
+    compiledScalar_prefix conditionShape ctxt (ctxt.vmax+1) live
   have nested : ∀ code : List (HolLoopProg width), (∀ p ∈ code, LoopBranch p) → LoopBranch (loopNestedSeqHOL code) := by
     intro xs hx
     induction xs with

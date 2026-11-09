@@ -1,6 +1,8 @@
 import SteppedFlapjack.CrepToLoopSteps.BranchExtraClock
+import SteppedFlapjack.LoopSteps.ClockConsumption
+import SteppedFlapjack.CrepToLoopSteps.ScalarPrefix
 
-/-! Conditions whose compiled expression prefixes are loop-free. -/
+/-! Scalar conditions whose compiled expression prefixes are loop-free. -/
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.LoopSemStateFiniteExact
 open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
@@ -11,38 +13,28 @@ inductive BranchCondition {width : Nat} [NeZero width] : CrepExpHOL width → Pr
   | direct {e} : DirectExpression e → BranchCondition e
   | cmp (op) {a b} : DirectExpression a → DirectExpression b → BranchCondition (.cmp op a b)
 
+/-- Legacy simple conditions belong to the full scalar fragment. -/
+theorem BranchCondition.toScalar {width : Nat} [NeZero width] {e : CrepExpHOL width}
+    (shape : BranchCondition e) : CompiledScalar e := by
+  cases shape with
+  | direct h => exact .direct h
+  | cmp op a b => exact .cmp op (.direct a) (.direct b)
+
+instance {width : Nat} [NeZero width] {e : CrepExpHOL width} :
+    Coe (BranchCondition e) (CompiledScalar e) where
+  coe := BranchCondition.toScalar
+
 /-- Each generated prefix statement is loop-free and supported by instruction
 selection; this exposes the actual compiler output and fresh temporaries. -/
 theorem condition_prefix_shape {width : Nat} [NeZero width] {e : CrepExpHOL width}
-    (shape : BranchCondition e) (ctxt : CrepToLoopContextExact) (tmp : Nat) (live : NumSet) :
+    (shape : CompiledScalar e) (ctxt : CrepToLoopContextExact) (tmp : Nat) (live : NumSet) :
     ∃ code value next outLive,
       compileExpHOLExact ctxt tmp live e = (code,value,next,outLive) ∧
       (∀ p ∈ code, BranchedProgram p) ∧
       (∀ p ∈ code, LoopSelectProgram p) := by
-  cases shape with
-  | direct h =>
-    obtain ⟨value,compiled⟩ := directExpression_noCode h ctxt tmp live
-    exact ⟨[],value,tmp,live,compiled,by simp,by simp⟩
-  | @cmp op a b ha hb =>
-    obtain ⟨va,ca⟩ := directExpression_noCode ha ctxt tmp live
-    obtain ⟨vb,cb⟩ := directExpression_noCode hb ctxt tmp live
-    refine ⟨[.assign (tmp+1) va, .assign (tmp+2) vb,
-      .ite op (tmp+1) (.reg (tmp+2)) (.assign (tmp+1) (.const 1))
-        (.assign (tmp+1) (.const 0)) (sptListInsert [tmp+1,tmp+2] live)],
-      .var (tmp+1),tmp+3,sptListInsert [tmp+1,tmp+2] live,?_,?_,?_⟩
-    · simp only [compileExpHOLExact,ca,cb,progIfHOLExact,List.nil_append]
-    · intro p hp
-      simp only [List.mem_cons,List.not_mem_nil,or_false] at hp
-      rcases hp with rfl | rfl | rfl
-      · exact .leaf (.assign _ _)
-      · exact .leaf (.assign _ _)
-      · exact .ite _ _ _ _ (.leaf (.assign _ _)) (.leaf (.assign _ _))
-    · intro p hp
-      simp only [List.mem_cons,List.not_mem_nil,or_false] at hp
-      rcases hp with rfl | rfl | rfl
-      · exact .assign _ _
-      · exact .assign _ _
-      · exact .ite _ _ _ _ (.assign _ _) (.assign _ _)
+  obtain ⟨code,value,next,outLive,compiled,branch,selected,_⟩ :=
+    compiledScalar_prefix shape ctxt tmp live
+  exact ⟨code,value,next,outLive,compiled,branch,selected⟩
 
 /-- A nested sequence of loop-free statements is loop-free. -/
 theorem nestedSeq_branched {width : Nat} [NeZero width] (code : List (HolLoopProg width))
@@ -52,6 +44,19 @@ theorem nestedSeq_branched {width : Nat} [NeZero width] (code : List (HolLoopPro
   | cons p code ih =>
     simp only [loopNestedSeqHOL]
     exact .seq (shape p (by simp)) (ih (by intro q hq; exact shape q (by simp [hq])))
+
+/-- The actual Loop prefix for a generalized scalar expression has a
+literal-independent visit bound, with no execution or fuel premise. -/
+theorem compiledScalar_prefix_steps {width : Nat} [NeZero width] {σ : Type}
+    {e : CrepExpHOL width} (shape : CompiledScalar e)
+    (ctxt : CrepToLoopContextExact) (tmp : Nat) (live : NumSet)
+    (state : LoopSemStateFiniteExact width σ) :
+    let code := (compileExpHOLExact ctxt tmp live e).1
+    LoopSteps.steps (loopNestedSeqHOL code) state ≤
+      LoopSteps.structuralWeight (loopNestedSeqHOL code) := by
+  obtain ⟨code,value,next,outLive,compiled,branch,_⟩ := compiledScalar_prefix shape ctxt tmp live
+  have bounded := LoopSteps.branchedProgram_structural_bound (nestedSeq_branched code branch) state
+  simpa [compiled] using bounded
 
 /-- A nested sequence of selected statements is selected. -/
 theorem nestedSeq_select {width : Nat} [NeZero width] (code : List (HolLoopProg width))
@@ -63,54 +68,23 @@ theorem nestedSeq_select {width : Nat} [NeZero width] (code : List (HolLoopProg 
     exact .seq (shape p (by simp)) (ih (by intro q hq; exact shape q (by simp [hq])))
 
 /-- Every correctness clock witness for a compiled branch condition prefix is
-bounded by that prefix's syntax size. -/
+bounded by that prefix's control-node weight. -/
 theorem condition_extraClock_bound {width : Nat} [NeZero width] {σ : Type}
     (source : CrepSemHOLState width σ) (target post : LoopSemStateFiniteExact width σ)
     (code : List (HolLoopProg width)) (extra : Nat)
     (shape : ∀ p ∈ code, BranchedProgram p)
     (stateRel : crepToLoopStateRelExact source target)
     (run : evaluate (loopNestedSeqHOL code) {target with clock := target.clock+extra} = (none,post))
-    (postRel : crepToLoopStateRelExact source post) : extra ≤ sizeOf (loopNestedSeqHOL code) := by
+    (postRel : crepToLoopStateRelExact source post) : extra ≤ LoopSteps.structuralWeight (loopNestedSeqHOL code) := by
   have hshape := nestedSeq_branched code shape
   have consumed := LoopSteps.branchedProgram_clock_consumed hshape
     {target with clock := target.clock+extra} post none run
-  have visits := LoopSteps.branchedProgram_static_bound hshape {target with clock := target.clock+extra}
+  have visits := LoopSteps.branchedProgram_structural_bound hshape {target with clock := target.clock+extra}
   have initial := stateRel.2.2.1
   have final := postRel.2.2.1
   simp only at consumed
   omega
 
-
-/-- The existing expression-correctness witness has a statically bounded
-extra clock for both direct and comparison conditions. -/
-theorem condition_correct_with_bounded_extra {width : Nat} [NeZero width] {σ : Type}
-    (e : CrepExpHOL width) (shape : BranchCondition e) (source : CrepSemHOLState width σ)
-    (v : HolWordLab width) (target : LoopSemStateFiniteExact width σ)
-    (ctxt : CrepToLoopContextExact) (tmp : Nat) (live : NumSet)
-    (evalSource : evalCrepSemHOLExp source e = some v)
-    (stateRel : crepToLoopStateRelExact source target)
-    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
-    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
-    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
-    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
-    (fresh : ctxt.vmax < tmp) :
-    ∃ code value next outLive extra post,
-      compileExpHOLExact ctxt tmp live e = (code,value,next,outLive) ∧
-      (∀ p ∈ code, BranchedProgram p) ∧ (∀ p ∈ code, LoopSelectProgram p) ∧
-      evaluate (loopNestedSeqHOL code) {target with clock := target.clock+extra} = (none,post) ∧
-      LoopSemStateFiniteExact.eval post value = some (wlabWlocExact v) ∧
-      crepToLoopStateRelExact source post ∧
-      crepToLoopMemRelHOLExact source.memory post.memory source.memaddrs ∧
-      crepToLoopGlobalsRelHOLExact source.globals post.globals ∧
-      crepToLoopCodeRelExact ctxt source.code post.code ∧
-      crepToLoopLocalsRelExact ctxt outLive source.locals post.locals ∧
-      extra ≤ sizeOf (loopNestedSeqHOL code) := by
-  obtain ⟨code,value,next,outLive,compiled,branch,selected⟩ := condition_prefix_shape shape ctxt tmp live
-  obtain ⟨extra,post,run,he,hs,hm,hg,hc,hl⟩ :=
-    crepToLoop_comp_exp_preserves_eval source e v target ctxt tmp live code value next outLive
-      ⟨evalSource,stateRel,memRel,globalsRel,codeRel,localsRel,compiled,fresh⟩
-  exact ⟨code,value,next,outLive,extra,post,compiled,branch,selected,run,he,hs,hm,hg,hc,hl,
-    condition_extraClock_bound source target post code extra branch stateRel run hs⟩
 
 /-- The actual loop body generated for a supported condition. -/
 def branchConditionWhileBody {width : Nat} [NeZero width]
@@ -120,11 +94,11 @@ def branchConditionWhileBody {width : Nat} [NeZero width]
     .ite .notEqual next (.imm (0 : BitVec width))
       (.seq (compileHOLExact ctxt live body) (.continue 0)) (.break 0) live])
 
-/-- Comparison conditions still compile to a loop whose body is loop-free
+/-- Scalar conditions compile to a loop whose body is loop-free
 and accepted by the selected RISC-V backend. -/
 theorem branchCondition_compileWhile {width : Nat} [NeZero width]
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
-    (body : CrepProgHOL width) (bodyShape : BranchProgram body)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
+    (body : CrepProgHOL width) (bodyShape : LoopFreeCrep body)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     ∃ code value next outLive,
       compileExpHOLExact ctxt (ctxt.vmax+1) live condition = (code,value,next,outLive) ∧
@@ -142,7 +116,7 @@ theorem branchCondition_compileWhile {width : Nat} [NeZero width]
     rcases hp with h | rfl | rfl
     · exact branch p h
     · exact .leaf (.assign _ _)
-    · exact .ite _ _ _ _ (.seq (compile_branchProgram bodyShape ctxt live) (.leaf (.continue 0))) (.leaf (.break 0))
+    · exact .ite _ _ _ _ (.seq (compile_loopFreeCrep bodyShape ctxt live) (.leaf (.continue 0))) (.leaf (.break 0))
   have fullSelect : ∀ p ∈ code ++ [.assign next value,
       .ite .notEqual next (.imm (0 : BitVec width))
         (.seq (compileHOLExact ctxt live body) (.continue 0)) (.break 0) live], LoopSelectProgram p := by
@@ -151,7 +125,7 @@ theorem branchCondition_compileWhile {width : Nat} [NeZero width]
     rcases hp with h | rfl | rfl
     · exact selected p h
     · exact .assign _ _
-    · exact .ite _ _ _ _ (.seq (compile_branchProgram_select bodyShape ctxt live) (.leaf (.continue 0))) (.leaf (.break 0))
+    · exact .ite _ _ _ _ (.seq (compile_loopFreeCrep_select bodyShape ctxt live) (.leaf (.continue 0))) (.leaf (.break 0))
   have hcomp : compileHOLExact ctxt live (.while condition body) =
       .loop live (branchConditionWhileBody ctxt live code value next body) live := by
     simp only [compileHOLExact,compiled,branchConditionWhileBody]

@@ -9,19 +9,19 @@ open SteppedFlapjack.LoopToWordSteps
 
 /-- The sequence is accepted by the existing Loop-to-RISC-V fragment. -/
 theorem conditionWhileThenBranch_select {width : Nat} [NeZero width]
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
-    (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
+    (body tail : CrepProgHOL width) (bodyShape : LoopFreeCrep body) (tailShape : LoopFreeCrep tail)
     (ctxt : CrepToLoopContextExact) (live : NumSet) :
     LoopSelectProgram (compileHOLExact ctxt live (.seq (.while condition body) tail)) := by
   obtain ⟨_,_,_,_,_,_,_,whileShape⟩ := branchCondition_compileWhile condition conditionShape body bodyShape ctxt live
   simpa only [compileHOLExact] using
-    LoopSelectProgram.seq whileShape (compile_branchProgram_select tailShape ctxt live)
+    LoopSelectProgram.seq whileShape (compile_loopFreeCrep_select tailShape ctxt live)
 
 /-- Actual compilation preserves a source-step bound for a direct Crep while
 followed by a supported branch, including early loop exits. -/
 theorem conditionWhileThenBranch_correct_with_steps {width : Nat} [NeZero width] {σ : Type}
-    (condition : CrepExpHOL width) (conditionShape : BranchCondition condition)
-    (body tail : CrepProgHOL width) (bodyShape : BranchProgram body) (tailShape : BranchProgram tail)
+    (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
+    (body tail : CrepProgHOL width) (bodyShape : LoopFreeCrep body) (tailShape : LoopFreeCrep tail)
     (source sourceFinal : CrepSemHOLState width σ) (result : Option (CrepResultHOLExact width))
     (target : LoopSemStateFiniteExact width σ) (ctxt : CrepToLoopContextExact) (live : NumSet)
     (run : evalCrepSemHOLProgExact source (.seq (.while condition body) tail) = (result,sourceFinal))
@@ -91,7 +91,7 @@ theorem conditionWhileThenBranch_correct_with_steps {width : Nat} [NeZero width]
         {target with clock := target.clock+(firstExtra+secondExtra)} =
           LoopSteps.steps (compileHOLExact ctxt live (.while condition body)) {target with clock := target.clock+firstExtra} := by
       simpa [compiledFirst,Nat.add_assoc] using stepLift
-    have secondBound := LoopSteps.branchedProgram_static_bound (compile_branchProgram tailShape ctxt live)
+    have secondBound := LoopSteps.branchedProgram_static_bound (compile_loopFreeCrep tailShape ctxt live)
       {firstTarget with clock := firstTarget.clock+secondExtra}
     have seqCount := LoopSteps.steps_seq (compileHOLExact ctxt live (.while condition body)) (compileHOLExact ctxt live tail)
       {target with clock := target.clock+(firstExtra+secondExtra)}
