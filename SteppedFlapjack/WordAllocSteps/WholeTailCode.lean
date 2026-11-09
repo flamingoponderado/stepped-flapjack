@@ -160,7 +160,7 @@ theorem wholeCompile_start_result_and_bound {C F : Type} (wc : Config) (ac : Asm
     (evaluate (.call none (some start) [0] none) target).2.ffi =
       (evaluate (.call none (some start) [0] none) {s with clock := clock}).2.ffi ∧
     steps (.call none (some start) [0] none) target ≤
-      1 + sizeOf entryOut * (sizeOf calleeOut + 1) * (clock + 1) := by
+      1 + wordControlWeight entryOut * (wordControlWeight calleeOut + 1) * (clock + 1) := by
   dsimp only
   let k := ac.regCount - (5 + ac.avoidRegs.length)
   let out := sptFromAList (compile wc ac programs).2
@@ -176,14 +176,14 @@ theorem wholeCompile_start_result_and_bound {C F : Type} (wc : Config) (ac : Asm
     dsimp only [calleeOut]
     rw [fullCompileSingle_eq_alloc ac ac.twoRegArith 1 dest wc.regAlg k (entryColour wc programs dest) calleeShape]
     exact wordAlloc_loopSequence dest ac wc.regAlg k _ (preAlloc_shape ac ac.twoRegArith 1 calleeShape)
-  have callBound : RegTailCodeBound entryOut out (sizeOf calleeOut) := by
+  have callBound : RegTailControlCodeBound entryOut out (wordControlWeight calleeOut) := by
     intro loc reached
     have eq := regAllowed_calls allowed loc reached
     subst loc
     exact ⟨calleeOut,calleeLookup,calleeShapeOut,le_rfl⟩
   have noInstall := (wholeCompile_tail_codeRelations wc ac programs shapes).2.2.2.2.1
   have bound := regTail_start_clock_bound start entryOut (regAllowed_shape allowed)
-    {s with clock := clock, code := out} value (sizeOf calleeOut) entryLookup arg noInstall callBound
+    {s with clock := clock, code := out} value (wordControlWeight calleeOut) entryLookup arg noInstall callBound
   have agree := wholeCompile_start_agrees wc ac programs shapes s start clock code gc stack nonerror
   exact ⟨agree.1,agree.2,bound⟩
 

@@ -17,10 +17,10 @@ inductive RegTailShape : WordLangProgHOL (BitVec width) → Prop
 
 /-- A direct tail call's visits are bounded by its actual callee's syntax and
 available clock, even if argument lookup fails or the call times out. -/
-theorem regDirectTail_clock_bound (loc reg : Nat) (callee : WordLangProgHOL (BitVec width))
+theorem regDirectTail_control_bound (loc reg : Nat) (callee : WordLangProgHOL (BitVec width))
     (shape : LoopSequence callee) (s : WordSemStateFiniteExact width C F)
     (lookup : sptLookup loc s.code = some (1,callee)) :
-    steps (.call none (some loc) [reg] none) s ≤ (1 + sizeOf callee) * (s.clock+1) := by
+    steps (.call none (some loc) [reg] none) s ≤ (1 + wordControlWeight callee) * (s.clock+1) := by
   cases hvar : getVar reg s with
   | none =>
     rw [steps.eq_def]
@@ -35,10 +35,10 @@ theorem regDirectTail_clock_bound (loc reg : Nat) (callee : WordLangProgHOL (Bit
       simp [args,wordSemBadDestArgs,wordSemAddRetLoc,found,clock]
     · rw [steps_call_tail (some loc) [reg] s [value] [value] (sptLookup loc s.stackSize) callee
         args (by simp [wordSemBadDestArgs]) found clock]
-      have h := loopSequence_clock_bound shape (callEnv [value] (sptLookup loc s.stackSize) (decClock s))
+      have h := wordControl_clock_bound (loopSequence_program shape) (callEnv [value] (sptLookup loc s.stackSize) (decClock s))
       change steps callee (callEnv [value] (sptLookup loc s.stackSize) (decClock s)) ≤
-        sizeOf callee * (s.clock-1+1) at h
-      have scale := Nat.mul_le_mul_left (sizeOf callee) (show s.clock-1+1 ≤ s.clock+1 by omega)
+        wordControlWeight callee * (s.clock-1+1) at h
+      have scale := Nat.mul_le_mul_left (wordControlWeight callee) (show s.clock-1+1 ≤ s.clock+1 by omega)
       nlinarith
 
 /-- A non-error, non-timeout direct call consumes at most its own visits when
@@ -83,6 +83,12 @@ inductive RegTailCalls : WordLangProgHOL (BitVec width) → Nat → Prop
   | left {a b loc} : RegTailCalls a loc → RegTailCalls (.seq a b) loc
   | right {a b loc} : RegTailCalls b loc → RegTailCalls (.seq a b) loc
 
+/-- Reachable callees have a bounded executable control-node weight. -/
+def RegTailControlCodeBound (p : WordLangProgHOL (BitVec width))
+    (code : Spt (Nat × WordLangProgHOL (BitVec width))) (K : Nat) : Prop :=
+  ∀ loc, RegTailCalls p loc → ∃ callee, sptLookup loc code = some (1,callee) ∧
+    LoopSequence callee ∧ wordControlWeight callee ≤ K
+
 /-- Only code entries targeted by this particular entry need supported
 callee shape and size; other code entries are unrestricted. -/
 def RegTailCodeBound (p : WordLangProgHOL (BitVec width))
@@ -92,40 +98,39 @@ def RegTailCodeBound (p : WordLangProgHOL (BitVec width))
 
 /-- The actual Word entry's visits have a syntax-and-clock bound, requiring
 callee properties only for its own direct call destinations. -/
-theorem regTail_clock_bound {p : WordLangProgHOL (BitVec width)}
+theorem regTail_control_bound {p : WordLangProgHOL (BitVec width)}
     (shape : RegTailShape p) :
     ∀ (s : WordSemStateFiniteExact width C F) (K : Nat),
-      noInstallSubprogsHOL p = true → WordProps.noInstallCode s.code → RegTailCodeBound p s.code K →
-      steps p s ≤ (sizeOf p * (K+1)) * (s.clock+1) := by
+      noInstallSubprogsHOL p = true → WordProps.noInstallCode s.code → RegTailControlCodeBound p s.code K →
+      steps p s ≤ (wordControlWeight p * (K+1)) * (s.clock+1) := by
   induction shape with
   | @branch q h =>
     intro s K _ _ _
-    have bound := branch_static h s
-    have scale : 1 ≤ (K+1)*(s.clock+1) := by nlinarith
-    have mult := Nat.mul_le_mul_left (sizeOf q) scale
-    simp only [Nat.mul_one,← Nat.mul_assoc] at mult ⊢
-    omega
+    have bound := wordControl_clock_bound (branch_program h) s
+    have scale := Nat.mul_le_mul_left (wordControlWeight q * (s.clock+1)) (show 1 ≤ K+1 by omega)
+    simp only [Nat.mul_one] at scale
+    nlinarith
   | call loc reg =>
     intro s K _ _ code
     obtain ⟨callee,lookup,body,size⟩ := code loc (.call loc reg)
-    have bound := regDirectTail_clock_bound loc reg callee body s lookup
-    have sz : 1 + sizeOf callee ≤ sizeOf (.call none (some loc) [reg] none : WordLangProgHOL (BitVec width)) * (K+1) := by simp_wf; nlinarith
+    have bound := regDirectTail_control_bound loc reg callee body s lookup
+    have sz : 1 + wordControlWeight callee ≤ wordControlWeight (.call none (some loc) [reg] none : WordLangProgHOL (BitVec width)) * (K+1) := by simp [wordControlWeight]; nlinarith
     exact bound.trans (Nat.mul_le_mul_right _ sz)
   | @seq a b ha hb iha ihb =>
     intro s K noInstall noInstallCode code
     simp only [noInstallSubprogsHOL,notCreatedSubprogsWithMemOp,Bool.and_eq_true] at noInstall
-    have codeA : RegTailCodeBound a s.code K := fun loc h => code loc (.left h)
-    have codeB : RegTailCodeBound b s.code K := fun loc h => code loc (.right h)
+    have codeA : RegTailControlCodeBound a s.code K := fun loc h => code loc (.left h)
+    have codeB : RegTailControlCodeBound b s.code K := fun loc h => code loc (.right h)
     have first := iha s K noInstall.1 noInstallCode codeA
-    have sizeLower : 1 + sizeOf a + sizeOf b ≤ sizeOf (.seq a b : WordLangProgHOL (BitVec width)) := by simp_wf
+    have sizeLower : 1 + wordControlWeight a + wordControlWeight b ≤ wordControlWeight (.seq a b : WordLangProgHOL (BitVec width)) := by simp [wordControlWeight]
     let m := (K+1)*(s.clock+1)
     have factorPositive : 1 ≤ m := by dsimp [m]; nlinarith
     have sizeScaled := Nat.mul_le_mul_right m sizeLower
-    have sizeScaled' : m + sizeOf a*m + sizeOf b*m ≤ sizeOf (.seq a b : WordLangProgHOL (BitVec width))*m := by
+    have sizeScaled' : m + wordControlWeight a*m + wordControlWeight b*m ≤ wordControlWeight (.seq a b : WordLangProgHOL (BitVec width))*m := by
       simpa only [Nat.add_mul,one_mul] using sizeScaled
     rw [Nat.mul_assoc] at first ⊢
-    change steps a s ≤ sizeOf a*m at first
-    change steps (.seq a b) s ≤ sizeOf (.seq a b : WordLangProgHOL (BitVec width))*m
+    change steps a s ≤ wordControlWeight a*m at first
+    change steps (.seq a b) s ≤ wordControlWeight (.seq a b : WordLangProgHOL (BitVec width))*m
     rw [steps_seq]
     rcases run : evaluate a s with ⟨res,middle⟩
     cases res with
@@ -138,11 +143,32 @@ theorem regTail_clock_bound {p : WordLangProgHOL (BitVec width)}
         (by simpa only [codeEq] using codeB)
       have clock := (evaluate_clock a s none middle run).1
       simp only
-      have scaled := Nat.mul_le_mul_left (sizeOf b * (K+1)) (show middle.clock+1 ≤ s.clock+1 by omega)
+      have scaled := Nat.mul_le_mul_left (wordControlWeight b * (K+1)) (show middle.clock+1 ≤ s.clock+1 by omega)
       simp only [Nat.mul_assoc] at scaled second
-      change sizeOf b * ((K+1) * (middle.clock+1)) ≤ sizeOf b*m at scaled
+      change wordControlWeight b * ((K+1) * (middle.clock+1)) ≤ wordControlWeight b*m at scaled
       omega
 
+
+
+theorem regTail_control_le_size {p : WordLangProgHOL (BitVec width)} (shape : RegTailShape p) :
+    wordControlWeight p ≤ sizeOf p := by
+  induction shape with
+  | branch h => exact wordControl_le_size (branch_program h)
+  | call loc reg => simp [wordControlWeight]
+  | seq ha hb iha ihb => simp [wordControlWeight]; omega
+
+theorem regTail_clock_bound {p : WordLangProgHOL (BitVec width)} (shape : RegTailShape p)
+    (s : WordSemStateFiniteExact width C F) (K : Nat)
+    (noInstall : noInstallSubprogsHOL p = true) (codeOk : WordProps.noInstallCode s.code)
+    (code : RegTailCodeBound p s.code K) :
+    steps p s ≤ (sizeOf p * (K+1)) * (s.clock+1) := by
+  have control : RegTailControlCodeBound p s.code K := by
+    intro loc calls
+    obtain ⟨callee,lookup,shape,size⟩ := code loc calls
+    exact ⟨callee,lookup,shape,(wordControl_le_size (loopSequence_program shape)).trans size⟩
+  have bound := regTail_control_bound shape s K noInstall codeOk control
+  have size := Nat.mul_le_mul_right ((K+1)*(s.clock+1)) (regTail_control_le_size shape)
+  nlinarith
 
 /-- A single-argument tail entry whose destinations satisfy a predicate. -/
 inductive RegAllowedTail (allowed : Nat → Prop) : WordLangProgHOL (BitVec width) → Prop
@@ -230,8 +256,8 @@ theorem regTail_start_clock_bound (start : Nat) (entry : WordLangProgHOL (BitVec
     (s : WordSemStateFiniteExact width C F) (value : WordLocW width) (K : Nat)
     (lookup : sptLookup start s.code = some (1,entry)) (arg : getVar 0 s = some value)
     (codeOk : WordProps.noInstallCode s.code)
-    (bodyBound : RegTailCodeBound entry s.code K) :
-    steps (.call none (some start) [0] none) s ≤ 1 + sizeOf entry * (K+1) * (s.clock+1) := by
+    (bodyBound : RegTailControlCodeBound entry s.code K) :
+    steps (.call none (some start) [0] none) s ≤ 1 + wordControlWeight entry * (K+1) * (s.clock+1) := by
   have args : getVars [0] s = some [value] := by simp [WordSemStateFiniteExact.getVars,arg]
   have found : wordSemFindCode (some start) [value] s.code s.stackSize =
       some ([value],entry,sptLookup start s.stackSize) := by simp [wordSemFindCode,lookup]
@@ -240,11 +266,11 @@ theorem regTail_start_clock_bound (start : Nat) (entry : WordLangProgHOL (BitVec
     simp [args,wordSemBadDestArgs,wordSemAddRetLoc,found,clock]
   · rw [steps_call_tail (some start) [0] s [value] [value] (sptLookup start s.stackSize) entry
       args (by simp [wordSemBadDestArgs]) found clock]
-    have bound := regTail_clock_bound shape (callEnv [value] (sptLookup start s.stackSize) (decClock s)) K
+    have bound := regTail_control_bound shape (callEnv [value] (sptLookup start s.stackSize) (decClock s)) K
       (regTail_noInstall shape) codeOk bodyBound
     change steps entry (callEnv [value] (sptLookup start s.stackSize) (decClock s)) ≤
-      (sizeOf entry * (K+1)) * (s.clock-1+1) at bound
-    have scale := Nat.mul_le_mul_left (sizeOf entry * (K+1)) (show s.clock-1+1 ≤ s.clock+1 by omega)
+      (wordControlWeight entry * (K+1)) * (s.clock-1+1) at bound
+    have scale := Nat.mul_le_mul_left (wordControlWeight entry * (K+1)) (show s.clock-1+1 ≤ s.clock+1 by omega)
     omega
 
 /-- Register allocation preserves a completed direct-entry execution and

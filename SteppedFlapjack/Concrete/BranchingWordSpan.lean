@@ -3,6 +3,7 @@ import SteppedFlapjack.Concrete.ConditionalLoopSpan
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.LoopSemStateFiniteExact Flapjack.Basis.Pure.MlString
 open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.WordToWord
+open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps SteppedFlapjack.WordAllocSteps
 variable {C : Type}
 /-- Phase 2 clock budget and visit bound for the conditional-loop fixture. -/
@@ -12,9 +13,9 @@ def branchLoopVisits : Nat := 80*(388+branchLoopBudget+1)+8
 def branchCrepCode := twoPrograms (ofString "main") (entryName (progToHOL branchingLoop)) branchingLoopCrepBody
 def branchWordPrograms := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa branchCrepCode)
 /-- Explicit optimized Word visit bound for the branching fixture. -/
-noncomputable def branchWordBound : Nat :=
+def branchWordBound : Nat :=
   twoProgramWordBound riscvConfig.isa (ofString "main") (entryName (progToHOL branchingLoop))
-    branchingLoopCrepBody branchLoopVisits countdownRiscVBackend.wordToWordConf riscvConfig
+    branchingLoopCrepBody branchLoopVisits phase3WordConfig riscvConfig
 /-- The Word start state constructed from the Phase 2 branching state. -/
 noncomputable def branchWordStarter (template : WordSemStateFiniteExact 64 C Unit) (frame : Nat) :=
   let pan := panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)
@@ -28,10 +29,14 @@ within its explicit code-derived visit bound. -/
 theorem branchingLoop_wholeWord (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit)
     (template : WordSemStateFiniteExact 64 C Unit) (frame : Nat) :
+    let pan := panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)
+    let crep := crepStateFrom pan (progToHOL branchingLoop)
     let starter := branchWordStarter template frame
     let target := WordSemStateFiniteExact.evaluate (.call none (some 64) [0] none)
       {starter with clock := 6*branchLoopVisits+1, code := sptFromAList (compile countdownRiscVBackend.wordToWordConf riscvConfig branchWordPrograms).2}
-    ∃ post : LoopSemStateFiniteExact 64 Unit,
+    ∃ (final : CrepSemHOLState 64 Unit) (post : LoopSemStateFiniteExact 64 Unit),
+      evalCrepSemHOLProgExact crep branchingLoopCrepEntry = (some (.return [.word 7]),final) ∧
+      crepToLoopStateRelExact final {post with clock := final.clock} ∧
       target.1 = some (.result (.loc 1 0) [.word 7]) ∧ target.2.ffi = post.ffi ∧
       WordSteps.steps (.call none (some 64) [0] none)
         {starter with clock := 6*branchLoopVisits+1, code := sptFromAList (compile countdownRiscVBackend.wordToWordConf riscvConfig branchWordPrograms).2} ≤ branchWordBound := by
@@ -40,7 +45,7 @@ theorem branchingLoop_wholeWord (context : PanValueFfiContext (RiscV.Word 64)) (
   let timed := {crep with clock := crep.clock + branchLoopBudget}
   have code : crepPrograms (progToHOL branchingLoop) = branchCrepCode := by
     simpa [branchCrepCode,twoPrograms] using branchingLoop_crep_code
-  obtain ⟨_,_,final,post,_,loopRun,loopBound,_,_,_,_⟩ := branchingLoop_fixture_entry_loop riscvConfig.isa context primitive handler
+  obtain ⟨_,_,final,post,crepRun,loopRun,loopBound,stateRel,_,_,_⟩ := branchingLoop_fixture_entry_loop riscvConfig.isa context primitive handler
   have heap : timed.topAddr = timed.baseAddr + 2*fixtureHeapLength := by
     simpa [timed,crep,pan] using fixture_heap branchingLoop 23 (progToHOL branchingLoop)
   have loopEq : concreteDeclLoopState riscvConfig.isa timed branchCrepCode =
@@ -60,8 +65,9 @@ theorem branchingLoop_wholeWord (context : PanValueFfiContext (RiscV.Word 64)) (
     countdownRiscVBackend.wordToWordConf riscvConfig heap sourceRun sourceBound
   obtain ⟨wordPost,wordResult,relation,result,ffi,bound⟩ := span
   simp only [LoopToWord.CompileCorrect.resultCase] at relation
-  refine ⟨post,?_,?_,?_⟩
+  refine ⟨final,post,?_,stateRel,?_,?_,?_⟩
+  · simpa [crep,pan] using crepRun
   · simpa [branchWordStarter,branchCrepCode,branchWordPrograms,crep,timed,pan,relation.2.1] using result
   · simpa [branchWordStarter,branchCrepCode,branchWordPrograms,crep,timed,pan] using ffi
-  · simpa only [branchWordBound,branchWordStarter,branchCrepCode,branchWordPrograms,crep,timed,pan] using bound
+  · simpa only [branchWordBound,phase3WordConfig_eq,branchWordStarter,branchCrepCode,branchWordPrograms,crep,timed,pan] using bound
 end SteppedFlapjack.Concrete

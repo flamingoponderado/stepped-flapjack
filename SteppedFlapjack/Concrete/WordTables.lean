@@ -2,8 +2,11 @@ import SteppedFlapjack.Concrete.BranchEntryLoop
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopShape
 import SteppedFlapjack.CrepToLoopSteps.ScalarExecutable
 import SteppedFlapjack.LoopToWordSteps.WholeWordSpan
+import Flapjack.Compiler.Backend.RegAlloc.Executable
+import Flapjack.Compiler.Backend.WordToWord.FastCompile
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Basis.Pure.MlString Flapjack.Compiler.Encoders.Asm
+open Flapjack.Compiler.Backend.WordToWord
 open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps
 open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.WordAllocSteps
 
@@ -11,6 +14,17 @@ open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.WordSimpSteps SteppedFlapja
 def twoCallee (arch : AsmArchitecture) (name callee : MlString) (body : CrepProgHOL 64) : HolLoopProg 64 :=
   let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (twoPrograms name callee body)) 0
   optimiseScalar (compileHOLExact ctxt .ln body)
+
+/-- The actual optimized table equals an executable calculation for every scalar
+program, including every value of a countdown literal. -/
+theorem twoProgram_optimized_executable (arch : AsmArchitecture) (name callee : MlString)
+    (body : CrepProgHOL 64) (shape : ScalarProgram body) (wc : Config) (ac : AsmConfigExact 64) :
+    compile wc ac (loopToWordCompileHOL (compileProgHOLExact arch (twoPrograms name callee body))) =
+      compileWith Flapjack.RegAlloc.regAllocExecutable wc ac (loopToWordCompileHOL (twoLoopPrograms arch name callee body)) := by
+  have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
+    funext a b c d e f g
+    exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
+  rw [compileWith_eq_compile _ allocator, twoLoopPrograms_eq arch name callee body shape]
 
 /-- The generated entry has one direct tail destination. -/
 theorem entryShape : SingleTailEntryShape 65 branchingLoopEntry := by

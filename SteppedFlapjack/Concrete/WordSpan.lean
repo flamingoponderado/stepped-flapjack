@@ -1,14 +1,16 @@
 import SteppedFlapjack.Concrete.WordStarter
 import SteppedFlapjack.Concrete.WordTables
 import SteppedFlapjack.LoopToWordSteps.WholeWordSpan
+import Flapjack.Compiler.Backend.RegAlloc.Executable
+import Flapjack.Compiler.Backend.WordToWord.FastCompile
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Basis.Pure.MlString Flapjack.LoopSemStateFiniteExact
 open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.WordToWord
 open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps SteppedFlapjack.LoopToWordSteps
-open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.WordAllocSteps
+open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.WordAllocSteps SteppedFlapjack.WordSimpSteps
 variable {C F : Type}
 /-- The start-call bound computed from the actual optimized two-function output. -/
-noncomputable def twoProgramWordBound (arch : AsmArchitecture) (name callee : MlString)
+noncomputable def twoProgramWordBoundSpec (arch : AsmArchitecture) (name callee : MlString)
     (body : CrepProgHOL 64) (limit : Nat) (wc : Config) (ac : AsmConfigExact 64) : Nat :=
   let words := loopToWordCompileHOL (compileProgHOLExact arch (twoPrograms name callee body))
   let k := ac.regCount-(5+ac.avoidRegs.length)
@@ -16,7 +18,30 @@ noncomputable def twoProgramWordBound (arch : AsmArchitecture) (name callee : Ml
     ((64,1,loopToWordCompFuncHOL 64 [] branchingLoopEntry),entryColour wc words 64)).2.2
   let calleeOut := (fullCompileSingle ac.twoRegArith k wc.regAlg ac
     ((65,1,loopToWordCompFuncHOL 65 [] (twoCallee arch name callee body)),entryColour wc words 65)).2.2
-  1 + sizeOf entryOut * (sizeOf calleeOut+1) * (6*limit+2)
+  1 + wordControlWeight entryOut * (wordControlWeight calleeOut+1) * (6*limit+2)
+
+/-- A computable bound for the actual optimized two-function output. -/
+def twoProgramWordBound (arch : AsmArchitecture) (name callee : MlString)
+    (body : CrepProgHOL 64) (limit : Nat) (wc : Config) (ac : AsmConfigExact 64) : Nat :=
+  let words := loopToWordCompileHOL (twoLoopPrograms arch name callee body)
+  let k := ac.regCount-(5+ac.avoidRegs.length)
+  let entryOut := (fullCompileSingleWith Flapjack.RegAlloc.regAllocExecutable ac.twoRegArith k wc.regAlg ac
+    ((64,1,loopToWordCompFuncHOL 64 [] branchingLoopEntry),entryColour wc words 64)).2.2
+  let calleeOut := (fullCompileSingleWith Flapjack.RegAlloc.regAllocExecutable ac.twoRegArith k wc.regAlg ac
+    ((65,1,loopToWordCompFuncHOL 65 [] (twoCallee arch name callee body)),entryColour wc words 65)).2.2
+  1 + wordControlWeight entryOut * (wordControlWeight calleeOut+1) * (6*limit+2)
+
+theorem twoProgramWordBound_eq (arch : AsmArchitecture) (name callee : MlString)
+    (body : CrepProgHOL 64) (shape : ScalarProgram body) (limit : Nat) (wc : Config) (ac : AsmConfigExact 64) :
+    twoProgramWordBound arch name callee body limit wc ac = twoProgramWordBoundSpec arch name callee body limit wc ac := by
+  have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
+    funext a b c d e f g
+    exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
+  unfold twoProgramWordBound twoProgramWordBoundSpec
+  rw [← twoLoopPrograms_eq arch name callee body shape, allocator]
+  simp only [← fullCompileSingleExecutable_eq]
+  rfl
+
 
 /-- A returning two-function scalar Loop run yields the actual optimized Word
 start run with no additional state or code assumptions. -/
@@ -82,5 +107,6 @@ theorem twoProgram_wholeWord_span (arch : AsmArchitecture) (name callee : MlStri
   have span := singleTail_wholeWord_span entryShape calleeShape loop post (some (.result values))
     64 starter ctxt (64,2) limit words wc ac entryMember calleeMember nodup shapes codeEq
     starterFacts.2.1 starterFacts.2.2.1 starterFacts.2.2.2 lookup premises (.return values) sourceBound
-  simpa [twoProgramWordBound,crep,loops,words,starter,loop,ctxt,word,loopToWordCompFuncHOL] using span
+  rw [twoProgramWordBound_eq arch name callee body shape limit wc ac]
+  simpa [twoProgramWordBoundSpec,crep,loops,words,starter,loop,ctxt,word,loopToWordCompFuncHOL] using span
 end SteppedFlapjack.Concrete

@@ -40,7 +40,7 @@ theorem singleTail_wholeWord_span {dest : Nat} {p callee : HolLoopProg 64}
       final.1 = wordResult ∧ final.2.ffi = sourcePost.ffi ∧
       WordSteps.steps (.call none (some start) [0] none)
         {starter with clock := 6*limit+1, code := sptFromAList (compile wc ac programs).2} ≤
-        1 + sizeOf entryOut * (sizeOf calleeOut+1) * (6*limit+2) := by
+        1 + wordControlWeight entryOut * (wordControlWeight calleeOut+1) * (6*limit+2) := by
   let word := callEnv [(.loc 1 0 : WordLocW 64)] (sptLookup start starter.stackSize) (decClock starter)
   have found : findCode (some dest) [] source.code = some (.ln,callee) := by simp [findCode,lookup,sptFromAList]
   obtain ⟨wordPost,wordResult,wordRun,wordFfi,wordRel,wordBound⟩ :=
