@@ -17,6 +17,7 @@ import SteppedFlapjack.Concrete.CountdownSsaLiteral
 import SteppedFlapjack.Concrete.CountdownDeadLiteral
 import SteppedFlapjack.Concrete.CountdownAllocationLiteral
 import SteppedFlapjack.Concrete.CountdownOptimized
+import SteppedFlapjack.Concrete.CountdownStackFrames
 import SteppedFlapjack.Concrete.FixedWordBounds
 import SteppedFlapjack.Concrete.NaturalCountdownWordSpan
 import SteppedFlapjack.Concrete.BranchingWordSpan
