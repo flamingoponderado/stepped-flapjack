@@ -46,6 +46,17 @@ def countdownLoopLiteral (initial returned : BitVec 64) : List (Nat × List Nat 
               ((HolLoopProg.return [2]).mark.seq HolLoopProg.skip.mark).mark).mark)))]
 
 set_option maxRecDepth 100000 in
+set_option maxHeartbeats 1000000 in
+/-- Lowering the countdown Loop literal to Word is independent of the initial
+word. This is the actual Loop-to-Word compiler, with the generated contexts. -/
+theorem countdownLoopLiteral_toWord (initial returned : BitVec 64) :
+    loopToWordCompileHOL (countdownLoopLiteral initial returned) = countdownWordLiteral initial returned := by
+  simp only [loopToWordCompileHOL, loopToWordCompileProgHOL, loopToWordCompFuncHOL,
+    countdownLoopLiteral, countdownWordLiteral, List.map_cons, List.map_nil, List.length,
+    Nat.zero_add, List.nil_append, LoopToWord.compHOL, LoopToWord.compExpHOL, accVarsHOL]
+  with_unfolding_all rfl
+
+set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
 /-- The original Crep-to-Loop compiler emits the exact countdown Loop program. -/
 theorem countdownLoopLiteral_zero_eq :
@@ -72,8 +83,7 @@ theorem countdownWordLiteral_zero_eq :
         (.while (.var .local (ofString "x")) (.assign .local (ofString "x") (.op .sub [.var .local (ofString "x"),.const 1])))
         (.return (.const (0 : BitVec 64))))))) = countdownWordLiteral (0 : BitVec 64) (0 : BitVec 64) := by
   rw [singleEntry_countdown_panToWord, countdownLoopLiteral_zero_eq]
-  unfold countdownLoopLiteral countdownWordLiteral
-  with_unfolding_all rfl
+  exact countdownLoopLiteral_toWord 0 0
 
 /-- The exact sequence of Word passes before register allocation. -/
 def countdownPreAllocation (arity : Nat) (prog : WordLangProgHOL (BitVec 64)) :
