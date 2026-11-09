@@ -8,6 +8,10 @@ import SteppedFlapjack.Concrete.ConditionalLoopSpan
 import SteppedFlapjack.CrepSteps.ScalarClock
 import SteppedFlapjack.Concrete.CountdownLoopSpan
 import SteppedFlapjack.Concrete.WordStarter
+import SteppedFlapjack.Concrete.WordTables
+import SteppedFlapjack.Concrete.WordSpan
+import SteppedFlapjack.Concrete.CountdownWordSpan
+import SteppedFlapjack.Concrete.BranchingWordSpan
 import SteppedFlapjack.Concrete.BranchEntryLoop
 import SteppedFlapjack.Concrete.WitnessLoopCode
 import SteppedFlapjack.CrepToLoopSteps.ScalarExecutable
