@@ -210,4 +210,62 @@ theorem countdown_unreach_literal (x : BitVec 64) : WordUnreach.removeUnreach (c
   simp only [WordUnreach.removeUnreach,WordUnreach.seqAssocRight,WordUnreach.simpSeq]
   with_unfolding_all rfl
 
+private def firstDeadRet : WordLangProgHOL (BitVec 64) := match countdownSsaWord 5 with
+  | .seq _ (.seq _ t) => t | _ => .skip
+private def firstDeadZero : WordLangProgHOL (BitVec 64) := match countdownSsaWord 5 with
+  | .seq _ (.seq (.seq _ t) _) => t | _ => .skip
+private def firstDeadLoopIn : WordLangProgHOL (BitVec 64) := match countdownSsaWord 5 with
+  | .seq _ (.seq (.seq (.seq (.seq _ t) _) _) _) => t | _ => .skip
+private def firstDeadLoopOut : WordLangProgHOL (BitVec 64) := match countdownDeadWord 5 with
+  | .seq _ (.seq (.seq (.seq (.seq _ t) _) _) _) => t | _ => .skip
+private def firstDeadLret : NumSet := .bn .ln (.bn (.bn (.bn .ln (.bn (.ls ()) .ln)) (.bn .ln (.ls ()))) .ln)
+private def firstDeadLzero : NumSet := .bn .ln (.bn (.bn .ln (.bn .ln (.ls ()))) .ln)
+private def firstDeadLloop : NumSet := .bn .ln (.bn (.bn (.ls ()) (.ls ())) .ln)
+set_option maxHeartbeats 1000000 in
+set_option maxRecDepth 100000 in
+private theorem firstDeadRunRet : WordAlloc.removeDead firstDeadRet .ln [] [] = (firstDeadRet,firstDeadLret,[]) := by with_unfolding_all rfl
+set_option maxHeartbeats 1000000 in
+set_option maxRecDepth 100000 in
+private theorem firstDeadRunZero : WordAlloc.removeDead firstDeadZero firstDeadLret [] [] = (firstDeadZero,firstDeadLzero,[]) := by with_unfolding_all rfl
+set_option maxHeartbeats 1000000 in
+set_option maxRecDepth 100000 in
+private theorem firstDeadRunLoop : WordAlloc.removeDead firstDeadLoopIn firstDeadLzero [] [] = (firstDeadLoopOut,firstDeadLloop,[]) := by with_unfolding_all rfl
+
+private theorem firstDeadPrefix (x : BitVec 64) (l a b c d : WordLangProgHOL (BitVec 64))
+ (hr : WordAlloc.removeDead (.seq c d) .ln [] [] = (.seq c d,firstDeadLret,[]))
+ (hz : WordAlloc.removeDead (.inst (.const 53 (0 : BitVec 64))) firstDeadLret [] [] = (.inst (.const 53 (0 : BitVec 64)),firstDeadLzero,[]))
+ (hl : WordAlloc.removeDead l firstDeadLzero [] [] = (.seq a b,firstDeadLloop,[])) :
+ WordAlloc.removeDeadProg
+   (.seq (.move 1 [(9,0)]) (.seq (.seq (.seq (.seq (.seq (.inst (.const 13 x)) .tick) l) .tick) (.inst (.const 53 (0 : BitVec 64)))) (.seq c d))) =
+   .seq (.move 1 [(9,0)]) (.seq (.seq (.seq (.seq (.seq (.inst (.const 13 x)) .tick) (.seq a b)) .tick) (.inst (.const 53 (0 : BitVec 64)))) (.seq c d)) := by
+ simp only [WordAlloc.removeDeadProg,WordAlloc.removeDead,hr,hz,hl,WordAlloc.removeDeadInst,WordAlloc.removeDeadInstCore,WordAlloc.getLiveInst,WordAlloc.getLiveInstCore,WordAlloc.getLive]
+ with_unfolding_all rfl
+
+private def firstDeadOutA : WordLangProgHOL (BitVec 64) := match firstDeadLoopOut with | .seq a _ => a | _ => .skip
+private def firstDeadOutB : WordLangProgHOL (BitVec 64) := match firstDeadLoopOut with | .seq _ b => b | _ => .skip
+private theorem firstDeadLoopSplit : firstDeadLoopOut = .seq firstDeadOutA firstDeadOutB := by with_unfolding_all rfl
+set_option maxHeartbeats 1000000 in
+set_option maxRecDepth 100000 in
+/-- The first dead-code pass emits the literal for every count. -/
+theorem countdown_firstDead_literal (x : BitVec 64) : WordAlloc.removeDeadProg (countdownSsaWord x) = countdownDeadWord x := by
+  have hin : countdownSsaWord x = .seq (.move 1 [(9,0)])
+    (.seq (.seq (.seq (.seq (.seq (.inst (.const 13 x)) .tick) firstDeadLoopIn) .tick) (.inst (.const 53 0)))
+      (.seq (.move 0 [(2,53)]) (.return 17 [2]))) := by
+    unfold countdownSsaWord firstDeadLoopIn
+    rfl
+  have hout : countdownDeadWord x = .seq (.move 1 [(9,0)])
+    (.seq (.seq (.seq (.seq (.seq (.inst (.const 13 x)) .tick) (.seq firstDeadOutA firstDeadOutB)) .tick) (.inst (.const 53 0)))
+      (.seq (.move 0 [(2,53)]) (.return 17 [2]))) := by
+    unfold countdownDeadWord firstDeadOutA firstDeadOutB firstDeadLoopOut
+    rfl
+  have hl : WordAlloc.removeDead firstDeadLoopIn firstDeadLzero [] [] = (.seq firstDeadOutA firstDeadOutB,firstDeadLloop,[]) := by
+    rw [← firstDeadLoopSplit]
+    exact firstDeadRunLoop
+  have hr : WordAlloc.removeDead (.seq (.move 0 [(2,53)]) (.return 17 [2]) : WordLangProgHOL (BitVec 64)) .ln [] [] =
+      (.seq (.move 0 [(2,53)]) (.return 17 [2]),firstDeadLret,[]) := by exact firstDeadRunRet
+  have hz : WordAlloc.removeDead (.inst (.const 53 (0 : BitVec 64))) firstDeadLret [] [] =
+      (.inst (.const 53 (0 : BitVec 64)),firstDeadLzero,[]) := by exact firstDeadRunZero
+  rw [hin,hout]
+  exact firstDeadPrefix x firstDeadLoopIn firstDeadOutA firstDeadOutB _ _ hr hz hl
+
 end SteppedFlapjack.Concrete

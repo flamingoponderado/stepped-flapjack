@@ -191,4 +191,34 @@ theorem countdown_entry_optimized : fullCompileSingleWith regAllocExecutable ris
   (64,1,.seq (.move 1 [(0,0)]) (.call none (some 65) [0] none)) := by
   with_unfolding_all rfl
 
+private def secondDeadLive : NumSet := .bn .ln (.bn (.bn (.ls ()) (.ls ())) .ln)
+private theorem secondDeadPrefix (x : BitVec 64) (tail a b : WordLangProgHOL (BitVec 64))
+ (h : WordAlloc.removeDead tail .ln [] [] = (.seq a b,secondDeadLive,[])) :
+ WordAlloc.removeDeadProg (.seq (.move 1 [(9,0)]) (.seq (.inst (.const 13 x)) tail)) =
+   .seq (.move 1 [(9,0)]) (.seq (.inst (.const 13 x)) (.seq a b)) := by
+  simp only [WordAlloc.removeDeadProg,WordAlloc.removeDead,h,WordAlloc.removeDeadInst,WordAlloc.removeDeadInstCore,WordAlloc.getLiveInst,WordAlloc.getLiveInstCore]
+  with_unfolding_all rfl
+
+private def secondDeadTail : WordLangProgHOL (BitVec 64) := match countdownReachableWord 5 with
+  | .seq _ (.seq _ t) => t
+  | _ => .skip
+private def secondDeadRest : WordLangProgHOL (BitVec 64) := match countdownAllocationInput 5 with
+  | .seq _ (.seq _ (.seq _ t)) => t
+  | _ => .skip
+set_option maxHeartbeats 1000000 in
+set_option maxRecDepth 100000 in
+private theorem secondDeadTailRun : WordAlloc.removeDead secondDeadTail .ln [] [] = (.seq .tick secondDeadRest,secondDeadLive,[]) := by
+  with_unfolding_all rfl
+
+/-- The second dead-code pass emits the allocator input for every count. -/
+theorem countdown_secondDead_literal (x : BitVec 64) : WordAlloc.removeDeadProg (countdownReachableWord x) = countdownAllocationInput x := by
+  have hin : countdownReachableWord x = .seq (.move 1 [(9,0)]) (.seq (.inst (.const 13 x)) secondDeadTail) := by
+    unfold countdownReachableWord secondDeadTail
+    rfl
+  have hout : countdownAllocationInput x = .seq (.move 1 [(9,0)]) (.seq (.inst (.const 13 x)) (.seq .tick secondDeadRest)) := by
+    unfold countdownAllocationInput secondDeadRest
+    rfl
+  rw [hin,hout]
+  exact secondDeadPrefix x secondDeadTail .tick secondDeadRest secondDeadTailRun
+
 end SteppedFlapjack.Concrete
