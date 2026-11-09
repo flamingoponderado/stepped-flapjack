@@ -1,4 +1,4 @@
-import SteppedFlapjack.Concrete.ScalarEntry
+import SteppedFlapjack.Concrete.WitnessWeights
 import SteppedFlapjack.Concrete.CountedApplications
 
 /-! The conditional-loop witness through the optimized Loop entry. -/
@@ -11,12 +11,6 @@ def conditionalLoopBody : CrepProgHOL 64 :=
   .ite (.cmp .equal (.var 1) (.const 2))
     (.seq (.assign 1 (.const 1)) .skip) (.seq (.assign 1 (.const 0)) .skip)
 
-theorem conditionalLoop_scalar : ScalarProgram branchingLoopCrepBody := by
-  exact .dec 1 (.direct (.const 2)) (.seq
-    (.while (.direct (.var 1)) (.ite (.cmp .equal (.direct (.var 1)) (.direct (.const 2)))
-      (.seq (.assign 1 (.direct (.const 1))) .skip) (.seq (.assign 1 (.direct (.const 0))) .skip)))
-    (.ret (.direct (.const 7))))
-
 /-- The actual generated optimized entry executes with a source-derived
 closed-form bound for the witness that takes both conditional branches. -/
 theorem branchingLoop_fixture_entry_loop (arch : AsmArchitecture)
@@ -26,16 +20,14 @@ theorem branchingLoop_fixture_entry_loop (arch : AsmArchitecture)
     let crep := crepStateFrom source (progToHOL branchingLoop)
     let target := loopStateFrom arch source (progToHOL branchingLoop)
     let ctxt := witnessLoopContext arch (progToHOL branchingLoop)
-    let c := ctxtFcExact ctxt.target ctxt.funcs [] []
-    let code := compileHOLExact c .ln branchingLoopCrepBody
-    let budget := scalarOutputEnvelope (loopVisitWeight (optimiseHOL code))*(388+1)
+    let budget := 33055944283804003169638662153711282791046653244720418147730817235062148260722345963974318859772770346070640788027992384967906657677887271650360407*(388+1)
     CrepSteps.steps branchingLoopCrepEntry crep ≤ 388 ∧
     (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms (progToHOL branchingLoop)) ∧
     ∃ final post,
       evalCrepSemHOLProgExact crep branchingLoopCrepEntry = (some (.return [.word 7]),final) ∧
       evaluate branchingLoopEntry {target with clock := target.clock+2*budget} = (some (.result [.word 7]),post) ∧
       LoopSteps.steps branchingLoopEntry {target with clock := target.clock+2*budget} ≤
-        loopVisitWeight (optimiseHOL code)*(2*budget+1)+8 ∧
+        80*(2*budget+1)+8 ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       crepToLoopMemRelHOLExact final.memory post.memory final.memaddrs ∧
       crepToLoopGlobalsRelHOLExact final.globals post.globals ∧
@@ -61,9 +53,10 @@ theorem branchingLoop_fixture_entry_loop (arch : AsmArchitecture)
   have compiled : (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms (progToHOL branchingLoop)) := by
     rw [branchingLoop_loop_code]
     exact twoLoopPrograms_entry_code arch _ _ _ (Ne.symm (entryName_fresh (progToHOL branchingLoop)))
-  have result := generatedScalar_entry_explicit ctxt name branchingLoopCrepBody conditionalLoop_scalar crep final target [.word 7] 388
+  have result := generatedScalar_entry_explicit ctxt name branchingLoopCrepBody branchingLoop_scalar crep final target [.word 7] 388
     nonzero found run bound rel.1 rel.2.1 rel.2.2 codeLocals.1 codeLocals.2 label
   obtain ⟨post,entry,steps,finalState,finalMem,finalGlobals,finalCode⟩ := result
+  simp only [ctxt,conditional_optimized_weight,envelope_80] at entry steps
   refine ⟨bound,compiled,final,post,run,?_,?_,finalState,finalMem,finalGlobals,finalCode⟩
   · simpa [ctxt,name,target,crep,conditionalLoopBody,branchingLoopCrepBody,wlabWlocExact] using entry
   · simpa [ctxt,name,target,crep,conditionalLoopBody,branchingLoopCrepBody] using steps

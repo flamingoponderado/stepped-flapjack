@@ -1,4 +1,4 @@
-import SteppedFlapjack.Concrete.ScalarEntry
+import SteppedFlapjack.Concrete.WitnessWeights
 import SteppedFlapjack.Concrete.CountedApplications
 
 /-! The comparison witness through the optimized Loop entry. -/
@@ -16,16 +16,14 @@ theorem branching_fixture_entry_loop (arch : AsmArchitecture)
     let crep := crepStateFrom source branchingHOL
     let target := loopStateFrom arch source branchingHOL
     let ctxt := witnessLoopContext arch branchingHOL
-    let c := ctxtFcExact ctxt.target ctxt.funcs [] []
-    let code := compileHOLExact c .ln branchCrepBody
-    let budget := scalarOutputEnvelope (loopVisitWeight (optimiseHOL code))*(33+1)
+    let budget := 85838975299478796137350471140065246905153223130317616185985232102213238409*(33+1)
     CrepSteps.steps branchCrepEntry crep ≤ 33 ∧
     (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms branchingHOL) ∧
     ∃ final post,
       evalCrepSemHOLProgExact crep branchCrepEntry = (some (.return [.word 7]),final) ∧
       evaluate branchingLoopEntry {target with clock := target.clock+2*budget} = (some (.result [.word 7]),post) ∧
       LoopSteps.steps branchingLoopEntry {target with clock := target.clock+2*budget} ≤
-        loopVisitWeight (optimiseHOL code)*(2*budget+1)+8 ∧
+        46*(2*budget+1)+8 ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       crepToLoopMemRelHOLExact final.memory post.memory final.memaddrs ∧
       crepToLoopGlobalsRelHOLExact final.globals post.globals ∧
@@ -48,15 +46,11 @@ theorem branching_fixture_entry_loop (arch : AsmArchitecture)
     simpa [ctxt,name,witnessLoopContext,branching_crep_code,twoPrograms,branchCrepBody] using h
   have rel := loopStateFrom_relations arch source branchingHOL
   have codeLocals := branching_loop_code_locals arch source
-  have compiled : (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms branchingHOL) := by
-    rw [branching_loop_code]
-    exact twoLoopPrograms_entry_code arch _ _ _ (Ne.symm (entryName_fresh branchingHOL))
-  have branchScalar : ScalarProgram branchCrepBody :=
-    .ite (.cmp .lower (.direct (.const _)) (.direct (.const _)))
-      (.ret (.direct (.const _))) (.ret (.direct (.const _)))
-  have result := generatedScalar_entry_explicit ctxt name branchCrepBody branchScalar crep final target [.word 7] 33
+  have compiled := branching_loop_entry_code arch
+  have result := generatedScalar_entry_explicit ctxt name branchCrepBody branching_scalar crep final target [.word 7] 33
     nonzero found run bound rel.1 rel.2.1 rel.2.2 codeLocals.1 codeLocals.2 label
   obtain ⟨post,entry,steps,finalState,finalMem,finalGlobals,finalCode⟩ := result
+  simp only [ctxt,comparison_optimized_weight,envelope_46] at entry steps
   refine ⟨bound,compiled,final,post,run,?_,?_,finalState,finalMem,finalGlobals,finalCode⟩
   · simpa [ctxt,name,target,crep,branchCrepBody,wlabWlocExact] using entry
   · simpa [ctxt,name,target,crep,branchCrepBody] using steps

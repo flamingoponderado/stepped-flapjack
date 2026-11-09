@@ -9,7 +9,8 @@ open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps
 
 /-- A returning generated tail entry inherits an explicit optimized Loop
-clock and visit bound from its Crep entry limit. -/
+clock and visit bound from its Crep entry limit. This specializes the generated
+two-program entry layout, where the callee label is 65. -/
 theorem generatedScalar_entry_explicit {σ : Type}
     (ctxt : CrepToLoopContextExact) (name : MlString) (p : CrepProgHOL 64)
     (scalar : ScalarProgram p)

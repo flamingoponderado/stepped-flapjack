@@ -1,6 +1,6 @@
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgramDef
 import SteppedFlapjack.CrepToLoopSteps.FrontendScalar
-import SteppedFlapjack.CrepToLoopSteps.InlineFixed
+import SteppedFlapjack.CrepToLoopSteps.SimpFixed
 import SteppedFlapjack.PanToCrepSteps.FrontendProgram
 import Flapjack.Pancake.CrepArith
 
@@ -52,14 +52,5 @@ theorem frontend_scalar_program {width : Nat} [NeZero width] {ctxt : PanToCrepCo
 theorem scalarProgram_simp_fixed {width : Nat} [NeZero width] {p : CrepProgHOL width}
     (shape : ScalarProgram p) : crepSimpProgHOL p = p := by
   induction shape <;> simp_all [crepSimpProgHOL,branchCondition_simp_fixed]
-
-open Flapjack.CrepInlineCanonical
-
-/-- Inlining leaves call-free scalar programs unchanged for any inline map. -/
-theorem scalarProgram_inline_fixed {width : Nat} [NeZero width] {p : CrepProgHOL width}
-    (inl : HolFiniteMapExact CrepInlineMapHOLName (List Nat × CrepProgHOL width))
-    (keys : List CrepInlineMapHOLName) (support : ∀ key, inl.lookup key ≠ none → key ∈ keys)
-    (shape : ScalarProgram p) : inlineProgHOLCoreExact inl keys support p = p := by
-  induction shape <;> simp_all [inlineProgHOLCoreExact]
 
 end SteppedFlapjack.CrepToLoopSteps

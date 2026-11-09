@@ -1,29 +1,36 @@
 import SteppedFlapjack.CrepToLoopSteps.TwoEntryExecutable
 import SteppedFlapjack.Concrete.BranchingLoop
 import SteppedFlapjack.Concrete.CrepBranch
+import SteppedFlapjack.Concrete.FrontendState
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.Compiler.Encoders.Asm
 open SteppedFlapjack.CrepToLoopSteps
 
-private theorem branching_scalar : ScalarProgram branchCrepBody := by
-  exact .ite (.cmp .lower (.direct (.const _)) (.direct (.const _)))
-    (.ret (.direct (.const _))) (.ret (.direct (.const _)))
+theorem supported_compiled_scalar (program : Prog (RiscV.Word 64)) (supported : Supported program) (target : CrepProgHOL 64)
+    (code : crepPrograms (progToHOL program) = twoPrograms (ofString "main") (entryName (progToHOL program)) target) :
+    ScalarProgram target := by
+  let body := progToHOL program
+  let caller := frontendContext body
+  let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
+  have lookup := (supported_callee_relations program supported).1
+  have actual := generated_callee_lookup body target code
+  have eq : compileProgExactHOLW callee body = target := by
+    change (crepState body).code.lookup (entryName body) = some ([],compileProgExactHOLW callee body) at lookup
+    rw [actual] at lookup
+    exact (Prod.mk.inj (Option.some.inj lookup)).2.symm
+  rw [← eq]
+  exact frontend_scalar_program (supported_frontend_shape supported callee)
+theorem branching_scalar : ScalarProgram branchCrepBody := by
+  apply supported_compiled_scalar branching branching_supported
+  simpa [branching_hol_eq,twoPrograms,branchCrepBody] using branching_crep_code
 
-private theorem countdown_scalar (x : BitVec 64) : ScalarProgram (countdownCrepBody x) := by
-  exact .dec _ (.direct (.const _)) (.seq .skip (.seq
-    (.while (.direct (.var _)) (.dec _ (.op .sub (.direct (.var _)) (.direct (.const _)))
-      (.seq (.assign _ (.direct (.var _))) .skip))) (.ret (.direct (.const _)))))
+theorem naturalCountdown_scalar (n : Nat) : ScalarProgram (naturalCountdownCrepBody (BitVec.ofNat 64 n)) := by
+  apply supported_compiled_scalar (naturalCountdown n) (naturalCountdown_supported n)
+  simpa [naturalCountdownHOL,twoPrograms] using natural_countdown_crep_code n
 
-private theorem naturalCountdown_scalar (x : BitVec 64) : ScalarProgram (naturalCountdownCrepBody x) := by
-  exact .dec _ (.direct (.const _)) (.seq
-    (.while (.direct (.var _)) (.dec _ (.op .sub (.direct (.var _)) (.direct (.const _)))
-      (.seq (.assign _ (.direct (.var _))) .skip))) (.ret (.direct (.const _))))
-
-private theorem branchingLoop_scalar : ScalarProgram branchingLoopCrepBody := by
-  exact .dec _ (.direct (.const _)) (.seq
-    (.while (.direct (.var _)) (.ite (.cmp .equal (.direct (.var _)) (.direct (.const _)))
-      (.seq (.assign _ (.direct (.const _))) .skip) (.seq (.assign _ (.direct (.const _))) .skip)))
-    (.ret (.direct (.const _))))
+theorem branchingLoop_scalar : ScalarProgram branchingLoopCrepBody := by
+  apply supported_compiled_scalar branchingLoop branchingLoop_supported
+  simpa [twoPrograms] using branchingLoop_crep_code
 
 /-- Kernel-computable optimized code for the comparison witness. -/
 theorem branching_loop_code (arch : AsmArchitecture) :
@@ -32,21 +39,13 @@ theorem branching_loop_code (arch : AsmArchitecture) :
   rw [branching_crep_code]
   exact (twoLoopPrograms_eq arch _ _ branchCrepBody branching_scalar).symm
 
-/-- Kernel-computable optimized code for the prefixed countdown witness. -/
-theorem countdown_loop_code (arch : AsmArchitecture) (n : Nat) :
-    compileProgHOLExact arch (crepPrograms (countdownHOL n)) =
-      twoLoopPrograms arch (ofString "main") (entryName (countdownHOL n))
-        (countdownCrepBody (BitVec.ofNat 64 n)) := by
-  rw [countdown_crep_code]
-  exact (twoLoopPrograms_eq arch _ _ _ (countdown_scalar _)).symm
-
 /-- Kernel-computable optimized code for the natural countdown witness. -/
 theorem naturalCountdown_loop_code (arch : AsmArchitecture) (n : Nat) :
     compileProgHOLExact arch (crepPrograms (naturalCountdownHOL n)) =
       twoLoopPrograms arch (ofString "main") (entryName (naturalCountdownHOL n))
         (naturalCountdownCrepBody (BitVec.ofNat 64 n)) := by
   rw [natural_countdown_crep_code]
-  exact (twoLoopPrograms_eq arch _ _ _ (naturalCountdown_scalar _)).symm
+  exact (twoLoopPrograms_eq arch _ _ _ (naturalCountdown_scalar n)).symm
 
 /-- Kernel-computable optimized code for the conditional-loop witness. -/
 theorem branchingLoop_loop_code (arch : AsmArchitecture) :
@@ -96,16 +95,6 @@ theorem branching_loop_code_locals {σ : Type} (arch : AsmArchitecture) (source 
   apply loopStateFrom_code_locals arch source branchingHOL branchCrepBody branching_scalar
   simpa [twoPrograms,branchCrepBody] using branching_crep_code
 
-/-- The countdown witness needs no separate code or locals premises. -/
-theorem countdown_loop_code_locals {σ : Type} (arch : AsmArchitecture)
-    (source : PanSemStateFiniteExact 64 σ) (n : Nat) :
-    crepToLoopCodeRelExact (witnessLoopContext arch (countdownHOL n)) (crepStateFrom source (countdownHOL n)).code
-      (loopStateFrom arch source (countdownHOL n)).code ∧
-    crepToLoopLocalsRelExact (witnessLoopContext arch (countdownHOL n)) .ln (crepStateFrom source (countdownHOL n)).locals
-      (loopStateFrom arch source (countdownHOL n)).locals := by
-  apply loopStateFrom_code_locals arch source (countdownHOL n) _ (countdown_scalar _)
-  simpa [twoPrograms] using countdown_crep_code n
-
 /-- The unprefixed countdown witness has the same constructed relations. -/
 theorem naturalCountdown_loop_code_locals {σ : Type} (arch : AsmArchitecture)
     (source : PanSemStateFiniteExact 64 σ) (n : Nat) :
@@ -113,7 +102,7 @@ theorem naturalCountdown_loop_code_locals {σ : Type} (arch : AsmArchitecture)
       (loopStateFrom arch source (naturalCountdownHOL n)).code ∧
     crepToLoopLocalsRelExact (witnessLoopContext arch (naturalCountdownHOL n)) .ln (crepStateFrom source (naturalCountdownHOL n)).locals
       (loopStateFrom arch source (naturalCountdownHOL n)).locals := by
-  apply loopStateFrom_code_locals arch source (naturalCountdownHOL n) _ (naturalCountdown_scalar _)
+  apply loopStateFrom_code_locals arch source (naturalCountdownHOL n) _ (naturalCountdown_scalar n)
   simpa [twoPrograms] using natural_countdown_crep_code n
 
 /-- The conditional-loop witness has the same constructed relations. -/
