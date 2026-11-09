@@ -78,6 +78,22 @@ theorem loopSequence_compNative_bitmap {width : Nat} [NeZero width]
   | loop _ _ h =>
     intro bs frame
     simpa only [compNative] using branch_compNative_bitmap ac perf h bs frame
+  | nestedLoop names exits h ih =>
+    intro bs frame
+    simpa only [compNative] using ih bs frame
+  | conditional cmp r ri ha hb iha ihb =>
+    intro bs frame
+    simp only [compNative]
+    cases h1 : compNative ac perf _ bs frame with
+    | mk qa ba =>
+      have eq : ba = bs := by simpa only [h1] using iha bs frame
+      subst ba
+      cases h2 : compNative ac perf _ bs frame with
+      | mk qb bb =>
+        have eq : bb = bs := by simpa only [h2] using ihb bs frame
+        subst bb
+        cases ri <;> simp only
+        split <;> rfl
   | seq ha hb iha ihb =>
     intro bs frame
     simp only [compNative]

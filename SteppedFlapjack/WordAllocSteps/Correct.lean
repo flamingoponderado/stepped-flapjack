@@ -32,6 +32,8 @@ theorem colour_loopSequence (f : Nat → Nat) {p : WordLangProgHOL (BitVec width
   | branch h => exact .branch (colour_branch f h)
   | loop _ _ h => exact .loop _ _ (colour_branch f h)
   | seq _ _ ih1 ih2 => exact .seq ih1 ih2
+  | nestedLoop names exits h ih => exact .nestedLoop _ _ ih
+  | conditional cmp r ri ha hb iha ihb => exact .conditional _ _ _ iha ihb
 
 theorem wordAlloc_loopSequence (fc : Nat) (ac : AsmConfigExact width) (alg k : Nat)
     {p : WordLangProgHOL (BitVec width)} (col : Option (Spt Nat)) (h : LoopSequence p) :

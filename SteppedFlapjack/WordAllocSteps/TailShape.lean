@@ -23,15 +23,15 @@ theorem tailEntry_allowed_all {width : Nat} [NeZero width] {p : WordLangProgHOL 
 assuming an execution or a code-table relation. -/
 theorem preAlloc_tailEntry_allowed {width : Nat} [NeZero width]
     (ac : AsmConfigExact width) (flag : Bool) (count : Nat)
-    {p : WordLangProgHOL (BitVec width)} (shape : WordTailEntryShape p) :
-    AllowedTailEntry (fun _ => True) (preAlloc ac flag count p) := by
-  have h0 := compileExp_allowedTailEntry (tailEntry_allowed_all shape)
+    {allowed : Nat → Prop} {p : WordLangProgHOL (BitVec width)} (shape : AllowedTailEntry allowed p) :
+    AllowedTailEntry allowed (preAlloc ac flag count p) := by
+  have h0 := compileExp_allowedTailEntry shape
   have h1 := select_allowedTailEntry ac (maxVarHOL (compileExp p)+1) h0
   have h2 := fullSsa_allowedTailEntry count h1
   have h3 := removeDead_allowedTailEntry h2 .ln [] []
   have h4 := wordCse_allowedTailEntry h3 emptyData
   have h5 := copy_allowedTailEntry h4 emptyEq
-  have h6 : AllowedTailEntry (fun _ => True) (threeToTwoRegProg flag
+  have h6 : AllowedTailEntry allowed (threeToTwoRegProg flag
       (copyProp (wordCommonSubexpElim (removeDeadProg (fullSsaCcTrans count
         (instSelect ac (maxVarHOL (compileExp p)+1) (compileExp p))))))) := by
     cases flag with
@@ -40,18 +40,25 @@ theorem preAlloc_tailEntry_allowed {width : Nat} [NeZero width]
   have h7 := seqAssocRight_allowedTailEntry h6 (.branch .skip)
   exact removeDead_allowedTailEntry h7 .ln [] []
 
-/-- Full Word compilation keeps a direct-tail entry in the register-renamed
-fragment used by the native bitmap-preservation theorem. -/
+/-- Full Word compilation preserves every allowed direct-call destination. -/
+theorem fullCompileSingle_tailEntry_allowed {width : Nat} [NeZero width]
+    (ac : AsmConfigExact width) (flag : Bool) (count fc alg k : Nat)
+    (col : Option (Spt Nat)) {allowed : Nat → Prop} {p : WordLangProgHOL (BitVec width)}
+    (shape : AllowedTailEntry allowed p) :
+    RegAllowedTail allowed (fullCompileSingle flag k alg ac ((fc,count,p),col)).2.2 := by
+  have input := allowed_regTail (preAlloc_tailEntry_allowed ac flag count shape)
+  have allocated := wordAlloc_regAllowed fc ac alg k col input
+  change RegAllowedTail allowed (Flapjack.Compiler.Backend.WordRemove.removeMustTerminate
+    (wordAlloc fc ac alg k (preAlloc ac flag count p) col))
+  rw [removeMustTerminate_regTail (regAllowed_shape allocated)]
+  exact allocated
+
+/-- Full Word compilation keeps the direct-tail entry shape. -/
 theorem fullCompileSingle_tailEntry_shape {width : Nat} [NeZero width]
     (ac : AsmConfigExact width) (flag : Bool) (count fc alg k : Nat)
     (col : Option (Spt Nat)) {p : WordLangProgHOL (BitVec width)} (shape : WordTailEntryShape p) :
-    RegTailShape (fullCompileSingle flag k alg ac ((fc,count,p),col)).2.2 := by
-  have input := allowed_regTail (preAlloc_tailEntry_allowed ac flag count shape)
-  have allocated := regAllowed_shape (wordAlloc_regAllowed fc ac alg k col input)
-  change RegTailShape (Flapjack.Compiler.Backend.WordRemove.removeMustTerminate
-    (wordAlloc fc ac alg k (preAlloc ac flag count p) col))
-  rw [removeMustTerminate_regTail allocated]
-  exact allocated
+    RegTailShape (fullCompileSingle flag k alg ac ((fc,count,p),col)).2.2 :=
+  regAllowed_shape (fullCompileSingle_tailEntry_allowed ac flag count fc alg k col (tailEntry_allowed_all shape))
 
 private theorem zip_left_member {α β : Type} (xs : List α) (ys : List β)
     (x : α) (y : β) (h : (x,y) ∈ xs.zip ys) : x ∈ xs := by

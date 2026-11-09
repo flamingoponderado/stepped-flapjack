@@ -1,7 +1,17 @@
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgramDef
-import SteppedFlapjack.CrepToLoopSteps.ScalarLoop
+import SteppedFlapjack.CrepToLoopSteps.ScalarLoopLive
+import SteppedFlapjack.LoopToWordSteps.WordSimpSequence
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack SteppedFlapjack.LoopToWordSteps
+
+/-- The recursive scalar Loop fragment is covered by the Loop-to-Word span. -/
+theorem scalarLoop_wordShape {width : Nat} [NeZero width] {p : HolLoopProg width}
+    (shape : ScalarLoop p) : LoopSequenceSource p := by
+  induction shape with
+  | branch h => exact .branch h
+  | seq ha hb iha ihb => exact .seq iha ihb
+  | ite cmp r ri live ha hb iha ihb => exact .conditional cmp r ri live iha ihb
+  | loop live exits h ih => exact .nestedLoop live exits ih
 
 private theorem scalarLoop_nested {width : Nat} [NeZero width] (xs : List (HolLoopProg width))
     (shape : ∀ p ∈ xs, ScalarLoop p) : ScalarLoop (loopNestedSeqHOL xs) := by
@@ -89,4 +99,11 @@ theorem compile_scalar_program {width : Nat} [NeZero width] {p : CrepProgHOL wid
     · exact .branch (pref p h)
     · exact .branch (.assign _ _)
     · exact .ite _ _ _ _ (.seq (ih _ _) (.branch (.continue 0))) (.branch (.break 0))
+/-- The actual optimized Loop output of every recursive scalar Crep body is
+within the Loop-to-Word span fragment. -/
+theorem compile_scalar_optimized_wordShape {width : Nat} [NeZero width] {p : CrepProgHOL width}
+    (shape : ScalarProgram p) (ctxt : CrepToLoopContextExact) (live : NumSet) :
+    LoopSequenceSource (optimiseHOL (compileHOLExact ctxt live p)) :=
+  scalarLoop_wordShape (scalarLoop_optimise (compile_scalar_program shape ctxt live))
+
 end SteppedFlapjack.CrepToLoopSteps

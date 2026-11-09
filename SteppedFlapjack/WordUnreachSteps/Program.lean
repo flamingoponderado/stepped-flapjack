@@ -1,7 +1,7 @@
 import SteppedFlapjack.WordTwoRegSteps.Correct
 import Flapjack.Compiler.Backend.WordUnreach.Proofs
 
-/-! Unreachable-code removal on sequences of branch-bodied loops. -/
+/-! Unreachable-code removal on recursive call-free programs. -/
 namespace SteppedFlapjack.WordUnreachSteps
 open Flapjack Flapjack.WordSemStateFiniteExact SteppedFlapjack.WordSteps
 open Flapjack.Compiler.Backend.WordUnreach SteppedFlapjack.WordSimpSteps
@@ -115,6 +115,14 @@ theorem seqAssocRight_shape {p : WordLangProgHOL (BitVec width)} (shape : LoopSe
     | ret r vs => exact simpSeq_shape (.branch (.ret r vs)) hacc
     | «break» n => exact simpSeq_shape (.branch (.break n)) hacc
     | «continue» n => exact simpSeq_shape (.branch (.continue n)) hacc
+  | nestedLoop names exits hp ih =>
+    intro acc hacc
+    simp only [seqAssocRight]
+    exact simpSeq_shape (.nestedLoop names exits (ih (.branch .skip))) hacc
+  | conditional cmp r ri ha hb iha ihb =>
+    intro acc hacc
+    simp only [seqAssocRight]
+    exact simpSeq_shape (.conditional cmp r ri (iha (.branch .skip)) (ihb (.branch .skip))) hacc
   | loop names exits hp =>
     intro acc hacc
     simp only [seqAssocRight]

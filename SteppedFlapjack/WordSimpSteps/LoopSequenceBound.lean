@@ -15,6 +15,8 @@ theorem loopSequence_clockProgram {p : WordLangProgHOL (BitVec width)} (hp : Loo
   | branch hp => exact branch_clockProgram hp
   | loop names exits hb => simpa [clockProgram] using branch_clockProgram hb
   | seq ha hb iha ihb => simp [clockProgram,iha,ihb]
+  | nestedLoop names exits h ih => simpa [clockProgram] using ih
+  | conditional cmp r ri ha hb iha ihb => simp [clockProgram,iha,ihb]
 
 /-- Replay a non-timeout run with any clock bounding its visits, including
 unselected expression assignments and stores. -/
@@ -32,7 +34,7 @@ theorem loopSequence_normalized_run {p : WordLangProgHOL (BitVec width)} (shape 
   simpa only [eqn,Nat.zero_add] using extended
 
 /-- The complete WordSimp pass preserves a normalized execution of a sequence
-of branch-bodied loops, and its actual visits are bounded in terms of the
+with recursive control flow, and its actual visits are bounded in terms of the
 original source visit bound. -/
 theorem loopSequence_wordSimp_normalized {p : WordLangProgHOL (BitVec width)} (shape : LoopSequence p)
     (s post : WordSemStateFiniteExact width C F) (res : Option (WordSemResult width)) (limit : Nat)

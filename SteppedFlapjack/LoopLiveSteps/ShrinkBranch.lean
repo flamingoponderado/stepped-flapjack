@@ -32,11 +32,12 @@ theorem shrink_branch {p : HolLoopProg width} (shape : LoopBranch p) :
     cases ri <;> simp only [shrinkHOL] <;>
       exact .ite _ _ _ _ (iha lt (sptInter live ls)) (ihb lt (sptInter live ls))
 
-/-- Any successful loop liveness fixed point returns a branch-shaped body. -/
-theorem fixedpoint_branch {body : HolLoopProg width} (shape : LoopBranch body)
+/-- A successful liveness fixed point preserves any property preserved by shrinking. -/
+theorem fixedpoint_preserves {body : HolLoopProg width} (property : HolLoopProg width → Prop)
+    (preserves : ∀ lt live, property (shrinkHOL lt body live).1)
     (lt : List (NumSet × NumSet)) (liveIn l1 l2 : NumSet)
     (out : HolLoopProg width) (liveOut : NumSet)
-    (result : fixedpointHOL lt liveIn l1 l2 body = some (out,liveOut)) : LoopBranch out := by
+    (result : fixedpointHOL lt liveIn l1 l2 body = some (out,liveOut)) : property out := by
   induction hmeasure : sptSize liveIn - sptSize l1 using Nat.strongRecOn generalizing l1 with
   | _ measure ih =>
     rcases hsh : shrinkHOL ((sptInter liveIn l1,l2)::lt) body l2 with ⟨shrunk,l0⟩
@@ -44,7 +45,7 @@ theorem fixedpoint_branch {body : HolLoopProg width} (shape : LoopBranch body)
     simp only [hsh] at result
     split at result
     · simp only [Option.some.injEq, Prod.mk.injEq] at result
-      have branch := shrink_branch shape ((sptInter liveIn l1,l2)::lt) l2
+      have branch := preserves ((sptInter liveIn l1,l2)::lt) l2
       rw [hsh] at branch
       simpa only [result.1] using branch
     · split at result
@@ -54,11 +55,23 @@ theorem fixedpoint_branch {body : HolLoopProg width} (shape : LoopBranch body)
         have bounded := sptSize_inter_le liveIn l0
         omega
 
-/-- The liveness pass preserves supported sequences of branch-bodied loops. -/
+/-- The liveness pass preserves recursive supported Loop programs. -/
 theorem shrink_sequence {p : HolLoopProg width} (shape : LoopSequenceSource p) :
     ∀ lt live, LoopSequenceSource (shrinkHOL lt p live).1 := by
   induction shape with
   | branch h => intro lt live; exact .branch (shrink_branch h lt live)
+  | @nestedLoop liveIn liveOut body h ih =>
+    intro lt live
+    simp only [shrinkHOL]
+    cases fixed : fixedpointHOL lt liveIn .ln (sptUnion liveIn (sptInter liveOut live)) body with
+    | none => exact .nestedLoop _ _ (ih _ _)
+    | some pair =>
+      cases pair with
+      | mk body out => exact .nestedLoop _ _ (fixedpoint_preserves LoopSequenceSource ih lt liveIn .ln _ body out fixed)
+  | conditional cmp r ri ls ha hb iha ihb =>
+    intro lt live
+    cases ri <;> simp only [shrinkHOL] <;>
+      exact .conditional _ _ _ _ (iha lt (sptInter live ls)) (ihb lt (sptInter live ls))
   | @seq a b ha hb iha ihb =>
     intro lt live
     simp only [shrinkHOL]
@@ -70,6 +83,6 @@ theorem shrink_sequence {p : HolLoopProg width} (shape : LoopSequenceSource p) :
     | none => exact .loop _ _ (shrink_branch h _ _)
     | some pair =>
       cases pair with
-      | mk body out => exact .loop _ _ (fixedpoint_branch h lt liveIn .ln _ body out fixed)
+      | mk body out => exact .loop _ _ (fixedpoint_preserves LoopBranch (shrink_branch h) lt liveIn .ln _ body out fixed)
 
 end SteppedFlapjack.LoopLiveSteps

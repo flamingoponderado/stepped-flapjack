@@ -13,19 +13,23 @@ theorem supportedCodeBody_rawLoopShape {width : Nat} [NeZero width]
     (ctxt : CrepToLoopContextExact) (live : NumSet) {p : CrepProgHOL width}
     (shape : SupportedCodeBody p) :
     TailEntryShape (compileHOLExact ctxt live p) ∨
-      LoopSequenceSource (compileHOLExact ctxt live p) := by
+      SimpleLoopSequenceSource (compileHOLExact ctxt live p) := by
   cases shape with
   | branch h => right; exact .branch (compile_branchProgram_loopBranch h ctxt live)
   | tail h name => left; exact (compiled_tailEntry_shape ctxt live _ h name).1
   | loop hi hc hb ht =>
     right
-    exact branchConditionWhileBranch_wordSimpShape _ hi _ hc _ _ hb ht ctxt live
+    obtain ⟨code,value,next,outLive,compiled,loopCompiled,loopBody⟩ :=
+      branchConditionWhile_loopBranch _ (BranchCondition.toScalar hc) _ hb ctxt live
+    simp only [compileHOLExact,loopCompiled]
+    exact .seq (.branch (compile_branchProgram_loopBranch hi ctxt live))
+      (.seq (.loop live live loopBody) (.branch (compile_branchProgram_loopBranch ht ctxt live)))
   | @declWhile name value condition body tail hv hc hb ht =>
     right
     have suffix (bc : CrepToLoopContextExact) (bl : NumSet) :
-        LoopSequenceSource (compileHOLExact bc bl (.seq (.while condition body) tail)) := by
+        SimpleLoopSequenceSource (compileHOLExact bc bl (.seq (.while condition body) tail)) := by
       obtain ⟨code,conditionValue,next,outLive,condCompiled,loopCompiled,loopBody⟩ :=
-        branchConditionWhile_loopBranch condition hc body hb bc bl
+        branchConditionWhile_loopBranch condition (BranchCondition.toScalar hc) body hb bc bl
       simp only [compileHOLExact,loopCompiled]
       exact .seq (.loop bl bl loopBody) (.branch (compile_branchProgram_loopBranch ht bc bl))
     obtain ⟨value2,compiled⟩ := directExpression_noCode hv ctxt (ctxt.vmax+1) live
@@ -33,10 +37,16 @@ theorem supportedCodeBody_rawLoopShape {width : Nat} [NeZero width]
     exact .seq (.branch .skip) (.seq (.branch (.assign _ _)) (suffix _ _))
   | @declLoop name value init condition body tail hv hi hc hb ht =>
     right
+    have suffix (bc : CrepToLoopContextExact) (bl : NumSet) :
+        SimpleLoopSequenceSource (compileHOLExact bc bl (.seq init (.seq (.while condition body) tail))) := by
+      obtain ⟨code,conditionValue,next,outLive,condCompiled,loopCompiled,loopBody⟩ :=
+        branchConditionWhile_loopBranch condition (BranchCondition.toScalar hc) body hb bc bl
+      simp only [compileHOLExact,loopCompiled]
+      exact .seq (.branch (compile_branchProgram_loopBranch hi bc bl))
+        (.seq (.loop bl bl loopBody) (.branch (compile_branchProgram_loopBranch ht bc bl)))
     obtain ⟨value2,compiled⟩ := directExpression_noCode hv ctxt (ctxt.vmax+1) live
     rw [compileHOLExact,compiled]
-    exact .seq (.branch .skip) (.seq (.branch (.assign _ _))
-      (branchConditionWhileBranch_wordSimpShape init hi condition hc body tail hb ht _ _))
+    exact .seq (.branch .skip) (.seq (.branch (.assign _ _)) (suffix _ _))
 
 /-- Frontend composition with the structurally executable Loop optimizer. -/
 def compileProgWithStructuralLive {width : Nat} [NeZero width] (arch : AsmArchitecture)

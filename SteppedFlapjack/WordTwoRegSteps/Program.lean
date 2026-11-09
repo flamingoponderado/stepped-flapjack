@@ -31,13 +31,15 @@ theorem threeToTwo_branch {p : WordLangProgHOL (BitVec width)} (shape : Branch p
   | seq ha hb iha ihb => exact .seq iha ihb
   | ite cmp r ri ha hb iha ihb => exact .ite cmp r ri iha ihb
 
-/-- Three-to-two rewriting preserves sequences of branch-bodied loops. -/
+/-- Three-to-two rewriting preserves recursive call-free programs. -/
 theorem threeToTwo_loopSequence {p : WordLangProgHOL (BitVec width)} (shape : LoopSequence p) :
     LoopSequence (threeToTwoReg p) := by
   induction shape with
   | branch hp => exact .branch (threeToTwo_branch hp)
   | loop names exits hp => exact .loop names exits (threeToTwo_branch hp)
   | seq ha hb iha ihb => exact .seq iha ihb
+  | nestedLoop names exits hp ih => exact .nestedLoop names exits ih
+  | conditional cmp r ri ha hb iha ihb => exact .conditional cmp r ri iha ihb
 
 /-- The optional rewrite preserves a non-error execution and has an output
 visit bound under its standard distinct-target-register convention. -/

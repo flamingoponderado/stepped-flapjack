@@ -38,6 +38,10 @@ theorem flat_loopSequence_block {p : WordLangProgHOL (BitVec width)} (h : LoopSe
   | seq _ _ ih1 ih2 =>
     simp only [flatExpConventions, Bool.and_eq_true] at flat
     exact .seq (ih1 flat.1) (ih2 flat.2)
+  | nestedLoop names exits h ih => exact .loop names exits (ih flat)
+  | conditional cmp r ri ha hb iha ihb =>
+    simp only [flatExpConventions, Bool.and_eq_true] at flat
+    exact .ite cmp r ri (iha flat.1) (ihb flat.2)
 
 theorem branch_noInstall {p : WordLangProgHOL (BitVec width)} (h : Branch p) :
     noInstallSubprogsHOL p = true := by
@@ -51,6 +55,10 @@ theorem loopSequence_noInstall {p : WordLangProgHOL (BitVec width)} (h : LoopSeq
   | seq _ _ ih1 ih2 =>
     simp only [noInstallSubprogsHOL] at ih1 ih2 ⊢
     simp only [notCreatedSubprogsWithMemOp,ih1,ih2,Bool.and_self]
+  | nestedLoop names exits h ih => simpa [noInstallSubprogsHOL,notCreatedSubprogsWithMemOp] using ih
+  | conditional cmp r ri ha hb iha ihb =>
+    simp only [noInstallSubprogsHOL] at iha ihb ⊢
+    simp only [notCreatedSubprogsWithMemOp,iha,ihb,Bool.and_self]
 
 /-- The allocator output satisfies the stack compiler’s flat-expression and
 post-allocation conventions, without assumptions on the source. -/

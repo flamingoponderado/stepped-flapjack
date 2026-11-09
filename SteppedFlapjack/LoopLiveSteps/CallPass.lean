@@ -22,8 +22,7 @@ theorem loopCall_branch {p : HolLoopProg width} (shape : LoopBranch p) :
     intro env
     simp only [loopCallCompHOL,iha env,ihb env]
 
-/-- The pass is also the identity on the supported sequences of branch-bodied
-loops, so frontend call propagation introduces no extra source steps. -/
+/-- The pass is also the identity on the recursive supported Loop programs, so frontend call propagation introduces no extra source steps. -/
 theorem loopCall_sequence {p : HolLoopProg width} (shape : LoopSequenceSource p) :
     ∀ env, (loopCallCompHOL env p).1 = p := by
   induction shape with
@@ -35,5 +34,7 @@ theorem loopCall_sequence {p : HolLoopProg width} (shape : LoopSequenceSource p)
     intro env
     simp only [loopCallCompHOL]
     rw [iha env,ihb (loopCallCompHOL env a).2]
+  | nestedLoop live exits h ih => intro env; simp only [loopCallCompHOL,ih]
+  | conditional cmp r ri live ha hb iha ihb => intro env; simp only [loopCallCompHOL,iha env,ihb env]
 
 end SteppedFlapjack.LoopLiveSteps

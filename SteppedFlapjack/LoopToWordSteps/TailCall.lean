@@ -117,6 +117,8 @@ theorem loopSequence_program {width : Nat} [NeZero width] {p : HolLoopProg width
   | branch h => exact loopBranch_program h
   | loop live exits h => exact .loop live exits (loopBranch_program h)
   | seq _ _ a b => exact .seq a b
+  | nestedLoop live exits h ih => exact .loop live exits ih
+  | conditional cmp r ri live ha hb iha ihb => exact .ite cmp r ri live iha ihb
 
 /-- A single-destination entry has the sixfold bound when its reached callee
 is supported; successful prefixes preserve the lookup needed by the call. -/

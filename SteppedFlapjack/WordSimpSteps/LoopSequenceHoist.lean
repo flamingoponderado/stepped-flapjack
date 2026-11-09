@@ -11,33 +11,55 @@ theorem isSimple_branch (p : WordLangProgHOL (BitVec width)) (h : isSimple p = t
   cases p <;> simp_all [isSimple] <;> constructor
 
 omit [NeZero width] in
-/-- A conditional in the loop-sequence fragment has loop-free branches. -/
+/-- Inverting the recursive shape exposes both conditional arms. -/
 theorem loopSequence_ite_inv (cmp : Cmp) (r : Nat) (ri : WordRegImm (BitVec width))
-    (a b : WordLangProgHOL (BitVec width)) (h : LoopSequence (.ite cmp r ri a b)) : Branch a ∧ Branch b := by
+    (a b : WordLangProgHOL (BitVec width)) (h : LoopSequence (.ite cmp r ri a b)) :
+    LoopSequence a ∧ LoopSequence b := by
   cases h with
-  | branch h => cases h with | ite _ _ _ ha hb => exact ⟨ha,hb⟩
+  | branch h => cases h with | ite _ _ _ ha hb => exact ⟨.branch ha,.branch hb⟩
+  | conditional _ _ _ ha hb => exact ⟨ha,hb⟩
 
-/-- Successful duplicate-conditional hoisting preserves the loop-sequence
-fragment, including loops before the transformed conditional. -/
+omit [NeZero width] in
+/-- Inverting the recursive shape exposes both sequence components. -/
+theorem loopSequence_seq_inv (a b : WordLangProgHOL (BitVec width))
+    (h : LoopSequence (.seq a b)) : LoopSequence a ∧ LoopSequence b := by
+  cases h with
+  | branch h => cases h with | seq ha hb => exact ⟨.branch ha,.branch hb⟩
+  | seq ha hb => exact ⟨ha,hb⟩
+
+/-- Constant propagation preserves the recursive fragment. -/
+theorem constFp_loopSequence {p : WordLangProgHOL (BitVec width)} (hp : LoopSequence p) :
+    LoopSequence (constFp p) := by
+  exact constFpLoop_loopSequence hp .ln
+
+/-- Successful duplicate-conditional hoisting preserves recursive control flow. -/
 theorem tryIfHoist2_loopSequence (fuel : Nat) : ∀
     {p interm dummy after out : WordLangProgHOL (BitVec width)},
-    LoopSequence p → Branch interm → Branch after →
+    LoopSequence p → LoopSequence interm → LoopSequence after →
     tryIfHoist2 fuel p interm dummy after = some out → LoopSequence out := by
   induction fuel with
   | zero => intros; simp_all [tryIfHoist2]
   | succ fuel ih =>
     intro p interm dummy after out hp hi ht h
-    cases hp with
-    | branch hp => exact .branch (tryIfHoist2_branch _ hp hi ht h)
-    | loop names exits hb => simp [tryIfHoist2] at h
-    | @seq a b ha hb =>
+    cases p <;> try { simp [tryIfHoist2] at h }
+    case ite cmp lhs rhs a b =>
+      obtain ⟨ha,hb⟩ := loopSequence_ite_inv cmp lhs rhs a b hp
+      simp only [tryIfHoist2] at h
+      split at h
+      · contradiction
+      · split at h
+        · contradiction
+        · cases h
+          exact constFp_loopSequence (.conditional cmp lhs rhs (.seq (.seq ha hi) ht) (.seq (.seq hb hi) ht))
+    case seq a b =>
+      obtain ⟨ha,hb⟩ := loopSequence_seq_inv a b hp
       simp only [tryIfHoist2] at h
       cases hd : destIf b with
       | none =>
         simp only [hd] at h
         split at h
         · rename_i simple
-          exact ih ha (.seq (isSimple_branch b simple) hi) ht h
+          exact ih ha (.seq (.branch (isSimple_branch b simple)) hi) ht h
         · contradiction
       | some value =>
         rcases value with ⟨cmp,lhs,rhs,x,y⟩
@@ -50,7 +72,7 @@ theorem tryIfHoist2_loopSequence (fuel : Nat) : ∀
         · split at h
           · contradiction
           · cases h
-            exact .seq ha (.branch (constFp_branch (.ite cmp lhs rhs (.seq (.seq hx hi) ht) (.seq (.seq hy hi) ht))))
+            exact .seq ha (constFp_loopSequence (.conditional cmp lhs rhs (.seq (.seq hx hi) ht) (.seq (.seq hy hi) ht)))
 
 /-- The hoisting entry point cannot introduce unsupported loops. -/
 theorem tryIfHoist1_loopSequence {a b out : WordLangProgHOL (BitVec width)}
@@ -64,7 +86,7 @@ theorem tryIfHoist1_loopSequence {a b out : WordLangProgHOL (BitVec width)}
     subst b
     have parts := loopSequence_ite_inv cmp lhs rhs x y hb
     simp only [hd] at h
-    exact tryIfHoist2_loopSequence _ ha .skip (.ite cmp lhs rhs parts.1 parts.2) h
+    exact tryIfHoist2_loopSequence _ ha (.branch .skip) (.conditional cmp lhs rhs parts.1 parts.2) h
 
 /-- Duplicate-conditional simplification preserves programs with loop-free
 initialization, loop bodies and continuations. -/
@@ -73,6 +95,8 @@ theorem simpDuplicateIf_loopSequence {p : WordLangProgHOL (BitVec width)} (hp : 
   induction hp with
   | branch hp => exact .branch (simpDuplicateIf_branch hp)
   | loop names exits hb => exact .loop names exits (simpDuplicateIf_branch hb)
+  | nestedLoop names exits hb ih => exact .nestedLoop names exits ih
+  | conditional cmp r ri ha hb iha ihb => exact .conditional cmp r ri iha ihb
   | @seq a b ha hb iha ihb =>
     simp only [simpDuplicateIf]
     cases h : tryIfHoist1 (simpDuplicateIf a) (simpDuplicateIf b) with

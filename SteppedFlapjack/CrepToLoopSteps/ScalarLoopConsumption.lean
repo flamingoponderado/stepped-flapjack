@@ -1,6 +1,7 @@
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopWeight
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopLive
-import SteppedFlapjack.LoopLiveSteps.ClockBound
+import SteppedFlapjack.LoopLiveSteps.BranchShape
+import Flapjack.Pancake.Proofs.LoopLive.Optimise
 import SteppedFlapjack.LoopSteps.ClockConsumption
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.LoopSemStateFiniteExact Flapjack.Compiler.Encoders.Asm

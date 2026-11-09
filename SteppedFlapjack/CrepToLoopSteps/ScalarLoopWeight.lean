@@ -85,7 +85,7 @@ theorem scalarLoop_shrink_weight {p : HolLoopProg width} (shape : ScalarLoop p) 
     | none => simp only [loopSkeletonWeight,ih]
     | some pair =>
       rcases pair with ⟨b,l⟩
-      simp only [loopSkeletonWeight, scalarFixedpoint_preserves (fun p => loopSkeletonWeight p = loopSkeletonWeight body) ih lt li .ln _ b l heq]
+      simp only [loopSkeletonWeight, SteppedFlapjack.LoopLiveSteps.fixedpoint_preserves (fun p => loopSkeletonWeight p = loopSkeletonWeight body) ih lt li .ln _ b l heq]
 private theorem branch_mark_weight {p : HolLoopProg width} (shape : LoopBranch p) :
     loopSkeletonWeight (markAllHOL p).1 = loopSkeletonWeight p := by
   induction shape with

@@ -36,6 +36,18 @@ theorem markAll_sequence {p : HolLoopProg width} (shape : LoopSequenceSource p) 
   | loop live exits h =>
     simp only [markAllHOL]
     exact ⟨.loop _ _ (markAll_branch h).1,by simp⟩
+  | nestedLoop live exits h ih =>
+    simp only [markAllHOL]
+    exact ⟨.nestedLoop _ _ ih.1,by simp⟩
+  | @conditional cmp r ri ls a b ha hb iha ihb =>
+    simp only [markAllHOL]
+    cases h1 : (markAllHOL a).2 <;> cases h2 : (markAllHOL b).2 <;>
+      simp only [h1,h2,Bool.false_and,Bool.true_and,if_true] at *
+    · exact ⟨.conditional _ _ _ _ iha.1 ihb.1,by simp⟩
+    · exact ⟨.conditional _ _ _ _ iha.1 ihb.1,by simp⟩
+    · exact ⟨.conditional _ _ _ _ iha.1 ihb.1,by simp⟩
+    · have branch := LoopBranch.ite cmp r ri ls (iha.2 True.intro) (ihb.2 True.intro)
+      exact ⟨.branch (.mark branch),fun _ => .mark branch⟩
   | @seq a b ha hb iha ihb =>
     simp only [markAllHOL]
     cases h1 : (markAllHOL a).2 <;> cases h2 : (markAllHOL b).2 <;>
@@ -46,7 +58,7 @@ theorem markAll_sequence {p : HolLoopProg width} (shape : LoopSequenceSource p) 
     · have branch := LoopBranch.seq (iha.2 True.intro) (ihb.2 True.intro)
       exact ⟨.branch (.mark branch),fun _ => .mark branch⟩
 
-/-- The complete actual Loop optimizer retains the nonnested-loop fragment. -/
+/-- The complete actual Loop optimizer retains the recursive Loop fragment. -/
 theorem optimise_sequence {p : HolLoopProg width} (shape : LoopSequenceSource p) :
     LoopSequenceSource (optimiseHOL p) := by
   simp only [optimiseHOL,loopCall_sequence shape .ln,compHOL]
