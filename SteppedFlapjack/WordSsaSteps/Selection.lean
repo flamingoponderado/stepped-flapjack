@@ -50,6 +50,8 @@ theorem select_loopSequence (ac : AsmConfigExact width) (temp : Nat)
   | branch hp => exact .branch (select_branch ac temp hp)
   | loop names exits hp => simpa only [instSelect] using LoopSequence.loop names exits (select_branch ac temp hp)
   | seq ha hb iha ihb => simpa only [instSelect] using LoopSequence.seq iha ihb
+  | nestedLoop names exits hp ih => simpa only [instSelect] using LoopSequence.nestedLoop names exits ih
+  | conditional cmp r ri ha hb iha ihb => simpa only [instSelect] using LoopSequence.conditional cmp r ri iha ihb
 
 /-- The first three actual Word-to-Word transformations have an output
 visit bound in terms of the available clock and computed output syntax. -/

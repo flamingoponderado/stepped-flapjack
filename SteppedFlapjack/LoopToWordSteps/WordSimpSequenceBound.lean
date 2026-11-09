@@ -12,6 +12,8 @@ theorem loopSequenceSource_select {width : Nat} [NeZero width] {p : HolLoopProg 
   | branch h => exact loopBranch_select h
   | loop live exits h => exact .loop live exits (loopBranch_select h)
   | seq ha hb iha ihb => exact .seq iha ihb
+  | nestedLoop live exits h ih => exact .loop live exits ih
+  | conditional cmp r ri live ha hb iha ihb => exact .ite cmp r ri live iha ihb
 
 /-- Shared Loop-to-Word execution and visit bound used by the Word-pass
 compositions. Completion discharges error and timeout cases once here. -/

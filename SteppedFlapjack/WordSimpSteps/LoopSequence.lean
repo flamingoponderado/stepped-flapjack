@@ -6,11 +6,13 @@ open Flapjack Flapjack.WordSemStateFiniteExact SteppedFlapjack.WordSteps
 open Flapjack.Compiler.Backend.WordSimp
 variable {width : Nat} [NeZero width]
 
-/-- A call-free sequence of loop-free branches and loops with branch bodies. -/
+/-- Call-free programs with supported branches and recursive control flow. -/
 inductive LoopSequence : WordLangProgHOL (BitVec width) → Prop
   | branch {p} : Branch p → LoopSequence p
   | loop (names exits) {body} : Branch body → LoopSequence (.loop names body exits)
   | seq {a b} : LoopSequence a → LoopSequence b → LoopSequence (.seq a b)
+  | nestedLoop (names exits) {body} : LoopSequence body → LoopSequence (.loop names body exits)
+  | conditional (cmp r ri) {a b} : LoopSequence a → LoopSequence b → LoopSequence (.ite cmp r ri a b)
 
 /-- Smart sequence elimination preserves programs with loops. -/
 theorem smartSeq_loopSequence {a b : WordLangProgHOL (BitVec width)}
@@ -45,6 +47,14 @@ theorem seqAssoc_loopSequence {p : WordLangProgHOL (BitVec width)} (hp : LoopSeq
     intro prelude hprefix
     simp only [Compiler.Backend.WordSimp.seqAssoc]
     exact smartSeq_loopSequence hprefix (.loop names exits (seqAssoc_branch hbody .skip))
+  | nestedLoop names exits hbody ih =>
+    intro prelude hprefix
+    simp only [Compiler.Backend.WordSimp.seqAssoc]
+    exact smartSeq_loopSequence hprefix (.nestedLoop names exits (ih (.branch .skip)))
+  | conditional cmp r ri ha hb iha ihb =>
+    intro prelude hprefix
+    simp only [Compiler.Backend.WordSimp.seqAssoc]
+    exact smartSeq_loopSequence hprefix (.conditional cmp r ri (iha (.branch .skip)) (ihb (.branch .skip)))
   | seq ha hb iha ihb =>
     intro prelude hprefix
     simp only [Compiler.Backend.WordSimp.seqAssoc]
@@ -57,6 +67,17 @@ theorem constFpLoop_loopSequence {p : WordLangProgHOL (BitVec width)} (hp : Loop
   induction hp with
   | branch hp => intro cs; exact .branch (constFpLoop_branch hp cs)
   | loop names exits hp => intro cs; exact .loop names exits (constFpLoop_branch hp .ln)
+  | nestedLoop names exits hb ih =>
+    intro cs
+    simpa only [constFpLoop] using LoopSequence.nestedLoop names exits (ih .ln)
+  | conditional cmp r ri ha hb iha ihb =>
+    intro cs
+    simp only [constFpLoop]
+    split
+    · split
+      · exact iha cs
+      · exact ihb cs
+    · exact .conditional cmp r ri (iha cs) (ihb cs)
   | seq ha hb iha ihb =>
     intro cs
     simp only [constFpLoop]

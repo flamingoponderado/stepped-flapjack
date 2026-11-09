@@ -124,9 +124,22 @@ theorem shrinkSequence_branch {p : HolLoopProg width} (shape : LoopBranch p) :
       simp only [shrinkSequence,shrinkBranch,iha,ihb]
   | mark h ih => intro lt live; simp only [shrinkSequence,shrinkBranch,ih]
 
+/-- Inputs supported by the older branch-body executable liveness shortcut. -/
+inductive SimpleLoopSequenceSource {width : Nat} [NeZero width] : HolLoopProg width → Prop
+  | branch {p} : LoopBranch p → SimpleLoopSequenceSource p
+  | loop (live exits) {body} : LoopBranch body → SimpleLoopSequenceSource (.loop live body exits)
+  | seq {a b} : SimpleLoopSequenceSource a → SimpleLoopSequenceSource b → SimpleLoopSequenceSource (.seq a b)
+
+theorem simpleLoopSequence_source {p : HolLoopProg width} (shape : SimpleLoopSequenceSource p) :
+    LoopSequenceSource p := by
+  induction shape with
+  | branch h => exact .branch h
+  | loop live exits h => exact .loop live exits h
+  | seq ha hb iha ihb => exact .seq iha ihb
+
 /-- The executable sequence pass returns exactly the original program and
 live set for the supported nonnested-loop fragment. -/
-theorem shrinkSequence_eq {p : HolLoopProg width} (shape : LoopSequenceSource p) :
+theorem shrinkSequence_eq {p : HolLoopProg width} (shape : SimpleLoopSequenceSource p) :
     ∀ lt live, shrinkSequence lt p live = shrinkHOL lt p live := by
   induction shape with
   | branch h =>
@@ -144,9 +157,9 @@ without unfolding the original well-founded liveness recursion. -/
 def optimiseSequence (p : HolLoopProg width) : HolLoopProg width :=
   (markAllHOL (shrinkSequence [] p .ln).1).1
 
-theorem optimiseSequence_eq {p : HolLoopProg width} (shape : LoopSequenceSource p) :
+theorem optimiseSequence_eq {p : HolLoopProg width} (shape : SimpleLoopSequenceSource p) :
     optimiseSequence p = optimiseHOL p := by
-  simp only [optimiseSequence,optimiseHOL,loopCall_sequence shape .ln,compHOL,shrinkSequence_eq shape]
+  simp only [optimiseSequence,optimiseHOL,loopCall_sequence (simpleLoopSequence_source shape) .ln,compHOL,shrinkSequence_eq shape]
 
 
 /-- The same structural shrinking also computes direct tail-call entries. -/

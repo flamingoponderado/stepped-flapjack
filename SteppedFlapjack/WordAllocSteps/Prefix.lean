@@ -79,6 +79,8 @@ theorem removeMustTerminate_loopSequence {p : WordLangProgHOL (BitVec width)} (h
   | branch h => exact removeMustTerminate_branch h
   | loop names exits h => simp only [Flapjack.Compiler.Backend.WordRemove.removeMustTerminate, removeMustTerminate_branch h]
   | seq _ _ ih1 ih2 => simp only [Flapjack.Compiler.Backend.WordRemove.removeMustTerminate, ih1, ih2]
+  | nestedLoop _ _ _ ih => simp only [Flapjack.Compiler.Backend.WordRemove.removeMustTerminate, ih]
+  | conditional _ _ _ _ _ ih1 ih2 => simp only [Flapjack.Compiler.Backend.WordRemove.removeMustTerminate, ih1, ih2]
 
 /-- The result is precisely the compiler’s full single-function output. -/
 theorem fullCompileSingle_eq_alloc (ac : AsmConfigExact width) (flag : Bool) (count fc alg k : Nat)

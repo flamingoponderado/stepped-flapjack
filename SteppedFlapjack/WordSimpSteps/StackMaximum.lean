@@ -33,7 +33,8 @@ theorem branch_stackMax {p : WordLangProgHOL (BitVec width)} (hp : Branch p) :
 set_option maxHeartbeats 1000000 in
 /-- Branch-bodied loops preserve the recorded maximum stack usage. -/
 theorem loop_stackMax (names exits : NumSet) {body : WordLangProgHOL (BitVec width)}
-    (shape : Branch body) (s : WordSemStateFiniteExact width C F) :
+    (bodyMax : ∀ s : WordSemStateFiniteExact width C F, (evaluate body s).2.stackMax = s.stackMax)
+    (s : WordSemStateFiniteExact width C F) :
     (evaluate (.loop names body exits) s).2.stackMax = s.stackMax := by
   rw [evaluate]
   cases hc : cutState (names,.ln) s with
@@ -41,7 +42,7 @@ theorem loop_stackMax (names exits : NumSet) {body : WordLangProgHOL (BitVec wid
   | some u =>
     have uc : u.clock = s.clock := (cutState_clock_termdep _ _ _ hc).1
     have us : u.stackMax = s.stackMax := by obtain ⟨_,rfl⟩ := cutStateConst _ _ _ hc; rfl
-    have hb := branch_stackMax shape u
+    have hb := bodyMax u
     rcases he : evaluate body u with ⟨res,v⟩
     rw [he] at hb
     have hclock := (evaluate_clock body u res v he).1
@@ -53,7 +54,7 @@ theorem loop_stackMax (names exits : NumSet) {body : WordLangProgHOL (BitVec wid
       by_cases hz : v.clock = 0
       · simp [hz,flushState]; exact hb.trans us
       · simp only [hz,wordSemSTOP]
-        exact (loop_stackMax names exits shape (decClock v)).trans (hb.trans us)
+        exact (loop_stackMax names exits bodyMax (decClock v)).trans (hb.trans us)
     · simp only [hcont,Bool.false_eq_true,if_false]
       split
       · split
@@ -74,7 +75,13 @@ theorem loopSequence_stackMax {p : WordLangProgHOL (BitVec width)} (shape : Loop
     ∀ s : WordSemStateFiniteExact width C F, (evaluate p s).2.stackMax = s.stackMax := by
   induction shape with
   | branch h => exact branch_stackMax h
-  | loop names exits h => exact loop_stackMax names exits h
+  | loop names exits h => exact loop_stackMax names exits (branch_stackMax h)
+  | nestedLoop names exits h ih => exact loop_stackMax names exits ih
+  | conditional cmp r ri ha hb iha ihb =>
+    intro s
+    rw [evaluate]
+    cases getVar r s <;> cases getVarImm ri s <;> simp only
+    split <;> first | rfl | exact iha s | exact ihb s
   | seq ha hb iha ihb =>
     intro s
     rw [evaluate, fix_clock_evaluate]

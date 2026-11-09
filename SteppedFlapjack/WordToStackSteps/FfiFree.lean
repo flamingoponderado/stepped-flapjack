@@ -139,6 +139,22 @@ theorem loopSequence_compNative_noFfi {width : Nat} [NeZero width]
   | loop _ _ h =>
     intro bs frame
     simpa [compNative,stackNoFfi] using branch_compNative_noFfi ac perf h bs frame
+  | nestedLoop names exits h ih =>
+    intro bs frame
+    simpa [compNative,stackNoFfi] using ih bs frame
+  | conditional cmp r ri ha hb iha ihb =>
+    intro bs frame
+    simp only [compNative]
+    cases h1 : compNative ac perf _ bs frame with
+    | mk pa ba =>
+      cases h2 : compNative ac perf _ ba frame with
+      | mk pb bb =>
+        have a := iha bs frame
+        have b := ihb ba frame
+        simp only [h1] at a
+        simp only [h2] at b
+        cases ri <;> simp [wStackLoad_noFfi,stackNoFfi,a,b]
+        split <;> simp [wStackLoad_noFfi,stackNoFfi,a,b]
   | seq ha hb iha ihb =>
     intro bs frame
     simp only [compNative]

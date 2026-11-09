@@ -14,7 +14,14 @@ theorem compactSeq_loopSequence {a b : WordLangProgHOL (BitVec width)} (ha : Loo
     LoopSequence (match a,b with | .skip,_ => b | _,.skip => a | _,_ => .seq a b) := by
   cases a <;> cases b <;> first | exact ha | exact hb | exact .seq ha hb
 
-/-- Dead-code removal preserves the non-nested loop-sequence fragment. -/
+omit [NeZero width] in
+/-- Removing an empty conditional preserves recursive control flow. -/
+theorem compactIte_loopSequence (cmp : Cmp) (r : Nat) (ri : WordRegImm (BitVec width))
+    {a b : WordLangProgHOL (BitVec width)} (ha : LoopSequence a) (hb : LoopSequence b) :
+    LoopSequence (match a,b with | .skip,.skip => .skip | _,_ => .ite cmp r ri a b) := by
+  cases a <;> cases b <;> first | exact .branch .skip | exact .conditional cmp r ri ha hb
+
+/-- Dead-code removal preserves the recursive control-flow fragment. -/
 theorem removeDead_loopSequence {p : WordLangProgHOL (BitVec width)} (shape : LoopSequence p) :
     ∀ live nlive targets, LoopSequence (removeDead p live nlive targets).1 := by
   induction shape with
@@ -23,6 +30,20 @@ theorem removeDead_loopSequence {p : WordLangProgHOL (BitVec width)} (shape : Lo
     intro live nlive targets
     simp only [removeDead]
     exact .loop names exits (removeDead_branch hb names [] ((names,exits)::targets))
+  | nestedLoop names exits hb ih =>
+    intro live nlive targets
+    simp only [removeDead]
+    exact .nestedLoop names exits (ih names [] ((names,exits)::targets))
+  | @conditional cmp r ri a b ha hb iha ihb =>
+    intro live nlive targets
+    simp only [removeDead]
+    rcases h : removeDead a live nlive targets with ⟨a',la,na⟩
+    rcases k : removeDead b live nlive targets with ⟨b',lb,nb⟩
+    have aa := iha live nlive targets
+    have bb := ihb live nlive targets
+    simp only [h] at aa
+    simp only [k] at bb
+    exact compactIte_loopSequence cmp r ri aa bb
   | @seq a b ha hb iha ihb =>
     intro live nlive targets
     simp only [removeDead]

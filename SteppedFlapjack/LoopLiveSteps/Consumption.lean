@@ -1,4 +1,4 @@
-import SteppedFlapjack.CrepToLoopSteps.ScalarLoopConsumption
+import SteppedFlapjack.LoopLiveSteps.ClockBound
 import SteppedFlapjack.LoopSteps.ClockConsumption
 import SteppedFlapjack.LoopToWordSteps.WordSimpSequenceBound
 
@@ -7,14 +7,6 @@ namespace SteppedFlapjack.LoopLiveSteps
 open Flapjack Flapjack.LoopSemStateFiniteExact
 open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.LoopSteps
 variable {width : Nat} [NeZero width] {F : Type}
-
-/-- The older nonnested-loop fragment embeds in the recursive Loop grammar. -/
-theorem sequence_scalarLoop {p : HolLoopProg width} (shape : LoopSequenceSource p) :
-    SteppedFlapjack.CrepToLoopSteps.ScalarLoop p := by
-  induction shape with
-  | branch h => exact .branch h
-  | loop li lo h => exact .loop li lo (.branch h)
-  | seq _ _ iha ihb => exact .seq iha ihb
 
 /-- Supported executions consume at most twice their actual visits. -/
 theorem sequence_consumed {p : HolLoopProg width} (shape : LoopSequenceSource p)

@@ -1,7 +1,7 @@
 import SteppedFlapjack.WordCseSteps.Correct
 import Flapjack.Compiler.Backend.WordCopy.Proofs.Correct
 
-/-! Copy propagation for sequences of branch-bodied loops. -/
+/-! Copy propagation for recursive call-free programs. -/
 namespace SteppedFlapjack.WordCopySteps
 open Flapjack Flapjack.WordSemStateFiniteExact SteppedFlapjack.WordSteps
 open Flapjack.Compiler.Backend.WordCopy SteppedFlapjack.WordSimpSteps
@@ -66,7 +66,7 @@ theorem copyBranch_shape {p : WordLangProgHOL (BitVec width)} (shape : Branch p)
     simp only [k] at bb
     exact .ite _ _ _ aa bb
 
-/-- Copy propagation preserves sequences of branches and branch-bodied loops. -/
+/-- Copy propagation preserves recursive call-free programs. -/
 theorem copyLoopSequence_shape {p : WordLangProgHOL (BitVec width)} (shape : LoopSequence p) :
     ∀ cs, LoopSequence (copyPropProg p cs).1 := by
   induction shape with
@@ -78,6 +78,23 @@ theorem copyLoopSequence_shape {p : WordLangProgHOL (BitVec width)} (shape : Loo
     have hb := copyBranch_shape hp emptyEq
     simp only [h] at hb
     exact .loop names exits hb
+  | nestedLoop names exits hp ih =>
+    intro cs
+    simp only [copyPropProg]
+    rcases h : copyPropProg _ emptyEq with ⟨body,cs'⟩
+    have hb := ih emptyEq
+    simp only [h] at hb
+    exact .nestedLoop names exits hb
+  | @conditional cmp r ri a b ha hb iha ihb =>
+    intro cs
+    simp only [copyPropProg]
+    rcases h : copyPropProg a cs with ⟨a',ca⟩
+    rcases k : copyPropProg b cs with ⟨b',cb⟩
+    have aa := iha cs
+    have bb := ihb cs
+    simp only [h] at aa
+    simp only [k] at bb
+    exact .conditional _ _ _ aa bb
   | @seq a b ha hb iha ihb =>
     intro cs
     simp only [copyPropProg]

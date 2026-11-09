@@ -1,6 +1,6 @@
 import SteppedFlapjack.WordCseSteps.Leaves
 
-/-! CSE output shape and visit bounds for branch-bodied loop sequences. -/
+/-! CSE output shape and visit bounds for recursive call-free programs. -/
 namespace SteppedFlapjack.WordCseSteps
 open Flapjack Flapjack.WordSemStateFiniteExact SteppedFlapjack.WordSteps
 open Flapjack.Compiler.Backend.WordCse SteppedFlapjack.WordSimpSteps
@@ -54,7 +54,7 @@ theorem wordCse_branch {p : WordLangProgHOL (BitVec width)} (shape : Branch p) :
     simp only [k] at bb
     exact .ite cmp r ri aa bb
 
-/-- CSE preserves sequences of branches and branch-bodied loops. -/
+/-- CSE preserves recursive call-free programs. -/
 theorem wordCse_loopSequence {p : WordLangProgHOL (BitVec width)} (shape : LoopSequence p) :
     ∀ data, LoopSequence (wordCse data p).2 := by
   induction shape with
@@ -66,6 +66,23 @@ theorem wordCse_loopSequence {p : WordLangProgHOL (BitVec width)} (shape : LoopS
     have hb' := wordCse_branch hb emptyData
     simp only [h] at hb'
     exact .loop names exits hb'
+  | nestedLoop names exits hb ih =>
+    intro data
+    simp only [wordCse]
+    rcases h : wordCse emptyData _ with ⟨d,q⟩
+    have hb' := ih emptyData
+    simp only [h] at hb'
+    exact .nestedLoop names exits hb'
+  | @conditional cmp r ri a b ha hb iha ihb =>
+    intro data
+    simp only [wordCse]
+    rcases h : wordCse data a with ⟨da,a'⟩
+    rcases k : wordCse data b with ⟨db,b'⟩
+    have aa := iha data
+    have bb := ihb data
+    simp only [h] at aa
+    simp only [k] at bb
+    exact .conditional cmp r ri aa bb
   | @seq a b ha hb iha ihb =>
     intro data
     simp only [wordCse]

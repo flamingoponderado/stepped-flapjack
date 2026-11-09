@@ -14,6 +14,19 @@ theorem pushOutIfAux_loopSequence {p : WordLangProgHOL (BitVec width)} (hp : Loo
   induction hp with
   | branch hp => exact .branch (pushOutIfAux_branch hp)
   | loop names exits hb => exact .loop names exits (pushOutIfAux_branch hb)
+  | nestedLoop names exits hb ih =>
+    simpa only [pushOutIfAux] using LoopSequence.nestedLoop names exits ih
+  | conditional cmp r ri ha hb iha ihb =>
+    simp only [pushOutIfAux]
+    rcases h : pushOutIfAux _ with ⟨a,ba⟩
+    rcases k : pushOutIfAux _ with ⟨b,bb⟩
+    simp only [h] at iha
+    simp only [k] at ihb
+    cases ba <;> cases bb <;> simp only
+    · exact .conditional cmp r ri iha ihb
+    · exact .seq (.conditional cmp r ri (.branch .skip) ihb) iha
+    · exact .seq (.conditional cmp r ri iha (.branch .skip)) ihb
+    · exact .conditional cmp r ri iha ihb
   | @seq a b ha hb iha ihb =>
     simp only [pushOutIfAux]
     rcases h : pushOutIfAux a with ⟨a',ba⟩
@@ -41,6 +54,8 @@ theorem loopSequence_program {p : WordLangProgHOL (BitVec width)} (hp : LoopSequ
   | branch hp => exact branch_program hp
   | loop names exits hp => exact .loop names exits (branch_program hp)
   | seq ha hb iha ihb => exact .seq iha ihb
+  | nestedLoop names exits h ih => exact .loop names exits ih
+  | conditional cmp r ri ha hb iha ihb => exact .ite cmp r ri iha ihb
 
 /-- WordSimp's output shape and evaluation are derived from the input shape;
 no hypothesis about the transformed program is needed. -/

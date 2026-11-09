@@ -34,6 +34,10 @@ private theorem loop_noShare {width : Nat} [NeZero width] {p : WordLangProgHOL (
   | seq _ _ ha hb =>
     simp only [noShareInstSubprogsHOL] at ha hb
     simp [noShareInstSubprogsHOL,notCreatedSubprogsWithMemOp,ha,hb]
+  | nestedLoop names exits h ih => simpa [noShareInstSubprogsHOL,notCreatedSubprogsWithMemOp] using ih
+  | conditional cmp r ri ha hb iha ihb =>
+    simp only [noShareInstSubprogsHOL] at iha ihb
+    simp [noShareInstSubprogsHOL,notCreatedSubprogsWithMemOp,iha,ihb]
 
 private theorem block_noShare {width : Nat} [NeZero width] {p : WordLangProgHOL (BitVec width)}
     (h : LoopBlock p) : noShareInstSubprogsHOL p = true := by

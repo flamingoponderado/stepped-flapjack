@@ -20,6 +20,10 @@ private theorem loopSequence_noMt {p : WordLangProgHOL (BitVec width)} (h : Loop
   | seq _ _ a b =>
     simp only [noMtSubprogsHOL] at a b ⊢
     simp only [notCreatedSubprogsWithMemOp,a,b,Bool.and_self]
+  | nestedLoop names exits h ih => simpa [noMtSubprogsHOL,notCreatedSubprogsWithMemOp] using ih
+  | conditional cmp r ri ha hb iha ihb =>
+    simp only [noMtSubprogsHOL] at iha ihb ⊢
+    simp only [notCreatedSubprogsWithMemOp,iha,ihb,Bool.and_self]
 
 private theorem tailEntry_noMt {p : WordLangProgHOL (BitVec width)}
     (h : LoopLiveSteps.WordTailEntryShape p) : noMtSubprogsHOL p = true := by

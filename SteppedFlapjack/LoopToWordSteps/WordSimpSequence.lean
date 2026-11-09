@@ -6,11 +6,13 @@ namespace SteppedFlapjack.LoopToWordSteps
 open Flapjack Flapjack.LoopSemStateFiniteExact
 open SteppedFlapjack.WordSimpSteps Flapjack.Compiler.Backend.WordSimp
 
-/-- Sequences of Loop branches and loops whose bodies are branches. -/
+/-- Recursive call-free Loop programs with supported basic blocks. -/
 inductive LoopSequenceSource {width : Nat} [NeZero width] : HolLoopProg width → Prop
   | branch {p} : LoopBranch p → LoopSequenceSource p
   | loop (live exits) {body} : LoopBranch body → LoopSequenceSource (.loop live body exits)
   | seq {a b} : LoopSequenceSource a → LoopSequenceSource b → LoopSequenceSource (.seq a b)
+  | nestedLoop (live exits) {body} : LoopSequenceSource body → LoopSequenceSource (.loop live body exits)
+  | conditional (cmp r ri live) {a b} : LoopSequenceSource a → LoopSequenceSource b → LoopSequenceSource (.ite cmp r ri a b live)
 
 /-- Loop-to-Word produces a supported Word sequence, including the ticks around
 loops. -/
@@ -25,6 +27,21 @@ theorem loopSequenceSource_word {width : Nat} [NeZero width] {p : HolLoopProg wi
     have wordShape : Branch wb := by simpa only [hc] using loopBranch_word hb ctxt labels
     simp only [LoopToWord.compHOL,hc]
     exact .seq (.branch .tick) (.seq (.loop _ _ wordShape) (.branch .tick))
+  | @nestedLoop live exits body hb ih =>
+    intro labels
+    rcases hc : LoopToWord.compHOL ctxt body labels with ⟨wb,lb⟩
+    have wordShape : LoopSequence wb := by simpa only [hc] using ih labels
+    simp only [LoopToWord.compHOL,hc]
+    exact .seq (.branch .tick) (.seq (.nestedLoop _ _ wordShape) (.branch .tick))
+  | @conditional cmp r ri live a b ha hb iha ihb =>
+    intro labels
+    rcases h1 : LoopToWord.compHOL ctxt a labels with ⟨wa,la⟩
+    rcases h2 : LoopToWord.compHOL ctxt b la with ⟨wb,lb⟩
+    have hwa : LoopSequence wa := by simpa only [h1] using iha labels
+    have hwb : LoopSequence wb := by simpa only [h2] using ihb la
+    unfold LoopToWord.compHOL
+    simp only [h1,h2]
+    exact .seq (.conditional _ _ _ hwa hwb) (.branch .tick)
   | @seq a b ha hb iha ihb =>
     intro labels
     simp only [LoopToWord.compHOL]
