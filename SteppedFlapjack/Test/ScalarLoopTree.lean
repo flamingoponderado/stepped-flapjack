@@ -17,9 +17,6 @@ example (x : BitVec 64) :
   simp [optimiseScalar,scalarDepth,shrinkScalar,SteppedFlapjack.LoopLiveSteps.shrinkBranch,
     markAllHOL,loopVisitWeight,sptListInsert,sptInsert,sptLookup,sptDelete]
 
-/-- The output-derived envelope computes to a concrete natural number. -/
-example : scalarOutputEnvelope 3 = 901 := by decide +kernel
-
 /-- The recursive shape includes the reached inner loop and the outer break. -/
 theorem nestedLoop_shape : ScalarProgram nestedLoopExample := by
   exact .seq (.while (.direct (.const 1)) (.seq (.while (.direct (.const 0)) .skip) (.break 0)))
@@ -78,10 +75,10 @@ example {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64
     let target := SteppedFlapjack.Concrete.loopStateFrom arch source SteppedFlapjack.Concrete.branchingHOL
     let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
     let code := compileHOLExact ctxt .ln computedConditionalExample
-    let budget := scalarOutputEnvelope (loopVisitWeight (optimiseHOL code)) * 9
-    ∃ post, evaluate (optimiseHOL code) {target with clock := target.clock+2*budget} = (some (.result [.word 7]),post) ∧
-      LoopSteps.steps (optimiseHOL code) {target with clock := target.clock+2*budget} ≤
-        loopVisitWeight (optimiseHOL code)*(2*budget+1) := by
+    let budget := 3 * loopVisitWeight (optimiseHOL code) * 9
+    ∃ post, evaluate (optimiseHOL code) {target with clock := target.clock+budget} = (some (.result [.word 7]),post) ∧
+      LoopSteps.steps (optimiseHOL code) {target with clock := target.clock+budget} ≤
+        loopVisitWeight (optimiseHOL code)*(8+budget+1) := by
   let crep := SteppedFlapjack.Concrete.crepStateFrom source SteppedFlapjack.Concrete.branchingHOL
   let target := SteppedFlapjack.Concrete.loopStateFrom arch source SteppedFlapjack.Concrete.branchingHOL
   let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
@@ -104,9 +101,9 @@ example {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64
     let target := SteppedFlapjack.Concrete.loopStateFrom arch source SteppedFlapjack.Concrete.branchingHOL
     let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
     ∃ post, evaluate (optimiseHOL (compileHOLExact ctxt .ln nestedLoopExample))
-        {target with clock := target.clock+1201745654192703145922906595960913456672145123824446626603793249430985337726} = (some (.result [.word 7]),post) ∧
+        {target with clock := target.clock+966} = (some (.result [.word 7]),post) ∧
       LoopSteps.steps (optimiseHOL (compileHOLExact ctxt .ln nestedLoopExample))
-        {target with clock := target.clock+1201745654192703145922906595960913456672145123824446626603793249430985337726} ≤ 55280300092864344712453703414202019006918675695924544823774489473825325535442 := by
+        {target with clock := target.clock+966} ≤ 44758 := by
   let crep := SteppedFlapjack.Concrete.crepStateFrom source SteppedFlapjack.Concrete.branchingHOL
   let target := SteppedFlapjack.Concrete.loopStateFrom arch source SteppedFlapjack.Concrete.branchingHOL
   let ctxt := SteppedFlapjack.Concrete.witnessLoopContext arch SteppedFlapjack.Concrete.branchingHOL
@@ -135,7 +132,7 @@ example {σ : Type} (arch : AsmArchitecture) (source : PanSemStateFiniteExact 64
     (nestedLoop_run crep positive) (by rw [nestedLoop_steps crep positive]) (.return _)
     rel.1 rel.2.1 rel.2.2 codeLocals.1 codeLocals.2
   refine ⟨post,?_,?_⟩
-  · simpa [actualSize,SteppedFlapjack.Concrete.envelope_46,resultToLoop,wlabWlocExact] using run
-  · simpa [actualSize,SteppedFlapjack.Concrete.envelope_46] using bound
+  · simpa [actualSize,resultToLoop,wlabWlocExact] using run
+  · simpa [actualSize] using bound
 
 end SteppedFlapjack.CrepToLoopSteps

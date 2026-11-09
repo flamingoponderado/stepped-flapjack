@@ -47,17 +47,4 @@ theorem loopFree_linearBodySimulation {width : Nat} [NeZero width] {σ : Type}
   refine ⟨extra,out,post,he,hs,hm,hg,hc,hr,hl,?_⟩
   nlinarith
 
-/-- A proved recursive program bound yields the body simulation needed by an
-outer loop, with an explicit linear padding function. -/
-theorem scalar_program_bodySimulation {width : Nat} [NeZero width] {σ : Type}
-    (p : CrepProgHOL width) (shape : ScalarProgram p) (ctxt : CrepToLoopContextExact) (live : NumSet) (factor : Nat)
-    (proved : @ProgramBound width _ σ p ctxt live factor) :
-    @BodySimulation width _ σ p ctxt live (fun n => 2*factor*(n+1)) := by
-  intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
-  obtain ⟨extra,post,he,hs,hm,hg,hc,hl,visits⟩ :=
-    proved source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
-  have extraBound := scalarLoop_extra_le_visits source sourceFinal result target post ctxt live shape extra _
-    run stateRel hs he visits
-  refine ⟨extra,resultToLoop result,post,he,hs,hm,hg,hc,rfl,hl,?_⟩
-  nlinarith
 end SteppedFlapjack.CrepToLoopSteps

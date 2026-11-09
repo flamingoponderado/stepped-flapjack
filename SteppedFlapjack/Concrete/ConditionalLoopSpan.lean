@@ -20,14 +20,14 @@ theorem branchingLoop_fixture_entry_loop (arch : AsmArchitecture)
     let crep := crepStateFrom source (progToHOL branchingLoop)
     let target := loopStateFrom arch source (progToHOL branchingLoop)
     let ctxt := witnessLoopContext arch (progToHOL branchingLoop)
-    let budget := 33055944283804003169638662153711282791046653244720418147730817235062148260722345963974318859772770346070640788027992384967906657677887271650360407*(388+1)
+    let budget := 240*(388+1)
     CrepSteps.steps branchingLoopCrepEntry crep ≤ 388 ∧
     (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms (progToHOL branchingLoop)) ∧
     ∃ final post,
       evalCrepSemHOLProgExact crep branchingLoopCrepEntry = (some (.return [.word 7]),final) ∧
-      evaluate branchingLoopEntry {target with clock := target.clock+2*budget} = (some (.result [.word 7]),post) ∧
-      LoopSteps.steps branchingLoopEntry {target with clock := target.clock+2*budget} ≤
-        80*(2*budget+1)+8 ∧
+      evaluate branchingLoopEntry {target with clock := target.clock+budget} = (some (.result [.word 7]),post) ∧
+      LoopSteps.steps branchingLoopEntry {target with clock := target.clock+budget} ≤
+        80*(388+budget+1)+8 ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       crepToLoopMemRelHOLExact final.memory post.memory final.memaddrs ∧
       crepToLoopGlobalsRelHOLExact final.globals post.globals ∧
@@ -56,7 +56,7 @@ theorem branchingLoop_fixture_entry_loop (arch : AsmArchitecture)
   have result := generatedScalar_entry_explicit ctxt name branchingLoopCrepBody branchingLoop_scalar crep final target [.word 7] 388
     nonzero found run bound rel.1 rel.2.1 rel.2.2 codeLocals.1 codeLocals.2 label
   obtain ⟨post,entry,steps,finalState,finalMem,finalGlobals,finalCode⟩ := result
-  simp only [ctxt,conditional_optimized_weight,envelope_80] at entry steps
+  simp only [ctxt,conditional_optimized_weight] at entry steps
   refine ⟨bound,compiled,final,post,run,?_,?_,finalState,finalMem,finalGlobals,finalCode⟩
   · simpa [ctxt,name,target,crep,conditionalLoopBody,branchingLoopCrepBody,wlabWlocExact] using entry
   · simpa [ctxt,name,target,crep,conditionalLoopBody,branchingLoopCrepBody] using steps

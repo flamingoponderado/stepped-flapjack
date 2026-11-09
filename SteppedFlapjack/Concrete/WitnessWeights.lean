@@ -1,5 +1,5 @@
 import SteppedFlapjack.Concrete.ScalarEntry
-/-! Concrete optimized control weights and envelope values for the phase-one witnesses. -/
+/-! Concrete optimized control weights for the phase-one witnesses. -/
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Compiler.Encoders.Asm
 open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps
@@ -68,11 +68,5 @@ theorem conditional_optimized_weight (arch : AsmArchitecture) :
   rw [← optimiseScalar_eq (compile_scalar_program branchingLoop_scalar c .ln)]
   exact conditional_weight arch
 
-
-theorem envelope_46 : scalarOutputEnvelope 46 = 85838975299478796137350471140065246905153223130317616185985232102213238409 := by decide +kernel
-
-theorem envelope_52 : scalarOutputEnvelope 52 = 90807393422973472024195615988211844816286992141046971418300877908670798816850466939403 := by decide +kernel
-
-theorem envelope_80 : scalarOutputEnvelope 80 = 33055944283804003169638662153711282791046653244720418147730817235062148260722345963974318859772770346070640788027992384967906657677887271650360407 := by decide +kernel
 
 end SteppedFlapjack.Concrete
