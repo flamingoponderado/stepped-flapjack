@@ -191,6 +191,7 @@ import SteppedFlapjack.CrepToLoopSteps.ConditionPrefix
 import SteppedFlapjack.CrepToLoopSteps.BackendReady
 import SteppedFlapjack.LoopToWordSteps.WordAllocatedRiscV
 import SteppedFlapjack.LoopToWordSteps.WordAllocatedSequence
+import SteppedFlapjack.LoopToWordSteps.WholeWordSpan
 import SteppedFlapjack.WordToStackSteps.EntryComposition
 import SteppedFlapjack.WordToStackSteps.FixedEntryFrame
 import SteppedFlapjack.CrepToLoopSteps.WordSimpSequence
