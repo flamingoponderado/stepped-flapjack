@@ -17,8 +17,8 @@ jobs:
     runs-on: first-large
     steps:
       - uses: actions/checkout@v5
-      # Share only the project build artifacts; caching all of .lake also stores
-      # dependencies and can evict the main-branch cache from the repository.
+      # Cache project artifacts separately from dependencies, avoiding repeated
+      # copies of the much larger dependency build on each main commit.
       - name: Restore Lake build cache
         id: lake-cache
         uses: actions/cache/restore@v5.1.0
@@ -27,6 +27,15 @@ jobs:
           key: lake-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}
           restore-keys: |
             lake-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      # Restore the checkout as well as its build: Lake needs the Git metadata
+      # to recognize the pinned package rather than replacing the directory.
+      - name: Restore Flapjack dependency cache
+        id: flapjack-cache
+        uses: actions/cache/restore@v5.1.0
+        with:
+          path: .lake/packages/flapjack
+          key: flapjack-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
 
       - uses: leanprover/lean-action@v1
         with:
@@ -50,3 +59,12 @@ jobs:
         with:
           path: .lake/build
           key: ${{ steps.lake-cache.outputs.cache-primary-key }}
+
+      - name: Save Flapjack dependency cache
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
+          && steps.flapjack-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5.1.0
+        with:
+          path: .lake/packages/flapjack
+          key: ${{ steps.flapjack-cache.outputs.cache-primary-key }}
