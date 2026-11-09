@@ -1,6 +1,6 @@
 import SteppedFlapjack.Concrete.CountdownDeadLiteral
 import SteppedFlapjack.PanToCrepSteps.CountdownColoring
-open Flapjack Flapjack.RegAlloc Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
+open Flapjack Flapjack.RegAlloc Flapjack.Compiler.Backend Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Encoders.RiscV.Target
 open SteppedFlapjack.PanToCrepSteps
 namespace SteppedFlapjack.Concrete
 
@@ -169,5 +169,18 @@ theorem countdown_apply_color_literal (x : BitVec 64) :
   unfold countdownAllocationInput countdownOptimizedLiteral
   simp only [WordAlloc.applyColour,WordRemove.removeMustTerminate]
   with_unfolding_all rfl
+
+private theorem allocateWith_coloring (p : WordLangProgHOL (BitVec 64)) (color : Spt Nat)
+  (h : regAllocExecutable .IRC (WordAlloc.getHeuristics 3 65 p).2 countdownZeroLimit
+    (WordAlloc.getHeuristics 3 65 p).1 (WordAlloc.getClashTree p [])
+    (WordAlloc.getForced riscvConfig p []) (WordAlloc.getStackOnly p) = .success color) :
+  wordAllocWith regAllocExecutable 65 riscvConfig 3 countdownZeroLimit p none =
+  WordAlloc.applyColour (WordAlloc.totalColour color) p := by
+  simp only [wordAllocWith,WordAlloc.oracleColourOk,selectRegAllocWith,show ¬ 4 ≤ 3 by decide,if_false,show ¬ 3 ≤ 1 by decide]
+  rw [h]
+/-- The actual allocator applies the checked coloring for every count. -/
+theorem countdown_wordAlloc_literal (x : BitVec 64) : wordAllocWith regAllocExecutable 65 riscvConfig 3 countdownZeroLimit (countdownAllocationInput x) none =
+  WordAlloc.applyColour (WordAlloc.totalColour countdownZeroColor) (countdownAllocationInput x) :=
+  allocateWith_coloring _ _ (countdown_allocation_color x)
 
 end SteppedFlapjack.Concrete
