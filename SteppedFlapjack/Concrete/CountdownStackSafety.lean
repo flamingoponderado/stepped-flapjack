@@ -1,5 +1,5 @@
 import SteppedFlapjack.Concrete.CountdownStackFrames
-import SteppedFlapjack.WordSimpSteps.ZeroFrameTail
+import SteppedFlapjack.WordSimpSteps.TailFrameStackMax
 import SteppedFlapjack.StackRemoveSteps.InitStackNonempty
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.WordSemStateFiniteExact SteppedFlapjack.WordSimpSteps
@@ -55,11 +55,10 @@ theorem countdown_entry_stackMax {C F : Type} (n : Nat) (stack : StackSemStateFi
     (locals : Spt (WordLocW 64)) (clock : Nat) :
     (WordSemStateFiniteExact.evaluate countdownOptimizedEntry
       {(countdownInitialWord n stack coracle) with locals := locals, clock := clock}).2.stackMax = some 1 := by
-  apply moveTail_zeroFrame_stackMax 65 (countdownOptimizedLoop n) (countdownOptimizedLoop_shape n)
-  · exact countdownOptimizedLoop_lookup n
-  · exact countdownOptimizedLoop_frame_lookup n
-  · rfl
-  · rfl
+  have bound := moveTail_frame_stackMax 65 0 (countdownOptimizedLoop n) (countdownOptimizedLoop_shape n)
+    {(countdownInitialWord n stack coracle) with locals := locals, clock := clock}
+    (countdownOptimizedLoop_lookup n) (countdownOptimizedLoop_frame_lookup n) rfl rfl
+  simpa [countdownOptimizedEntry] using bound
 
 /-- A nonempty stack excludes the Word-to-Stack resource condition. -/
 theorem countdown_entry_resource_safe {C F : Type} (n : Nat) (stack : StackSemStateFiniteExact 64 C F)

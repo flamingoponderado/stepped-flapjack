@@ -1,3 +1,6 @@
+import SteppedFlapjack.StackAllocSteps.LoopClockLinear
+import SteppedFlapjack.WordToStackSteps.DirectTailLinear
+import SteppedFlapjack.WordToStackSteps.ResourceSafeResult
 import SteppedFlapjack.CrepToLoopSteps.ScalarPrefixOutput
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopWeight
 import SteppedFlapjack.Concrete.ComparisonLoopSpan
@@ -887,6 +890,3 @@ their names in the `Flapjack` namespace. The tests are in the separate
 
 
 
-import SteppedFlapjack.StackAllocSteps.LoopClockLinear
-import SteppedFlapjack.WordToStackSteps.DirectTailLinear
-import SteppedFlapjack.WordToStackSteps.ResourceSafeResult
