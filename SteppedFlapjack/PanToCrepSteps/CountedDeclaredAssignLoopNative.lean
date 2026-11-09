@@ -59,7 +59,7 @@ theorem counted_assignLoop_anyReturn_invert {σ : Type}
     obtain ⟨locals,normal | error⟩ := counted_assignLoop_result_shape condition assignment name context primitive handler
       functions (fuel+1) production loopResult loopCost loopRun
     · subst loopResult
-      simp [loopRun,evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith,
+      simp [loopRun,evalPanValueFfiProgSteps,panValueReturnResult,
         evalPanValueExpCounted,evalPanValueExp,panValuePayloadWithinLimit,
         panValuePayloadSizeFuel,panValueExpStepCost] at run
       exact ⟨locals,loopCost,rfl,by omega⟩

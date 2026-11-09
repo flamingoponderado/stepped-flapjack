@@ -21,12 +21,12 @@ theorem counted_assign_local_invert {σ : Type}
     ∃ value, evalPanSemStateExp production assignment = some value ∧
       panValueAssignmentValid production.structs production.locals production.globals .local name value = true ∧
       localsPost = updatePanValueMap production.locals name value ∧ steps = panValueExpStepCost assignment+1 := by
-  have counted : evalPanValueExpCountedWith none production.structs production.locals production.globals production.memory
+  have counted : evalPanValueExpCounted production.structs production.locals production.globals production.memory
       production.baseAddress production.topAddress panSemBitVec64BytesInWord assignment
       (some (panSemBitVec64MemoryAccess production)) =
       (evalPanSemStateExp production assignment).map (fun value => (value,panValueExpStepCost assignment)) := by
-    simp [evalPanValueExpCountedWith_eq_map,evalPanValueExpWith,evalPanSemStateExp_64_eq_previous]
-  simp only [evalPanValueFfiProgSteps,panValueAssignLocalSteps,counted] at run
+    simp [evalPanValueExpCounted,evalPanSemStateExp_64_eq_previous]
+  simp only [evalPanValueFfiProgSteps,panValueAssignLocalResult,counted] at run
   cases eval : evalPanSemStateExp production assignment with
   | none => simp [eval] at run
   | some value =>
@@ -94,11 +94,11 @@ theorem counted_assignLoop_unroll {σ : Type}
         (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
           some (.normal finalLocals production.globals production.memory production.ffi,restCost) ∧
       cost = panValueExpStepCost condition+(panValueExpStepCost assignment+1)+restCost+1 := by
-  have counted : evalPanValueExpCountedWith none production.structs production.locals production.globals production.memory
+  have counted : evalPanValueExpCounted production.structs production.locals production.globals production.memory
       production.baseAddress production.topAddress panSemBitVec64BytesInWord assignment
       (some (panSemBitVec64MemoryAccess production)) =
       (evalPanSemStateExp production assignment).map (fun value => (value,panValueExpStepCost assignment)) := by
-    simp [evalPanValueExpCountedWith_eq_map,evalPanValueExpWith,evalPanSemStateExp_64_eq_previous]
+    simp [evalPanValueExpCounted,evalPanSemStateExp_64_eq_previous]
   rw [evalPanValueFfiProgSteps, counted_condition_eq,cond] at run
   simp only [Option.elim_some,beq_iff_eq,if_neg nonzero] at run
   cases evaluated : evalPanSemStateExp production assignment with
@@ -108,7 +108,7 @@ theorem counted_assignLoop_unroll {σ : Type}
         production.locals production.globals production.memory production.ffi (.assign .local name assignment)
         (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
           some (.error production.locals production.globals production.memory production.ffi,0) := by
-      simp [evalPanValueFfiProgSteps,panValueAssignLocalSteps,counted,evaluated]
+      simp [evalPanValueFfiProgSteps,panValueAssignLocalResult,counted,evaluated]
     simp [body] at run
   | some value =>
     cases valid : panValueAssignmentValid production.structs production.locals production.globals .local name value with
@@ -118,7 +118,7 @@ theorem counted_assignLoop_unroll {σ : Type}
           production.locals production.globals production.memory production.ffi (.assign .local name assignment)
           (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
             some (.error production.locals production.globals production.memory production.ffi,panValueExpStepCost assignment+1) := by
-        simp [evalPanValueFfiProgSteps,panValueAssignLocalSteps,counted,evaluated,valid]
+        simp [evalPanValueFfiProgSteps,panValueAssignLocalResult,counted,evaluated,valid]
       simp [body] at run
     | true =>
       have body : evalPanValueFfiProgSteps context primitive handler production.structs functions
@@ -127,7 +127,7 @@ theorem counted_assignLoop_unroll {σ : Type}
           (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
             some (.normal (updatePanValueMap production.locals name value) production.globals production.memory production.ffi,
               panValueExpStepCost assignment+1) := by
-        simp [evalPanValueFfiProgSteps,panValueAssignLocalSteps,counted,evaluated,valid]
+        simp [evalPanValueFfiProgSteps,panValueAssignLocalResult,counted,evaluated,valid]
       simp only [body] at run
       cases rest : evalPanValueFfiProgSteps context primitive handler production.structs functions
           production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+1)

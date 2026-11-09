@@ -34,7 +34,7 @@ private theorem errorLoopFacts (context : PanValueFfiContext (RiscV.Word 64))
       (memoryAccess := some (panSemBitVec64MemoryAccess errorLoopProduction)) =
         some (.error errorLoopProduction.locals errorLoopProduction.globals errorLoopProduction.memory errorLoopProduction.ffi,12) := by
     simp (config := {maxSteps := 1000000}) [errorLoop,evalPanValueFfiProgSteps,panValueDecAccepted,
-      panValueAssignLocalSteps,panValueIteCondition,panValueReturnSteps,evalPanValueExpCountedWith,
+      panValueAssignLocalResult,panValueIteCondition,panValueReturnResult,evalPanValueExpCountedWith,
       evalPanValueExpCounted,evalPanValueExp,panValueExpStepCost,panSemBitVec64MemoryAccess,
       panValueMemoryAccessOfModel,panSemBitVec64WordModel,panSemWordModel,errorLoopProduction,clockedFixtureProduction,executableState,singleEntrySourceProduction,sourceProduction,
       RiscV.panRiscVMemoryModel,RiscV.panRiscVShift,updatePanValueMap,restorePanValueFfiLocal,

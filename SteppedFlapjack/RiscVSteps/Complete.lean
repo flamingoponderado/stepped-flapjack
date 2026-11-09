@@ -54,7 +54,6 @@ theorem riscv_encoder_correct_within :
     | mem m r address =>
       cases address with
       | addr base w => exact riscv_encoder_correct_mem_within m r base w s1 s2 ms h
-    | fp f => exact riscv_encoder_correct_fp_within f s1 s2 ms h
   | jump c => exact riscv_encoder_correct_jump_within c s1 s2 ms h
   | jumpCmp c r right a => exact riscv_encoder_correct_jumpCmp_within c r right a s1 s2 ms h
   | call c => exact riscv_encoder_correct_call_within c s1 s2 ms h

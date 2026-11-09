@@ -28,7 +28,6 @@ theorem threeToTwo_branch {p : WordLangProgHOL (BitVec width)} (shape : Branch p
     | skip => exact .inst _
     | const dst value => exact .inst _
     | mem op dst addr => exact .inst _
-    | fp op => exact .inst _
   | seq ha hb iha ihb => exact .seq iha ihb
   | ite cmp r ri ha hb iha ihb => exact .ite cmp r ri iha ihb
 

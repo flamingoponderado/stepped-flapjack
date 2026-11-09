@@ -33,9 +33,6 @@ theorem ssaInst_branch (i : WordLangInst (BitVec width)) (ssa : Spt Nat) (next :
   | mem op dst addr =>
     cases op <;> cases addr <;> simp only [ssaCcTransInst,nextVarRename] <;>
       repeat' first | split | constructor
-  | fp op =>
-    cases op <;> simp only [ssaCcTransInst,nextVarRename] <;>
-      repeat' first | split | constructor
 
 /-- The visits to the lowered instruction are bounded by its generated size. -/
 theorem ssaInst_steps (i : WordLangInst (BitVec width)) (ssa : Spt Nat) (next : Nat)

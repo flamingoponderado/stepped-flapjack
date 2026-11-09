@@ -289,7 +289,7 @@ theorem callPropagate {B : Nat} {p p' : HolProg width} {t : Bool} {x : StackSemR
     (hind : ∀ cs bs cs' bs' : List Nat, ∀ m m', resultView x m cs bs = resultView x m' cs' bs')
     (ph : FlattenConclBound B p true (some x) s2 d l' [] [] tE) :
     FlattenConclBound (2 + B) p' t (some x) s2 n l cs bs t1 :=
-  flattenConclComposeSome hb1 run1 f1 f2 f3 f4 f5 (by rw [fcode])
+  flattenConclComposeSome hb1 run1 f1 f2 f3 f4 f5 (by rw [fcode]; exact ⟨[], by simp⟩)
     (flattenConclResult (p' := p) (t' := true) (l' := 0) (h := ph) rfl (hind _ _ _ _ _ _))
 
 /-- The code after the return continuation of a call with an exception

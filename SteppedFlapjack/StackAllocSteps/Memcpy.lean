@@ -12,14 +12,14 @@ theorem memcpyBodySteps (s : StackSemStateFiniteExact width C F) :
       storeInst 1 3, addBytesInWordInst 3], s) ≤ 9 := by
   simp only [listSeqHOL, loadInst, storeInst, addBytesInWordInst, sub1Inst]
   refine stepsSeqLe _ _ 1 7 ?_ ?_ s
-  · intro t; exact (steps_leaf _ t rfl).le
+  · intro t; exact Nat.le_of_eq (steps_leaf _ t rfl)
   · intro t; refine stepsSeqLe _ _ 1 5 ?_ ?_ t
-    · intro t; exact (steps_leaf _ t rfl).le
+    · intro t; exact Nat.le_of_eq (steps_leaf _ t rfl)
     · intro t; refine stepsSeqLe _ _ 1 3 ?_ ?_ t
-      · intro t; exact (steps_leaf _ t rfl).le
+      · intro t; exact Nat.le_of_eq (steps_leaf _ t rfl)
       · intro t; refine stepsSeqLe _ _ 1 1 ?_ ?_ t
-        · intro t; exact (steps_leaf _ t rfl).le
-        · intro t; exact (steps_leaf _ t rfl).le
+        · intro t; exact Nat.le_of_eq (steps_leaf _ t rfl)
+        · intro t; exact Nat.le_of_eq (steps_leaf _ t rfl)
 
 /-- A loop with a uniformly bounded body is bounded by its available clock. -/
 theorem loopStepsLe (body : HolProg width) (B : Nat)
@@ -56,6 +56,6 @@ theorem memcpyStepsLe (s : StackSemStateFiniteExact width C F) :
   intro t
   refine stepsIteLe _ _ _ _ _ 9 1 ?_ ?_ t
   · exact memcpyBodySteps
-  · intro u; exact (steps_leaf _ u rfl).le
+  · intro u; exact Nat.le_of_eq (steps_leaf _ u rfl)
 
 end SteppedFlapjack.StackAllocSteps

@@ -1,9 +1,5 @@
-module
-
-public import Flapjack.PanExpressionEvaluatorBase
-public import SteppedFlapjack.PanValueExpCounted
-
-@[expose] public section
+import SteppedFlapjack.PanExpressionEvaluatorBase
+import SteppedFlapjack.PanValueExpCounted
 
 namespace Flapjack
 

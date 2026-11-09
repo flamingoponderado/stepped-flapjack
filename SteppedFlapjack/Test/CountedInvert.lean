@@ -21,7 +21,7 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
       (memoryAccess := some (panSemBitVec64MemoryAccess (executableState branchingHOL))) =
       some (.returned (fun _ => none) (executableState branchingHOL).globals (executableState branchingHOL).memory
         (executableState branchingHOL).ffi [.word 7],2) := by
-    simp [evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith,evalPanValueExpCounted,
+    simp [evalPanValueFfiProgSteps,panValueReturnResult,evalPanValueExpCountedWith,evalPanValueExpCounted,
       evalPanValueExp,panValueExpStepCost,panValuePayloadWithinLimit,panValuePayloadSizeFuel]
   have words : WordLocals (executableState branchingHOL).locals := by
     simpa [executableState,singleEntrySourceProduction,sourceProduction] using wordLocals_empty
@@ -50,7 +50,7 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
       panSemBitVec64BytesInWord 1 p.locals p.globals p.memory p.ffi (.assign .local "x" (.const 1))
       (memoryAccess := some (panSemBitVec64MemoryAccess p)) =
       some (.normal (updatePanValueMap p.locals "x" (.word 1)) p.globals p.memory p.ffi,2) := by
-    simp [p,evalPanValueFfiProgSteps,panValueAssignLocalSteps,evalPanValueExpCountedWith,evalPanValueExpCounted,
+    simp [p,evalPanValueFfiProgSteps,panValueAssignLocalResult,evalPanValueExpCountedWith,evalPanValueExpCounted,
       evalPanValueExp,panValueExpStepCost,panValueAssignmentValid,updatePanValueMap,panValueShape,panShapeMatches]
   obtain ⟨value,_,hol,_,_,_⟩ := counted_assign_invert p source rel ranged "x" countdown_name_ranged
     (.const 1) (by simp [ExpByteRanged]) context primitive handler [] 1 2

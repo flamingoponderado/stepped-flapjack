@@ -67,6 +67,5 @@ theorem wordCseInst_branch (data : Knowledge) (i : HolInst width) : Branch (word
       · split
         · exact .inst _
         · exact addToLoadAux_branch _ _ _ (.inst _)
-  | fp op => exact .inst _
 
 end SteppedFlapjack.WordCseSteps

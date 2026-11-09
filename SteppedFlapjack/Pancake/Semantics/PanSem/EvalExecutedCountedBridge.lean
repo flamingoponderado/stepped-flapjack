@@ -1,9 +1,5 @@
-module
-
-public import Flapjack.Pancake.Semantics.PanSem.EvalExecutedBridge
-public import SteppedFlapjack.PanValueExpCounted
-
-@[expose] public section
+import SteppedFlapjack.Pancake.Semantics.PanSem.EvalExecutedBridge
+import SteppedFlapjack.PanValueExpCounted
 
 /-!
 # HOL agreement for the step-counted expression evaluator
@@ -158,7 +154,7 @@ theorem evalPanValueFieldsCounted_agree {σ : Type}
     (fields : List (FieldName × Exp (RiscV.Word 64)))
     (he : ∀ p ∈ fields, ExpByteRanged p.2) :
     Option.map (fun result => result.1.map (fun p => (ofString p.1, panValueToHOL p.2)))
-        (evalPanValueFieldsCounted state.structs state.locals state.globals state.memory
+        (evalPanValueFieldsCountedWithAccess state.structs state.locals state.globals state.memory
           state.baseAddress state.topAddress panSemBitVec64BytesInWord fields
           (memoryAccess := some (panSemBitVec64MemoryAccess state))) =
       exact.evalListFieldsHOLFinite (fields.map (fun p => (ofString p.1, expToHOL p.2))) := by
@@ -166,7 +162,7 @@ theorem evalPanValueFieldsCounted_agree {σ : Type}
     state.globals state.memory state.baseAddress state.topAddress
     panSemBitVec64BytesInWord (some (panSemBitVec64MemoryAccess state)) exact fields
     (fun p hp => evalPanValueExp_agree state exact hrel hranged p.2 (he p hp))
-  simpa [evalPanValueFieldsCounted, Option.map_map, Function.comp_def] using h
+  simpa [evalPanValueFieldsCountedWithAccess, Option.map_map, Function.comp_def] using h
 
 /-- Counted call arguments agree with the isolated finite HOL view of the
     production state. As with the single-expression theorem, this requires no
@@ -205,7 +201,7 @@ theorem evalPanValueFieldsCounted_isolatedView_agree {σ : Type}
     (fields : List (FieldName × Exp (RiscV.Word 64)))
     (he : ∀ p ∈ fields, ExpByteRanged p.2) :
     Option.map (fun result => result.1.map (fun p => (ofString p.1, panValueToHOL p.2)))
-        (evalPanValueFieldsCounted state.structs state.locals state.globals state.memory
+        (evalPanValueFieldsCountedWithAccess state.structs state.locals state.globals state.memory
           state.baseAddress state.topAddress panSemBitVec64BytesInWord fields
           (memoryAccess := some (panSemBitVec64MemoryAccess state))) =
       @PanSemStateFiniteExact.evalListFieldsHOLFinite 64 σ _
@@ -220,6 +216,6 @@ theorem evalPanValueFieldsCounted_isolatedView_agree {σ : Type}
     (fun p hp => by
       simpa [evalPanSemStateExp_64_eq_previous] using
         evalPanSemStateExp_isolatedView_agree state hmem hloc hglob hranged p.2 (he p hp))
-  simpa [evalPanValueFieldsCounted, Option.map_map, Function.comp_def] using h
+  simpa [evalPanValueFieldsCountedWithAccess, Option.map_map, Function.comp_def] using h
 
 end Flapjack

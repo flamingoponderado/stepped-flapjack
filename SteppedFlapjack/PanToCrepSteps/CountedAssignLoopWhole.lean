@@ -48,11 +48,11 @@ theorem counted_assignLoop_result_shape {σ : Type}
           cases fuel with
           | zero => simp [evalPanValueFfiProgSteps] at run
           | succ fuel =>
-            have counted : evalPanValueExpCountedWith none production.structs production.locals production.globals production.memory
+            have counted : evalPanValueExpCounted production.structs production.locals production.globals production.memory
                 production.baseAddress production.topAddress panSemBitVec64BytesInWord assignment
                 (some (panSemBitVec64MemoryAccess production)) =
                 (evalPanSemStateExp production assignment).map (fun value => (value,panValueExpStepCost assignment)) := by
-              simp [evalPanValueExpCountedWith_eq_map,evalPanValueExpWith,evalPanSemStateExp_64_eq_previous]
+              simp [evalPanValueExpCounted,evalPanSemStateExp_64_eq_previous]
             cases assigned : evalPanSemStateExp production assignment with
             | none =>
               have body : evalPanValueFfiProgSteps context primitive handler production.structs functions
@@ -60,7 +60,7 @@ theorem counted_assignLoop_result_shape {σ : Type}
                   production.locals production.globals production.memory production.ffi (.assign .local name assignment)
                   (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
                     some (.error production.locals production.globals production.memory production.ffi,0) := by
-                simp [evalPanValueFfiProgSteps,panValueAssignLocalSteps,counted,assigned]
+                simp [evalPanValueFfiProgSteps,panValueAssignLocalResult,counted,assigned]
               simp [body] at run
               cases run.1
               exact ⟨_,Or.inr rfl⟩
@@ -72,7 +72,7 @@ theorem counted_assignLoop_result_shape {σ : Type}
                     production.locals production.globals production.memory production.ffi (.assign .local name assignment)
                     (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
                       some (.error production.locals production.globals production.memory production.ffi,panValueExpStepCost assignment+1) := by
-                  simp [evalPanValueFfiProgSteps,panValueAssignLocalSteps,counted,assigned,valid]
+                  simp [evalPanValueFfiProgSteps,panValueAssignLocalResult,counted,assigned,valid]
                 simp [body] at run
                 cases run.1
                 exact ⟨_,Or.inr rfl⟩
@@ -83,7 +83,7 @@ theorem counted_assignLoop_result_shape {σ : Type}
                     (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
                       some (.normal (updatePanValueMap production.locals name value) production.globals production.memory production.ffi,
                         panValueExpStepCost assignment+1) := by
-                  simp [evalPanValueFfiProgSteps,panValueAssignLocalSteps,counted,assigned,valid]
+                  simp [evalPanValueFfiProgSteps,panValueAssignLocalResult,counted,assigned,valid]
                 simp only [body] at run
                 let next := {production with locals := updatePanValueMap production.locals name value}
                 cases rest : evalPanValueFfiProgSteps context primitive handler production.structs functions
@@ -135,7 +135,7 @@ theorem counted_assignLoop_whole_invert {σ : Type}
     obtain ⟨locals,normal | error⟩ := counted_assignLoop_result_shape condition assignment name context primitive handler
       functions (fuel+1) production loopResult loopCost loopRun
     · subst loopResult
-      simp [loopRun,evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith,
+      simp [loopRun,evalPanValueFfiProgSteps,panValueReturnResult,
         evalPanValueExpCounted,evalPanValueExp,panValuePayloadWithinLimit,
         panValuePayloadSizeFuel,panValueExpStepCost] at run
       exact ⟨locals,loopCost,rfl,by omega⟩

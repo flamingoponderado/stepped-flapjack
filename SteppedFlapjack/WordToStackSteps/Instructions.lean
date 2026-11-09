@@ -43,14 +43,6 @@ theorem straightLine_inst (i : HolInst width) (kf : Nat × Nat × Nat) :
       first | apply straightLine_stackLoad; apply straightLine_regWrite1; intro; rfl
             | apply straightLine_stackLoad; rfl
             | rfl
-  | fp f =>
-    cases f <;> simp only [wInstNative]
-    all_goals
-      first | apply straightLine_regWrite1; intro; rfl
-            | split <;> first | apply straightLine_regWrite1; intro; rfl
-                              | apply straightLine_regWrite2; intro; apply straightLine_regWrite1; intro; rfl
-            | apply straightLine_stackLoad; rfl
-            | rfl
   | skip => rfl
   | const n c => simp only [wInstNative]; apply straightLine_regWrite1; intro; rfl
 

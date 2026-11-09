@@ -31,8 +31,8 @@ theorem branchingLoop_source_run (context : PanValueFfiContext (RiscV.Word 64)) 
  (memoryAccess := some (panSemBitVec64MemoryAccess (executableState (progToHOL branchingLoop)))) =
  some (.returned (executableState (progToHOL branchingLoop)).locals (executableState (progToHOL branchingLoop)).globals
  (executableState (progToHOL branchingLoop)).memory (executableState (progToHOL branchingLoop)).ffi [.word 7],23) := by
- simp (config := {maxSteps := 1000000}) [branchingLoop,evalPanValueFfiProgSteps,panValueDecAccepted,panValueIteCondition,panValueAssignLocalSteps,
- panValueReturnSteps,evalPanValueExpCounted,evalPanValueExp,panValueExpStepCost,executableState,singleEntrySourceProduction,
+ simp (config := {maxSteps := 1000000}) [branchingLoop,evalPanValueFfiProgSteps,panValueDecAccepted,panValueIteCondition,panValueAssignLocalResult,
+ panValueReturnResult,evalPanValueExpCounted,evalPanValueExp,panValueExpStepCost,executableState,singleEntrySourceProduction,
  panSemBitVec64MemoryAccess,panValueMemoryAccessOfModel,panSemBitVec64WordModel,panSemWordModel,
  RiscV.panRiscVMemoryModel,RiscV.panRiscVCmp,updatePanValueMap,restorePanValueFfiLocal,
  panShapeMatches,panValueShape,panValueAssignmentValid]

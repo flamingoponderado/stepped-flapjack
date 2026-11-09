@@ -133,36 +133,6 @@ theorem assign_code (reg : Nat) (exp : WordLangExpHOL (BitVec width))
   · simp at h
   · obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
 
-/-- Int-to-FP conversions keep `code` and `compileOracle`. -/
-theorem fpToInt_code (d1 d2 : Nat) (s t : StackSemStateFiniteExact width C F)
-    (h : StackSemFpRegisterInstructions.instFpToInt d1 d2 s = some t) :
-    t.code = s.code ∧ t.compileOracle = s.compileOracle := by
-  simp only [StackSemFpRegisterInstructions.instFpToInt] at h
-  cases hg : getFpVar d2 s with
-  | none => simp [hg] at h
-  | some f =>
-    cases hi : holFp64ToInt .roundTiesToEven f with
-    | none => simp [hg, hi] at h
-    | some i =>
-      simp only [hg, hi] at h
-      split_ifs at h
-      all_goals try (obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩)
-      all_goals try (cases hf : getFpVar (d1 / 2) s)
-      all_goals try (simp [hf] at h)
-      all_goals try (obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩)
-
-/-- FP-to-int conversions keep `code` and `compileOracle`. -/
-theorem fpFromInt_code (d1 d2 : Nat) (s t : StackSemStateFiniteExact width C F)
-    (h : StackSemFpRegisterInstructions.instFpFromInt d1 d2 s = some t) :
-    t.code = s.code ∧ t.compileOracle = s.compileOracle := by
-  simp only [StackSemFpRegisterInstructions.instFpFromInt] at h
-  split_ifs at h
-  all_goals try (cases hg : getFpVar d2 s)
-  all_goals try (cases hk : getFpVar (d2 / 2) s)
-  all_goals try (simp [hg] at h)
-  all_goals try (simp [hk] at h)
-  all_goals try (obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩)
-
 theorem mem_code (op : HolMemop) (r a : Nat) (w : BitVec width)
     (s t : StackSemStateFiniteExact width C F)
     (h : StackSemIntegerInstructions.instInteger (.mem op r (.addr a w)) s = some (some t)) :
@@ -287,16 +257,6 @@ theorem instHOL_code (i : HolInst width) (s t : StackSemStateFiniteExact width C
           simp [hi] at h
           subst t
           exact mem_code op dest a w s t' hi
-  case fp op =>
-    cases op <;> simp [StackSemInst.instHOL, StackSemFpInstructions.instFp,
-      StackSemFpRegisterInstructions.instFpRegister,
-      StackSemFpRegisterInstructions.instFpSqrt] at h ⊢
-    all_goals try (split_ifs at h)
-    all_goals try (split at h)
-    all_goals try (simp at h)
-    all_goals try (rw [← h]; exact ⟨rfl, rfl⟩)
-    all_goals try (exact fpToInt_code _ _ _ _ h)
-    all_goals try (exact fpFromInt_code _ _ _ _ h)
 theorem sptAListLookup_mem {α : Type} (key : Nat) (entries : List (Nat × α)) (value : α)
     (h : sptAListLookup key entries = some value) : (key, value) ∈ entries := by
   induction entries with

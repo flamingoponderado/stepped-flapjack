@@ -71,7 +71,7 @@ theorem counted_decl_set_zero_with_tail {σ : Type}
         (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (result,9) := by
       rw [evalPanValueFfiProgSteps]
       rw [hloop]
-      simp [evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith,evalPanValueExpCounted,
+      simp [evalPanValueFfiProgSteps,panValueReturnResult,evalPanValueExpCounted,
         evalPanValueExp,panValueExpStepCost,panValuePayloadWithinLimit,panValuePayloadSizeFuel,result]
     have skipExec : evalPanValueFfiProgSteps context primitive handler production.structs functions
         production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+5)
