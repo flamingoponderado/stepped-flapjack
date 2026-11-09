@@ -22,13 +22,6 @@ def loopVisitWeight : HolLoopProg width → Nat
 theorem loopVisitWeight_pos (p : HolLoopProg width) : 0 < loopVisitWeight p := by
   cases p <;> simp [loopVisitWeight]
 
-/-- Appending statements to a nested sequence cannot reduce its control weight. -/
-theorem nestedSeq_append_weight (a b : List (HolLoopProg width)) :
-    loopVisitWeight (loopNestedSeqHOL a) ≤ loopVisitWeight (loopNestedSeqHOL (a ++ b)) := by
-  induction a with
-  | nil => simp only [List.nil_append,loopNestedSeqHOL,loopVisitWeight]; exact loopVisitWeight_pos _
-  | cons p rest ih => simp only [List.cons_append,loopNestedSeqHOL,loopVisitWeight]; omega
-
 theorem branched_visitWeight {p : HolLoopProg width}
     (shape : SteppedFlapjack.LoopToWordSteps.BranchedProgram p) :
     loopVisitWeight p = LoopSteps.structuralWeight p := by

@@ -1,5 +1,4 @@
 import SteppedFlapjack.CrepToLoopSteps.ProgramBound
-import SteppedFlapjack.CrepToLoopSteps.ScalarCompilerClock
 import SteppedFlapjack.CrepToLoopSteps.BranchExtraClock
 
 /-! Internal interfaces for compositional loop-body simulation. -/

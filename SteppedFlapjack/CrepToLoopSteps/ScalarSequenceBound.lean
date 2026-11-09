@@ -1,6 +1,5 @@
 import SteppedFlapjack.CrepToLoopSteps.ScalarClockCompositional
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopConsumption
-import SteppedFlapjack.CrepToLoopSteps.ScalarClockShift
 import SteppedFlapjack.CrepToLoopSteps.BackendReady
 /-! Explicit polynomial structural bounds for the optimized Loop program. -/
 namespace SteppedFlapjack.CrepToLoopSteps

@@ -25,13 +25,4 @@ def ProgramBound {width : Nat} [NeZero width] {σ : Type}
       LoopSteps.steps (compileHOLExact ctxt live p) {target with clock := target.clock+extra} ≤
         factor * (CrepSteps.steps p source+1)
 
-theorem programBound_mono {width : Nat} [NeZero width] {σ : Type}
-    (p : CrepProgHOL width) (ctxt : CrepToLoopContextExact) (live : NumSet) (a b : Nat)
-    (bound : @ProgramBound width _ σ p ctxt live a) (le : a ≤ b) :
-    @ProgramBound width _ σ p ctxt live b := by
-  intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
-  obtain ⟨extra,post,he,hs,hm,hg,hc,hl,visits⟩ :=
-    bound source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
-  exact ⟨extra,post,he,hs,hm,hg,hc,hl,visits.trans (Nat.mul_le_mul_right _ le)⟩
-
 end SteppedFlapjack.CrepToLoopSteps
