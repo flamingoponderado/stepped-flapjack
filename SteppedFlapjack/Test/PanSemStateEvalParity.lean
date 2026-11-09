@@ -43,7 +43,7 @@ def bigEndianState : PanSemState Word64 Unit := sourceState true true true
 /- Counted field expressions must use the caller's state-owned access, just as
    counted expressions and argument lists do. -/
 private def countedByteField (state : PanSemState Word64 Unit) :=
-  evalPanValueFieldsCounted state.structs state.locals state.globals state.memory
+  evalPanValueFieldsCountedWithAccess state.structs state.locals state.globals state.memory
     state.baseAddress state.topAddress panSemBitVec64BytesInWord
     [("byte", .loadByte (.const 0))]
     (memoryAccess := some (panSemBitVec64MemoryAccess state))

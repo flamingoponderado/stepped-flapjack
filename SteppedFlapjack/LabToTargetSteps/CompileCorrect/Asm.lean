@@ -33,11 +33,6 @@ theorem _root_.SteppedFlapjack.LabToTargetSteps.asmInst_codeBuffer
       all_goals repeat' first
         | simp_all [updReg, updMem, assertState]
         | split
-  | fp operation =>
-      cases operation <;> simp only [asmInst, fpUpd]
-      all_goals repeat' first
-        | simp_all [updFpReg, updReg, assertState]
-        | split
 
 end Flapjack.Compiler.Backend.LabSem
 

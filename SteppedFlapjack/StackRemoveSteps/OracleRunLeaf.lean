@@ -763,36 +763,6 @@ theorem assign_bitmapOracle (reg : Nat) (exp : WordLangExpHOL (BitVec width))
   · simp at h
   · obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩
 
-/-- Int-to-FP conversions keep `bitmaps` and `compileOracle`. -/
-theorem fpToInt_bitmapOracle (d1 d2 : Nat) (s t : StackSemStateFiniteExact width C F)
-    (h : StackSemFpRegisterInstructions.instFpToInt d1 d2 s = some t) :
-    t.bitmaps = s.bitmaps ∧ t.compileOracle = s.compileOracle := by
-  simp only [StackSemFpRegisterInstructions.instFpToInt] at h
-  cases hg : getFpVar d2 s with
-  | none => simp [hg] at h
-  | some f =>
-    cases hi : holFp64ToInt .roundTiesToEven f with
-    | none => simp [hg, hi] at h
-    | some i =>
-      simp only [hg, hi] at h
-      split_ifs at h
-      all_goals try (obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩)
-      all_goals try (cases hf : getFpVar (d1 / 2) s)
-      all_goals try (simp [hf] at h)
-      all_goals try (obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩)
-
-/-- FP-to-int conversions keep `bitmaps` and `compileOracle`. -/
-theorem fpFromInt_bitmapOracle (d1 d2 : Nat) (s t : StackSemStateFiniteExact width C F)
-    (h : StackSemFpRegisterInstructions.instFpFromInt d1 d2 s = some t) :
-    t.bitmaps = s.bitmaps ∧ t.compileOracle = s.compileOracle := by
-  simp only [StackSemFpRegisterInstructions.instFpFromInt] at h
-  split_ifs at h
-  all_goals try (cases hg : getFpVar d2 s)
-  all_goals try (cases hk : getFpVar (d2 / 2) s)
-  all_goals try (simp [hg] at h)
-  all_goals try (simp [hk] at h)
-  all_goals try (obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl⟩)
-
 theorem mem_bitmapOracle (op : HolMemop) (r a : Nat) (w : BitVec width)
     (s t : StackSemStateFiniteExact width C F)
     (h : StackSemIntegerInstructions.instInteger (.mem op r (.addr a w)) s = some (some t)) :
@@ -917,16 +887,6 @@ theorem instHOL_bitmapOracle (i : HolInst width) (s t : StackSemStateFiniteExact
           simp [hi] at h
           subst t
           exact mem_bitmapOracle op dest a w s t' hi
-  case fp op =>
-    cases op <;> simp [StackSemInst.instHOL, StackSemFpInstructions.instFp,
-      StackSemFpRegisterInstructions.instFpRegister,
-      StackSemFpRegisterInstructions.instFpSqrt] at h ⊢
-    all_goals try (split_ifs at h)
-    all_goals try (split at h)
-    all_goals try (simp at h)
-    all_goals try (rw [← h]; exact ⟨rfl, rfl⟩)
-    all_goals try (exact fpToInt_bitmapOracle _ _ _ _ h)
-    all_goals try (exact fpFromInt_bitmapOracle _ _ _ _ h)
 
 theorem oracleRunEffect_inst
     (i : HolInst width) (s t : StackSemStateFiniteExact width C F) (r : Option (StackSemResult width))

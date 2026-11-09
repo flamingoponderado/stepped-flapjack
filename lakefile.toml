@@ -5,7 +5,7 @@ defaultTargets = ["SteppedFlapjack", "SteppedFlapjackTests"]
 # Flapjack, the Lean 4 port of the Pancake compiler. This package holds the
 # step-counted source semantics split out of it (flapjack#1251).
 [[require]]
-name = "Flapjack"
+name = "flapjack"
 git = "https://github.com/flamingoponderado/flapjack"
 rev = "034bb5a1ed0b757082768d5406206bd2f8e31b7c"
 

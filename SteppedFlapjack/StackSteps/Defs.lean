@@ -1,3 +1,7 @@
+import Mathlib.Tactic.Ring
+import Mathlib.Tactic.Linarith
+import Batteries.Tactic.PermuteGoals
+import Mathlib.Data.Nat.Basic
 import Flapjack.Compiler.Backend.Semantics.StackSem.EvaluateDef
 import Flapjack.Compiler.Backend.Semantics.StackSem.EvaluateClock
 

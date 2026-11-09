@@ -30,7 +30,7 @@ theorem supported_counted_basic {σ : Type}
       obtain ⟨rfl,rfl⟩ := run
       trivial
     | @assign scope name expression member scalar =>
-      simp only [evalPanValueFfiProgSteps,panValueAssignLocalSteps,evalPanValueExpCountedWith] at run
+      simp only [evalPanValueFfiProgSteps,panValueAssignLocalResult] at run
       cases evaluated : evalPanValueExpCounted structs locals globals memory base top panSemBitVec64BytesInWord
           expression access with
       | none =>
@@ -43,7 +43,7 @@ theorem supported_counted_basic {σ : Type}
         split at run <;> simp only [Option.some.injEq,Prod.mk.injEq] at run <;>
           obtain ⟨rfl,_⟩ := run <;> trivial
     | @ret scope expression scalar =>
-      simp only [evalPanValueFfiProgSteps,panValueReturnSteps,evalPanValueExpCountedWith] at run
+      simp only [evalPanValueFfiProgSteps,panValueReturnResult] at run
       cases evaluated : evalPanValueExpCounted structs locals globals memory base top panSemBitVec64BytesInWord
           expression access with
       | none =>

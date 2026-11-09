@@ -145,7 +145,7 @@ theorem optimizedSeqWithinSteps {width : Nat} [NeZero width] {C F : Type}
             change steps (.call none (.inl dest) none,
               {{target with stackSpace := source.stackSpace + released} with clock := target.clock + clock}) ≤ _ at cost
             rw [sourceCost]
-            exact costTarget.trans (Nat.add_le_add_left cost 2)
+            exact Nat.le_trans costTarget (Nat.add_le_add_left cost 2)
   · have disabled : source.useStack = false := by cases source.useStack <;> simp_all
     simp only [disabled, Bool.not_false, if_true, Prod.mk.injEq] at execution
     exact False.elim (nonerror execution.1.symm)

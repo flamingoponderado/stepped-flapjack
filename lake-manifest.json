@@ -6,7 +6,7 @@
    "subDir": null,
    "scope": "",
    "rev": "034bb5a1ed0b757082768d5406206bd2f8e31b7c",
-   "name": "Flapjack",
+   "name": "flapjack",
    "manifestFile": "lake-manifest.json",
    "inputRev": "034bb5a1ed0b757082768d5406206bd2f8e31b7c",
    "inherited": false,

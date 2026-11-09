@@ -67,7 +67,7 @@ theorem branching_run
       (memoryAccess := some (panSemBitVec64MemoryAccess (executableState branchingHOL))) =
       some (.returned (executableState branchingHOL).locals (executableState branchingHOL).globals
         (executableState branchingHOL).memory (executableState branchingHOL).ffi [.word 7],6) := by
-  simp [branching,evalPanValueFfiProgSteps,panValueIteCondition,panValueReturnSteps,evalPanValueExpCounted,
+  simp [branching,evalPanValueFfiProgSteps,panValueIteCondition,panValueReturnResult,evalPanValueExpCounted,
     evalPanValueExp,panValueExpStepCost,executableState,singleEntrySourceProduction,
     panSemBitVec64MemoryAccess,panValueMemoryAccessOfModel,panSemBitVec64WordModel,
     panSemWordModel,RiscV.panRiscVMemoryModel,RiscV.panRiscVCmp]

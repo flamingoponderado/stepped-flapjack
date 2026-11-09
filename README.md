@@ -4,8 +4,11 @@ Step-counted source semantics for structured Pancake programs, split out of
 [Flapjack](https://github.com/flamingoponderado/flapjack), the Lean 4 port of
 the Pancake compiler. This package depends on Flapjack as a Lake package.
 
-The code moved here in phase 4 of
+The code was split out in phase 4 of
 [flapjack#1251](https://github.com/flamingoponderado/flapjack/issues/1251).
+The revision currently pinned by init-e predates that split and still contains
+the stepped definitions. At this revision, the corresponding modules here
+import those existing definitions rather than redeclaring them.
 
 ## Why a separate package
 
@@ -85,8 +88,9 @@ source execution. The previous machine theorem that selected part of its tick
 bound existentially has been removed; an independently fixed machine bound
 remains to be proved.
 
-Code shared with the clocked evaluator stays in Flapjack, in
-`Flapjack.PanValueFfiCore` and `Flapjack.PanExpressionEvaluatorBase`.
+The pinned historical Flapjack revision also contains the clocked/stepped
+shared FFI definitions. The expression-evaluator route and memory-aware counted
+field bridge needed here live in this package.
 
 ## Building
 
@@ -95,9 +99,10 @@ lake exe cache get   # Mathlib cache, via Flapjack's dependency
 lake build
 ```
 
-The Lean toolchain matches Flapjack's (`lean-toolchain`). Flapjack is pinned
-in `lake-manifest.json`; `lake update Flapjack` moves the pin to Flapjack's
-current `main`.
+The Lean toolchain matches Flapjack's (`lean-toolchain`). The `flapjack`
+dependency is pinned in both `lakefile.toml` and `lake-manifest.json` to the
+same revision as init-e. To change it, update the revision in `lakefile.toml`
+and run `lake update flapjack`.
 
 ## License
 

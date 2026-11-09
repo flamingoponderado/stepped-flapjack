@@ -63,7 +63,7 @@ theorem nestedBadShapeNonClockedExact : nestedBadShapeNonClockedResult = some
   simp (config := { decide := true }) [nestedBadShapeNonClockedResult,
     evalPanValueFfiProgramSteps, evalPanValueFfiProgSteps,
     evalPanValueFfiCallSteps, evalPanValueExpCounted, evalPanValueExpsCounted,
-    panValueReturnSteps, panValuePayloadWithinLimit, panValueExpStepCost,
+    panValueReturnResult, panValuePayloadWithinLimit, panValueExpStepCost,
     panValueExpsStepCost,
     updatePanValueMap, restorePanValueLocal, restorePanValueFfiLocal,
     panValueCallArguments, panValueCallTarget, panValueReturnValid, panValueShape,
