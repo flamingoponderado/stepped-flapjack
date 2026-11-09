@@ -13,7 +13,65 @@ open Flapjack.Compiler.Backend.WordToStack.Native
 open Flapjack.Compiler.Backend.WordToStack.Native.Initialization
 open Flapjack.Compiler.Backend.WordToWord
 open Flapjack.WordToStackProofs.InitializationStateRel
-open SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackAllocSteps
+open SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackAllocSteps SteppedFlapjack.WordAllocSteps
+
+/-- The compiler-selected one-argument entry frame. -/
+def nativeEntryFrame (k : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
+  max (maxVarHOL q / 2 + 1 - k) (1-k)
+/-- Stack allocation required by that frame. -/
+def nativeEntryFrameSize (k : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
+  let frame := nativeEntryFrame k q
+  if frame = 0 then 0 else frame+1
+
+/-- A fitting compiler-selected frame starts in the native state relation. -/
+theorem wholeWordStack_tailEntryFrame_safe {C F : Type}
+    (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact 64)
+    (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (name : Nat) (p : WordLangProgHOL (BitVec 64)) (member : (name,1,p) ∈ programs)
+    (nodup : (programs.map Prod.fst).Nodup)
+    (t : StackSemStateFiniteExact 64 C F)
+    (coracle : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (noRaise : raiseStubLocation ∉ programs.map Prod.fst) (noStore : storeConstsStubLocation ∉ programs.map Prod.fst)
+    (codeEq : t.code = sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2)
+    (bitmapsPrefix : (compileNative ac false (compile wc ac programs).2).1.IsPrefix t.bitmaps)
+    (ok : initStateOk ac (ac.regCount-(5+ac.avoidRegs.length)) t coracle)
+    (fits : nativeEntryFrameSize (ac.regCount-(5+ac.avoidRegs.length))
+      (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+        ((name,1,p),entryColour wc programs name)).2.2 ≤ t.stackSpace) :
+    let k := ac.regCount-(5+ac.avoidRegs.length)
+    let q := (fullCompileSingle ac.twoRegArith k wc.regAlg ac ((name,1,p),entryColour wc programs name)).2.2
+    let frame := nativeEntryFrame k q
+    let size := nativeEntryFrameSize k q
+    ∃ bs n bsPost nPost body,
+      nativeEntryBitmap ac false k name (compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
+      compNative ac false q (bs,n) (k,size,frame) = (body,(bsPost,nPost)) ∧
+      sptLookup name t.code = some (compileProgNative ac false q 1 k (bs,n)).1 ∧
+      (appListAppend bs).length ≤ n ∧ n-(appListAppend bs).length ≤ t.bitmaps.length ∧
+      (appListAppend bsPost).IsPrefix (t.bitmaps.drop (n-(appListAppend bs).length)) ∧
+      stateRel ac k size frame
+        (callEnv [(.loc 1 0 : WordLocW 64)] (some size)
+          (makeInit ac k t (sptFromAList (compile wc ac programs).2) coracle))
+        {t with stackSpace := t.stackSpace-size} [] 0 := by
+  obtain ⟨_,bs,n,bsPost,nPost,body,frame,frameSize,
+    selected,frameDef,sizeDef,compilation,found,lengthBound,gapBound,bitmapPrefix⟩ :=
+    wholeWordStack_tail_initialized_inputs wc ac programs name 1 p member nodup t coracle noRaise noStore codeEq bitmapsPrefix ok
+  subst frameSize
+  subst frame
+  have frameShape : if nativeEntryFrame (ac.regCount-(5+ac.avoidRegs.length))
+      (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+        ((name,1,p),entryColour wc programs name)).2.2 = 0 then
+        nativeEntryFrameSize (ac.regCount-(5+ac.avoidRegs.length))
+          (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+            ((name,1,p),entryColour wc programs name)).2.2 = 0 else
+        nativeEntryFrameSize (ac.regCount-(5+ac.avoidRegs.length))
+          (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+            ((name,1,p),entryColour wc programs name)).2.2 =
+        nativeEntryFrame (ac.regCount-(5+ac.avoidRegs.length))
+          (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+            ((name,1,p),entryColour wc programs name)).2.2 + 1 := by simp [nativeEntryFrameSize]
+  have related := wholeWordStack_initialFrame wc ac programs t coracle noRaise noStore codeEq bitmapsPrefix ok
+    _ _ frameShape fits
+  exact ⟨bs,n,bsPost,nPost,body,selected,compilation,found,lengthBound,gapBound,bitmapPrefix,related⟩
 
 /-- The compiler-selected one-argument tail entry either starts in the
 proved frame relation or takes the actual bounded Stack resource-limit path. -/
@@ -63,10 +121,17 @@ theorem wholeWordStack_tailEntryFrame_or_resource {C F : Type}
     selected,frameDef,sizeDef,compilation,found,lengthBound,gapBound,bitmapPrefix,?_⟩
   by_cases fits : frameSize ≤ t.stackSpace
   · left
-    have frameShape : if frame = 0 then frameSize = 0 else frameSize = frame+1 := by
-      split <;> simp_all
-    have related := wholeWordStack_initialFrame wc ac programs t coracle noRaise noStore codeEq bitmapsPrefix ok
-      frameSize frame frameShape fits
+    have safeFits : nativeEntryFrameSize (ac.regCount-(5+ac.avoidRegs.length))
+        (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+          ((name,1,p),entryColour wc programs name)).2.2 ≤ t.stackSpace := by
+      simpa only [nativeEntryFrameSize,nativeEntryFrame,← frameDef,← sizeDef] using fits
+    obtain ⟨_,_,_,_,_,_,_,_,_,_,_,related⟩ :=
+      wholeWordStack_tailEntryFrame_safe wc ac programs name p member nodup t coracle noRaise noStore codeEq bitmapsPrefix ok safeFits
+    have related : stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
+        (callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
+          (makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) t (sptFromAList (compile wc ac programs).2) coracle))
+        {t with stackSpace := t.stackSpace-frameSize} [] 0 := by
+      simpa only [nativeEntryFrameSize,nativeEntryFrame,← frameDef,← sizeDef] using related
     exact ⟨fits,related,stateRel_setClocks ac _ frameSize frame _ _ [] 0 limit related⟩
   · right
     obtain ⟨post,run,_,ffi,bound⟩ := allocationFailure_entry t name limit frameSize body foundBody ok.2.2.2.1 (by omega)
