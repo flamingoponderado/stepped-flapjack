@@ -133,10 +133,9 @@ noncomputable def scalarProgramFactor {width : Nat} [NeZero width]
             2*max (scalarProgramFactor ctxt live a) (scalarProgramFactor ctxt live b)+2)
     | .dec name init body =>
         let tmp := (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1
-        loopVisitWeight (compileHOLExact ctxt live p) *
-          (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) +
-            2*scalarProgramFactor {ctxt with vars := ctxt.vars.updateEq (name,tmp), vmax := tmp}
-              (sptInsert tmp () live) body+1)
+        LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) +
+          scalarProgramFactor {ctxt with vars := ctxt.vars.updateEq (name,tmp), vmax := tmp}
+            (sptInsert tmp () live) body+3
     | .while condition body =>
         loopVisitWeight (compileHOLExact ctxt live p) *
           (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
@@ -246,7 +245,7 @@ theorem scalarProgramFactor_scalarOutputEnvelope {width : Nat} [NeZero width] {p
       have wp : 0 < w := by have := loopVisitWeight_pos (compileHOLExact ctxt live (.dec name init body)); omega
       have prefBound := dec_prefix_le_control name initShape (body := body) ctxt live
       have bound := scalarOutputEnvelope_step w (w-1) (by omega)
-      change w * (_ + 2*scalarProgramFactor bc bl body+1) ≤ scalarOutputEnvelope w
+      change _ + scalarProgramFactor bc bl body+3 ≤ scalarOutputEnvelope w
       nlinarith
   | @«while» condition body cond bodyShape ih =>
     intro ctxt live

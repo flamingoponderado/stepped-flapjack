@@ -3,30 +3,24 @@ import SteppedFlapjack.CrepToLoopSteps.ResultLocals
 
 /-! Bottom-up quantitative simulation for scalar declarations. -/
 namespace SteppedFlapjack.CrepToLoopSteps
-open Flapjack Flapjack.LoopSemStateFiniteExact
+open Flapjack Flapjack.LoopSemStateFiniteExact SteppedFlapjack.LoopToWordSteps
 open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 
 /-- A scalar declaration is bounded once its body has been proved at the
 context and live set produced by compiling the initializer. -/
 theorem scalarDecl_programBound {width : Nat} [NeZero width] {σ : Type}
     (name : Nat) (init : CrepExpHOL width) (initShape : CompiledScalar init)
-    (body : CrepProgHOL width) (bodyShape : ScalarProgram body)
+    (body : CrepProgHOL width) (_bodyShape : ScalarProgram body)
     (ctxt : CrepToLoopContextExact) (live : NumSet) (bodyFactor : Nat)
     (bodyBound : @ProgramBound width _ σ body
       {ctxt with vars := ctxt.vars.updateEq (name,(compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1), vmax := (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1}
       (sptInsert (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1 () live) bodyFactor) :
     @ProgramBound width _ σ (.dec name init body) ctxt live
-      (loopVisitWeight (compileHOLExact ctxt live (.dec name init body)) *
-        (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) + 2*bodyFactor+1)) := by
+      (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) + bodyFactor + 3) := by
   intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
   let p := CrepProgHOL.dec name init body
   let code := compileHOLExact ctxt live p
   let prefixSize := LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1)
-  have scalar : ScalarProgram p := .dec name initShape bodyShape
-  have loopShape := compile_scalar_program scalar ctxt live
-  have sourceConsumed := CrepSteps.scalarProgram_clock_consumed scalar source sourceFinal result run
-  have sourceClock := evalCrepSemHOLProgExact_clock_le source p
-  rw [run] at sourceClock
   have sourceRun := run
   rw [evalCrepSemHOLProgExact_dec_holShape] at run
   rcases initRun : evalCrepSemHOLExp source init with _ | value
@@ -79,8 +73,6 @@ theorem scalarDecl_programBound {width : Nat} [NeZero width] {σ : Type}
     obtain ⟨extra,post,bodyEval,hs,hm,hg,hc,_,visits⟩ :=
       bodyBound' sourceBody bodyPost bodyResult bodyTarget (by simpa [sourceBody,CrepSemHOLState.setVar] using bodyRun)
         bodyNonerror bodyState bodyMem bodyGlobals bodyCode bodyLocals
-    have bodyExtra := scalarLoop_extra_le_visits sourceBody bodyPost bodyResult bodyTarget post bc bl bodyShape extra _
-      (by simpa [sourceBody,CrepSemHOLState.setVar] using bodyRun) bodyState hs bodyEval visits
     have prefixLift := evaluate_add_clock_eq _ _ _ _ extra exprRun (by simp)
     have prefixLift' : evaluate (loopNestedSeqHOL np) {target with clock := target.clock+(ck+extra)} =
         (none,{st with clock := st.clock+extra}) := by simpa [Nat.add_assoc] using prefixLift
@@ -113,18 +105,30 @@ theorem scalarDecl_programBound {width : Nat} [NeZero width] {σ : Type}
     simp only [initRun] at sourceCount
     have prefixEq : LoopSteps.structuralWeight (loopNestedSeqHOL np) = prefixSize := by dsimp [prefixSize]; rw [compiled]
     rw [prefixEq] at prefixBound
-    have padding : ck+extra ≤ (prefixSize+2*bodyFactor)*(CrepSteps.steps p source+1) := by
-      nlinarith
-    have allVisits := scalarLoop_control_consumption_bound loopShape _ post (resultToLoop result) targetRun
-    have initial := stateRel.2.2.1
-    have final := finalState.2.2.1
-    have delta : target.clock+(ck+extra)-post.clock ≤ CrepSteps.steps p source+(ck+extra) := by omega
-    have budget : target.clock+(ck+extra)-post.clock+1 ≤
-        (prefixSize+2*bodyFactor+1)*(CrepSteps.steps p source+1) := by nlinarith
+    have prefixShape : BranchedProgram (loopNestedSeqHOL np) := by
+      obtain ⟨_,_,_,_,hc,hbranch,_⟩ := condition_prefix_shape initShape ctxt (ctxt.vmax+1) live
+      rw [compiled] at hc
+      cases hc
+      exact nestedSeq_branched np hbranch
+    have prefixVisits := LoopSteps.branchedProgram_structural_bound prefixShape
+      {target with clock := target.clock+(ck+extra)}
+    have targetCount : LoopSteps.steps code {target with clock := target.clock+(ck+extra)} =
+        2 + LoopSteps.steps (loopNestedSeqHOL np) {target with clock := target.clock+(ck+extra)} +
+          1 + LoopSteps.steps (compileHOLExact bc bl body) {bodyTarget with clock := bodyTarget.clock+extra} := by
+      dsimp only [code,p]
+      rw [compileHOLExact,compiled,LoopSteps.steps_seq,prefixLift']
+      simp only
+      rw [LoopSteps.steps_seq,assignRun]
+      simp only
+      simp only [LoopSteps.steps_leaf (.assign tmp loopValue) _ (by rfl)]
+      simp only [bodyTarget,setVar,bc,bl]
+      omega
     refine ⟨ck+extra,post,targetRun,finalState,finalMem,finalGlobals,finalCode,finalLocals,?_⟩
-    rw [prefixEq]
-    change LoopSteps.steps code {target with clock := target.clock+(ck+extra)} ≤
-      (loopVisitWeight code*(prefixSize+2*bodyFactor+1))*(CrepSteps.steps p source+1)
-    rw [Nat.mul_assoc]
-    exact allVisits.trans (Nat.mul_le_mul_left _ budget)
+    rw [targetCount]
+    have positive := CrepSteps.steps_pos p source
+    have bcount : CrepSteps.steps body sourceBody ≤ CrepSteps.steps p source := by
+      dsimp [p,sourceBody,CrepSemHOLState.setVar] at *
+      omega
+    nlinarith
+
 end SteppedFlapjack.CrepToLoopSteps
