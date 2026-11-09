@@ -7,7 +7,7 @@ defaultTargets = ["SteppedFlapjack", "SteppedFlapjackTests"]
 [[require]]
 name = "Flapjack"
 git = "https://github.com/flamingoponderado/flapjack"
-rev = "main"
+rev = "034bb5a1ed0b757082768d5406206bd2f8e31b7c"
 
 [[lean_lib]]
 name = "SteppedFlapjack"
