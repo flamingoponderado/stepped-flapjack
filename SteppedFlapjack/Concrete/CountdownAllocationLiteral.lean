@@ -183,4 +183,12 @@ theorem countdown_wordAlloc_literal (x : BitVec 64) : wordAllocWith regAllocExec
   WordAlloc.applyColour (WordAlloc.totalColour countdownZeroColor) (countdownAllocationInput x) :=
   allocateWith_coloring _ _ (countdown_allocation_color x)
 
+set_option maxHeartbeats 1000000 in
+set_option maxRecDepth 100000 in
+/-- The optimized generated entry contains a direct tail call. -/
+theorem countdown_entry_optimized : fullCompileSingleWith regAllocExecutable riscvConfig.twoRegArith countdownZeroLimit 3 riscvConfig
+  ((64,1,.seq .skip (.seq (.call none (some 65) [0] none) .skip)),none) =
+  (64,1,.seq (.move 1 [(0,0)]) (.call none (some 65) [0] none)) := by
+  with_unfolding_all rfl
+
 end SteppedFlapjack.Concrete
