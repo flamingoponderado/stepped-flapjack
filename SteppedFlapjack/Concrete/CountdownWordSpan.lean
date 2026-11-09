@@ -83,7 +83,7 @@ theorem countdown_wholeWord (n : Nat) (range : n < 2^64)
     (phase3CountdownCrepBody n) (Ne.symm (entryName_fresh (naturalCountdownHOL n))) (naturalCountdown_scalar n)
     timed post [.word 0] (countdownLoopVisits n) template fixtureHeapLength frame
     countdownRiscVBackend.wordToWordConf riscvConfig heap sourceRun sourceBound
-  obtain ⟨wordPost,wordResult,relation,result,ffi,bound⟩ := span
+  obtain ⟨_,wordPost,wordResult,relation,result,ffi,bound⟩ := span
   simp only [LoopToWord.CompileCorrect.resultCase] at relation
   refine ⟨final,post,?_,stateRel,?_,?_,?_⟩
   · simpa [crep,pan] using crepRun

@@ -64,6 +64,8 @@ theorem twoProgram_wholeWord_span (arch : AsmArchitecture) (name callee : MlStri
       (sptDifference (accVarsHOL branchingLoopEntry .ln) (LoopToWord.toNumSetHOL []))) .ln
     let word := WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)]
       (sptLookup 64 starter.stackSize) (WordSemStateFiniteExact.decClock starter)
+    compile wc ac words = compileWith Flapjack.RegAlloc.regAllocExecutable wc ac
+      (loopToWordCompileHOL (twoLoopPrograms arch name callee body)) ∧
     ∃ wordPost wordResult,
       LoopToWord.CompileCorrect.resultCase ctxt (.loc 1 0) word (some (.result values)) post wordResult wordPost ∧
       target.1 = wordResult ∧ target.2.ffi = post.ffi ∧
@@ -107,6 +109,7 @@ theorem twoProgram_wholeWord_span (arch : AsmArchitecture) (name callee : MlStri
   have span := singleTail_wholeWord_span entryShape calleeShape loop post (some (.result values))
     64 starter ctxt (64,2) limit words wc ac entryMember calleeMember nodup shapes codeEq
     starterFacts.2.1 starterFacts.2.2.1 starterFacts.2.2.2 lookup premises (.return values) sourceBound
+  refine ⟨twoProgram_optimized_executable arch name callee body shape wc ac, ?_⟩
   rw [twoProgramWordBound_eq arch name callee body shape limit wc ac]
   simpa [twoProgramWordBoundSpec,crep,loops,words,starter,loop,ctxt,word,loopToWordCompFuncHOL] using span
 end SteppedFlapjack.Concrete

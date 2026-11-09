@@ -48,7 +48,7 @@ theorem twoCallee_shape (arch : AsmArchitecture) (name callee : MlString) (body 
   let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (twoPrograms name callee body)) 0
   have raw := compile_scalar_program shape ctxt .ln
   rw [optimiseScalar_eq raw]
-  exact scalarLoop_wordShape (scalarLoop_optimise raw)
+  exact compile_scalar_optimized_wordShape shape ctxt .ln
 
 /-- The actual generated Word table discharges the span’s code and shape facts. -/
 theorem twoWordTables_facts (arch : AsmArchitecture) (name callee : MlString) (body : CrepProgHOL 64)

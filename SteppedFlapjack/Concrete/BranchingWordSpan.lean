@@ -63,7 +63,7 @@ theorem branchingLoop_wholeWord (context : PanValueFfiContext (RiscV.Word 64)) (
     branchingLoopCrepBody (Ne.symm (entryName_fresh (progToHOL branchingLoop))) branchingLoop_scalar
     timed post [.word 7] branchLoopVisits template fixtureHeapLength frame
     countdownRiscVBackend.wordToWordConf riscvConfig heap sourceRun sourceBound
-  obtain ⟨wordPost,wordResult,relation,result,ffi,bound⟩ := span
+  obtain ⟨_,wordPost,wordResult,relation,result,ffi,bound⟩ := span
   simp only [LoopToWord.CompileCorrect.resultCase] at relation
   refine ⟨final,post,?_,stateRel,?_,?_,?_⟩
   · simpa [crep,pan] using crepRun
