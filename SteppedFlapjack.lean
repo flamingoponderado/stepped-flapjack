@@ -7,6 +7,7 @@ import SteppedFlapjack.Concrete.CrepLoopError
 import SteppedFlapjack.Concrete.ConditionalLoopSpan
 import SteppedFlapjack.CrepSteps.ScalarClock
 import SteppedFlapjack.Concrete.CountdownLoopSpan
+import SteppedFlapjack.Concrete.WordStarter
 import SteppedFlapjack.Concrete.BranchEntryLoop
 import SteppedFlapjack.Concrete.WitnessLoopCode
 import SteppedFlapjack.CrepToLoopSteps.ScalarExecutable
