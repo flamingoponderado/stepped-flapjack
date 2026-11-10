@@ -59,6 +59,14 @@ open Flapjack.WordToStackProofs Flapjack.WordToStackProofs.CompCorrect Flapjack.
 open Flapjack.Compiler.Backend.WordToStack.Native Flapjack.Compiler.Backend.WordToWord
 open Flapjack.Compiler.Backend.WordToStack.Native.Initialization
 
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 1000000 in
+/-- The countdown callee requires no native frame space. -/
+theorem countdownCallee_entryFrame_zero (n : Nat) :
+    nativeEntryFrameSize countdownZeroLimit (countdownOptimizedLoop n) = 0 := by
+  simp [nativeEntryFrameSize,nativeEntryFrame,countdownOptimizedLoop,countdownOptimizedLiteral,maxVarHOL,countdownZeroLimit,maxVarInstHOL]
+  constructor <;> with_unfolding_all rfl
+
 /-- The initialized native countdown entry has an exact Stack result and a code-derived visit bound. -/
 theorem countdown_stack_span {C F : Type} (n clock limit : Nat)
     (stack : StackSemStateFiniteExact 64 C F)
@@ -98,11 +106,6 @@ theorem countdown_stack_span {C F : Type} (n clock limit : Nat)
     change nativeEntryFrameSize _ (fullCompileSingle riscvConfig.twoRegArith _ _ riscvConfig ((64,1,countdownSourceWordEntry n),entryColour _ _ 64)).2.2 ≤ _
     rw [countdown_compilerEntryFrame_zero]
     omega
-  have safe0 := countdown_entry_resource_safe n stack coracle (countdownInitialWord n stack coracle).locals clock nonempty
-  have safe : post.stackMax.getD (post.stackLimit+1) ≤ post.stackLimit := by
-    change (evaluate countdownOptimizedEntry {(countdownInitialWord n stack coracle) with clock := clock}).2.stackMax.getD ((evaluate countdownOptimizedEntry {(countdownInitialWord n stack coracle) with clock := clock}).2.stackLimit+1) ≤ (evaluate countdownOptimizedEntry {(countdownInitialWord n stack coracle) with clock := clock}).2.stackLimit at safe0
-    rw [run] at safe0
-    exact safe0
   apply nativeTailEntry_span countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n) 64
     (countdownSourceWordEntry n) member nodup stack coracle noRaise noStore codeEq bitmaps ok fits clock limit result post
   · rw [selected]; exact countdownEntry_shape
@@ -119,7 +122,25 @@ theorem countdown_stack_span {C F : Type} (n clock limit : Nat)
   · exact notError
   · exact notTimeout
   · exact complete
-  · exact safe
+  · constructor
+    · have zeroEntry : nativeEntryFrameSize (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) countdownOptimizedEntry = 0 := by
+        with_unfolding_all rfl
+      rw [selected,zeroEntry]
+      exact nonempty
+    · intro loc call arity callee lookup
+      have locEq : loc = 65 := by
+        rw [selected] at call
+        cases call with
+        | left h => cases h
+        | right h => cases h; rfl
+      subst loc
+      have expected := countdownOptimizedLoop_lookup n
+      have eq := Option.some.inj (lookup.symm.trans expected)
+      cases eq
+      rw [nativeEntryFrameSize_compile]
+      change 1 + nativeEntryFrameSize countdownZeroLimit (countdownOptimizedLoop n) ≤ stack.stack.length
+      rw [countdownCallee_entryFrame_zero]
+      exact nonempty
   · rw [selected,countdownNativeEntryWord_eq]; exact bound
 
 /-- The countdown compiler emits only the standard single bitmap word. -/

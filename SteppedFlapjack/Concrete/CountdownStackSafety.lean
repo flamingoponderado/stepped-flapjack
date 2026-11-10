@@ -1,6 +1,5 @@
 import SteppedFlapjack.Concrete.CountdownOptimized
 import SteppedFlapjack.PanToCrepSteps.CountdownZeroFrames
-import SteppedFlapjack.WordSimpSteps.TailFrameStackMax
 import SteppedFlapjack.StackRemoveSteps.InitStackNonempty
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.WordSemStateFiniteExact SteppedFlapjack.WordSimpSteps
@@ -37,34 +36,9 @@ theorem countdownOptimizedLoop_lookup (n : Nat) : sptLookup 65 (sptFromAList
   rw [countdown_optimized_literal, sptLookup_sptFromAList]
   simp [sptAListLookup, countdownOptimizedLoop, countdownOptimizedLiteral]
 
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 2000000 in
-/-- The native initializer assigns the loop a zero-sized frame. -/
-theorem countdownOptimizedLoop_frame_lookup (n : Nat) : sptLookup 65 (sptMapi (fun _ (arity,prog) =>
-      (WordToStack.Native.compileProgNative riscvConfig false prog arity countdownZeroLimit (.nil,0)).2.1)
-      (sptFromAList (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n)).2)) = some 0 := by
-  rw [countdown_optimized_literal, sptLookupMapi, sptLookup_sptFromAList]
-  simp [countdownOptimizedLiteral, sptAListLookup, WordToStack.Native.compileProgNative, maxVarHOL, countdownZeroLimit, maxVarInstHOL]
-  constructor <;> with_unfolding_all rfl
-
 /-- The optimized entry wrapper tail-calls the countdown loop. -/
 def countdownOptimizedEntry : WordLangProgHOL (BitVec 64) :=
   .seq (.move 1 [(0,0)]) (.call none (some 65) [0] none)
-
-/-- A nonempty stack excludes the Word-to-Stack resource condition. -/
-theorem countdown_entry_resource_safe {C F : Type} (n : Nat) (stack : StackSemStateFiniteExact 64 C F)
-    (coracle : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
-    (locals : Spt (WordLocW 64)) (clock : Nat)
-    (nonempty : 1 ≤ stack.stack.length) :
-    let post := (WordSemStateFiniteExact.evaluate countdownOptimizedEntry
-      {(countdownInitialWord n stack coracle) with locals := locals, clock := clock}).2
-    post.stackMax.getD (post.stackLimit+1) ≤ post.stackLimit := by
-  apply moveTail_frame_stackSafe 65 0 (countdownOptimizedLoop n) (countdownOptimizedLoop_shape n)
-  · exact countdownOptimizedLoop_lookup n
-  · exact countdownOptimizedLoop_frame_lookup n
-  · rfl
-  · rfl
-  · exact nonempty
 
 /-- The entry function in the original two-function Word table. -/
 noncomputable def countdownSourceWordEntry (n : Nat) : WordLangProgHOL (BitVec 64) :=

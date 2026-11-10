@@ -36,6 +36,17 @@ def nativeEntryFrameSize (k : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
   let frame := nativeEntryFrame k q
   if frame = 0 then 0 else frame+1
 
+/-- The compiler's returned frame size is the source-derived frame formula. -/
+theorem nativeEntryFrameSize_compile (ac : AsmConfigExact 64) (p : WordLangProgHOL (BitVec 64))
+    (k : Nat) (bitmaps : AppList (BitVec 64) × Nat) :
+    (compileProgNative ac false p 1 k bitmaps).2.1 = nativeEntryFrameSize k p := by
+  unfold compileProgNative nativeEntryFrameSize nativeEntryFrame
+  generalize compNative ac false p bitmaps
+    (k, (if max (maxVarHOL p / 2 + 1 - k) (1-k) = 0 then 0 else max (maxVarHOL p / 2 + 1 - k) (1-k) + 1),
+      max (maxVarHOL p / 2 + 1 - k) (1-k)) = x
+  cases x
+  rfl
+
 /-- A fitting compiler-selected frame starts in the native state relation. -/
 theorem wholeWordStack_tailEntryFrame_safe {C F : Type}
     (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact 64)

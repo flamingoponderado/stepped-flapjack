@@ -1,12 +1,13 @@
 import SteppedFlapjack.WordToStackSteps.TailEntryFrame
 import SteppedFlapjack.WordToStackSteps.ResourceSafeResult
+import SteppedFlapjack.WordToStackSteps.TailFrameBound
 open Flapjack Flapjack.WordSemStateFiniteExact Flapjack.WordToStackProofs
 open Flapjack.WordToStackProofs.CompCorrect Flapjack.WordToStackProofs.InitializationStateRel
 open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Backend.WordToStack.Native Flapjack.Compiler.Backend.WordToStack.Native.Initialization
 open Flapjack.Compiler.Backend.WordToWord
 open SteppedFlapjack.WordToStackSteps SteppedFlapjack.WordAllocSteps SteppedFlapjack.StackSteps
-open SteppedFlapjack.StackToLabSteps
+open SteppedFlapjack.StackToLabSteps SteppedFlapjack.WordSimpSteps
 
 namespace SteppedFlapjack.WordToStackSteps
 
@@ -42,7 +43,7 @@ noncomputable def nativeTailEntryBound (wc : Flapjack.Compiler.Backend.WordToWor
   3 + callSequenceCost ac 0 code q (nativeTailEntryBitmap wc ac programs name)
     (k,nativeEntryFrameSize k q,nativeEntryFrame k q) * (limit+1)
 
-/-- An initialized, stack-safe Word entry simulates through the native Stack entry with an explicit visit bound. -/
+/-- An initialized Word entry with fitting reachable frames simulates through the native Stack entry with an explicit visit bound. -/
 theorem nativeTailEntry_span {C F : Type} (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact 64)
     (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
     (name : Nat) (p : WordLangProgHOL (BitVec 64)) (member : (name,1,p) ∈ programs)
@@ -65,7 +66,11 @@ theorem nativeTailEntry_span {C F : Type} (wc : Flapjack.Compiler.Backend.WordTo
     (run : evaluate (nativeTailEntryCode wc ac programs name p) (nativeTailEntryWord wc ac programs name p t coracle clock) = (result,post))
     (notError : result ≠ some .error) (notTimeout : result ≠ some .timeOut)
     (complete : CompleteWordResult result)
-    (safe : post.stackMax.getD (post.stackLimit+1) ≤ post.stackLimit)
+    (framesFit :
+      1 + nativeEntryFrameSize (ac.regCount-(5+ac.avoidRegs.length)) (nativeTailEntryCode wc ac programs name p) ≤ t.stack.length ∧
+      ∀ loc, RegTailCalls (nativeTailEntryCode wc ac programs name p) loc →
+        ∀ arity callee, sptLookup loc (sptFromAList (compile wc ac programs).2) = some (arity,callee) →
+          1 + (compileProgNative ac false callee arity (ac.regCount-(5+ac.avoidRegs.length)) (.nil,0)).2.1 ≤ t.stack.length)
     (wordBound : SteppedFlapjack.WordSteps.steps (nativeTailEntryCode wc ac programs name p) (nativeTailEntryWord wc ac programs name p t coracle clock) ≤ limit) :
     ∃ targetPost targetResult,
       StackSemEvaluate.evaluate (.call none (.inl name) none,{t with clock := limit+1}) = (targetResult,targetPost) ∧
@@ -96,6 +101,33 @@ theorem nativeTailEntry_span {C F : Type} (wc : Flapjack.Compiler.Backend.WordTo
     have bodyEq : (compNative ac false q (bs,n) (k,sz,f)).1 = body := congrArg Prod.fst compilation
     rw [bodyEq] at found
     exact found
+  have startStack : wordSemStackSize word.stack = some 1 := by rfl
+  have startMax : word.stackMax = some (1+sz) := by
+    simp [word,nativeTailEntryWord,k,q,sz,WordSemStateFiniteExact.callEnv,makeInit,wordSemStackSize,wordSemOptionMax,wordSemOptionAdd]
+  have startLimit : word.stackLimit = t.stack.length := by rfl
+  have calleeFrames : ∀ loc, RegTailCalls q loc → ∃ arity callee size,
+      sptLookup loc word.code = some (arity,callee) ∧ LoopBlock callee ∧
+      sptLookup loc word.stackSize = some size ∧ 1+size ≤ word.stackLimit := by
+    intro loc call
+    obtain ⟨arity,callee,lookup,calleeShape⟩ := localCode loc call
+    let size := (compileProgNative ac false callee arity k (.nil,0)).2.1
+    have sizeLookup : sptLookup loc word.stackSize = some size := by
+      change sptLookup loc (sptMapi _ (sptFromAList (compile wc ac programs).2)) = _
+      rw [sptLookupMapi]
+      change sptLookup loc (sptFromAList (compile wc ac programs).2) = _ at lookup
+      rw [lookup]
+      rfl
+    refine ⟨arity,callee,size,lookup,calleeShape,sizeLookup,?_⟩
+    change 1+size ≤ t.stack.length
+    exact framesFit.2 loc call arity callee lookup
+  obtain ⟨used,postMax,usedFit,_⟩ := regTail_stackMax_bound shape word (1+sz) word.stackLimit
+    startStack startMax (by simpa [startLimit,k,q,sz] using framesFit.1) noInstallCode calleeFrames
+  have limitEq := evaluate_stack_limit q word result post run
+  have safe : post.stackMax.getD (post.stackLimit+1) ≤ post.stackLimit := by
+    rw [run] at postMax
+    simp only at postMax
+    rw [postMax,Option.getD_some,limitEq]
+    exact usedFit
   have ⟨maxBound,labels⟩ := nativeEntry_frame_and_labels ac k f sz 1 name q t bs bsPost n nPost body frameDef sizeDef compilation found
   have labelsStack : ∀ loc, StackSem.getLabelsExact body loc → StackSem.locCheckExact stack.code loc := labels
   obtain ⟨targetPost,targetResult,bodyRun,matchResult,ffi,cost⟩ :=
