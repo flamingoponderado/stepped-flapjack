@@ -590,4 +590,31 @@ theorem tailCall_entries {width : Nat} [NeZero width] {σ : Type}
   rw [localsEq]
   simpa [compileProgExactHOLW,compileCallNoReturnExactHOLW,decClockCrepSemHOL] using count
 
+private theorem nestedDecs_zero_steps {width : Nat} [NeZero width] {σ : Type}
+    (names : List Nat) (body : CrepProgHOL width) (s : CrepSemHOLState width σ) :
+    CrepSteps.steps (nestedDecsHOL names (List.replicate names.length (.const (0 : BitVec width))) body) s =
+      names.length + CrepSteps.steps body (names.foldl (fun st name => CrepSemHOLState.setVar name (.word 0) st) s) := by
+  induction names generalizing s with
+  | nil => simp [nestedDecsHOL]
+  | cons name rest ih =>
+    simp only [List.length_cons,List.replicate_succ,nestedDecsHOL,CrepSteps.steps_dec,evalCrepSemHOLExp,List.foldl_cons]
+    rw [ih]
+    omega
+
+/-- The generated return slots and selected continuation contribute their exact
+Crep visits to a declaration call. -/
+theorem decCall_compiled_steps {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (name fname : MlS) (shape : ShapeHOL)
+    (args : List (ExpHOL width)) (continuation : ProgHOL width) (target : CrepSemHOLState width σ) :
+    let names := decCallSlots ctxt shape
+    let pre := names.foldl (fun st name => CrepSemHOLState.setVar name (.word 0) st) target
+    let call : CrepProgHOL width := .call (some (names,none)) fname ((compileExpExactHOLWList ctxt args).flatMap Prod.fst)
+    let cont := compileProgExactHOLW (decCallCtxt ctxt name shape) continuation
+    CrepSteps.steps (compileProgExactHOLW ctxt (.decCall name shape fname args continuation)) target =
+      names.length + (1 + CrepSteps.steps call pre + match evalCrepSemHOLProgExact pre call with
+        | (none,post) => CrepSteps.steps cont post
+        | _ => 0) := by
+  rw [compileDecCallShape,nestedDecs_zero_steps,CrepSteps.steps_seq]
+  rfl
+
 end SteppedFlapjack.PanToCrepSteps
