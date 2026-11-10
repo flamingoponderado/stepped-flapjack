@@ -262,6 +262,40 @@ theorem compile_tailCall_nil_crep_bound {F : Type}
     (branchConditionWhileBranch_wordSimpShape init initShape condition conditionShape body tail bodyShape tailShape c .ln)
     extendedRun (completeCrep_loop complete) extendedBound
 
+/-- A call with evaluated arguments preserves the compiler relations at the
+parameterized callee entry. -/
+theorem call_entry_relations {width : Nat} [NeZero width] {F : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (source : CrepSemHOLState width F)
+    (target : LoopSemStateFiniteExact width F) (name : MlString) (params : List Nat) (body : CrepProgHOL width)
+    (expressions : List (CrepExpHOL width)) (values : List (HolWordLab width))
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
+    (found : source.code.lookup name = some (params,body))
+    (distinct : params.Nodup) (arity : values.length = params.length)
+    (evaluated : expressions.map (evalCrepSemHOLExp source) = values.map some) :
+    let sourceEntry := decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}
+    let regs := List.range params.length
+    let targetEntry : LoopSemStateFiniteExact width F := {decClock target with locals := sptFromAList (regs.zip (values.map wlabWlocExact))}
+    let calleeCtxt := ctxtFcExact ctxt.target ctxt.funcs params regs
+    crepToLoopStateRelExact sourceEntry targetEntry ∧
+    crepToLoopMemRelHOLExact sourceEntry.memory targetEntry.memory sourceEntry.memaddrs ∧
+    crepToLoopGlobalsRelHOLExact sourceEntry.globals targetEntry.globals ∧
+    crepToLoopCodeRelExact calleeCtxt sourceEntry.code targetEntry.code ∧
+    crepToLoopLocalsRelExact calleeCtxt (listToNumSetHOLExact regs) sourceEntry.locals targetEntry.locals := by
+  obtain ⟨loc,len,hlab,hlen,_⟩ := codeRel.2 name params body found
+  subst len
+  have preserved := crepToLoopCallPreserveStateCodeLocalsRelExact params (List.range params.length) values source target ctxt live name expressions body loc
+    distinct List.nodup_range (by simp) (by simpa using arity) stateRel memRel globalsRel codeRel localsRel found (by simpa using hlab) evaluated
+  refine ⟨?_,?_,?_,?_,?_⟩
+  · simpa [decClockCrepSemHOL,decClock] using preserved.1
+  · simpa [decClockCrepSemHOL,decClock] using memRel
+  · simpa [decClockCrepSemHOL,decClock] using globalsRel
+  · simpa [decClockCrepSemHOL,decClock] using preserved.2.1
+  · simpa [decClockCrepSemHOL,decClock] using preserved.2.2
+
 /-- The ordinary caller state/code/locals relations derive all callee-entry
 relations for an empty-argument call, including the actual compiler context. -/
 theorem tailCall_nil_entry_relations {width : Nat} [NeZero width] {F : Type}
@@ -281,16 +315,8 @@ theorem tailCall_nil_entry_relations {width : Nat} [NeZero width] {F : Type}
     crepToLoopGlobalsRelHOLExact sourceEntry.globals targetEntry.globals ∧
     crepToLoopCodeRelExact calleeCtxt sourceEntry.code targetEntry.code ∧
     crepToLoopLocalsRelExact calleeCtxt .ln sourceEntry.locals targetEntry.locals := by
-  obtain ⟨loc,len,hlab,hlen,_⟩ := codeRel.2 name [] body found
-  have lenZero : len = 0 := by simpa using hlen.symm
-  subst len
-  have preserved := crepToLoopCallPreserveStateCodeLocalsRelExact [] [] [] source target ctxt live name [] body loc
-    (by simp) (by simp) (by simp) (by simp) stateRel memRel globalsRel codeRel localsRel found (by simpa using hlab) (by simp)
-  refine ⟨?_,?_,?_,?_,?_⟩
-  · simpa [decClockCrepSemHOL,decClock,sptFromAList] using preserved.1
-  · simpa [decClockCrepSemHOL,decClock] using memRel
-  · simpa [decClockCrepSemHOL,decClock] using globalsRel
-  · simpa [decClockCrepSemHOL,decClock] using preserved.2.1
-  · simpa [decClockCrepSemHOL,decClock,sptFromAList] using preserved.2.2
+  simpa [sptFromAList,listToNumSetHOLExact] using
+    call_entry_relations ctxt live source target name [] body [] [] stateRel memRel globalsRel codeRel localsRel
+      found (by simp) rfl (by rfl)
 
 end SteppedFlapjack.CrepToLoopSteps
