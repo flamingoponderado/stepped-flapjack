@@ -10,11 +10,14 @@ open SteppedFlapjack.CrepToLoopSteps
 /-- The actual generated optimized entry executes with a source-derived
 closed-form bound for the comparison witness. -/
 theorem branching_fixture_entry_loop (arch : AsmArchitecture)
+    (memory : BitVec 64 → WordLocW 64)
+    (memoryRel : let source := panSimpSourceState branching (clockedFixtureSource branching 6)
+      crepToLoopMemRelHOLExact (crepStateFrom source branchingHOL).memory memory (crepStateFrom source branchingHOL).memaddrs)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
     let source := panSimpSourceState branching (clockedFixtureSource branching 6)
     let crep := crepStateFrom source branchingHOL
-    let target := loopStateFrom arch source branchingHOL
+    let target := {(loopStateFrom arch source branchingHOL) with memory := memory}
     let ctxt := witnessLoopContext arch branchingHOL
     let budget := 138*(33+1)
     CrepSteps.steps branchCrepEntry crep ≤ 33 ∧
@@ -30,7 +33,7 @@ theorem branching_fixture_entry_loop (arch : AsmArchitecture)
       crepToLoopCodeRelExact ctxt final.code post.code := by
   let source := panSimpSourceState branching (clockedFixtureSource branching 6)
   let crep := crepStateFrom source branchingHOL
-  let target := loopStateFrom arch source branchingHOL
+  let target := {(loopStateFrom arch source branchingHOL) with memory := memory}
   let ctxt := witnessLoopContext arch branchingHOL
   let name := entryName branchingHOL
   obtain ⟨final,run,bound⟩ := branching_counted_fixture context primitive handler
@@ -44,7 +47,9 @@ theorem branching_fixture_entry_loop (arch : AsmArchitecture)
     have fresh := Ne.symm (entryName_fresh branchingHOL)
     have h := twoPrograms_callee_label arch (ofString "main") name branchCrepBody fresh
     simpa [ctxt,name,witnessLoopContext,branching_crep_code,twoPrograms,branchCrepBody] using h
-  have rel := loopStateFrom_relations arch source branchingHOL
+  have originalRel := loopStateFrom_relations arch source branchingHOL
+  have rel : crepToLoopStateRelExact crep target ∧ crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact crep.globals target.globals := ⟨originalRel.1,memoryRel,originalRel.2.2⟩
   have codeLocals := branching_loop_code_locals arch source
   have compiled := branching_loop_entry_code arch
   have result := generatedScalar_entry_explicit ctxt name branchCrepBody branching_scalar crep final target [.word 7] 33

@@ -21,7 +21,7 @@ theorem countdownFixture_callEq (n : Nat) (cfg : LabToTarget.Config) (clock : Na
   dsimp only
   rw [evaluate]
   have args : getVars [0] {(countdownFixtureWord n cfg) with clock := clock+1} = some [(.loc 1 0 : WordLocW 64)] := by
-    simp [WordSemStateFiniteExact.getVars,WordSemStateFiniteExact.getVar,countdownFixtureWord,WordToStack.Native.Initialization.makeInit,sptLookup]
+    simp [WordSemStateFiniteExact.getVars,WordSemStateFiniteExact.getVar,countdownFixtureWord,fixtureWord,WordToStack.Native.Initialization.makeInit,sptLookup]
   have fn := countdownFixture_callFind n cfg
   simp only [args,wordSemBadDestArgs,wordSemAddRetLoc,fn,show clock+1 ≠ 0 by omega,↓reduceDIte]
   rfl
@@ -65,13 +65,13 @@ theorem countdownFixture_source_stack (n : Nat) (range : n < 2^64) (cfg : LabToT
     rw [countdownFixture_callEq n cfg clock,run] at ffi
     simpa [wordSemBadFunReturn] using ffi
   have args : getVars [0] word = some [(.loc 1 0 : WordLocW 64)] := by
-    simp [word,WordSemStateFiniteExact.getVars,WordSemStateFiniteExact.getVar,countdownFixtureWord,WordToStack.Native.Initialization.makeInit,sptLookup]
+    simp [word,WordSemStateFiniteExact.getVars,WordSemStateFiniteExact.getVar,countdownFixtureWord,fixtureWord,WordToStack.Native.Initialization.makeInit,sptLookup]
   have find : wordSemFindCode (some 64) [(.loc 1 0 : WordLocW 64)] word.code word.stackSize =
       some ([.loc 1 0],countdownOptimizedEntry,some 0) := countdownFixture_callFind n cfg
   have stepEq := WordSteps.steps_call_tail (some 64) [0] word [.loc 1 0] [.loc 1 0] (some 0) countdownOptimizedEntry
     args rfl find (by simp [word])
   have bodyEq : callEnv [(.loc 1 0 : WordLocW 64)] (some 0) (decClock word) = body := by
-    simp [word,body,clock,countdownInitialWord,countdownFixtureWord,WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.decClock]
+    simp [word,body,clock,countdownInitialWord,countdownFixtureWord,fixtureWord,countdownZeroLimit,countdownFixtureStack,WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.decClock]
   rw [bodyEq] at stepEq
   have bodyBound : WordSteps.steps countdownOptimizedEntry body ≤ countdownWordBound n := by
     change WordSteps.steps (.call none (some 64) [0] none) word ≤ _ at bound

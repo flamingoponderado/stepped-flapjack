@@ -1,5 +1,5 @@
 import SteppedFlapjack.Concrete.CountdownStackSpan
-import SteppedFlapjack.Concrete.InitEHeap
+import SteppedFlapjack.Concrete.FixtureCrepMemory
 import SteppedFlapjack.Concrete.CountdownLoopSpan
 import SteppedFlapjack.PanToCrepSteps.SingleEntryNativeGoodCode
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineConfig
@@ -71,21 +71,6 @@ theorem countdownFixture_stack_span (n clock limit : Nat) (cfg : LabToTarget.Con
   · exact bound
 
 
-/-- The initializer's heap agrees with the countdown source on its accessible domain. -/
-theorem countdownFixture_crep_memory (n : Nat) (cfg : LabToTarget.Config) :
-    let source := panSimpSourceState (countdown n) (clockedFixtureSource (countdown n) (6*n+9))
-    crepToLoopMemRelHOLExact
-      (crepStateFrom source (naturalCountdownHOL n)).memory (countdownFixtureStack n cfg).memory
-      (crepStateFrom source (naturalCountdownHOL n)).memaddrs := by
-  dsimp only
-  intro a member
-  have h := fixtureStack_heapMemory (countdownNativeStackCode n) cfg (countdown_nativeGoodCode n) a
-  change (WordLocW.word (initialWord a)) = (fixtureStack (countdownNativeStackCode n) cfg).memory a
-  apply Eq.symm
-  apply h
-  simpa [crepStateFrom,concreteDeclCrepState,loweredStateFrom,noGlobalsLoweredPreCall,
-    panSimpSourceState,clockedFixtureSource,exactState,singleEntrySourceTemplate,sourceTemplate] using member
-
 /-- The counted countdown source reaches Loop code using the actual initialized
 Stack memory, with an explicit Loop visit bound. -/
 theorem countdownFixture_initialized_loop (n : Nat) (range : n < 2^64) (cfg : LabToTarget.Config)
@@ -115,7 +100,8 @@ theorem countdownFixture_initialized_loop (n : Nat) (range : n < 2^64) (cfg : La
       loweredStateFrom,noGlobalsLoweredPreCall]
   obtain ⟨post,compiled,entry,steps,state,mem,globals,codeRel⟩ :=
     naturalCountdown_entry_loop riscvConfig.isa source final n (3+8*(6*n+18))
-      (countdownFixtureStack n cfg).memory (countdownFixture_crep_memory n cfg) nonzero run bound
+      (countdownFixtureStack n cfg).memory (fixtureCrep_memory (countdown n) (6*n+9) (naturalCountdownHOL n)
+        (countdownNativeStackCode n) cfg (countdown_nativeGoodCode n)) nonzero run bound
   refine ⟨final,post,run,compiled,?_,?_,state,mem,globals,codeRel⟩
   · simpa only [countdown_optimized_weight] using entry
   · simpa only [countdown_optimized_weight] using steps

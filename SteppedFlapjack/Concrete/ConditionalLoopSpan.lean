@@ -14,11 +14,14 @@ def conditionalLoopBody : CrepProgHOL 64 :=
 /-- The actual generated optimized entry executes with a source-derived
 closed-form bound for the witness that takes both conditional branches. -/
 theorem branchingLoop_fixture_entry_loop (arch : AsmArchitecture)
+    (memory : BitVec 64 → WordLocW 64)
+    (memoryRel : let source := panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)
+      crepToLoopMemRelHOLExact (crepStateFrom source (progToHOL branchingLoop)).memory memory (crepStateFrom source (progToHOL branchingLoop)).memaddrs)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
     let source := panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)
     let crep := crepStateFrom source (progToHOL branchingLoop)
-    let target := loopStateFrom arch source (progToHOL branchingLoop)
+    let target := {(loopStateFrom arch source (progToHOL branchingLoop)) with memory := memory}
     let ctxt := witnessLoopContext arch (progToHOL branchingLoop)
     let budget := 240*(388+1)
     CrepSteps.steps branchingLoopCrepEntry crep ≤ 388 ∧
@@ -34,7 +37,7 @@ theorem branchingLoop_fixture_entry_loop (arch : AsmArchitecture)
       crepToLoopCodeRelExact ctxt final.code post.code := by
   let source := panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)
   let crep := crepStateFrom source (progToHOL branchingLoop)
-  let target := loopStateFrom arch source (progToHOL branchingLoop)
+  let target := {(loopStateFrom arch source (progToHOL branchingLoop)) with memory := memory}
   let ctxt := witnessLoopContext arch (progToHOL branchingLoop)
   let name := entryName (progToHOL branchingLoop)
   obtain ⟨final,run,bound⟩ := branching_loop_counted_fixture context primitive handler
@@ -48,7 +51,9 @@ theorem branchingLoop_fixture_entry_loop (arch : AsmArchitecture)
     have fresh := Ne.symm (entryName_fresh (progToHOL branchingLoop))
     have h := twoPrograms_callee_label arch (ofString "main") name branchingLoopCrepBody fresh
     simpa [ctxt,witnessLoopContext,branchingLoop_crep_code,twoPrograms] using h
-  have rel := loopStateFrom_relations arch source (progToHOL branchingLoop)
+  have originalRel := loopStateFrom_relations arch source (progToHOL branchingLoop)
+  have rel : crepToLoopStateRelExact crep target ∧ crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact crep.globals target.globals := ⟨originalRel.1,memoryRel,originalRel.2.2⟩
   have codeLocals := branchingLoop_loop_code_locals arch source
   have compiled : (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms (progToHOL branchingLoop)) := by
     rw [branchingLoop_loop_code]

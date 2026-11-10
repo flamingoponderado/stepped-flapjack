@@ -26,12 +26,15 @@ set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
 /-- The straight-line branching fixture returns through the actual optimized Word table
 within its explicit code-derived visit bound. -/
-theorem branching_wholeWord (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+theorem branching_wholeWord (memory : BitVec 64 → WordLocW 64)
+    (memoryRel : let source := panSimpSourceState branching (clockedFixtureSource branching 6)
+      crepToLoopMemRelHOLExact (crepStateFrom source branchingHOL).memory memory (crepStateFrom source branchingHOL).memaddrs)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit)
     (template : WordSemStateFiniteExact 64 C Unit) (frame : Nat) :
     let pan := panSimpSourceState branching (clockedFixtureSource branching 6)
     let crep := crepStateFrom pan (branchingHOL)
-    let starter := comparisonWordStarter template frame
+    let starter := {(comparisonWordStarter template frame) with memory := memory}
     let target := WordSemStateFiniteExact.evaluate (.call none (some 64) [0] none)
       {starter with clock := 6*comparisonLoopVisits+1, code := sptFromAList (compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2}
     ∃ (final : CrepSemHOLState 64 Unit) (post : LoopSemStateFiniteExact 64 Unit),
@@ -45,24 +48,23 @@ theorem branching_wholeWord (context : PanValueFfiContext (RiscV.Word 64)) (prim
   let timed := {crep with clock := crep.clock + comparisonLoopBudget}
   have code : crepPrograms (branchingHOL) = comparisonCrepCode := by
     simpa [comparisonCrepCode,twoPrograms,branchCrepBody] using branching_crep_code
-  obtain ⟨_,_,final,post,crepRun,loopRun,loopBound,stateRel,_,_,_⟩ := branching_fixture_entry_loop riscvConfig.isa context primitive handler
+  obtain ⟨_,_,final,post,crepRun,loopRun,loopBound,stateRel,_,_,_⟩ := branching_fixture_entry_loop riscvConfig.isa memory memoryRel context primitive handler
   have heap : timed.topAddr = timed.baseAddr + 2*fixtureHeapLength := by
     simpa [timed,crep,pan] using fixture_heap branching 6 (branchingHOL)
-  have loopEq : concreteDeclLoopState riscvConfig.isa timed comparisonCrepCode =
-      {loopStateFrom riscvConfig.isa pan (branchingHOL) with
-        clock := (loopStateFrom riscvConfig.isa pan (branchingHOL)).clock + comparisonLoopBudget} := by
+  have loopEq : {(concreteDeclLoopState riscvConfig.isa timed comparisonCrepCode) with memory := memory} =
+      {loopStateFrom riscvConfig.isa pan (branchingHOL) with memory := memory, clock := (loopStateFrom riscvConfig.isa pan (branchingHOL)).clock + comparisonLoopBudget} := by
     simp [timed,crep,pan,loopStateFrom,concreteDeclLoopState,code]
-  have sourceRun : evaluate branchingLoopEntry (concreteDeclLoopState riscvConfig.isa timed comparisonCrepCode) =
+  have sourceRun : evaluate branchingLoopEntry {(concreteDeclLoopState riscvConfig.isa timed comparisonCrepCode) with memory := memory} =
       (some (.result [.word 7]),post) := by
     rw [loopEq]
     simpa [pan,comparisonLoopBudget] using loopRun
-  have sourceBound : LoopSteps.steps branchingLoopEntry (concreteDeclLoopState riscvConfig.isa timed comparisonCrepCode) ≤ comparisonLoopVisits := by
+  have sourceBound : LoopSteps.steps branchingLoopEntry {(concreteDeclLoopState riscvConfig.isa timed comparisonCrepCode) with memory := memory} ≤ comparisonLoopVisits := by
     rw [loopEq]
     simpa [pan,comparisonLoopBudget,comparisonLoopVisits] using loopBound
   have span := twoProgram_wholeWord_span riscvConfig.isa (ofString "main") (entryName branchingHOL)
     branchCrepBody (Ne.symm (entryName_fresh (branchingHOL))) branching_scalar
     timed post [.word 7] comparisonLoopVisits template fixtureHeapLength frame
-    countdownRiscVBackend.wordToWordConf riscvConfig (phase3Starter riscvConfig.isa timed (comparisonCrepCode) template fixtureHeapLength 64 frame).memory heap sourceRun sourceBound
+    countdownRiscVBackend.wordToWordConf riscvConfig memory heap sourceRun sourceBound
   obtain ⟨_,wordPost,wordResult,relation,result,ffi,bound⟩ := span
   simp only [LoopToWord.CompileCorrect.resultCase] at relation
   refine ⟨final,post,?_,stateRel,?_,?_,?_⟩

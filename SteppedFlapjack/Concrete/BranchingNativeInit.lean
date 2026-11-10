@@ -1,7 +1,8 @@
 import SteppedFlapjack.Concrete.ComparisonWordSpan
 import SteppedFlapjack.Concrete.BranchingWordSpan
 import SteppedFlapjack.Concrete.WordBitmap
-import SteppedFlapjack.Concrete.InitEStack
+import SteppedFlapjack.Concrete.FixtureCrepMemory
+import SteppedFlapjack.Concrete.TwoProgramNativeEntry
 import SteppedFlapjack.PanToCrepSteps.SingleEntryNativeGoodCode
 open Flapjack Flapjack.Basis.Pure.MlString Flapjack.Pancake.PanLang
 open Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
@@ -61,26 +62,104 @@ theorem branchingLoop_nativeBitmaps :
   exact twoWordTables_native_bitmaps riscvConfig.isa (ofString "main") (entryName (progToHOL branchingLoop)) branchingLoopCrepBody
     (Ne.symm (entryName_fresh (progToHOL branchingLoop))) branchingLoop_scalar countdownRiscVBackend.wordToWordConf riscvConfig
 
+/-- Native Stack code emitted for the comparison witness. -/
+noncomputable def comparisonNativeCode :=
+  (compileNative riscvConfig false (compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2).2.2.2
+
+/-- Native Stack code emitted for the branching-loop witness. -/
+noncomputable def branchingLoopNativeCode :=
+  (compileNative riscvConfig false (compile countdownRiscVBackend.wordToWordConf riscvConfig branchWordPrograms).2).2.2.2
+
+/-- The original compiler establishes good comparison code. -/
+theorem comparison_nativeGoodCode : StackToLab.Proofs.GoodCode.goodCode 24 comparisonNativeCode :=
+  singleEntry_nativeGoodCode (progToHOL branching) comparisonWordPrograms comparison_panToWord
+
+/-- The original compiler establishes good branching-loop code. -/
+theorem branchingLoop_nativeGoodCode : StackToLab.Proofs.GoodCode.goodCode 24 branchingLoopNativeCode :=
+  singleEntry_nativeGoodCode (progToHOL branchingLoop) branchWordPrograms branchingLoop_panToWord
+
 /-- Actual initialized Stack state for the compiled comparison witness. -/
-noncomputable def comparisonFixtureStack (cfg : LabToTarget.Config) := fixtureStack
-  (compileNative riscvConfig false (compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2).2.2.2 cfg
+noncomputable def comparisonFixtureStack (cfg : LabToTarget.Config) := fixtureStack comparisonNativeCode cfg
 
 /-- Actual initialized Stack state for the compiled branching-loop witness. -/
-noncomputable def branchingLoopFixtureStack (cfg : LabToTarget.Config) := fixtureStack
-  (compileNative riscvConfig false (compile countdownRiscVBackend.wordToWordConf riscvConfig branchWordPrograms).2).2.2.2 cfg
+noncomputable def branchingLoopFixtureStack (cfg : LabToTarget.Config) := fixtureStack branchingLoopNativeCode cfg
 
 /-- The original compiler supplies the comparison initializer validity. -/
 theorem comparisonFixture_initOk (cfg : LabToTarget.Config) :
     Flapjack.WordToStackProofs.InitializationStateRel.initStateOk riscvConfig
-      (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (comparisonFixtureStack cfg) (fixtureWordOracle cfg) := by
-  apply fixtureStack_nativeInitOk
-  exact singleEntry_nativeGoodCode (progToHOL branching) comparisonWordPrograms comparison_panToWord
+      (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (comparisonFixtureStack cfg) (fixtureWordOracle cfg) :=
+  fixtureStack_nativeInitOk _ cfg comparison_nativeGoodCode
 
 /-- The original compiler supplies the branching-loop initializer validity. -/
 theorem branchingLoopFixture_initOk (cfg : LabToTarget.Config) :
     Flapjack.WordToStackProofs.InitializationStateRel.initStateOk riscvConfig
-      (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (branchingLoopFixtureStack cfg) (fixtureWordOracle cfg) := by
-  apply fixtureStack_nativeInitOk
-  exact singleEntry_nativeGoodCode (progToHOL branchingLoop) branchWordPrograms branchingLoop_panToWord
+      (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (branchingLoopFixtureStack cfg) (fixtureWordOracle cfg) :=
+  fixtureStack_nativeInitOk _ cfg branchingLoop_nativeGoodCode
+
+/-- Word initialization for the comparison witness. -/
+noncomputable def comparisonFixtureWord (cfg : LabToTarget.Config) := fixtureWord comparisonNativeCode
+  (compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2 cfg
+
+/-- Word initialization for the branching-loop witness. -/
+noncomputable def branchingLoopFixtureWord (cfg : LabToTarget.Config) := fixtureWord branchingLoopNativeCode
+  (compile countdownRiscVBackend.wordToWordConf riscvConfig branchWordPrograms).2 cfg
+
+open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
+
+/-- The comparison source reaches optimized Word code from the actual initializer. -/
+theorem comparisonFixture_native_word (cfg : LabToTarget.Config)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
+    let pan := panSimpSourceState branching (clockedFixtureSource branching 6)
+    let crep := crepStateFrom pan branchingHOL
+    let word := {(comparisonFixtureWord cfg) with clock := 6*comparisonLoopVisits+1}
+    let target := WordSemStateFiniteExact.evaluate (.call none (some 64) [0] none) word
+    ∃ (final : CrepSemHOLState 64 Unit) (post : LoopSemStateFiniteExact 64 Unit),
+      evalCrepSemHOLProgExact crep branchCrepEntry = (some (.return [.word 7]),final) ∧
+      crepToLoopStateRelExact final {post with clock := final.clock} ∧
+      target.1 = some (.result (.loc 1 0) [.word 7]) ∧ target.2.ffi = post.ffi ∧
+      WordSteps.steps (.call none (some 64) [0] none) word ≤ comparisonWordBound := by
+  have memoryRel := fixtureCrep_memory branching 6 branchingHOL comparisonNativeCode cfg comparison_nativeGoodCode
+  have h := branching_wholeWord (comparisonFixtureStack cfg).memory memoryRel context primitive handler (comparisonFixtureWord cfg) 0
+  have frame := twoProgram_optimizedEntry_frame riscvConfig.isa (ofString "main") (entryName branchingHOL)
+    branchCrepBody (Ne.symm (entryName_fresh branchingHOL)) branching_scalar comparisonNativeCode cfg
+  have starter := fixtureStarter branching 6 comparisonLoopBudget branchingHOL comparisonCrepCode comparisonNativeCode
+    (compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2 cfg comparison_nativeGoodCode 0
+    (6*comparisonLoopVisits+1) frame
+  have codeEq : (comparisonFixtureWord cfg).code = sptFromAList
+      (compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2 := rfl
+  rw [← codeEq] at h
+  dsimp only [comparisonWordStarter,comparisonFixtureWord,comparisonFixtureStack] at h
+  dsimp only at starter
+  rw [starter] at h
+  exact h
+
+/-- The branching-loop source reaches optimized Word code from the actual initializer. -/
+theorem branchingLoopFixture_native_word (cfg : LabToTarget.Config)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
+    let pan := panSimpSourceState branchingLoop (clockedFixtureSource branchingLoop 23)
+    let crep := crepStateFrom pan (progToHOL branchingLoop)
+    let word := {(branchingLoopFixtureWord cfg) with clock := 6*branchLoopVisits+1}
+    let target := WordSemStateFiniteExact.evaluate (.call none (some 64) [0] none) word
+    ∃ (final : CrepSemHOLState 64 Unit) (post : LoopSemStateFiniteExact 64 Unit),
+      evalCrepSemHOLProgExact crep branchingLoopCrepEntry = (some (.return [.word 7]),final) ∧
+      crepToLoopStateRelExact final {post with clock := final.clock} ∧
+      target.1 = some (.result (.loc 1 0) [.word 7]) ∧ target.2.ffi = post.ffi ∧
+      WordSteps.steps (.call none (some 64) [0] none) word ≤ branchWordBound := by
+  have memoryRel := fixtureCrep_memory branchingLoop 23 (progToHOL branchingLoop) branchingLoopNativeCode cfg branchingLoop_nativeGoodCode
+  have h := branchingLoop_wholeWord (branchingLoopFixtureStack cfg).memory memoryRel context primitive handler (branchingLoopFixtureWord cfg) 0
+  have frame := twoProgram_optimizedEntry_frame riscvConfig.isa (ofString "main") (entryName (progToHOL branchingLoop))
+    branchingLoopCrepBody (Ne.symm (entryName_fresh (progToHOL branchingLoop))) branchingLoop_scalar branchingLoopNativeCode cfg
+  have starter := fixtureStarter branchingLoop 23 branchLoopBudget (progToHOL branchingLoop) branchCrepCode branchingLoopNativeCode
+    (compile countdownRiscVBackend.wordToWordConf riscvConfig branchWordPrograms).2 cfg branchingLoop_nativeGoodCode 0
+    (6*branchLoopVisits+1) frame
+  have codeEq : (branchingLoopFixtureWord cfg).code = sptFromAList
+      (compile countdownRiscVBackend.wordToWordConf riscvConfig branchWordPrograms).2 := rfl
+  rw [← codeEq] at h
+  dsimp only [branchWordStarter,branchingLoopFixtureWord,branchingLoopFixtureStack] at h
+  dsimp only at starter
+  rw [starter] at h
+  exact h
 
 end SteppedFlapjack.Concrete

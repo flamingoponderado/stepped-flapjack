@@ -1,3 +1,6 @@
+import SteppedFlapjack.Concrete.TwoProgramNativeEntry
+import SteppedFlapjack.Concrete.FixtureWordStarter
+import SteppedFlapjack.Concrete.FixtureCrepMemory
 import SteppedFlapjack.Concrete.BranchingNativeInit
 import SteppedFlapjack.PanToCrepSteps.SingleEntryNativeGoodCode
 import SteppedFlapjack.WordToStackSteps.TailFrameBound
