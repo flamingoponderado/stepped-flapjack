@@ -817,6 +817,15 @@ theorem decCall_continuation_relations {width : Nat} [NeZero width] {σ : Type}
   · simpa [decCallCtxt,PanSemStateFiniteExact.setVarHOLFinite] using excpRel
   · exact loc
 
+/-- Source evaluation retains the function table across every outcome. -/
+theorem source_code_preserved {width : Nat} [NeZero width] {σ : Type}
+    (p : ProgHOL width) (s t : PanSemStateFiniteExact width σ) (r : Option (PanSemResultExact width))
+    (run : s.evaluateHOLFiniteState p = (r,t)) : t.code = s.code := by
+  have h := evaluateInvariantsHOLFinite p (PanPropsEvalStateFiniteExact.ofPanSemFinite s) r
+    (PanPropsEvalStateFiniteExact.ofPanSemFinite t) (by
+      simp [PanPropsEvalStateFiniteExact.evaluateHOLFinitePair,run])
+  exact h.2.2.2.2.2.2.1
+
 open Flapjack.PanSemStateFiniteExact in
 /-- A successful declaration call exposes exact source and Crep visits and
 the related continuation states, with no assumed callee simulation. -/
@@ -852,6 +861,7 @@ theorem decCall_return_bridge {width : Nat} [NeZero width] {σ : Type}
       panToCrepLocalsRelFiniteExact next sourceEntry.locals targetEntry.locals ∧
       evalCrepSemHOLProgExact targetEntry (compileProgExactHOLW next body) = (some (.return (flattenHOL value)),targetPost) ∧
       targetPost.code = target.code ∧
+      sourcePost.code = source.code ∧
       controlSteps (.decCall name shape fname argexps continuation) source =
         1 + controlSteps body sourceEntry + controlSteps continuation sourceCont ∧
       CrepSteps.steps (compileProgExactHOLW ctxt (.decCall name shape fname argexps continuation)) target =
@@ -910,7 +920,10 @@ theorem decCall_return_bridge {width : Nat} [NeZero width] {σ : Type}
   have targetCode : targetPost.code = target.code := by
     have h := evaluateCodeInvariantHOL _ _ _ _ targetRun
     simpa [targetEntry,decClockCrepSemHOL] using h
-  refine ⟨shapes,targetPost,hsrc,htgt,hbodyLocal,hs,hc,he,hl,targetRun,targetCode,?_,?_,continuations⟩
+  have sourceCode : sourcePost.code = source.code := by
+    have h := source_code_preserved body entry sourcePost (some (.returned value)) bodyRun
+    simpa [entry,callEntryStateHOLFinite] using h
+  refine ⟨shapes,targetPost,hsrc,htgt,hbodyLocal,hs,hc,he,hl,targetRun,targetCode,sourceCode,?_,?_,continuations⟩
   · exact sourceCount
   · dsimp only [targetEntry,next,ns] at targetCount ⊢
     simp only [decClockCrepSemHOL] at targetCount ⊢
@@ -1083,6 +1096,7 @@ theorem decCall_return_bound_from_induction {width : Nat} [NeZero width] {σ : T
       let sourceCont := setVarHOLFinite name value {sourcePost with locals := source.locals}
       let targetCont := {targetPost with locals := target.locals.updateListEq ((decCallSlots ctxt shape).zip (flattenHOL value))}
       targetPost.code = target.code →
+      sourcePost.code = source.code →
       panToCrepStateRelFiniteExact sourceCont targetCont →
       codeRelExactHOLW (decCallCtxt ctxt name shape) sourceCont.code targetCont.code →
       panToCrepExcpRelFiniteExact (decCallCtxt ctxt name shape).eids sourceCont.eshapes →
@@ -1091,11 +1105,11 @@ theorem decCall_return_bound_from_induction {width : Nat} [NeZero width] {σ : T
         K * controlSteps continuation sourceCont) :
     CrepSteps.steps (compileProgExactHOLW ctxt (.decCall name shape fname argexps continuation)) target ≤
       K * controlSteps (.decCall name shape fname argexps continuation) source := by
-  obtain ⟨shapes,targetPost,hsrc,htgt,hlocal,bs,bc,be,bl,_,hcode,hsource,htarget,hs,hc,he,hl⟩ :=
+  obtain ⟨shapes,targetPost,hsrc,htgt,hlocal,bs,bc,be,bl,_,hcode,hsourceCode,hsource,htarget,hs,hc,he,hl⟩ :=
     decCall_return_bridge ctxt name fname shape argexps continuation source target args body locals rsh value sourcePost
       hargs found clock stateRel codeRel excpRel localsRel localised bodyRun valid returnValid
   have b := bodyIH shapes hsrc htgt hlocal bs bc be bl
-  have c := contIH targetPost hcode hs hc he hl
+  have c := contIH targetPost hcode hsourceCode hs hc he hl
   have overhead : (decCallSlots ctxt shape).length + 2 ≤ K := by
     rw [decCall_statementWeight] at weight
     simp [decCallSlots]
