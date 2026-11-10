@@ -34,6 +34,21 @@ theorem frontendScalar_localised {width : Nat} [NeZero width] {ctxt : PanToCrepC
     {e : ExpHOL width} (shape : FrontendScalar ctxt e) : localisedExpHOL e = true := by
   induction shape <;> simp_all [localisedExpHOL,everyExpHOL,everyExpListHOL]
 
+/-- Supported scalar arguments satisfy the compiler localization check. -/
+theorem frontendScalar_everyLocal {width : Nat} [NeZero width] {ctxt : PanToCrepContextExact width}
+    {e : ExpHOL width} (shape : FrontendScalar ctxt e) : everyExpHOL localisedExpHOL e = true := by
+  induction shape <;> simp_all [localisedExpHOL,everyExpHOL,everyExpListHOL]
+  all_goals constructor <;> (simpa [localisedExpHOL] using frontendScalar_localised (by assumption))
+
+theorem frontendArguments_localised {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width)
+    (args : List (ExpHOL width)) (shape : ∀ e ∈ args, FrontendScalar ctxt e) :
+    everyExpListHOL localisedExpHOL args = true := by
+  induction args with
+  | nil => rfl
+  | cons e es ih =>
+    simp only [everyExpListHOL,Bool.and_eq_true]
+    exact ⟨frontendScalar_everyLocal (shape e (by simp)),ih (fun x hx => shape x (by simp [hx]))⟩
+
 /-- Every frontend scalar produces exactly one Crep expression. -/
 theorem frontendScalar_compile {width : Nat} [NeZero width] {ctxt : PanToCrepContextExact width} {e : ExpHOL width}
     (shape : FrontendScalar ctxt e) : ∃ value, compileExpExactHOLW ctxt e = ([value],.one) := by
