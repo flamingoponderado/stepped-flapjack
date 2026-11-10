@@ -12,16 +12,18 @@ the body factor per Pancake control visit when that factor is positive. -/
 private theorem while_compiled_steps_compositional {width : Nat} [NeZero width] {σ : Type}
     (condition : ExpHOL width) (body : ProgHOL width) (context : PanToCrepContextExact width)
     (conditionShape : FrontendScalar context condition)
+    (codeTable : HolFiniteMapExact MlS (List Nat × CrepProgHOL width))
     (bodyFactor : Nat) (factorPositive : 1 ≤ bodyFactor)
     (bodyBound : ∀ (bs bf : PanSemStateFiniteExact width σ) (br : Option (PanSemResultExact width))
       (bt : CrepSemHOLState width σ),
       bs.evaluateHOLFiniteState body = (br,bf) → br ≠ some .error →
+      bt.code = codeTable →
       panToCrepStateRelFiniteExact bs bt → codeRelExactHOLW context bs.code bt.code →
       panToCrepExcpRelFiniteExact context.eids bs.eshapes →
       panToCrepLocalsRelFiniteExact context bs.locals bt.locals → localisedProgHOL body = true →
       CrepSteps.steps (compileProgExactHOLW context body) bt ≤ bodyFactor * controlSteps body bs)
     (source sourceFinal : PanSemStateFiniteExact width σ) (result : Option (PanSemResultExact width))
-    (target : CrepSemHOLState width σ)
+    (target : CrepSemHOLState width σ) (targetTable : target.code = codeTable)
     (run : source.evaluateHOLFiniteState (.while condition body) = (result,sourceFinal))
     (nonerror : result ≠ some .error)
     (stateRel : panToCrepStateRelFiniteExact source target)
@@ -81,7 +83,7 @@ private theorem while_compiled_steps_compositional {width : Nat} [NeZero width] 
             bodyState codeRel excpRel localsRel locs.2
         rw [targetRun]
         have bodyStepBound := bodyBound source.decClockHOLFinite sourcePost bodyResult (decClockCrepSemHOL target)
-          bodyRun bodyNonerror bodyState codeRel excpRel localsRel locs.2
+          bodyRun bodyNonerror (by simpa [decClockCrepSemHOL] using targetTable) bodyState codeRel excpRel localsRel locs.2
         have bodyClock := evaluateHOLFiniteState_clock_le source.decClockHOLFinite body
         rw [bodyRun] at bodyClock
         have smaller : sourcePost.clock < clock := by
@@ -104,7 +106,10 @@ private theorem while_compiled_steps_compositional {width : Nat} [NeZero width] 
               | (none,t) | (some (.continue 0),t) => CrepSteps.steps (.while ce (compileProgExactHOLW context body)) t
               | _ => 0) ≤
               bodyFactor * controlSteps (.while condition body) source := by
-          have recurse := ih sourcePost.clock smaller sourcePost sourceFinal result targetPost tailRun nonerror
+          have postTable : targetPost.code = codeTable := by
+            have invariant := evaluateCodeInvariantHOL _ _ _ _ targetRun
+            exact invariant.trans (by simpa [decClockCrepSemHOL] using targetTable)
+          have recurse := ih sourcePost.clock smaller sourcePost sourceFinal result targetPost postTable tailRun nonerror
             postState postCode postExcp postLocals rfl
           rw [comp] at recurse
           have counts : controlSteps (.while condition body) source ≥
@@ -246,10 +251,10 @@ private theorem programBound_while {width : Nat} [NeZero width]
     omega
   have positive : 1 ≤ K := (CrepSteps.statementWeight_pos _).trans sizeBound
   have bounded := while_compiled_steps_compositional condition body context conditionShape
-    K positive (by
-      intro bs bf br bt hrun hgood hstate hcode hexcp hlocals _
+    target.code K positive (by
+      intro bs bf br bt hrun hgood _ hstate hcode hexcp hlocals _
       exact bodyBound K sizeBound bs bf br bt hrun hgood hstate hcode hexcp hlocals)
-    source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel localised
+    source sourceFinal result target rfl run nonerror stateRel codeRel excpRel localsRel localised
   exact bounded
 
 
@@ -471,9 +476,9 @@ theorem while_compiled_steps_general {width : Nat} [NeZero width] {σ : Type}
     CrepSteps.steps (compileProgExactHOLW context (.while condition body)) target ≤
       (1 + sizeOf (compileProgExactHOLW context body)) * controlSteps (.while condition body) source := by
   apply while_compiled_steps_compositional condition body context conditionShape
-    (1 + sizeOf (compileProgExactHOLW context body)) (by omega) ?_ source sourceFinal result target
+    target.code (1 + sizeOf (compileProgExactHOLW context body)) (by omega) ?_ source sourceFinal result target rfl
     run nonerror stateRel codeRel excpRel localsRel localised
-  intro bs bf br bt _ _ _ _ _ _ _
+  intro bs bf br bt _ _ _ _ _ _ _ _
   have static := CrepSteps.staticProgram_steps bodyShape bt
   have positive := controlSteps_pos body bs
   nlinarith
