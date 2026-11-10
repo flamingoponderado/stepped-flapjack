@@ -251,6 +251,33 @@ theorem controlSteps_decCall_return {width : Nat} [NeZero width] {σ : Type}
     dif_pos entrySmall,dif_pos continuationSmall]
   omega
 
+open Flapjack.PanSemStateFiniteExact in
+/-- A terminal callee outcome does not visit a declaration-call continuation. -/
+theorem controlSteps_decCall_terminal {width : Nat} [NeZero width] {σ : Type}
+    (name function : MlS) (shape : ShapeHOL) (arguments : List (ExpHOL width))
+    (continuation : ProgHOL width) (s : PanSemStateFiniteExact width σ)
+    (values : List (ValueHOL width)) (body : ProgHOL width)
+    (locals : HolFiniteMapExact MlS (ValueHOL width)) (returnShape : ShapeHOL)
+    (result : Option (PanSemResultExact width)) (post : PanSemStateFiniteExact width σ)
+    (args : @evalListHOLFinite width σ _ s (fun address => Classical.propDecidable (s.memaddrs address)) arguments = some values)
+    (found : lookupCodeHOLFinite s.code.lookup function values = some (body,locals,returnShape))
+    (clock : s.clock ≠ 0)
+    (run : (callEntryStateHOLFinite s locals).evaluateHOLFiniteState body = (result,post))
+    (terminal : ∀ value, result ≠ some (.returned value)) :
+    controlSteps (.decCall name shape function arguments continuation) s =
+      1 + controlSteps body (callEntryStateHOLFinite s locals) := by
+  have smaller : Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b)
+      ((callEntryStateHOLFinite s locals).clock,sizeOf body)
+      (s.clock,sizeOf (.decCall name shape function arguments continuation : ProgHOL width)) := by
+    apply Prod.Lex.left
+    simp only [callEntryStateHOLFinite]
+    omega
+  rw [controlSteps.eq_def]
+  simp only [args,found,clock,if_false,run,dif_pos smaller]
+  cases result with
+  | none => simp
+  | some r => cases r <;> simp_all
+
 /-- Actual compiled Crep visits are bounded by a syntax factor times the
 Pancake source control visits for each supported loop-free branch. -/
 theorem branch_compiled_steps {width : Nat} [NeZero width] {σ τ : Type}
