@@ -1,3 +1,5 @@
+import SteppedFlapjack.Concrete.CountdownEncoding
+import SteppedFlapjack.StackToLabSteps.ConstantPrefix
 import SteppedFlapjack.Concrete.FixtureMachineLab
 import SteppedFlapjack.Concrete.FixtureMachineState
 import SteppedFlapjack.Concrete.FixtureByteDomain
@@ -156,7 +158,6 @@ import SteppedFlapjack.PanToCrepSteps.SimplifiedCountdownFullCompiler
 import SteppedFlapjack.PanToCrepSteps.LabInitializedCountdown
 import SteppedFlapjack.PanToCrepSteps.LabCountedFullCompiler
 import SteppedFlapjack.LoopToWordSteps.FullInitMachineConstruct
-import SteppedFlapjack.PanToCrepSteps.AlignedLabInitSourceMemory
 import SteppedFlapjack.PanToCrepSteps.AlignedCompiledCountdown
 import SteppedFlapjack.PanToCrepSteps.CountdownByteDomain
 import SteppedFlapjack.PanToCrepSteps.RiscVBackendCountdown

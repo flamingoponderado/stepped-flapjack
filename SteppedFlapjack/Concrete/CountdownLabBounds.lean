@@ -1,3 +1,4 @@
+import SteppedFlapjack.StackToLabSteps.ConstantPrefix
 import SteppedFlapjack.Concrete.CountdownInitE
 import SteppedFlapjack.Concrete.CountdownStackBounds
 import SteppedFlapjack.Concrete.FixtureLabNumeric
@@ -10,15 +11,12 @@ open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
 
 namespace SteppedFlapjack.Concrete
 
-private def prefixCode (x : BitVec 64) (a b c tail : HolProg 64) : List (Nat × HolProg 64) :=
- [(5,a),(6,b),(64,c),(65,.seq (.stackAlloc 0) (.seq .skip (.seq (.inst (.const 1 x)) tail)))]
-
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 400000 in
 private theorem sameInfo (x y : BitVec 64) (a b c tail : HolProg 64) :
- StackRawCall.collectInfo (prefixCode x a b c tail) .ln =
- StackRawCall.collectInfo (prefixCode y a b c tail) .ln := by
- simp [prefixCode,StackRawCall.collectInfo,StackRawCall.seqStackAlloc]
+ StackRawCall.collectInfo (SteppedFlapjack.Phase6.prefixCode x a b c tail) .ln =
+ StackRawCall.collectInfo (SteppedFlapjack.Phase6.prefixCode y a b c tail) .ln := by
+ simp [SteppedFlapjack.Phase6.prefixCode,SteppedFlapjack.Phase6.P,StackRawCall.collectInfo,StackRawCall.seqStackAlloc]
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 400000 in
 private theorem rawPrefix (x : BitVec 64) (tail : HolProg 64) (info : Spt Nat) :
@@ -34,14 +32,14 @@ private theorem allocPrefixCost (B : Nat) (bounds : BitVec 64 × BitVec 64) (x y
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 400000 in
 private theorem code1Prefix (x : BitVec 64) (a b c tail : HolProg 64) :
- code1 countdownRiscVBackend.dataConf (prefixCode x a b c tail) =
- let info := StackRawCall.collectInfo (prefixCode x a b c tail) .ln
+ code1 countdownRiscVBackend.dataConf (SteppedFlapjack.Phase6.prefixCode x a b c tail) =
+ let info := StackRawCall.collectInfo (SteppedFlapjack.Phase6.prefixCode x a b c tail) .ln
  [(gcStubLocation, .seq (StackAlloc.wordGcCode countdownRiscVBackend.dataConf) (.ret 0)),
   StackAlloc.progComp (5,StackRawCall.compTop info a),
   StackAlloc.progComp (6,StackRawCall.compTop info b),
   StackAlloc.progComp (64,StackRawCall.compTop info c),
   StackAlloc.progComp (65,.seq (.stackAlloc 0) (.seq .skip (.seq (.inst (.const 1 x)) (StackRawCall.comp info tail))))] := by
- unfold code1 StackAlloc.compile StackRawCall.compile prefixCode
+ unfold code1 StackAlloc.compile StackRawCall.compile SteppedFlapjack.Phase6.prefixCode SteppedFlapjack.Phase6.P
  simp only [List.map_cons,List.map_nil,List.cons_append,List.nil_append,StackAlloc.stubs]
  rw [rawPrefix]
 set_option maxRecDepth 10000 in
@@ -58,9 +56,9 @@ set_option maxRecDepth 10000 in
 set_option maxHeartbeats 400000 in
 private theorem prefixFactor (x y : BitVec 64) (a b c tail : HolProg 64) (cfg : LabToTarget.Config) :
  costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none)
-   (sptFromAList (code1 countdownRiscVBackend.dataConf (prefixCode x a b c tail))) [4] (coracle1 (fixtureStackOracle cfg)) =
+   (sptFromAList (code1 countdownRiscVBackend.dataConf (SteppedFlapjack.Phase6.prefixCode x a b c tail))) [4] (coracle1 (fixtureStackOracle cfg)) =
  costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none)
-   (sptFromAList (code1 countdownRiscVBackend.dataConf (prefixCode y a b c tail))) [4] (coracle1 (fixtureStackOracle cfg)) := by
+   (sptFromAList (code1 countdownRiscVBackend.dataConf (SteppedFlapjack.Phase6.prefixCode y a b c tail))) [4] (coracle1 (fixtureStackOracle cfg)) := by
  rw [code1Prefix x,code1Prefix y,sameInfo x y a b c tail]
  simp only [costFromFields,oracleBitmapBudget,Nat.add_zero,List.range_zero,List.flatMap_nil,maxListNat]
  congr 3
@@ -91,24 +89,24 @@ private theorem zeroFrameCompile (p : WordLangProgHOL (BitVec 64)) (bs : AppList
  rw [hs,hf]
  simp only [Nat.zero_sub]
 
-private noncomputable def firstNative : HolProg 64 :=
+noncomputable def countdownFirstNative : HolProg 64 :=
  (compileProgNative riscvConfig false countdownOptimizedEntry 1 countdownZeroLimit (.list [4],1)).1
 private noncomputable def firstCursor : AppList (BitVec 64) × Nat :=
  (compileProgNative riscvConfig false countdownOptimizedEntry 1 countdownZeroLimit (.list [4],1)).2.2
-private noncomputable def fixedTail : HolProg 64 :=
+noncomputable def countdownFixedTail : HolProg 64 :=
  (compNative riscvConfig false countdownCalleeSuffix firstCursor (countdownZeroLimit,0,0)).1
 
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 400000 in
-private theorem nativeShape (n : Nat) : countdownNativeStackCode n =
- prefixCode (BitVec.ofNat 64 n) (raiseStubNative false countdownZeroLimit) (storeConstsStubNative countdownZeroLimit) firstNative fixedTail := by
+theorem countdown_nativeShape (n : Nat) : countdownNativeStackCode n =
+ SteppedFlapjack.Phase6.prefixCode (BitVec.ofNat 64 n) (raiseStubNative false countdownZeroLimit) (storeConstsStubNative countdownZeroLimit) countdownFirstNative countdownFixedTail := by
  have lit : countdownOptimizedLiteral (BitVec.ofNat 64 n) = [(64,1,countdownOptimizedEntry),(65,1,countdownOptimizedLoop n)] := by rfl
  unfold countdownNativeStackCode
  rw [countdown_optimized_literal,lit,riscvNative_two_entry_code]
  have frame := countdownCallee_frame_zero n
  have size := countdownCallee_entryFrame_zero n
  change [(raiseStubLocation,raiseStubNative false countdownZeroLimit),
-   (storeConstsStubLocation,storeConstsStubNative countdownZeroLimit),(64,firstNative),
+   (storeConstsStubLocation,storeConstsStubNative countdownZeroLimit),(64,countdownFirstNative),
    (65,(compileProgNative riscvConfig false (countdownOptimizedLoop n) 1 countdownZeroLimit firstCursor).1)] = _
  rw [zeroFrameCompile _ firstCursor size frame,countdownOptimizedLoop_prefix,nativePrefix]
  have move : (wMoveNative [(0,0)] (countdownZeroLimit,0,0) : HolProg 64) = .skip := by with_unfolding_all rfl
@@ -121,7 +119,7 @@ private theorem actualFactor (n : Nat) (cfg : LabToTarget.Config) :
    (sptFromAList (code1 countdownRiscVBackend.dataConf (countdownNativeStackCode n))) [4] (coracle1 (fixtureStackOracle cfg)) =
  costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none)
    (sptFromAList (code1 countdownRiscVBackend.dataConf (countdownNativeStackCode 0))) [4] (coracle1 (fixtureStackOracle cfg)) := by
- rw [nativeShape n,nativeShape 0]
+ rw [countdown_nativeShape n,countdown_nativeShape 0]
  exact prefixFactor _ _ _ _ _ _ cfg
 
 open SteppedFlapjack.StackAllocSteps SteppedFlapjack.StackToLabSteps
