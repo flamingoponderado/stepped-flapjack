@@ -1,19 +1,16 @@
-import SteppedFlapjack.PanToCrepSteps.CountdownCompiledLab
+import Flapjack.Compiler.Backend.LabToTarget.GoodCode
 import Flapjack.Compiler.Backend.LabToTarget.FilterSkipSafety
 import Flapjack.Compiler.Backend.LabToTarget.SkipFilterPreconditions
 import Flapjack.Compiler.Backend.LabFilter.Proofs.SectionEnd
 
-/-! Derive filtered countdown code guards from the real Lab compiler output. -/
+/-! Skip filtering preserves Lab code safety. -/
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.LabSem Flapjack.Compiler.Backend.LabLang
 open Flapjack.Compiler.Backend.LabProps Flapjack.Compiler.Backend.LabProps.LabelSets
 open Flapjack.Compiler.Backend.LabToTarget Flapjack.Compiler.Backend.LabToTarget.FilterSkip
-open Flapjack.Compiler.Backend.LabFilter Flapjack.Compiler.Backend.BackendProof
-open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Misc
-open SteppedFlapjack.LoopToWordSteps
-open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInit
-open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
+open Flapjack.Compiler.Backend.LabFilter
+open Flapjack.Compiler.Encoders.Asm Flapjack.Misc
 
 /-- Skip filtering preserves each of the actual Lab code-safety conditions. -/
 theorem goodCode_filterSkip {width : Nat} [NeZero width] {G : Type}

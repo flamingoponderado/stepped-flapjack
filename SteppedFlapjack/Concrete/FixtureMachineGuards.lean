@@ -1,5 +1,8 @@
 import SteppedFlapjack.Concrete.FixtureStackSafety
-import SteppedFlapjack.PanToCrepSteps.CountdownNoShare
+import SteppedFlapjack.PanToCrepSteps.RiscVInitializerFacts
+import Flapjack.Compiler.Backend.LabToTarget.RemoveLabelsCorrectness
+import Flapjack.Compiler.Backend.LabToTarget.CodeSimilar.CodeSafety
+import Flapjack.Compiler.Backend.LabToTarget.CodeSafetyFacts
 import Flapjack.Pancake.Proofs.PanToTarget.ExecutableCompileProgMaxAsmWith
 
 /-! Discharge the machine's compiler guards from verified fixture facts. -/

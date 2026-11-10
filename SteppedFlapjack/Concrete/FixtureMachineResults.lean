@@ -8,6 +8,7 @@ namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.LabToTarget
 open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.LoopToWordSteps
+open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 
 private def fixtureContext : PanValueFfiContext (RiscV.Word 64) := riscv64PanValueFfiContext (fun _ => false)
 private def fixturePrimitive : PanPrimitiveHandler (RiscV.Word 64) := fun _ _ => none
@@ -86,58 +87,89 @@ noncomputable def branchingLoopFixture_machineContext :
     branchingLoop_nativeGoodCode (fixtureRemoveLabels_eq _ branching_compiler_facts.1)
     (fixtureMachine_allGuards _ (branching_labGoodCode _) branching_stackSafe branching_compiler_facts)
 
-/-- The compiled countdown halts successfully on its code-loaded RISC-V
-machine at the explicit bound calculated from the source clock `6*n+9`. -/
+/-- The source return and its code-loaded RISC-V run have matching events,
+with a concrete machine clock. -/
 theorem countdownFixture_machine (n : Nat) (range : n < 2^64) :
-    ∃ machinePost ffiPost, evaluateTargetHOL
-      (fixtureMachineConfig (fixtureCodeStart (countdownNativeStackCode n))) sourceFfi
-      (167602730287449600 * (6*n+9) + 1592247331570371948)
-      (fixtureMachineState (countdownNativeStackCode n)) = (.halt .success,machinePost,ffiPost) := by
-  let code := countdownNativeStackCode n
-  let cfg := fixtureCompilerConfig code
-  let machine := fixtureMachineState code
-  obtain ⟨_,_,labPost,_,_,labRun,_⟩ := countdownFixture_source_lab n range cfg machine
-    fixtureContext fixturePrimitive fixtureHandler
-  have facts := countdown_compiler_facts n
-  obtain ⟨machinePost,run⟩ := fixtureLabMachineReturn code (countdown_labGoodCode n cfg)
-    (countdown_stackSafe n) facts (1060776773971200*n + 3270750953752551) labPost labRun
-  refine ⟨machinePost,labPost.ffi,?_⟩
+    ∃ (final : CrepSemHOLState 64 Unit) (post : LoopSemStateFiniteExact 64 Unit), ∃ machinePost ffiPost,
+      evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState (countdown n)
+        (clockedFixtureSource (countdown n) (6*n+9))) (naturalCountdownHOL n)) (naturalCrepEntry n) =
+          (some (.return [.word 0]),final) ∧
+      crepToLoopStateRelExact final {post with clock := final.clock} ∧
+      evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (countdownNativeStackCode n))) sourceFfi
+        (167602730287449600 * (6*n+9) + 1592247331570371948) (fixtureMachineState (countdownNativeStackCode n)) = (.halt .success,machinePost,ffiPost) ∧
+      ffiPost.ioEvents = post.ffi.ioEvents := by
+  let cfg := fixtureCompilerConfig (countdownNativeStackCode n)
+  let machine := fixtureMachineState (countdownNativeStackCode n)
+  obtain ⟨final,post,labPost,sourceRun,stateRel,labRun,events⟩ := countdownFixture_source_lab n range cfg machine fixtureContext fixturePrimitive fixtureHandler
+  obtain ⟨machinePost,run⟩ := fixtureLabMachineReturn (countdownNativeStackCode n) (countdown_labGoodCode n cfg)
+    (countdown_stackSafe n) (countdown_compiler_facts n) (1060776773971200*n + 3270750953752551) labPost labRun
+  refine ⟨final,post,machinePost,labPost.ffi,sourceRun,stateRel,?_,events⟩
   have clock : 948 * (1060776773971200*n + 3270750953752551) =
       167602730287449600 * (6*n+9) + 1592247331570371948 := by omega
   rw [← clock]
   exact run
 
-/-- The natural countdown compiles to the same code and has the same
-explicit successful machine run. -/
+/-- The source return and its code-loaded RISC-V run have matching events,
+with a concrete machine clock. -/
 theorem naturalCountdownFixture_machine (n : Nat) (range : n < 2^64) :
     panToWordCompileProgHOL riscvConfig.isa (singleEntryProgram (ofString "main")
       (progToHOL (naturalCountdown n))) = countdownWordPrograms n ∧
-    ∃ machinePost ffiPost, evaluateTargetHOL
-      (fixtureMachineConfig (fixtureCodeStart (countdownNativeStackCode n))) sourceFfi
-      (167602730287449600 * (6*n+9) + 1592247331570371948)
-      (fixtureMachineState (countdownNativeStackCode n)) = (.halt .success,machinePost,ffiPost) :=
-  ⟨naturalCountdown_panToWord n,countdownFixture_machine n range⟩
+    ∃ (final : CrepSemHOLState 64 Unit) (post : LoopSemStateFiniteExact 64 Unit), ∃ machinePost ffiPost,
+      evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState (naturalCountdown n)
+        (clockedFixtureSource (naturalCountdown n) (6*n+9))) (naturalCountdownHOL n)) (naturalCrepEntry n) =
+          (some (.return [.word 0]),final) ∧
+      crepToLoopStateRelExact final {post with clock := final.clock} ∧
+      evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (countdownNativeStackCode n))) sourceFfi
+        (167602730287449600 * (6*n+9) + 1592247331570371948) (fixtureMachineState (countdownNativeStackCode n)) = (.halt .success,machinePost,ffiPost) ∧
+      ffiPost.ioEvents = post.ffi.ioEvents := by
+  let cfg := fixtureCompilerConfig (countdownNativeStackCode n)
+  let machine := fixtureMachineState (countdownNativeStackCode n)
+  obtain ⟨compileEq,final,post,labPost,sourceRun,stateRel,labRun,events⟩ := naturalCountdownFixture_source_lab n range cfg machine fixtureContext fixturePrimitive fixtureHandler
+  refine ⟨compileEq,?_⟩
+  obtain ⟨machinePost,run⟩ := fixtureLabMachineReturn (countdownNativeStackCode n) (countdown_labGoodCode n cfg)
+    (countdown_stackSafe n) (countdown_compiler_facts n) (1060776773971200*n + 3270750953752551) labPost labRun
+  refine ⟨final,post,machinePost,labPost.ffi,sourceRun,stateRel,?_,events⟩
+  have clock : 948 * (1060776773971200*n + 3270750953752551) =
+      167602730287449600 * (6*n+9) + 1592247331570371948 := by omega
+  rw [← clock]
+  exact run
 
-/-- The compiled comparison witness halts successfully at a closed clock. -/
+/-- The source return and its code-loaded RISC-V run have matching events,
+with a concrete machine clock. -/
 theorem comparisonFixture_machine :
-    ∃ machinePost ffiPost, evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart comparisonNativeCode)) sourceFfi
-      90715439766875148 (fixtureMachineState comparisonNativeCode) = (.halt .success,machinePost,ffiPost) := by
-  let cfg := fixtureCompilerConfig comparisonNativeCode
-  let machine := fixtureMachineState comparisonNativeCode
-  obtain ⟨_,_,labPost,_,_,labRun,_⟩ := comparisonFixture_source_lab cfg machine fixtureContext fixturePrimitive fixtureHandler
-  obtain ⟨machinePost,run⟩ := fixtureLabMachineReturn comparisonNativeCode (comparison_labGoodCode cfg)
-    comparison_stackSafe comparison_compiler_facts 95691392159151 labPost labRun
-  exact ⟨machinePost,labPost.ffi,by simpa using run⟩
+    ∃ (final : CrepSemHOLState 64 Unit) (post : LoopSemStateFiniteExact 64 Unit), ∃ machinePost ffiPost,
+      evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState (branching)
+        (clockedFixtureSource (branching) (6))) (branchingHOL)) (branchCrepEntry) =
+          (some (.return [.word 7]),final) ∧
+      crepToLoopStateRelExact final {post with clock := final.clock} ∧
+      evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (comparisonNativeCode))) sourceFfi
+        (90715439766875148) (fixtureMachineState (comparisonNativeCode)) = (.halt .success,machinePost,ffiPost) ∧
+      ffiPost.ioEvents = post.ffi.ioEvents := by
+  let cfg := fixtureCompilerConfig (comparisonNativeCode)
+  let machine := fixtureMachineState (comparisonNativeCode)
+  obtain ⟨final,post,labPost,sourceRun,stateRel,labRun,events⟩ := comparisonFixture_source_lab cfg machine fixtureContext fixturePrimitive fixtureHandler
+  obtain ⟨machinePost,run⟩ := fixtureLabMachineReturn (comparisonNativeCode) (comparison_labGoodCode cfg)
+    (comparison_stackSafe) (comparison_compiler_facts) (95691392159151) labPost labRun
+  refine ⟨final,post,machinePost,labPost.ffi,sourceRun,stateRel,?_,events⟩
+  simpa using run
 
-/-- The compiled branching-loop witness halts successfully at a closed clock. -/
+/-- The source return and its code-loaded RISC-V run have matching events,
+with a concrete machine clock. -/
 theorem branchingLoopFixture_machine :
-    ∃ machinePost ffiPost, evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart branchingLoopNativeCode)) sourceFfi
-      36771214184170446348 (fixtureMachineState branchingLoopNativeCode) = (.halt .success,machinePost,ffiPost) := by
-  let cfg := fixtureCompilerConfig branchingLoopNativeCode
-  let machine := fixtureMachineState branchingLoopNativeCode
-  obtain ⟨_,_,labPost,_,_,labRun,_⟩ := branchingLoopFixture_source_lab cfg machine fixtureContext fixturePrimitive fixtureHandler
-  obtain ⟨machinePost,run⟩ := fixtureLabMachineReturn branchingLoopNativeCode (branching_labGoodCode cfg)
-    branching_stackSafe branching_compiler_facts 38788200616213551 labPost labRun
-  exact ⟨machinePost,labPost.ffi,by simpa using run⟩
+    ∃ (final : CrepSemHOLState 64 Unit) (post : LoopSemStateFiniteExact 64 Unit), ∃ machinePost ffiPost,
+      evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState (branchingLoop)
+        (clockedFixtureSource (branchingLoop) (23))) (progToHOL branchingLoop)) (branchingLoopCrepEntry) =
+          (some (.return [.word 7]),final) ∧
+      crepToLoopStateRelExact final {post with clock := final.clock} ∧
+      evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (branchingLoopNativeCode))) sourceFfi
+        (36771214184170446348) (fixtureMachineState (branchingLoopNativeCode)) = (.halt .success,machinePost,ffiPost) ∧
+      ffiPost.ioEvents = post.ffi.ioEvents := by
+  let cfg := fixtureCompilerConfig (branchingLoopNativeCode)
+  let machine := fixtureMachineState (branchingLoopNativeCode)
+  obtain ⟨final,post,labPost,sourceRun,stateRel,labRun,events⟩ := branchingLoopFixture_source_lab cfg machine fixtureContext fixturePrimitive fixtureHandler
+  obtain ⟨machinePost,run⟩ := fixtureLabMachineReturn (branchingLoopNativeCode) (branching_labGoodCode cfg)
+    (branching_stackSafe) (branching_compiler_facts) (38788200616213551) labPost labRun
+  refine ⟨final,post,machinePost,labPost.ffi,sourceRun,stateRel,?_,events⟩
+  simpa using run
 
 end SteppedFlapjack.Concrete

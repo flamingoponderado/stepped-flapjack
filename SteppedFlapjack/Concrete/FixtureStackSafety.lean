@@ -1,6 +1,8 @@
 import SteppedFlapjack.Concrete.FixtureCompilerFacts
 import SteppedFlapjack.LabToTargetSteps.FfiFreeFlatten
-import SteppedFlapjack.PanToCrepSteps.CountdownNoShare
+import SteppedFlapjack.LabToTargetSteps.GoodCodeFilter
+import SteppedFlapjack.PanToCrepSteps.CountdownGoodCode
+import Flapjack.Compiler.Backend.StackToLab.Proofs.NoShmemop
 import Flapjack.Pancake.Proofs.PanToTarget.AssemblyGoodCodeSource
 
 /-! The concrete native programs have neither FFI nor shared-memory operations. -/

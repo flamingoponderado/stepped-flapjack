@@ -1,4 +1,5 @@
-import SteppedFlapjack.PanToCrepSteps.NoFfiCountdown
+import SteppedFlapjack.PanToCrepSteps.RiscVBackendCountdown
+import Flapjack.Compiler.Encoders.RiscV.Target.Configuration
 
 /-! A concrete empty-FFI RISC-V machine configuration for the countdown. -/
 namespace SteppedFlapjack.PanToCrepSteps
