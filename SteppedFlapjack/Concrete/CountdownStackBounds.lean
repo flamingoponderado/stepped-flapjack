@@ -45,7 +45,7 @@ private theorem genericRow (p : WordLangProgHOL (BitVec 64)) (bs : AppList (BitV
  stackControlWeight (compileProgNative riscvConfig false p 1 countdownZeroLimit bs).1 =
  2 + stackControlWeight (compNative riscvConfig false p bs
   (countdownZeroLimit,nativeEntryFrameSize countdownZeroLimit p,nativeEntryFrame countdownZeroLimit p)).1 := by
- unfold compileProgNative nativeEntryFrameSize nativeEntryFrame
+ unfold compileProgNative nativeEntryFrameSize nativeEntryFrame nativeFrameSize nativeFrame
  generalize h : (max (maxVarHOL p / 2 + 1 - countdownZeroLimit) (1-countdownZeroLimit)) = frame
  cases e : compNative riscvConfig false p bs (countdownZeroLimit, (if frame = 0 then 0 else frame+1),frame) with
  | mk prog out =>
@@ -56,7 +56,8 @@ set_option maxRecDepth 10000 in
 set_option maxHeartbeats 400000 in
 theorem countdownCallee_frame_zero (n : Nat) : nativeEntryFrame countdownZeroLimit (countdownOptimizedLoop n) = 0 := by
   have h := countdownCallee_entryFrame_zero n
-  unfold nativeEntryFrameSize at h
+  unfold nativeEntryFrameSize nativeFrameSize at h
+  change nativeFrame countdownZeroLimit 1 (countdownOptimizedLoop n) = 0
   dsimp only at h
   split at h <;> omega
 

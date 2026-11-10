@@ -109,6 +109,28 @@ theorem directTail_stackMax_bound (loc size m L arity stackWords : Nat) (args : 
         | none => simp [wordSemBadFunReturn]
         | some r => split <;> simp
 
+/-- A returning call accounts for its saved caller frame, optional handler
+slots, and callee frame in the actual maximum stack usage. -/
+theorem pushed_call_frame_usage (s : WordSemStateFiniteExact width C F)
+    (envs : Spt (WordLocW width) × Spt (WordLocW width))
+    (handler : Option (Nat × WordLangProgHOL (BitVec width) × Nat × Nat))
+    (args : List (WordLocW width)) (callerSize calleeSize stackWords maximum : Nat)
+    (caller : s.localsSize = some callerSize) (stack : wordSemStackSize s.stack = some stackWords)
+    (maxEq : s.stackMax = some maximum) :
+    let slots := if handler.isSome then 3 else 0
+    let pushed := pushEnv envs handler s
+    let called := callEnv args (some calleeSize) pushed
+    wordSemStackSize pushed.stack = some (callerSize + slots + stackWords) ∧
+    called.stackMax = some (max maximum (callerSize + slots + stackWords + calleeSize)) := by
+  simp only [wordSemStackSize,wordSemStackSizeFrame,wordSemOptionAdd] at stack
+  cases handler with
+  | none =>
+    simp [pushEnv,WordSemStateFiniteExact.callEnv,wordSemStackSize,wordSemStackSizeFrame,wordSemOptionAdd,wordSemOptionMax,caller,maxEq,stack]
+  | some h =>
+    obtain ⟨v,p,l1,l2⟩ := h
+    simp [pushEnv,WordSemStateFiniteExact.callEnv,wordSemStackSize,wordSemStackSizeFrame,wordSemOptionAdd,wordSemOptionMax,caller,maxEq,stack]
+    omega
+
 open SteppedFlapjack.WordAllocSteps
 set_option maxHeartbeats 1000000 in
 /-- Every reachable callee frame bounds the maximum usage of a tail entry. -/
