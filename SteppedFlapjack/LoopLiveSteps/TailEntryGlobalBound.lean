@@ -189,6 +189,101 @@ theorem returningCall_weighted_step {width : Nat} [NeZero width] {F : Type}
     cases markNormal <;> simp [steps_mark,steps_leaf]
   · exact bodyBound
 
+private theorem returningCall_post_consumed_aux {width : Nat} [NeZero width] {F : Type}
+    (dest : Option Nat) (args names : List Nat) (live liveOut : NumSet) (exception : Nat)
+    (handler normal : HolLoopProg width) (s cut post : LoopSemStateFiniteExact width F)
+    (values : List (WordLocW width)) (env : Spt (WordLocW width)) (body : HolLoopProg width) (out : Option (LoopResultExact width))
+    (get : getVars args s = some values) (found : findCode dest values s.code = some (env,body))
+    (distinct : names.Nodup) (cutRun : cutRes live (none,s) = (none,cut))
+    (bodyRun : evaluate body {cut with locals := env} = (out,post))
+    (handlerClock : ∀ t : LoopSemStateFiniteExact width F, (evaluate handler t).2.clock = t.clock)
+    (normalClock : ∀ t : LoopSemStateFiniteExact width F, (evaluate normal t).2.clock = t.clock) :
+    post.clock - (evaluate (.call (some (names,live)) dest args (some (exception,handler,normal,liveOut))) s).2.clock ≤ 1 := by
+  conv => lhs; rhs; rw [evaluate]
+  simp only [get,found,distinct,not_true_eq_false,if_false]
+  rw [cutRun]
+  simp only
+  rw [fix_clock_evaluate,bodyRun]
+  cases out with
+  | none => simp
+  | some r =>
+    cases r <;> try simp
+    case result returned =>
+      by_cases arity : returned.length = names.length
+      · simp only [arity,if_true]
+        let state := setVars names returned {post with locals := cut.locals}
+        rcases run : evaluate normal state with ⟨res,final⟩
+        have clockEq := normalClock state
+        rw [run] at clockEq
+        have c := LoopSteps.cutRes_clock_consumed liveOut res final
+        simp only [state,setVars] at clockEq
+        omega
+      · simp [arity]
+    case exception value =>
+      let state := setVar exception value {post with locals := cut.locals}
+      rcases run : evaluate handler state with ⟨res,final⟩
+      have clockEq := handlerClock state
+      rw [run] at clockEq
+      have c := LoopSteps.cutRes_clock_consumed liveOut res final
+      simp only [state,setVar] at clockEq
+      omega
+
+/-- A compiler-generated normal or exception continuation consumes at most one
+additional clock unit after its callee, including optimizer marks. -/
+theorem returningCall_post_consumed {width : Nat} [NeZero width] {F : Type}
+    (dest : Option Nat) (args names : List Nat) (live liveOut : NumSet) (exception : Nat)
+    (markHandler markNormal : Bool) (s cut post : LoopSemStateFiniteExact width F)
+    (values : List (WordLocW width)) (env : Spt (WordLocW width)) (body : HolLoopProg width) (out : Option (LoopResultExact width))
+    (get : getVars args s = some values) (found : findCode dest values s.code = some (env,body))
+    (distinct : names.Nodup) (cutRun : cutRes live (none,s) = (none,cut))
+    (bodyRun : evaluate body {cut with locals := env} = (out,post)) :
+    let handler : HolLoopProg width := if markHandler then .mark (.raise exception) else .raise exception
+    let normal : HolLoopProg width := if markNormal then .mark .skip else .skip
+    post.clock - (evaluate (.call (some (names,live)) dest args (some (exception,handler,normal,liveOut))) s).2.clock ≤ 1 := by
+  apply returningCall_post_consumed_aux dest args names live liveOut exception _ _ s cut post values env body out
+    get found distinct cutRun bodyRun
+  · intro t
+    cases markHandler <;> simp [evaluate,LoopSemStateFiniteExact.callEnv]
+    all_goals split <;> rfl
+  · intro t
+    cases markNormal <;> simp [evaluate]
+
+/-- The returning-call clock bound follows from its callee induction bound. -/
+theorem returningCall_consumed_step {width : Nat} [NeZero width] {F : Type}
+    (dest : Option Nat) (args names : List Nat) (live liveOut : NumSet) (exception : Nat)
+    (markHandler markNormal : Bool) (s cut post : LoopSemStateFiniteExact width F)
+    (values : List (WordLocW width)) (env : Spt (WordLocW width)) (body : HolLoopProg width) (out : Option (LoopResultExact width))
+    (get : getVars args s = some values) (found : findCode dest values s.code = some (env,body))
+    (distinct : names.Nodup) (cutRun : cutRes live (none,s) = (none,cut))
+    (bodyRun : evaluate body {cut with locals := env} = (out,post))
+    (bodyBound : cut.clock-post.clock ≤ 2 * LoopSteps.steps body {cut with locals := env}) :
+    let handler : HolLoopProg width := if markHandler then .mark (.raise exception) else .raise exception
+    let normal : HolLoopProg width := if markNormal then .mark .skip else .skip
+    let call : HolLoopProg width := .call (some (names,live)) dest args (some (exception,handler,normal,liveOut))
+    s.clock - (evaluate call s).2.clock ≤ 2 * LoopSteps.steps call s := by
+  let handler : HolLoopProg width := if markHandler then .mark (.raise exception) else .raise exception
+  let normal : HolLoopProg width := if markNormal then .mark .skip else .skip
+  let call : HolLoopProg width := .call (some (names,live)) dest args (some (exception,handler,normal,liveOut))
+  have count := LoopSteps.steps_call_returning dest args names live (some (exception,handler,normal,liveOut))
+    s cut post values env body out get found distinct cutRun bodyRun
+  have lower : 1 + LoopSteps.steps body {cut with locals := env} ≤ LoopSteps.steps call s := by
+    dsimp only [call]
+    rw [count]
+    omega
+  have first := LoopSteps.cutRes_clock_consumed live none s
+  rw [cutRun] at first
+  have firstLe := cutRes_clock_le live (none,s)
+  rw [cutRun] at firstLe
+  have bodyLe := evaluate_clock body {cut with locals := env} out post bodyRun
+  have last := returningCall_post_consumed dest args names live liveOut exception markHandler markNormal
+    s cut post values env body out get found distinct cutRun bodyRun
+  have lastLe := returningCall_post_clock dest args names live (some (exception,handler,normal,liveOut))
+    s cut post values env body out get found distinct cutRun bodyRun
+  simp only at first firstLe bodyLe last lastLe
+  dsimp only [call,handler,normal] at lower ⊢
+  dsimp only [handler,normal] at lastLe
+  omega
+
 /-- Every function body in the table has the call-aware Loop shape. -/
 def LoopTableSupported (code : Spt (List Nat × HolLoopProg width)) : Prop :=
   ∀ loc params body, sptLookup loc code = some (params,body) → SimpleLoopSequenceSource body
