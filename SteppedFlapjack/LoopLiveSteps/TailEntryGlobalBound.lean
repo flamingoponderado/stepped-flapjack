@@ -27,12 +27,12 @@ theorem loopCodeWeight_lookup {width : Nat} [NeZero width]
       | inr inRest => exact (ih entry inRest).trans (Nat.le_max_right _ _)
   exact aux _ _ member
 
-/-- A successful direct code lookup is bounded by the actual table weight. -/
-theorem findCode_direct_weight {width : Nat} [NeZero width]
+/-- A successful direct call identifies an actual code-table entry. -/
+theorem findCode_direct_body {width : Nat} [NeZero width]
     (code : Spt (List Nat × HolLoopProg width)) (loc : Nat) (values : List (WordLocW width))
     (env : Spt (WordLocW width)) (body : HolLoopProg width)
     (found : findCode (some loc) values code = some (env,body)) :
-    SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body ≤ loopCodeWeight code := by
+    ∃ params, sptLookup loc code = some (params,body) := by
   cases lookup : sptLookup loc code with
   | none => simp [findCode,lookup] at found
   | some pair =>
@@ -40,8 +40,17 @@ theorem findCode_direct_weight {width : Nat} [NeZero width]
     by_cases arity : values.length = params.length
     · simp [findCode,lookup,arity] at found
       obtain ⟨_,rfl⟩ := found
-      exact loopCodeWeight_lookup code loc params callee lookup
+      exact ⟨params,rfl⟩
     · simp [findCode,lookup,arity] at found
+
+/-- A successful direct code lookup is bounded by the actual table weight. -/
+theorem findCode_direct_weight {width : Nat} [NeZero width]
+    (code : Spt (List Nat × HolLoopProg width)) (loc : Nat) (values : List (WordLocW width))
+    (env : Spt (WordLocW width)) (body : HolLoopProg width)
+    (found : findCode (some loc) values code = some (env,body)) :
+    SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body ≤ loopCodeWeight code := by
+  obtain ⟨params,lookup⟩ := findCode_direct_body code loc values env body found
+  exact loopCodeWeight_lookup code loc params body lookup
 
 /-- A reached direct tail call lifts its callee bound using the actual code-table weight. -/
 theorem directTail_weighted_step {width : Nat} [NeZero width] {F : Type}
