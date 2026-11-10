@@ -687,4 +687,41 @@ theorem decCall_entries {width : Nat} [NeZero width] {σ : Type}
   simpa [decClockCrepSemHOL] using count
 
 
+/-- A successful call installs the returned values in its initialized slots. -/
+theorem initializedCall_return {width : Nat} [NeZero width] {σ : Type}
+    (target : CrepSemHOLState width σ) (fname : MlS) (args : List (CrepExpHOL width))
+    (flat returned : List (HolWordLab width)) (body : CrepProgHOL width)
+    (locals : HolFiniteMapExact Nat (HolWordLab width)) (names : List Nat)
+    (post : CrepSemHOLState width σ)
+    (hargs : args.mapM (evalCrepSemHOLExp target) = some flat)
+    (found : lookupCodeFiniteHOL target.code fname flat flat.length = some (body,locals))
+    (clock : target.clock ≠ 0) (distinct : names.Nodup)
+    (disjoint : distinctListsHol names (args.flatMap crepExpVarsHOL) = true)
+    (bodyRun : evalCrepSemHOLProgExact {decClockCrepSemHOL target with locals := locals} body =
+      (some (.return returned),post)) (arity : returned.length = names.length) :
+    let pre := {target with locals := target.locals.updateListEq (names.zip (List.replicate names.length (.word 0)))}
+    evalCrepSemHOLProgExact pre (.call (some (names,none)) fname args) =
+      (none,{post with locals := target.locals.updateListEq (names.zip returned)}) := by
+  classical
+  let zeros := List.replicate names.length (HolWordLab.word (0 : BitVec width))
+  let pre : CrepSemHOLState width σ := {target with locals := target.locals.updateListEq (names.zip zeros)}
+  have argsPre : args.mapM (evalCrepSemHOLExp pre) = some flat := by
+    apply optMmapEvalDistinctListsNotAffectHOL args target flat names zeros
+    exact ⟨hargs,by simp [zeros],disjoint⟩
+  have guard : ∀ rts h, (some (names,none) : Option (List Nat × Option (BitVec width × CrepProgHOL width))) = some (rts,h) → rts.Nodup := by
+    intro rts h eq
+    cases eq
+    exact distinct
+  have call := crepCallTarget pre (some (names,none)) fname args flat body locals argsPre found guard clock
+  rw [show ({decClockCrepSemHOL pre with locals := locals} : CrepSemHOLState width σ) =
+    {decClockCrepSemHOL target with locals := locals} from rfl,bodyRun] at call
+  simp only [crepCallAfterBody] at call
+  rw [if_neg (by rw [arity]; exact fun h => h rfl)] at call
+  have hzlen : names.length = zeros.length := by simp [zeros]
+  rw [show pre.locals = target.locals.updateListEq (names.zip zeros) from rfl,
+    mapM_lookup_updateListEq _ _ _ distinct hzlen] at call
+  dsimp only at call
+  rw [updateListEq_overwrite target.locals _ _ _ hzlen arity.symm] at call
+  exact call
+
 end SteppedFlapjack.PanToCrepSteps
