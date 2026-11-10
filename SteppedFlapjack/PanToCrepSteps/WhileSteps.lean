@@ -1499,4 +1499,28 @@ theorem decCall_bound_from_induction {width : Nat} [NeZero width] {σ : Type}
       sourceFinal result K hargs found clock stateRel codeRel excpRel localsRel localised run nonerror weight
       (bodyIH args body locals rsh hargs found) (contIH args body locals rsh hargs found)
 
+/-- Frontend syntax closed under direct tail calls and declaration calls. -/
+inductive CallFrontend {width : Nat} [NeZero width] : PanToCrepContextExact width → ProgHOL width → Prop
+  | base {ctxt p} : FrontendProgram ctxt p → CallFrontend ctxt p
+  | tail {ctxt fname args} : (∀ e ∈ args, FrontendScalar ctxt e) → CallFrontend ctxt (.call none fname args)
+  | decCall {ctxt name shape fname args cont} : (∀ e ∈ args, FrontendScalar ctxt e) →
+      CallFrontend (decCallCtxt ctxt name shape) cont → CallFrontend ctxt (.decCall name shape fname args cont)
+  | decl {ctxt name e body} : FrontendScalar ctxt e → CallFrontend (scalarDeclContext ctxt name) body →
+      CallFrontend ctxt (.dec name .one e body)
+  | seq {ctxt a b} : CallFrontend ctxt a → CallFrontend ctxt b → CallFrontend ctxt (.seq a b)
+  | ite {ctxt e a b} : FrontendScalar ctxt e → CallFrontend ctxt a → CallFrontend ctxt b → CallFrontend ctxt (.ite e a b)
+  | while {ctxt e body} : FrontendScalar ctxt e → CallFrontend ctxt body → CallFrontend ctxt (.while e body)
+
+theorem callFrontend_localised {width : Nat} [NeZero width] {ctxt : PanToCrepContextExact width}
+    {p : ProgHOL width} (h : CallFrontend ctxt p) : localisedProgHOL p = true := by
+  induction h with
+  | base h => exact frontendProgram_localised h
+  | @tail ctxt fname args ha => simpa [localisedProgHOL] using frontendArguments_localised ctxt args ha
+  | @decCall ctxt name shape fname args cont ha hb ih =>
+    simp [localisedProgHOL,frontendArguments_localised ctxt args ha,ih]
+  | decl he hb ih => simp [localisedProgHOL,frontendScalar_localised he,ih]
+  | seq ha hb iha ihb => simp [localisedProgHOL,iha,ihb]
+  | ite he ha hb iha ihb => simp [localisedProgHOL,frontendScalar_localised he,iha,ihb]
+  | «while» he hb ih => simp [localisedProgHOL,frontendScalar_localised he,ih]
+
 end SteppedFlapjack.PanToCrepSteps
