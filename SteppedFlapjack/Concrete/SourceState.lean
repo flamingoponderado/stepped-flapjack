@@ -27,10 +27,14 @@ def outputSize : Nat := 0x1000
 def outputEnd : Nat := outputStart + outputSize
 
 def heapBase : BitVec 64 := BitVec.ofNat 64 sourceBase
-def heapTop : BitVec 64 := BitVec.ofNat 64 heapEnd
+/-- The largest initializer-reachable endpoint inside the init-e heap. -/
+def fixtureHeapEnd : Nat := heapEnd - 8
+def heapTop : BitVec 64 := BitVec.ofNat 64 fixtureHeapEnd
+/-- The initialized length of one semispace in bytes. -/
+def fixtureHeapLength : BitVec 64 := 0x39efffef0
 
 def ordinaryAddress (a : BitVec 64) : Prop :=
-  sourceBase ≤ a.toNat ∧ a.toNat < heapEnd ∧ a.toNat % 8 = 0
+  sourceBase ≤ a.toNat ∧ a.toNat < fixtureHeapEnd ∧ a.toNat % 8 = 0
 
 def sharedAddress (a : BitVec 64) : Prop :=
   a.toNat % 8 = 0 ∧
@@ -55,19 +59,19 @@ theorem sharedAddress_alignment (a : BitVec 64) :
 
 /-- The interval presentation agrees with the compiler's word-address domain. -/
 theorem ordinaryAddress_eq_addresses (a : BitVec 64) :
-    ordinaryAddress a ↔ Flapjack.Compiler.Backend.StackRemove.addresses heapBase ((stackStart - sourceBase) / 8 - globalsWords) a := by
+    ordinaryAddress a ↔ Flapjack.Compiler.Backend.StackRemove.addresses heapBase ((stackStart - sourceBase) / 8 - globalsWords - 1) a := by
   rw [Flapjack.Compiler.Backend.StackRemove.mem_addresses]
   constructor
   · intro h
     refine ⟨(a.toNat - sourceBase) / 8, ?_, ?_⟩
-    · simp only [ordinaryAddress,sourceBase,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords] at h
+    · simp only [ordinaryAddress,sourceBase,fixtureHeapEnd,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords] at h
       simp [stackStart,ramEnd,ramStart,ramSize,stackSize,sourceBase,globalsWords]
       omega
     · apply BitVec.eq_of_toNat_eq
       change a.toNat = (BitVec.ofNat 64 sourceBase +
         BitVec.ofNat 64 ((a.toNat - sourceBase) / 8) * BitVec.ofNat 64 8).toNat
       rw [BitVec.ofNat_mul_ofNat, BitVec.ofNat_add_ofNat, BitVec.toNat_ofNat]
-      simp only [ordinaryAddress,sourceBase,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords] at h
+      simp only [ordinaryAddress,sourceBase,fixtureHeapEnd,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords] at h
       simp only [sourceBase]
       omega
   · rintro ⟨i, hi, h⟩
@@ -75,21 +79,22 @@ theorem ordinaryAddress_eq_addresses (a : BitVec 64) :
     change a = BitVec.ofNat 64 sourceBase + BitVec.ofNat 64 i * BitVec.ofNat 64 8 at h
     have hn := congrArg BitVec.toNat h
     rw [BitVec.ofNat_mul_ofNat, BitVec.ofNat_add_ofNat, BitVec.toNat_ofNat] at hn
-    simp only [ordinaryAddress,sourceBase,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords]
+    simp only [ordinaryAddress,sourceBase,fixtureHeapEnd,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords]
     simp only [sourceBase] at hn
     omega
 
-/-- The challenge's five startup pointer words; the rest of ordinary memory is zero. -/
-def startupHeaders : List (BitVec 64) :=
-  [0xa0020018, 0xa0028ff0, 0xa0028ff0, 0x800f0134, 0x800f1000]
+/-- Initializer headers for one compiler bitmap word and no extra data words.
+The addresses follow the init-e layout; the bitmap length follows the witness code. -/
+def fixtureHeaders : List (BitVec 64) :=
+  [0xa0020018, 0xa0020020, 0xa0020020, 0x800f0134, 0x800f1000]
 
 def initialWord (a : BitVec 64) : BitVec 64 :=
   if sourceBase ≤ a.toNat ∧ a.toNat < sourceBase + 40 then
-    startupHeaders[(a.toNat - sourceBase) / 8]?.getD 0
+    fixtureHeaders[(a.toNat - sourceBase) / 8]?.getD 0
   else 0
 
-/-- The first and last reserved words match init-e's startup metadata. -/
-theorem startup_first_and_last :
+/-- The bitmap pointer and code-buffer endpoint use the init-e addresses. -/
+theorem fixture_header_endpoints :
     initialWord heapBase = 0xa0020018 ∧ initialWord (heapBase + 32) = 0x800f1000 := by
   decide
 

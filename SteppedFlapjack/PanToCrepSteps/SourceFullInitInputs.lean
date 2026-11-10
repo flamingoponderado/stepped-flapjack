@@ -177,7 +177,7 @@ theorem labInitializedProduction_withClock {σ : Type}
     labInitializedProduction production template _ (backend.withClock clock) =
       {labInitializedProduction production template stack backend with clock := clock-1} := by
   simp [labInitializedProduction,labInitializedOriginal,labInitializedSource,
-    FullInitMachineContext.withClock,FullInitMachineContext.labHeapLength]
+    FullInitMachineContext.withClock,FullInitStackContext.labHeapLength]
   funext address
   exact decide_eq_decide.mpr Iff.rfl
 
@@ -349,7 +349,7 @@ theorem labInitializedOriginal_top_outside {σ : Type}
     rw [heapEnd]
     omega
   have lenEq : backend.labHeapLength = BitVec.ofNat 64 (heapWords / 2) * bytes := by
-    simp only [FullInitMachineContext.labHeapLength,r2,r3,r4,wordSemTheWord,limitValue,bytes]
+    simp only [FullInitStackContext.labHeapLength,r2,r3,r4,wordSemTheWord,limitValue,bytes]
   have halfBound : (heapWords / 2) * 8 < 2^64 := by
     have := p4.isLt
     simp only [Flapjack.Compiler.Backend.StackRemove.maxStackAlloc] at stackMin

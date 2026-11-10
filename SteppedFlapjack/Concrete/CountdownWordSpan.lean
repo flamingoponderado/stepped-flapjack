@@ -7,9 +7,6 @@ open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.WordToWor
 open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps SteppedFlapjack.WordAllocSteps
 variable {C : Type}
-/-- Heap length corresponding to the init-e-shaped source fixture. -/
-def fixtureHeapLength : BitVec 64 := 0x39efffef4
-
 /-- The fixed source fixture satisfies the Word heap-length equation. -/
 theorem fixture_heap (program : Prog (RiscV.Word 64)) (fuel : Nat) (body : ProgHOL 64) :
     let source := crepStateFrom (panSimpSourceState program (clockedFixtureSource program fuel)) body

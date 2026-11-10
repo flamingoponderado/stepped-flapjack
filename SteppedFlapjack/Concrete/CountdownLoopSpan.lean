@@ -21,11 +21,14 @@ theorem naturalCountdown_loop_entry_code (arch : AsmArchitecture) (n : Nat) :
 phase-one entry execution. -/
 theorem naturalCountdown_entry_loop {σ : Type} (arch : AsmArchitecture)
     (source : PanSemStateFiniteExact 64 σ) (entryFinal : CrepSemHOLState 64 σ) (n limit : Nat)
+    (memory : BitVec 64 → WordLocW 64)
+    (memoryRel : crepToLoopMemRelHOLExact (crepStateFrom source (naturalCountdownHOL n)).memory memory
+      (crepStateFrom source (naturalCountdownHOL n)).memaddrs)
     (nonzero : (crepStateFrom source (naturalCountdownHOL n)).clock ≠ 0)
     (entryRun : evalCrepSemHOLProgExact (crepStateFrom source (naturalCountdownHOL n))
       (naturalCrepEntry n) = (some (.return [.word 0]),entryFinal))
     (entryBound : CrepSteps.steps (naturalCrepEntry n) (crepStateFrom source (naturalCountdownHOL n)) ≤ limit) :
-    let target := loopStateFrom arch source (naturalCountdownHOL n)
+    let target := {(loopStateFrom arch source (naturalCountdownHOL n)) with memory := memory}
     let ctxt := witnessLoopContext arch (naturalCountdownHOL n)
     let c := ctxtFcExact ctxt.target ctxt.funcs [] []
     let p := naturalCountdownCrepBody (BitVec.ofNat 64 n)
@@ -41,7 +44,7 @@ theorem naturalCountdown_entry_loop {σ : Type} (arch : AsmArchitecture)
       crepToLoopGlobalsRelHOLExact entryFinal.globals post.globals ∧
       crepToLoopCodeRelExact ctxt entryFinal.code post.code := by
   let crep := crepStateFrom source (naturalCountdownHOL n)
-  let target := loopStateFrom arch source (naturalCountdownHOL n)
+  let target := {(loopStateFrom arch source (naturalCountdownHOL n)) with memory := memory}
   let ctxt := witnessLoopContext arch (naturalCountdownHOL n)
   let name := entryName (naturalCountdownHOL n)
   let body : CrepProgHOL 64 := .dec 2 (.op .sub [.var 1,.const 1]) (.seq (.assign 1 (.var 2)) .skip)
@@ -53,7 +56,10 @@ theorem naturalCountdown_entry_loop {σ : Type} (arch : AsmArchitecture)
     have fresh := Ne.symm (entryName_fresh (naturalCountdownHOL n))
     have h := twoPrograms_callee_label arch (ofString "main") name p fresh
     simpa [ctxt,witnessLoopContext,natural_countdown_crep_code,twoPrograms,p] using h
-  have rel := loopStateFrom_relations arch source (naturalCountdownHOL n)
+  have originalRel := loopStateFrom_relations arch source (naturalCountdownHOL n)
+  have rel : crepToLoopStateRelExact crep target ∧ crepToLoopMemRelHOLExact crep.memory target.memory crep.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact crep.globals target.globals := by
+    exact ⟨originalRel.1,memoryRel,originalRel.2.2⟩
   have codeLocals := naturalCountdown_loop_code_locals arch source n
   have result := generatedScalar_entry_explicit ctxt name p (naturalCountdown_scalar n) crep entryFinal target [.word 0] limit
     nonzero found entryRun entryBound rel.1 rel.2.1 rel.2.2 codeLocals.1 codeLocals.2 label
@@ -87,7 +93,9 @@ theorem naturalCountdown_fixture_entry_loop (arch : AsmArchitecture) (n : Nat) (
   have nonzero : (crepStateFrom source (naturalCountdownHOL n)).clock ≠ 0 := by
     simp [source,crepStateFrom,PanToCrepSteps.concreteDeclCrepState,panSimpSourceState,clockedFixtureSource,loweredStateFrom,PanToCrepSteps.noGlobalsLoweredPreCall]
   obtain ⟨post,compiled,entry,steps,state,mem,globals,codeRel⟩ :=
-    naturalCountdown_entry_loop arch source final n (3+8*(6*n+16)) nonzero run bound
+    naturalCountdown_entry_loop arch source final n (3+8*(6*n+16))
+      (loopStateFrom arch source (naturalCountdownHOL n)).memory
+      (loopStateFrom_relations arch source (naturalCountdownHOL n)).2.1 nonzero run bound
   refine ⟨final,post,run,compiled,?_,?_,state,mem,globals,codeRel⟩
   · simpa only [countdown_optimized_weight] using entry
   · simpa only [countdown_optimized_weight] using steps
@@ -117,7 +125,9 @@ theorem countdown_fixture_entry_loop (arch : AsmArchitecture) (n : Nat) (range :
   have nonzero : (crepStateFrom source (naturalCountdownHOL n)).clock ≠ 0 := by
     simp [source,crepStateFrom,PanToCrepSteps.concreteDeclCrepState,panSimpSourceState,clockedFixtureSource,loweredStateFrom,PanToCrepSteps.noGlobalsLoweredPreCall]
   obtain ⟨post,compiled,entry,steps,state,mem,globals,codeRel⟩ :=
-    naturalCountdown_entry_loop arch source final n (3+8*(6*n+18)) nonzero run bound
+    naturalCountdown_entry_loop arch source final n (3+8*(6*n+18))
+      (loopStateFrom arch source (naturalCountdownHOL n)).memory
+      (loopStateFrom_relations arch source (naturalCountdownHOL n)).2.1 nonzero run bound
   refine ⟨final,post,run,compiled,?_,?_,state,mem,globals,codeRel⟩
   · simpa only [countdown_optimized_weight] using entry
   · simpa only [countdown_optimized_weight] using steps

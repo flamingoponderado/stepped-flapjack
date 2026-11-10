@@ -14,8 +14,8 @@ open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
 /-- The standard full-initialization assumptions ensure that the optional
 Stack initializer succeeds, even though the machine context stores only the
 initialized Stack state. -/
-theorem FullInitMachineContext.initializer_succeeds {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
+theorem FullInitStackContext.initializer_succeeds {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack) :
     ∃ initialized,
       (fullMakeInit backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset backend.bitmaps
         backend.inputCode backend.lab backend.saveRegs backend.dataSp backend.coracle).2 = some initialized := by
@@ -87,8 +87,8 @@ theorem initOpt_heap_data {width : Nat} [NeZero width] {C F : Type}
 
 /-- Full initialization takes the heap base from the Lab register corresponding
 to Stack register 2 and preserves Lab memory on the initialized heap domain. -/
-theorem FullInitMachineContext.heap_base_and_memory_lab {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
+theorem FullInitStackContext.heap_base_and_memory_lab {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack) :
     ∃ current, backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 2) = .word current ∧
       stack.store.lookup .currHeap = some (.word current) ∧
       ∀ address, stack.mdomain address = true → stack.memory address = backend.lab.memory address := by
@@ -119,15 +119,15 @@ theorem FullInitMachineContext.heap_base_and_memory_lab {F : Type}
 
 /-- Heap-half length calculated by the original initializer from the three
 Lab pointer registers. -/
-noncomputable def FullInitMachineContext.labHeapLength {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) : BitVec 64 :=
+noncomputable def FullInitStackContext.labHeapLength {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack) : BitVec 64 :=
   let reg := fun n => wordSemTheWord (backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames n))
   BitVec.ofNat 64 (InitLimits.getStackHeapLimit backend.maxHeap (reg 2,reg 3,reg 4)).2 * bytesInWord 64
 
 /-- The initialized heap length is the original limit calculation on the
 Lab pointer registers. -/
-theorem FullInitMachineContext.heap_length_lab {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
+theorem FullInitStackContext.heap_length_lab {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack) :
     stack.store.lookup .heapLength = some (.word backend.labHeapLength) := by
   obtain ⟨initialized,fullOpt⟩ := backend.initializer_succeeds
   simp only [fullMakeInit_eq] at fullOpt
@@ -156,12 +156,12 @@ theorem FullInitMachineContext.heap_length_lab {F : Type}
   rw [fullMakeInit_eq] at stateEq
   have stateEq' : stack = StackAlloc.makeInit backend.dataConf (sptFromAList backend.inputCode) backend.coracle initialized := by
     simpa [InitMake.makeInitAny,fullOpt] using stateEq
-  simpa [stateEq',StackAlloc.makeInit,FullInitMachineContext.labHeapLength] using length
+  simpa [stateEq',StackAlloc.makeInit,FullInitStackContext.labHeapLength] using length
 
 /-- Successful full initialization provides the two contiguous, separated
 heap regions and the corresponding Stack store entries. -/
-theorem FullInitMachineContext.heap_shape {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
+theorem FullInitStackContext.heap_shape {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack) :
     ∃ (current other : BitVec 64) (length : Nat),
       stack.store.lookup .currHeap = some (.word current) ∧
       stack.store.lookup .nextFree = some (.word current) ∧
@@ -187,8 +187,8 @@ theorem FullInitMachineContext.heap_shape {F : Type}
   · simpa [stateEq,StackAlloc.makeInit] using hheap
 
 /-- The heap end is the current pointer plus the Lab-derived half length. -/
-theorem FullInitMachineContext.heap_end_lab {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack)
+theorem FullInitStackContext.heap_end_lab {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack)
     (current : BitVec 64) (hcurrent : stack.store.lookup .currHeap = some (.word current)) :
     stack.store.lookup .endOfHeap = some (.word (current + backend.labHeapLength)) := by
   obtain ⟨c,other,n,hc,_,hend,hlen,offset,_⟩ := backend.heap_shape
@@ -233,8 +233,8 @@ theorem wordList_heap_domain {width : Nat} [NeZero width] {β : Type}
 
 /-- Successful initialization's Stack memory domain is exactly the address
 range occupied by its two adjacent heap halves. -/
-theorem FullInitMachineContext.heap_domain {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
+theorem FullInitStackContext.heap_domain {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack) :
     ∃ (current other : BitVec 64) (length : Nat),
       stack.store.lookup .currHeap = some (.word current) ∧
       stack.store.lookup .endOfHeap = some (.word other) ∧
@@ -272,8 +272,8 @@ theorem FullInitMachineContext.heap_domain {F : Type}
   rw [graph,wordList_heap_domain values current _ wordList address,lengthEq]
 
 /-- The initialized domain is determined by its current and end pointers. -/
-theorem FullInitMachineContext.heap_domain_of_pointers {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack)
+theorem FullInitStackContext.heap_domain_of_pointers {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack)
     (current other : BitVec 64)
     (hcurrent : stack.store.lookup .currHeap = some (.word current))
     (hother : stack.store.lookup .endOfHeap = some (.word other)) :
@@ -291,8 +291,8 @@ theorem FullInitMachineContext.heap_domain_of_pointers {F : Type}
   exact domain
 
 /-- The initialized heap length is determined by its current and end pointers. -/
-theorem FullInitMachineContext.heap_length_of_pointers {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack)
+theorem FullInitStackContext.heap_length_of_pointers {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack)
     (current other : BitVec 64)
     (hcurrent : stack.store.lookup .currHeap = some (.word current))
     (hother : stack.store.lookup .endOfHeap = some (.word other)) :
@@ -308,8 +308,8 @@ theorem FullInitMachineContext.heap_length_of_pointers {F : Type}
 /-- Full initialization supplies the native entry-state validity relation
 when the native oracle obeys the compiler's conventions and generates the
 Stack oracle. The bitmap header and available register count are explicit. -/
-theorem FullInitMachineContext.nativeInitOk {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack)
+theorem FullInitStackContext.nativeInitOk {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack)
     (ac : AsmConfigExact 64)
     (wordOracle : Nat → (Nat × LabToTarget.Config) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
     (tail : List (BitVec 64))
@@ -337,8 +337,8 @@ theorem FullInitMachineContext.nativeInitOk {F : Type}
 
 
 /-- Full initialization installs the supplied Stack code and bitmaps. -/
-theorem FullInitMachineContext.stack_code_and_bitmaps {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
+theorem FullInitStackContext.stack_code_and_bitmaps {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack) :
     stack.code = sptFromAList backend.inputCode ∧ stack.bitmaps = backend.bitmaps := by
   obtain ⟨initialized,fullOpt⟩ := backend.initializer_succeeds
   have codeEq := congrArg (fun s : StackSemStateFiniteExact 64 LabToTarget.Config F => s.code) backend.stackEq
@@ -357,8 +357,8 @@ theorem FullInitMachineContext.stack_code_and_bitmaps {F : Type}
 
 /-- The full initializer and an actual native compiler output provide the
 Stack code and bitmap-prefix premises used by the source compiler bundle. -/
-theorem FullInitMachineContext.nativeCompilerCode {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack)
+theorem FullInitStackContext.nativeCompilerCode {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack)
     (ac : AsmConfigExact 64) (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
     (codeEq : backend.inputCode = (compileNative ac false programs).2.2.2)
     (bitmapPrefix : (compileNative ac false programs).1.IsPrefix backend.bitmaps) :
@@ -370,8 +370,8 @@ theorem FullInitMachineContext.nativeCompilerCode {F : Type}
 
 /-- A bitmap table extending the actual native compiler output has the
 header required by the native initialization proof. -/
-theorem FullInitMachineContext.nativeBitmapHeader {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack)
+theorem FullInitStackContext.nativeBitmapHeader {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack)
     (ac : AsmConfigExact 64) (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
     (bitmapPrefix : (compileNative ac false programs).1.IsPrefix backend.bitmaps) :
     ∃ tail, backend.bitmaps = 4 :: tail := by
@@ -389,8 +389,8 @@ theorem FullInitMachineContext.nativeBitmapHeader {F : Type}
 
 /-- Native initialization validity follows from the full initializer and
 actual bitmap prefix, with only register and oracle compatibility conditions. -/
-theorem FullInitMachineContext.nativeInitOk_of_compiled {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack)
+theorem FullInitStackContext.nativeInitOk_of_compiled {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack)
     (ac : AsmConfigExact 64) (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
     (wordOracle : Nat → (Nat × LabToTarget.Config) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
     (registers : 4 < ac.regCount-(5+ac.avoidRegs.length))
@@ -441,8 +441,8 @@ theorem emptyNativeWordOracle_compatible (ac : AsmConfigExact 64) (bitmapLength 
 
 /-- For a Stack oracle that never installs code, all Word-oracle convention
 and translation obligations follow from the empty oracle construction. -/
-theorem FullInitMachineContext.nativeInitOk_emptyOracle {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack)
+theorem FullInitStackContext.nativeInitOk_emptyOracle {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack)
     (ac : AsmConfigExact 64) (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
     (cfg : LabToTarget.Config)
     (registers : 4 < ac.regCount-(5+ac.avoidRegs.length))

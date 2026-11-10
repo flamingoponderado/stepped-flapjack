@@ -25,7 +25,7 @@ open SteppedFlapjack.StackAllocSteps SteppedFlapjack.StackRemoveSteps.CompCorrec
 open SteppedFlapjack.StackToLabSteps SteppedFlapjack.LabToTargetSteps
 
 /-- Actual full initialization and machine relation for a Stack entry. -/
-structure FullInitMachineContext {F : Type} (stack : StackSemStateFiniteExact 64 LabToTarget.Config F) where
+structure FullInitStackContext {F : Type} (stack : StackSemStateFiniteExact 64 LabToTarget.Config F) where
   stackConf : StackToLab.Config
   dataConf : DataToWord.Config
   maxHeap : Nat
@@ -39,6 +39,9 @@ structure FullInitMachineContext {F : Type} (stack : StackSemStateFiniteExact 64
   coracle : Nat → LabToTarget.Config × List (Nat × HolProg 64) × List (BitVec 64)
   initAssumptions : Assumptions stackConf dataConf maxHeap sp offset bitmaps inputCode lab saveRegs dataSp coracle
   stackEq : stack = (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps inputCode lab saveRegs dataSp coracle).1
+/-- Stack initialization plus the later machine-execution relations. -/
+structure FullInitMachineContext {F : Type} (stack : StackSemStateFiniteExact 64 LabToTarget.Config F)
+    extends FullInitStackContext stack where
   pc : BitVec 64
   mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection
   labCode : LabSem.LabProgHOL 64
@@ -102,8 +105,8 @@ theorem FullInitMachineContext.withClock_fields {F : Type}
   exact ⟨rfl,rfl,rfl,rfl,rfl,rfl,rfl,rfl,rfl⟩
 
 /-- Full initialization preserves the Lab state's FFI state. -/
-theorem FullInitMachineContext.ffi_eq {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
+theorem FullInitStackContext.ffi_eq {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack) :
     stack.ffi = backend.lab.ffi := by
   calc
     stack.ffi = (fullMakeInit backend.stackConf backend.dataConf backend.maxHeap backend.sp backend.offset
@@ -149,8 +152,8 @@ theorem initAny_ambient {width : Nat} [NeZero width] {C F : Type}
         · simp at opt
 
 /-- Full initialization preserves the Lab clock, byte order and shared domain. -/
-theorem FullInitMachineContext.ambient_eq {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitMachineContext stack) :
+theorem FullInitStackContext.ambient_eq {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack) :
     stack.clock = backend.lab.clock ∧ stack.be = backend.lab.be ∧ stack.shMdomain = backend.lab.sharedMemDomain := by
   have h := initAny_ambient (StackToLab.isGenGc backend.dataConf.gcKind) backend.maxHeap backend.bitmaps backend.dataSp
     (coracle1 backend.coracle) backend.stackConf.jump backend.offset backend.sp (sptFromAList (code1 backend.dataConf backend.inputCode))

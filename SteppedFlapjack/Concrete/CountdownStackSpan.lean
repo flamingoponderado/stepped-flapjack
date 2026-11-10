@@ -1,8 +1,9 @@
 import SteppedFlapjack.Concrete.CountdownStackSafety
+import SteppedFlapjack.Concrete.WordBitmap
 import SteppedFlapjack.WordToStackSteps.NativeEntrySpan
-open Flapjack Flapjack.WordSemStateFiniteExact Flapjack.Compiler.Backend
+open Flapjack Flapjack.Basis.Pure.MlString Flapjack.WordSemStateFiniteExact Flapjack.Compiler.Backend
 open Flapjack.Compiler.Encoders.RiscV.Target SteppedFlapjack.Concrete
-open SteppedFlapjack.WordSimpSteps SteppedFlapjack.WordAllocSteps SteppedFlapjack.WordToStackSteps
+open SteppedFlapjack.WordSimpSteps SteppedFlapjack.WordAllocSteps SteppedFlapjack.WordToStackSteps SteppedFlapjack.CrepToLoopSteps
 open SteppedFlapjack.PanToCrepSteps
 
 namespace SteppedFlapjack.Concrete
@@ -120,5 +121,15 @@ theorem countdown_stack_span {C F : Type} (n clock limit : Nat)
   · exact complete
   · exact safe
   · rw [selected,countdownNativeEntryWord_eq]; exact bound
+
+/-- The countdown compiler emits only the standard single bitmap word. -/
+theorem countdown_native_bitmaps (n : Nat) :
+ (compileNative riscvConfig false (compile countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n)).2).1 = [4] := by
+  unfold countdownWordPrograms countdownCrepCode
+  rw [← twoLoopPrograms_eq riscvConfig.isa (ofString "main") (entryName (naturalCountdownHOL n))
+    (phase3CountdownCrepBody n) (naturalCountdown_scalar n)]
+  exact twoWordTables_native_bitmaps riscvConfig.isa (ofString "main") (entryName (naturalCountdownHOL n))
+    (phase3CountdownCrepBody n) (Ne.symm (entryName_fresh (naturalCountdownHOL n))) (naturalCountdown_scalar n)
+    countdownRiscVBackend.wordToWordConf riscvConfig
 
 end SteppedFlapjack.Concrete
