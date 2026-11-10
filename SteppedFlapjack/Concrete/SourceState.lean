@@ -93,11 +93,6 @@ def initialWord (a : BitVec 64) : BitVec 64 :=
     fixtureHeaders[(a.toNat - sourceBase) / 8]?.getD 0
   else 0
 
-/-- The bitmap pointer and code-buffer endpoint use the init-e addresses. -/
-theorem fixture_header_endpoints :
-    initialWord heapBase = 0xa0020018 ∧ initialWord (heapBase + 32) = 0x800f1000 := by
-  decide
-
 /-- This oracle is sufficient for the FFI-free witnesses; it is not init-e's host oracle. -/
 def sourceFfi : HolFfiState Unit :=
   { oracle := fun _ s _ bytes => .ret s bytes, ffiState := (), ioEvents := [] }

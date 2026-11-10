@@ -38,13 +38,6 @@ noncomputable def fixtureStackContext (code : List (Nat × HolProg 64)) (cfg : L
   initAssumptions := fixtureLab_initAssumptions code cfg good
   stackEq := rfl
 
-/-- Full initialization succeeds for well-formed Stack code. -/
-theorem fixtureFullInit_succeeds (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
-    ∃ initialized, (fullMakeInit countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^61) 24 riscvConfig.addrOffset
-      [4] code (fixtureLab code cfg) fixtureSavedRegs 0 (fixtureStackOracle cfg)).2 = some initialized :=
-  (fixtureStackContext code cfg good).initializer_succeeds
-
 /-- The actual initialized Stack state satisfies the native initializer relation. -/
 theorem fixtureStack_nativeInitOk (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
     (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :

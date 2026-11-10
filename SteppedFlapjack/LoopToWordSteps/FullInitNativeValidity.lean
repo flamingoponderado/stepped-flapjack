@@ -290,21 +290,6 @@ theorem FullInitStackContext.heap_domain_of_pointers {F : Type}
   rw [diff,count]
   exact domain
 
-/-- The initialized heap length is determined by its current and end pointers. -/
-theorem FullInitStackContext.heap_length_of_pointers {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack)
-    (current other : BitVec 64)
-    (hcurrent : stack.store.lookup .currHeap = some (.word current))
-    (hother : stack.store.lookup .endOfHeap = some (.word other)) :
-    stack.store.lookup .heapLength = some (.word (other - current)) := by
-  obtain ⟨c,o,n,hc,_,ho,hn,offset,_⟩ := backend.heap_shape
-  have ec : c = current := by simpa [hcurrent,eq_comm] using hc
-  have eo : o = other := by simpa [hother,eq_comm] using ho
-  subst c
-  subst o
-  rw [offset]
-  simpa [BitVec.add_comm, BitVec.add_sub_cancel, mul_comm] using hn
-
 /-- Full initialization supplies the native entry-state validity relation
 when the native oracle obeys the compiler's conventions and generates the
 Stack oracle. The bitmap header and available register count are explicit. -/
@@ -438,20 +423,5 @@ theorem emptyNativeWordOracle_compatible (ac : AsmConfigExact 64) (bitmapLength 
     simp [emptyNativeWordOracle]
   · funext n
     simp [emptyNativeWordOracle,compileWordToStackNative,appListAppend,appendAux]
-
-/-- For a Stack oracle that never installs code, all Word-oracle convention
-and translation obligations follow from the empty oracle construction. -/
-theorem FullInitStackContext.nativeInitOk_emptyOracle {F : Type}
-    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack)
-    (ac : AsmConfigExact 64) (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
-    (cfg : LabToTarget.Config)
-    (registers : 4 < ac.regCount-(5+ac.avoidRegs.length))
-    (bitmapPrefix : (compileNative ac false programs).1.IsPrefix backend.bitmaps)
-    (stackOracle : backend.coracle = fun _ => (cfg,[],[])) :
-    Flapjack.WordToStackProofs.InitializationStateRel.initStateOk ac
-      (ac.regCount-(5+ac.avoidRegs.length)) stack (emptyNativeWordOracle backend.bitmaps.length cfg) := by
-  have compat := emptyNativeWordOracle_compatible ac backend.bitmaps.length cfg
-  apply backend.nativeInitOk_of_compiled ac programs _ registers bitmapPrefix compat.1
-  exact stackOracle.trans compat.2.symm
 
 end SteppedFlapjack.LoopToWordSteps
