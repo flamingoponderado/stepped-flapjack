@@ -86,4 +86,22 @@ theorem nestedCall_callees_frontend (ctxt : PanToCrepContextExact 64) :
     CallFrontend ctxt (.return (.const 7)) := by
   exact ⟨.tail (by simp), .base (.ret (.const 7))⟩
 
+/-- Every actual witness function has call-aware frontend syntax. -/
+theorem nestedCall_frontendCode (ctxt : PanToCrepContextExact 64) : CallFrontendCode ctxt nestedSourceState.code := by
+  intro name params body rsh found
+  simp only [nestedSourceState,sourceTemplate,HolFiniteMapExact.lookup_update,FUPDATE] at found
+  split at found
+  · simp only [Option.some.injEq,Prod.mk.injEq] at found
+    obtain ⟨rfl,rfl,rfl⟩ := found
+    exact (nestedCall_callees_frontend _).2
+  · split at found
+    · simp only [Option.some.injEq,Prod.mk.injEq] at found
+      obtain ⟨rfl,rfl,rfl⟩ := found
+      exact (nestedCall_callees_frontend _).1
+    · split at found
+      · simp only [Option.some.injEq,Prod.mk.injEq] at found
+        obtain ⟨rfl,rfl,rfl⟩ := found
+        exact nestedCall_frontend _
+      · simp at found
+
 end SteppedFlapjack.Concrete

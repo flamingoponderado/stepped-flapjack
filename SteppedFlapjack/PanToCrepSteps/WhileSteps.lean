@@ -1523,4 +1523,11 @@ theorem callFrontend_localised {width : Nat} [NeZero width] {ctxt : PanToCrepCon
   | ite he ha hb iha ihb => simp [localisedProgHOL,frontendScalar_localised he,iha,ihb]
   | «while» he hb ih => simp [localisedProgHOL,frontendScalar_localised he,ih]
 
+/-- All source functions satisfy the call-aware syntax in their actual callee contexts. -/
+def CallFrontendCode {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL)) : Prop :=
+  ∀ name params body rsh, code.lookup name = some (params,body,rsh) →
+    let ns := List.range (sizeOfShapeHOL (.comb (params.map Prod.snd)))
+    CallFrontend (ctxtFcExactHOL ctxt.funcs ctxt.eids (params.map Prod.fst) (params.map Prod.snd) ns) body
+
 end SteppedFlapjack.PanToCrepSteps
