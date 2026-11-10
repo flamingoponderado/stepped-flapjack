@@ -687,6 +687,32 @@ theorem decCall_entries {width : Nat} [NeZero width] {σ : Type}
   simpa [decClockCrepSemHOL] using count
 
 
+/-- Slot initialization preserves the call arguments and callee execution. -/
+theorem initializedCall_afterBody {width : Nat} [NeZero width] {σ : Type}
+    (target : CrepSemHOLState width σ) (fname : MlS) (args : List (CrepExpHOL width))
+    (flat : List (HolWordLab width)) (body : CrepProgHOL width)
+    (locals : HolFiniteMapExact Nat (HolWordLab width)) (names : List Nat)
+    (hargs : args.mapM (evalCrepSemHOLExp target) = some flat)
+    (found : lookupCodeFiniteHOL target.code fname flat flat.length = some (body,locals))
+    (clock : target.clock ≠ 0) (distinct : names.Nodup)
+    (disjoint : distinctListsHol names (args.flatMap crepExpVarsHOL) = true) :
+    let pre := {target with locals := target.locals.updateListEq (names.zip (List.replicate names.length (.word 0)))}
+    evalCrepSemHOLProgExact pre (.call (some (names,none)) fname args) =
+      crepCallAfterBody pre (some (names,none))
+        (evalCrepSemHOLProgExact {decClockCrepSemHOL target with locals := locals} body) := by
+  classical
+  let zeros := List.replicate names.length (HolWordLab.word (0 : BitVec width))
+  let pre : CrepSemHOLState width σ := {target with locals := target.locals.updateListEq (names.zip zeros)}
+  have argsPre : args.mapM (evalCrepSemHOLExp pre) = some flat := by
+    apply optMmapEvalDistinctListsNotAffectHOL args target flat names zeros
+    exact ⟨hargs,by simp [zeros],disjoint⟩
+  have guard : ∀ rts h, (some (names,none) : Option (List Nat × Option (BitVec width × CrepProgHOL width))) = some (rts,h) → rts.Nodup := by
+    intro rts h eq
+    cases eq
+    exact distinct
+  exact crepCallTarget pre (some (names,none)) fname args flat body locals argsPre found guard clock
+
+
 /-- A successful call installs the returned values in its initialized slots. -/
 theorem initializedCall_return {width : Nat} [NeZero width] {σ : Type}
     (target : CrepSemHOLState width σ) (fname : MlS) (args : List (CrepExpHOL width))
@@ -702,27 +728,39 @@ theorem initializedCall_return {width : Nat} [NeZero width] {σ : Type}
     let pre := {target with locals := target.locals.updateListEq (names.zip (List.replicate names.length (.word 0)))}
     evalCrepSemHOLProgExact pre (.call (some (names,none)) fname args) =
       (none,{post with locals := target.locals.updateListEq (names.zip returned)}) := by
-  classical
   let zeros := List.replicate names.length (HolWordLab.word (0 : BitVec width))
   let pre : CrepSemHOLState width σ := {target with locals := target.locals.updateListEq (names.zip zeros)}
-  have argsPre : args.mapM (evalCrepSemHOLExp pre) = some flat := by
-    apply optMmapEvalDistinctListsNotAffectHOL args target flat names zeros
-    exact ⟨hargs,by simp [zeros],disjoint⟩
-  have guard : ∀ rts h, (some (names,none) : Option (List Nat × Option (BitVec width × CrepProgHOL width))) = some (rts,h) → rts.Nodup := by
-    intro rts h eq
-    cases eq
-    exact distinct
-  have call := crepCallTarget pre (some (names,none)) fname args flat body locals argsPre found guard clock
-  rw [show ({decClockCrepSemHOL pre with locals := locals} : CrepSemHOLState width σ) =
-    {decClockCrepSemHOL target with locals := locals} from rfl,bodyRun] at call
+  have call := initializedCall_afterBody target fname args flat body locals names hargs found clock distinct disjoint
+  rw [bodyRun] at call
   simp only [crepCallAfterBody] at call
   rw [if_neg (by rw [arity]; exact fun h => h rfl)] at call
   have hzlen : names.length = zeros.length := by simp [zeros]
-  rw [show pre.locals = target.locals.updateListEq (names.zip zeros) from rfl,
-    mapM_lookup_updateListEq _ _ _ distinct hzlen] at call
+  rw [mapM_lookup_updateListEq _ _ _ distinct hzlen] at call
   dsimp only at call
   rw [updateListEq_overwrite target.locals _ _ _ hzlen arity.symm] at call
   exact call
+
+/-- A non-returning callee cannot reach the normal continuation. -/
+theorem initializedCall_terminal {width : Nat} [NeZero width] {σ : Type}
+    (target : CrepSemHOLState width σ) (fname : MlS) (args : List (CrepExpHOL width))
+    (flat : List (HolWordLab width)) (body : CrepProgHOL width)
+    (locals : HolFiniteMapExact Nat (HolWordLab width)) (names : List Nat)
+    (out : Option (CrepResultHOLExact width)) (post : CrepSemHOLState width σ)
+    (hargs : args.mapM (evalCrepSemHOLExp target) = some flat)
+    (found : lookupCodeFiniteHOL target.code fname flat flat.length = some (body,locals))
+    (clock : target.clock ≠ 0) (distinct : names.Nodup)
+    (disjoint : distinctListsHol names (args.flatMap crepExpVarsHOL) = true)
+    (bodyRun : evalCrepSemHOLProgExact {decClockCrepSemHOL target with locals := locals} body = (out,post))
+    (terminal : ∀ returned, out ≠ some (.return returned)) :
+    let pre := {target with locals := target.locals.updateListEq (names.zip (List.replicate names.length (.word 0)))}
+    (evalCrepSemHOLProgExact pre (.call (some (names,none)) fname args)).1 ≠ none := by
+  have call := initializedCall_afterBody target fname args flat body locals names hargs found clock distinct disjoint
+  rw [bodyRun] at call
+  dsimp only at call ⊢
+  rw [call]
+  cases out with
+  | none => simp [crepCallAfterBody]
+  | some r => cases r <;> simp_all [crepCallAfterBody]
 
 /-- A well-shaped returned value restores the compiler relations for the
 declaration-call continuation. -/
@@ -843,6 +881,81 @@ theorem decCall_return_bridge {width : Nat} [NeZero width] {σ : Type}
   refine ⟨shapes,targetPost,targetRun,?_,?_,continuations⟩
   · exact sourceCount
   · dsimp only [targetEntry,next,ns] at targetCount ⊢
+    simp only [decClockCrepSemHOL] at targetCount ⊢
+    omega
+
+private theorem resultRel_terminal {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (s : PanSemStateFiniteExact width σ) (t : CrepSemHOLState width σ)
+    (out : Option (PanSemResultExact width)) (targetOut : Option (CrepResultHOLExact width))
+    (rel : pcCompileCorrectResultRel ctxt s t out targetOut)
+    (terminal : ∀ value, out ≠ some (.returned value)) :
+    ∀ returned, targetOut ≠ some (.return returned) := by
+  cases out with
+  | none => simp [pcCompileCorrectResultRel] at rel; simp [rel.1]
+  | some r =>
+    cases r <;> simp_all [pcCompileCorrectResultRel]
+    case exception id value =>
+      split at rel <;> simp_all
+
+
+open Flapjack.PanSemStateFiniteExact in
+/-- Terminal declaration-call outcomes count the callee but no continuation. -/
+theorem decCall_terminal_bridge {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (name fname : MlS) (shape : ShapeHOL)
+    (argexps : List (ExpHOL width)) (continuation : ProgHOL width)
+    (source : PanSemStateFiniteExact width σ) (target : CrepSemHOLState width σ)
+    (args : List (ValueHOL width)) (body : ProgHOL width)
+    (locals : HolFiniteMapExact MlS (ValueHOL width)) (rsh : ShapeHOL)
+    (result : Option (PanSemResultExact width)) (sourcePost : PanSemStateFiniteExact width σ)
+    (hargs : source.evalListHOLFinite (h := fun address => Classical.propDecidable (source.memaddrs address)) argexps = some args)
+    (found : lookupCodeHOLFinite source.code.lookup fname args = some (body,locals,rsh))
+    (clock : source.clock ≠ 0) (stateRel : panToCrepStateRelFiniteExact source target)
+    (codeRel : codeRelExactHOLW ctxt source.code target.code)
+    (excpRel : panToCrepExcpRelFiniteExact ctxt.eids source.eshapes)
+    (localsRel : panToCrepLocalsRelFiniteExact ctxt source.locals target.locals)
+    (localised : everyExpListHOL localisedExpHOL argexps = true)
+    (bodyRun : (callEntryStateHOLFinite source locals).evaluateHOLFiniteState body = (result,sourcePost))
+    (nonerror : result ≠ some .error) (terminal : ∀ value, result ≠ some (.returned value)) :
+    ∃ shapes : List (MlS × ShapeHOL),
+      let ns := List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd)))
+      let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
+      let sourceEntry := callEntryStateHOLFinite source locals
+      let targetEntry := {decClockCrepSemHOL target with locals := tlcHOL ns args}
+      controlSteps (.decCall name shape fname argexps continuation) source = 1 + controlSteps body sourceEntry ∧
+      CrepSteps.steps (compileProgExactHOLW ctxt (.decCall name shape fname argexps continuation)) target =
+        (decCallSlots ctxt shape).length + 2 + CrepSteps.steps (compileProgExactHOLW next body) targetEntry := by
+  classical
+  obtain ⟨shapes,hsrc,hbodyLocal,htgt,callCount,hs,hc,he,hl⟩ :=
+    decCall_entries ctxt fname shape argexps source target args body locals rsh hargs found clock stateRel codeRel excpRel localsRel localised
+  let ns := List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd)))
+  let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
+  let entry := callEntryStateHOLFinite source locals
+  let targetEntry := {decClockCrepSemHOL target with locals := tlcHOL ns args}
+  have correct : pcCompileCorrectAt body entry := (pcCompileCorrectAt_iff_HOL _ _).mpr (pcCompileCorrect_all _ _)
+  obtain ⟨targetResult,targetPost,targetRun,_,_,_,resultRel⟩ :=
+    correct result sourcePost targetEntry next bodyRun nonerror hs hc he hl hbodyLocal
+  have targetTerminal := resultRel_terminal next sourcePost targetPost result targetResult resultRel terminal
+  obtain ⟨shapes2,hsrc2,_,_,_,htargs,htlookup,_,_,_,_⟩ :=
+    pcCompileCorrectCallPrelude source target ctxt fname argexps args body locals rsh hargs found stateRel codeRel excpRel localsRel localised
+  have shapesEq : shapes2 = shapes := by rw [hsrc] at hsrc2; exact (congrArg Prod.fst (Option.some.inj hsrc2)).symm
+  subst shapes2
+  have hdist := pcCompileCorrectCallRetSlotsDistinct ctxt argexps (sizeOfShapeHOL shape) localsRel.2.1
+  have targetClock : target.clock ≠ 0 := by rw [← stateRel.2.2.2.2.2.1]; exact clock
+  have callTerminal := initializedCall_terminal target fname ((compileExpExactHOLWList ctxt argexps).flatMap Prod.fst)
+    (args.flatMap flattenHOL) (compileProgExactHOLW next body) (tlcHOL ns args)
+    (decCallSlots ctxt shape) targetResult targetPost htargs htlookup targetClock (decCallSlots_nodup ctxt shape) hdist targetRun targetTerminal
+  have sourceCount := controlSteps_decCall_terminal name fname shape argexps continuation source args body locals rsh result sourcePost hargs found clock bodyRun terminal
+  have targetCount := decCall_compiled_steps ctxt name fname shape argexps continuation target
+  dsimp only at targetCount callTerminal
+  rw [callCount] at targetCount
+  rcases callRun : evalCrepSemHOLProgExact _ (.call (some (decCallSlots ctxt shape,none)) fname ((compileExpExactHOLWList ctxt argexps).flatMap Prod.fst)) with ⟨callResult,callPost⟩
+  rw [callRun] at targetCount callTerminal
+  cases callResult with
+  | none => simp at callTerminal
+  | some r =>
+    simp only at targetCount
+    refine ⟨shapes,sourceCount,?_⟩
+    dsimp only [targetEntry,next,ns] at targetCount ⊢
     simp only [decClockCrepSemHOL] at targetCount ⊢
     omega
 
