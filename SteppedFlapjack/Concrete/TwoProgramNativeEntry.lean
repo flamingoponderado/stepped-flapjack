@@ -70,7 +70,7 @@ theorem twoProgram_optimizedCallee (arch : Flapjack.Compiler.Encoders.Asm.AsmArc
   have shapes : TailProgramShapes programs := by simpa [programs,loopEq] using facts.2.2.2.1
   have wordShape : LoopSequence calleeWord := by simpa [calleeWord] using facts.2.2.2.2.2.1
   have lookup : sptLookup 65 code = some (1,out) := by
-    simpa [code,out,countdownZeroLimit] using
+    simpa [code,out,countdownZeroLimit,RowColoring.limit] using
       (wholeCompile_entry_lookups countdownRiscVBackend.wordToWordConf riscvConfig programs 65 1 calleeWord mem nodup).2
   have relations := wholeCompile_tail_codeRelations countdownRiscVBackend.wordToWordConf riscvConfig programs shapes
   have outShape : LoopSequence out := by

@@ -104,7 +104,7 @@ theorem countdown_allocation_color (x : BitVec 64) : regAllocExecutable .IRC
     (WordAlloc.getStackOnly (countdownAllocationInput x)) = .success countdownZeroColor := by
   have same := countdown_allocation_inputs x 0
   rw [same.1,same.2.1,same.2.2.1,same.2.2.2,countdownAllocationInput_zero]
-  simpa only [countdownZeroMoves,countdownZeroClashTree,countdownZeroForced,countdownZeroColor,
+  simpa only [countdownZeroMoves,countdownZeroClashTree,countdownZeroForced,RowColoring.forced,RowColoring.input,countdownZeroAllocInput,countdownZeroColor,
     show countdownZeroLoopRow.1 = 65 by rfl] using countdownZero_graphAllocation_exact
 
 /-- The complete register-allocated countdown Word table. -/

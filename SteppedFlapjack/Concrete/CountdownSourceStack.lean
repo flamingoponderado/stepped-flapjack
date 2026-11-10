@@ -71,7 +71,7 @@ theorem countdownFixture_source_stack (n : Nat) (range : n < 2^64) (cfg : LabToT
   have stepEq := WordSteps.steps_call_tail (some 64) [0] word [.loc 1 0] [.loc 1 0] (some 0) countdownOptimizedEntry
     args rfl find (by simp [word])
   have bodyEq : callEnv [(.loc 1 0 : WordLocW 64)] (some 0) (decClock word) = body := by
-    simp [word,body,clock,countdownInitialWord,countdownFixtureWord,fixtureWord,countdownZeroLimit,countdownFixtureStack,WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.decClock]
+    simp [word,body,clock,countdownInitialWord,countdownFixtureWord,fixtureWord,countdownZeroLimit,RowColoring.limit,countdownFixtureStack,WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.decClock]
   rw [bodyEq] at stepEq
   have bodyBound : WordSteps.steps countdownOptimizedEntry body ≤ countdownWordBound n := by
     change WordSteps.steps (.call none (some 64) [0] none) word ≤ _ at bound
