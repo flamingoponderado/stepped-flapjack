@@ -1,5 +1,6 @@
 import SteppedFlapjack.CrepToLoopSteps.ExecutableFrontend
-import SteppedFlapjack.PanToCrepSteps.CountdownCompilationReduction
+import SteppedFlapjack.PanToCrepSteps.CountdownNoFfi
+import SteppedFlapjack.PanToCrepSteps.CountdownBitmapProof
 
 /-! Connect the structural liveness evaluator to the actual countdown compiler. -/
 namespace SteppedFlapjack.PanToCrepSteps

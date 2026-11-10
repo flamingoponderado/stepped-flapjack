@@ -1,4 +1,5 @@
-import SteppedFlapjack.PanToCrepSteps.AlignedCompiledCountdown
+import SteppedFlapjack.PanToCrepSteps.LabInitializedCountdown
+import SteppedFlapjack.PanToCrepSteps.LabCountedFullCompiler
 import Flapjack.Compiler.Backend.RiscVConfig.PancakeConfigOk
 import SteppedFlapjack.PanToCrepSteps.FilteredCountdownGuards
 import SteppedFlapjack.PanToCrepSteps.RiscVInitializerFacts
