@@ -8,7 +8,9 @@ open SteppedFlapjack.Concrete SteppedFlapjack.PanToCrepSteps
 
 namespace SteppedFlapjack.Concrete
 
-/-- Assembly register inputs for the aligned init-e-shaped Lab layout. -/
+/-- Assembly inputs for the aligned init-e-shaped Lab layout. `makeInit` reads
+only the integer and floating-point registers; the other fields are placeholders
+until the concrete machine initialization in Phase 6. -/
 def fixtureAsm : AsmState 64 := {
  regs := fun r => if r = 11 then heapBase else if r = 12 then BitVec.ofNat 64 heapEnd else if r = 13 then BitVec.ofNat 64 ramEnd else 0
  fpRegs := fun _ => 0

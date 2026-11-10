@@ -1,5 +1,5 @@
 import SteppedFlapjack.Concrete.NaturalCountdownSourceStack
-import SteppedFlapjack.Concrete.FixtureStackLab
+import SteppedFlapjack.Concrete.CountdownLabBounds
 import SteppedFlapjack.StackToLabSteps.EntryLocation
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
 open Flapjack.WordToStackProofs.CompCorrect
@@ -19,7 +19,7 @@ theorem countdownFixture_source_lab (n : Nat) (range : n < 2^64) (cfg : LabToTar
         (clockedFixtureSource (countdown n) (6*n+9))) (naturalCountdownHOL n)) (naturalCrepEntry n) =
         (some (.return [.word 0]),final) ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
-      LabSem.evaluate {(fixtureTargetLab (countdownNativeStackCode n) cfg ms) with clock := (fixtureLabTickLimit (countdownNativeStackCode n) cfg (9543650688*n+29426459323))} =
+      LabSem.evaluate {(fixtureTargetLab (countdownNativeStackCode n) cfg ms) with clock := (301044271827414925352998591868160*n + 928226242656837292779915131748711)} =
         (.halt .success,labPost) ∧ labPost.ffi.ioEvents = post.ffi.ioEvents := by
   obtain ⟨final,post,targetPost,targetResult,sourceRun,stateRel,ffi,stackRun,result,stackBound⟩ :=
     countdownFixture_source_stack n range cfg context primitive handler
@@ -33,5 +33,6 @@ theorem countdownFixture_source_lab (n : Nat) (range : n < 2^64) (cfg : LabToTar
     simpa only [countdownFixtureStack] using stackBound
   obtain ⟨labPost,labRun,labFfi⟩ := fixtureStack_lab_return (countdownNativeStackCode n) cfg ms (countdown_nativeGoodCode n)
     (countdownWordBound n+1) (9543650688*n+29426459323) targetPost run bound
+  rw [countdownLabTick_closed n cfg] at labRun
   exact ⟨final,post,labPost,sourceRun,stateRel,labRun,labFfi.trans (congrArg _ ffi)⟩
 end SteppedFlapjack.Concrete

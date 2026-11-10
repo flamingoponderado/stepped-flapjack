@@ -24,19 +24,19 @@ private theorem twoConstPrefix (x y : BitVec 64) (tail : WordLangProgHOL (BitVec
  simp only [stackControlWeight]
  exact congrArg (fun t => 1 + stackControlWeight (wMoveNative [(0,0)] (countdownZeroLimit,0,0)) + t) (constPrefix x y tail bs)
 
-private noncomputable def countdownSuffix : WordLangProgHOL (BitVec 64) :=
+noncomputable def countdownCalleeSuffix : WordLangProgHOL (BitVec 64) :=
   match countdownOptimizedLoop 0 with
   | .seq _ (.seq _ tail) => tail
   | _ => .skip
 
-private theorem loopShape (n : Nat) : countdownOptimizedLoop n =
- .seq (.move 1 [(0,0)]) (.seq (.inst (.const 2 (BitVec.ofNat 64 n))) countdownSuffix) := by rfl
+theorem countdownOptimizedLoop_prefix (n : Nat) : countdownOptimizedLoop n =
+ .seq (.move 1 [(0,0)]) (.seq (.inst (.const 2 (BitVec.ofNat 64 n))) countdownCalleeSuffix) := by rfl
 
 private theorem loopWeight (n : Nat) (bs : AppList (BitVec 64) × Nat) :
  stackControlWeight (compNative riscvConfig false (countdownOptimizedLoop n) bs (countdownZeroLimit,0,0)).1 =
  stackControlWeight (compNative riscvConfig false (countdownOptimizedLoop 0) bs (countdownZeroLimit,0,0)).1 := by
- rw [loopShape n,loopShape 0]
- exact twoConstPrefix _ _ countdownSuffix bs
+ rw [countdownOptimizedLoop_prefix n,countdownOptimizedLoop_prefix 0]
+ exact twoConstPrefix _ _ countdownCalleeSuffix bs
 
 open SteppedFlapjack.Concrete SteppedFlapjack.PanToCrepSteps SteppedFlapjack.StackAllocSteps SteppedFlapjack.WordToStackSteps
 set_option maxRecDepth 10000 in
@@ -54,7 +54,7 @@ private theorem genericRow (p : WordLangProgHOL (BitVec 64)) (bs : AppList (BitV
 
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 400000 in
-private theorem loopFrame (n : Nat) : nativeEntryFrame countdownZeroLimit (countdownOptimizedLoop n) = 0 := by
+theorem countdownCallee_frame_zero (n : Nat) : nativeEntryFrame countdownZeroLimit (countdownOptimizedLoop n) = 0 := by
   have h := countdownCallee_entryFrame_zero n
   unfold nativeEntryFrameSize at h
   dsimp only at h
@@ -63,7 +63,7 @@ private theorem loopFrame (n : Nat) : nativeEntryFrame countdownZeroLimit (count
 private theorem rowInvariant (n : Nat) (bs : AppList (BitVec 64) × Nat) :
  stackControlWeight (compileProgNative riscvConfig false (countdownOptimizedLoop n) 1 countdownZeroLimit bs).1 =
  stackControlWeight (compileProgNative riscvConfig false (countdownOptimizedLoop 0) 1 countdownZeroLimit bs).1 := by
- rw [genericRow,genericRow,countdownCallee_entryFrame_zero,countdownCallee_entryFrame_zero,loopFrame,loopFrame,loopWeight]
+ rw [genericRow,genericRow,countdownCallee_entryFrame_zero,countdownCallee_entryFrame_zero,countdownCallee_frame_zero,countdownCallee_frame_zero,loopWeight]
 
 open SteppedFlapjack.StackRemoveSteps.CompCorrect
 set_option maxRecDepth 10000 in
@@ -78,7 +78,7 @@ private theorem tableCost (a b c : HolProg 64) (h : stackControlWeight b = stack
  simp only [linearLoopCost,Nat.zero_add,Nat.mul_one,h]
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 400000 in
-private theorem tableCode (p q : WordLangProgHOL (BitVec 64)) :
+theorem riscvNative_two_entry_code (p q : WordLangProgHOL (BitVec 64)) :
  (compileNative riscvConfig false [(64,1,p),(65,1,q)]).2.2.2 =
  [(raiseStubLocation,raiseStubNative false countdownZeroLimit),
   (storeConstsStubLocation,storeConstsStubNative countdownZeroLimit),
@@ -106,7 +106,7 @@ private theorem tableInvariant (n : Nat) : loopCodeCost 0 (sptFromAList (compile
  (Flapjack.Compiler.Backend.WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms 0)).2).2.2.2) := by
  rw [countdown_optimized_literal,countdown_optimized_literal]
  have lit (k : Nat) : countdownOptimizedLiteral (BitVec.ofNat 64 k) = [(64,1,countdownOptimizedEntry),(65,1,countdownOptimizedLoop k)] := by rfl
- rw [lit n,lit 0,tableCode,tableCode]
+ rw [lit n,lit 0,riscvNative_two_entry_code,riscvNative_two_entry_code]
  apply tableCost
  exact rowInvariant n _
 set_option maxRecDepth 100000 in

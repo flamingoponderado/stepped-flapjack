@@ -1,4 +1,4 @@
-import SteppedFlapjack.StackRemoveSteps.ExplicitFields
+import SteppedFlapjack.StackToLabSteps.ExplicitSpan
 import SteppedFlapjack.LoopToWordSteps.FullInitNativeSetup
 import Flapjack.Compiler.Backend.StackRemove.Proofs.InitAny
 namespace SteppedFlapjack.LoopToWordSteps
@@ -29,14 +29,8 @@ noncomputable def explicitTickLimit
   let frameSize := if frame = 0 then 0 else frame+1
   let stackLimit := tailStackReplayLimit ac 1 firstLoopName wc.regAlg k (entryColour wc programs firstLoopName)
     p ctxt labels compiledCode limit
-  let cost := uniformFactor (width := 64) dc *
-    (3 + callSequenceCost ac stackLimit (sptFromAList inputCode) out bitmap (k,frameSize,frame))
-  let code := sptFromAList (code1 dc inputCode)
-  let co := coracle1 oracle
-  let runCost := max (costFromFields offset cost (.call none (.inl firstLoopName) none) code bitmaps co)
-    (costFromFields offset cost (.call none (.inl firstLoopName) none) code [4] co)
-  labTickBound 4 labCode buffer * (flattenStepFactor *
-    (2 + loopOnlyCost 0 (initCode (StackToLab.isGenGc dc.gcKind) maxHeap sp : HolProg 64) + runCost * cost + 4))
+  let stackVisits := 3 + callSequenceCost ac stackLimit (sptFromAList inputCode) out bitmap (k,frameSize,frame)
+  labTickBound 4 labCode buffer * stackLabTickLimit dc maxHeap sp offset bitmaps inputCode oracle stackVisits
 
 /-- The existing simulation bound is bounded by the explicit compiler calculation. -/
 theorem FullInitMachineContext.successTickLimit_le_explicit {F : Type}
@@ -50,7 +44,7 @@ theorem FullInitMachineContext.successTickLimit_le_explicit {F : Type}
   have codeEq : stack.code = sptFromAList backend.inputCode := by
     have eq := congrArg (fun s => s.code) backend.stackEq
     simpa only [fullMakeInit_eq,StackAlloc.makeInit] using eq
-  simp only [FullInitMachineContext.successTickLimit,explicitTickLimit,codeEq]
+  simp only [FullInitMachineContext.successTickLimit,explicitTickLimit,stackLabTickLimit,codeEq, ← firstLoopName_eq_initGlobalsLocation]
   apply Nat.mul_le_mul_left
   apply Nat.mul_le_mul_left
   apply Nat.add_le_add_right
