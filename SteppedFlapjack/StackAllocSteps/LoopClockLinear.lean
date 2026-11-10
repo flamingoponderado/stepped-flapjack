@@ -91,4 +91,39 @@ theorem stackControl_clock_bound (p : HolProg width) (h : loopOnly p = true)
     steps (p,s) ≤ stackControlWeight p * (s.clock+1) :=
   (stackControl_consumption_bound p h s).trans (Nat.mul_le_mul_left _ (by omega))
 
+
+/-- Linear structural cost at a uniform clock limit. -/
+def linearLoopCost (k : Nat) (p : HolProg width) : Nat := stackControlWeight p * (k+1)
+
+/-- Every call-free Stack program obeys the linear cost at any larger clock. -/
+theorem linearLoopCostBound (k : Nat) (p : HolProg width) (shape : loopOnly p = true) :
+    ClockBound (C := C) (F := F) k p (linearLoopCost k p) := by
+  intro s clock
+  exact (stackControl_clock_bound p shape s).trans (Nat.mul_le_mul_left _ (by omega))
+
+/-- The linear structural cost is monotone in its clock limit. -/
+theorem linearLoopCost_mono (p : HolProg width) {lo hi : Nat} (h : lo ≤ hi) :
+    linearLoopCost lo p ≤ linearLoopCost hi p :=
+  Nat.mul_le_mul_left _ (Nat.add_le_add_right h 1)
+
+/-- At zero clock the original and linear structural costs agree. -/
+theorem linearLoopCost_zero (p : HolProg width) : linearLoopCost 0 p = loopOnlyCost 0 p := by
+  cases hp : p <;> try rfl
+  case seq a b =>
+    have ha := linearLoopCost_zero a
+    have hb := linearLoopCost_zero b
+    simp only [linearLoopCost,stackControlWeight,loopOnlyCost,Nat.zero_add,Nat.mul_one] at ha hb ⊢
+    omega
+  case ite cmp r ri a b =>
+    have ha := linearLoopCost_zero a
+    have hb := linearLoopCost_zero b
+    simp only [linearLoopCost,stackControlWeight,loopOnlyCost,Nat.zero_add,Nat.mul_one] at ha hb ⊢
+    omega
+  case loop a =>
+    have ha := linearLoopCost_zero a
+    simp only [linearLoopCost,stackControlWeight,loopOnlyCost,Nat.zero_add,Nat.mul_one] at ha ⊢
+    omega
+termination_by sizeOf p
+decreasing_by all_goals subst p; simp_wf; try omega
+
 end SteppedFlapjack.StackAllocSteps

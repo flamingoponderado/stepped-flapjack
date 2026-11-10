@@ -92,36 +92,17 @@ theorem continuingCodeCost_stable {width : Nat} [NeZero width] {C F : Type}
     (lookup_eq_of_growth_and_domain target.code targetPost.code growth domain)
 
 
-/-- Structural loop cost is monotone in the clock limit. -/
-theorem loopOnlyCost_mono {width : Nat} [NeZero width] (p : HolProg width)
-    {lo hi : Nat} (h : lo ≤ hi) : loopOnlyCost lo p ≤ loopOnlyCost hi p := by
-  cases hp : p <;> simp only [loopOnlyCost]
-  case seq a b =>
-    have ha := loopOnlyCost_mono a h
-    have hb := loopOnlyCost_mono b h
-    omega
-  case ite cmp r ri a b =>
-    have ha := loopOnlyCost_mono a h
-    have hb := loopOnlyCost_mono b h
-    omega
-  case loop body =>
-    have hb := loopOnlyCost_mono body h
-    exact Nat.mul_le_mul (Nat.add_le_add_right hb 1) (Nat.add_le_add_right h 1)
-  all_goals omega
-termination_by sizeOf p
-decreasing_by all_goals subst p; simp_wf; try omega
-
 /-- The maximum loop cost over a finite code map is monotone in the clock. -/
 theorem loopCodeCost_mono {width : Nat} [NeZero width] (code : Spt (HolProg width))
     {lo hi : Nat} (h : lo ≤ hi) : loopCodeCost lo code ≤ loopCodeCost hi code := by
   have bound (entries : List (Nat × HolProg width)) :
-      maxListNat (entries.map (fun entry => loopOnlyCost lo entry.2)) ≤
-      maxListNat (entries.map (fun entry => loopOnlyCost hi entry.2)) := by
+      maxListNat (entries.map (fun entry => linearLoopCost lo entry.2)) ≤
+      maxListNat (entries.map (fun entry => linearLoopCost hi entry.2)) := by
     induction entries with
     | nil => simp [maxListNat]
     | cons entry entries ih =>
       simp only [List.map_cons,maxListNat]
-      exact max_le_max (loopOnlyCost_mono entry.2 h) ih
+      exact max_le_max (linearLoopCost_mono entry.2 h) ih
   exact bound (sptToAList code)
 
 /-- A handler continuation's structural cost is monotone in the clock. -/
@@ -130,7 +111,7 @@ theorem handlerCost_mono {width : Nat} [NeZero width]
     handlerCost lo handler ≤ handlerCost hi handler := by
   cases handler with
   | none => rfl
-  | some v => rcases v with ⟨p,a,b⟩; exact loopOnlyCost_mono p h
+  | some v => rcases v with ⟨p,a,b⟩; exact linearLoopCost_mono p h
 
 /-- The complete generated returning-call bound is monotone in the clock. -/
 theorem returningChainCost_mono {width : Nat} [NeZero width]
@@ -138,7 +119,7 @@ theorem returningChainCost_mono {width : Nat} [NeZero width]
     returningChainCost lo code p ≤ returningChainCost hi code p := by
   cases hp : p <;> try simp only [returningChainCost]
   case seq a b =>
-    have ha := loopOnlyCost_mono a h
+    have ha := linearLoopCost_mono a h
     have hb := returningChainCost_mono code b h
     omega
   case call ret dest handler =>
@@ -148,7 +129,7 @@ theorem returningChainCost_mono {width : Nat} [NeZero width]
       rcases r with ⟨p,link,l1,l2⟩
       simp only [returningChainCost]
       have hc := loopCodeCost_mono code h
-      have hp := loopOnlyCost_mono p h
+      have hp := linearLoopCost_mono p h
       have hh := handlerCost_mono handler h
       omega
   all_goals omega

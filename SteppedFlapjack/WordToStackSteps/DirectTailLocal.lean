@@ -66,7 +66,7 @@ theorem directTargetTail_bound_at {C F : Type} (loc limit : Nat)
   | some p =>
     by_cases zero : s.clock = 0
     · simp [findCode,found,zero]
-    · have cost := loopOnlyCostBound limit p (shape p found) (decClock s) (by simp [decClock]; omega)
+    · have cost := linearLoopCostBound limit p (shape p found) (decClock s) (by simp [decClock]; omega)
       have maxBound := loopCodeCost_bound limit s.code loc p found
       simp only [findCode,found,zero,if_false]
       omega
@@ -277,7 +277,7 @@ theorem regTail_target_bound_local {C F : Type} (ac : AsmConfigExact width) (lim
     intro source sourcePost target result k f frame lens bs bsPost n nPost compiled noInstall noInstallCode code clock facts
     have block := flat_branch_block branch facts.2.2.2.2.1
     have shape := loopBlock_loop block
-    have bound := loopOnlyCostBound limit _ (loopWord_compiled ac _ shape (bs,n) (k,f,frame)) target (by rw [← facts.2.2.1.1]; exact clock)
+    have bound := linearLoopCostBound limit _ (loopWord_compiled ac _ shape (bs,n) (k,f,frame)) target (by rw [← facts.2.2.1.1]; exact clock)
     rw [facts.2.2.2.2.2.1] at bound
     rw [callSequenceCost.eq_def]
     simp only [shape,↓reduceIte,facts.2.2.2.2.2.1]
@@ -293,7 +293,7 @@ theorem regTail_target_bound_local {C F : Type} (ac : AsmConfigExact width) (lim
     have codeB : RegTailLocalCode b source.code := fun loc h => code loc (.right h)
     rcases facts with ⟨execution,notError,related,conventions,flat,compilation,lengthBound,bitmapBound,bitmapPrefix,labels,maxBound⟩
     by_cases wholeBlock : loopWord (.seq a b) = true
-    · have bound := loopOnlyCostBound limit _ (loopWord_compiled ac (.seq a b) wholeBlock (bs,n) (k,f,frame)) target (by rw [← related.1]; exact clock)
+    · have bound := linearLoopCostBound limit _ (loopWord_compiled ac (.seq a b) wholeBlock (bs,n) (k,f,frame)) target (by rw [← related.1]; exact clock)
       rw [compilation] at bound
       rw [callSequenceCost.eq_def]
       simp only [wholeBlock, ↓reduceIte, compilation]

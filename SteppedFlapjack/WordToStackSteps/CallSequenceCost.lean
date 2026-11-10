@@ -12,7 +12,7 @@ map and a uniform clock limit. -/
 def callSequenceCost {width : Nat} [NeZero width] (ac : AsmConfigExact width)
     (limit : Nat) (code : Spt (HolProg width)) (p : WordLangProgHOL (BitVec width))
     (bs : AppList (BitVec width) × Nat) (kf : Nat × Nat × Nat) : Nat :=
-  if loopWord p then loopOnlyCost limit (compNative ac false p bs kf).1 else
+  if loopWord p then linearLoopCost limit (compNative ac false p bs kf).1 else
   match p with
   | .seq a b =>
       let first := compNative ac false a bs kf
@@ -64,7 +64,7 @@ theorem callSequence_atomic_bound {width : Nat} [NeZero width] {C F : Type}
   · have shape := loopBlock_loop block
     rw [callSequenceCost.eq_def]
     simp only [shape, ↓reduceIte]
-    apply loopOnlyCostBound limit _ (loopWord_compiled ac p shape bs (k,f,frame)) target
+    apply linearLoopCostBound limit _ (loopWord_compiled ac p shape bs (k,f,frame)) target
     rw [← related.1]
     exact clock
   · have shape := relatedLoopCode ac k f frame source target lens related code
@@ -128,7 +128,7 @@ theorem callSequence_target_bound {width : Nat} [NeZero width] {C F : Type}
     intro source sourcePost target result k f frame lens bs bsPost n nPost compiled noInstall noInstallCode code clock facts
     rcases facts with ⟨execution,notError,related,conventions,flat,compilation,lengthBound,bitmapBound,bitmapPrefix,labels,maxBound⟩
     by_cases wholeBlock : loopWord (.seq a b) = true
-    · have bound := loopOnlyCostBound limit _ (loopWord_compiled ac (.seq a b) wholeBlock (bs,n) (k,f,frame)) target (by rw [← related.1]; exact clock)
+    · have bound := linearLoopCostBound limit _ (loopWord_compiled ac (.seq a b) wholeBlock (bs,n) (k,f,frame)) target (by rw [← related.1]; exact clock)
       rw [compilation] at bound
       rw [callSequenceCost.eq_def]
       simp only [wholeBlock, ↓reduceIte, compilation]

@@ -1,5 +1,7 @@
+import SteppedFlapjack.Concrete.CountdownStackSpan
+import SteppedFlapjack.WordToStackSteps.NativeEntrySpan
 import SteppedFlapjack.StackAllocSteps.LoopClockLinear
-import SteppedFlapjack.WordToStackSteps.DirectTailLinear
+import SteppedFlapjack.WordToStackSteps.CallSequenceLinear
 import SteppedFlapjack.WordToStackSteps.ResourceSafeResult
 import SteppedFlapjack.CrepToLoopSteps.ScalarPrefixOutput
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopWeight

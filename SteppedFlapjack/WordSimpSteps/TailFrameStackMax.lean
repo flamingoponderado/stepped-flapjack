@@ -59,4 +59,24 @@ theorem moveTail_frame_stackMax (loc size : Nat) (callee : WordLangProgHOL (BitV
     rw [evaluate,fix_clock_evaluate,evaluate]
     simpa [WordSemStateFiniteExact.getVars,hvar] using tail
 
+/-- A code-derived callee-frame bound excludes the Stack resource alternative. -/
+theorem moveTail_frame_stackSafe (loc size : Nat) (callee : WordLangProgHOL (BitVec width))
+    (shape : LoopSequence callee) (s : WordSemStateFiniteExact width C F)
+    (lookup : sptLookup loc s.code = some (1,callee))
+    (frame : sptLookup loc s.stackSize = some size)
+    (empty : s.stack = []) (maximum : s.stackMax = some 1)
+    (fits : 1+size ≤ s.stackLimit) :
+    let post := (evaluate (.seq (.move 1 [(0,0)]) (.call none (some loc) [0] none)) s).2
+    post.stackMax.getD (post.stackLimit+1) ≤ post.stackLimit := by
+  let p : WordLangProgHOL (BitVec width) := .seq (.move 1 [(0,0)]) (.call none (some loc) [0] none)
+  rcases run : evaluate p s with ⟨result,post⟩
+  have max := moveTail_frame_stackMax loc size callee shape s lookup frame empty maximum
+  change (evaluate p s).2.stackMax = some 1 ∨ (evaluate p s).2.stackMax = some (1+size) at max
+  rw [run] at max
+  simp only at max
+  have limit := evaluate_stack_limit p s result post run
+  change post.stackMax.getD (post.stackLimit+1) ≤ post.stackLimit
+  rw [limit]
+  rcases max with a | a <;> simp only [a,Option.getD_some] <;> omega
+
 end SteppedFlapjack.WordSimpSteps

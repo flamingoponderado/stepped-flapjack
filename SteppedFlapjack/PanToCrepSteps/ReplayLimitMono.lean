@@ -50,7 +50,7 @@ theorem callSequenceCost_mono {width : Nat} [NeZero width] (ac : AsmConfigExact 
   conv_lhs => rw [callSequenceCost.eq_def]
   conv_rhs => rw [callSequenceCost.eq_def]
   split
-  · exact loopOnlyCost_mono _ bound
+  · exact SteppedFlapjack.StackAllocSteps.linearLoopCost_mono _ bound
   · cases hp : p <;> try rfl
     case seq a b =>
       simp only
