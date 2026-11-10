@@ -138,8 +138,7 @@ theorem singleTailEntry_correct_with_steps {width : Nat} [NeZero width] {C F : T
     refine ⟨?_,iha s found⟩
     intro res middle h
     obtain ⟨first,rfl⟩ := h
-    have codeEq := LoopLiveSteps.tailEntry_none_code (LoopLiveSteps.singleTail_to_tail ha)
-      s middle first.symm
+    have codeEq := LoopLiveSteps.evaluate_code a s middle none first.symm
     exact ihb middle (by simpa only [codeEq] using found)
   | @mark p hp ih =>
     intro s found

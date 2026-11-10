@@ -56,7 +56,7 @@ theorem tailEntry_consumption_bound {p : HolLoopProg width} {loc : Nat} (shape :
     | none =>
       simp only at run ⊢
       have firstBound := tailEntry_none_static (singleTail_to_tail ha) s middle first
-      have codeEq := tailEntry_none_code (singleTail_to_tail ha) s middle first
+      have codeEq := evaluate_code a s middle none first
       have secondBound := ihb middle post result (by simpa only [codeEq] using code) run
       have firstClock := evaluate_clock a s none middle first
       have secondClock := evaluate_clock b middle result post run
@@ -116,7 +116,7 @@ theorem tailEntry_clock_consumed {p : HolLoopProg width} {loc : Nat} (shape : Si
     | none =>
       simp only at run ⊢
       have firstBound := tailEntry_none_consumed (singleTail_to_tail ha) s middle first
-      have codeEq := tailEntry_none_code (singleTail_to_tail ha) s middle first
+      have codeEq := evaluate_code a s middle none first
       have secondBound := ihb middle post result (by simpa only [codeEq] using code) run
       have secondClock := evaluate_clock b middle result post run
       omega
