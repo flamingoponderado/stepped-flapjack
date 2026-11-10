@@ -544,4 +544,50 @@ theorem while_correct_with_steps {width : Nat} [NeZero width] {σ : Type}
     while_compiled_steps condition body context conditionShape bodyShape source sourceFinal result target
       run nonerror stateRel codeRel excpRel localsRel localised⟩
 
+/-- A reached source tail call and its compiled call visit the corresponding
+callee entries, with the compiler relations preserved at those entries. -/
+theorem tailCall_entries {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (fname : MlS) (argexps : List (ExpHOL width))
+    (source : PanSemStateFiniteExact width σ) (target : CrepSemHOLState width σ)
+    (args : List (ValueHOL width)) (body : ProgHOL width)
+    (locals : HolFiniteMapExact MlS (ValueHOL width)) (rsh : ShapeHOL)
+    (hargs : source.evalListHOLFinite (h := fun address => Classical.propDecidable (source.memaddrs address)) argexps = some args)
+    (found : PanSemStateFiniteExact.lookupCodeHOLFinite source.code.lookup fname args = some (body,locals,rsh))
+    (clock : source.clock ≠ 0) (stateRel : panToCrepStateRelFiniteExact source target)
+    (codeRel : codeRelExactHOLW ctxt source.code target.code)
+    (excpRel : panToCrepExcpRelFiniteExact ctxt.eids source.eshapes)
+    (localsRel : panToCrepLocalsRelFiniteExact ctxt source.locals target.locals)
+    (localised : everyExpListHOL localisedExpHOL argexps = true) :
+    ∃ shapes : List (MlS × ShapeHOL),
+      let ns := List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd)))
+      let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
+      let sourceEntry := PanSemStateFiniteExact.callEntryStateHOLFinite source locals
+      let targetEntry := {decClockCrepSemHOL target with locals := tlcHOL ns args}
+      source.code.lookup fname = some (shapes,body,rsh) ∧
+      localisedProgHOL body = true ∧
+      target.code.lookup fname = some (ns,compileProgExactHOLW next body) ∧
+      controlSteps (.call none fname argexps) source = 1 + controlSteps body sourceEntry ∧
+      CrepSteps.steps (compileProgExactHOLW ctxt (.call none fname argexps)) target =
+        1 + CrepSteps.steps (compileProgExactHOLW next body) targetEntry ∧
+      panToCrepStateRelFiniteExact sourceEntry targetEntry ∧
+      codeRelExactHOLW next sourceEntry.code targetEntry.code ∧
+      panToCrepExcpRelFiniteExact next.eids sourceEntry.eshapes ∧
+      panToCrepLocalsRelFiniteExact next sourceEntry.locals targetEntry.locals := by
+  obtain ⟨shapes, hsrc, hbodyLocal, _, hlen, htargs, htlookup, hs, hc, he, hl⟩ :=
+    pcCompileCorrectCallPrelude source target ctxt fname argexps args body locals rsh hargs found stateRel codeRel excpRel localsRel localised
+  let ns := List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd)))
+  let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
+  have htgt := (codeRelExactHOLW_imp ctxt source.code target.code codeRel fname shapes body rsh hsrc).2.2
+  have targetClock : target.clock ≠ 0 := by rw [← stateRel.2.2.2.2.2.1]; exact clock
+  have localsEq : tlcHOL ns args = HolFiniteMapExact.empty.updateList (ns.zip (args.flatMap flattenHOL)) := by
+    simp only [lookupCodeFiniteHOL, htgt, hlen, List.nodup_range, and_self, if_true, Option.some.injEq,
+      Prod.mk.injEq, true_and] at htlookup
+    exact htlookup.symm
+  have count := CrepSteps.steps_call_tail fname ((compileExpExactHOLWList ctxt argexps).flatMap Prod.fst) target
+    (args.flatMap flattenHOL) ns (compileProgExactHOLW next body) htargs htgt hlen List.nodup_range targetClock
+  refine ⟨shapes,hsrc,hbodyLocal,htgt,controlSteps_tailCall fname argexps source args body locals rsh hargs found clock, ?_,hs,hc,he,hl⟩
+  dsimp [next,ns] at count localsEq
+  rw [localsEq]
+  simpa [compileProgExactHOLW,compileCallNoReturnExactHOLW,decClockCrepSemHOL] using count
+
 end SteppedFlapjack.PanToCrepSteps
