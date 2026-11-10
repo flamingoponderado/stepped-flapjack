@@ -1,37 +1,6 @@
-import SteppedFlapjack.StackRemoveSteps.OraclePrefix
+import SteppedFlapjack.StackRemoveSteps.ExplicitFields
 import SteppedFlapjack.LoopToWordSteps.FullInitNativeSetup
 import Flapjack.Compiler.Backend.StackRemove.Proofs.InitAny
-namespace SteppedFlapjack.StackRemoveSteps.CompCorrect
-open Flapjack Flapjack.Compiler.Backend.StackLang Flapjack.Compiler.Backend.StackRemove
-open Flapjack.Compiler.Backend.StackRemove.Proofs
-variable {width : Nat} [NeZero width] {C F : Type}
-
-/-- The finite code-and-oracle factor calculated from explicit compiler inputs. -/
-def costFromFields (bounds : BitVec width × BitVec width) (n : Nat) (p : HolProg width)
-    (code : Spt (HolProg width)) (bitmaps : List (BitVec width))
-    (oracle : Nat → C × List (Nat × HolProg width) × List (BitVec width)) : Nat :=
-  let budget := bitmaps.length + oracleBitmapBudget n oracle
-  max 1 (max (leafCost budget bounds p) (max
-    (maxListNat ((sptToAList code).map fun e => leafCost budget bounds e.2))
-    (maxListNat ((List.range n).flatMap fun index =>
-      ((oracle index).2.1.map fun e => leafCost budget bounds e.2)))))
-
-/-- The code-and-oracle factor depends only on those input fields. -/
-theorem costFromFields_eq (bounds : BitVec width × BitVec width) (n : Nat)
-    (p : HolProg width) (s : StackSemStateFiniteExact width C F) :
-    computedRunCost bounds n p s = costFromFields bounds n p s.code s.bitmaps s.compileOracle := by
-  rfl
-
-/-- Either initializer branch is bounded by the same explicit field calculation. -/
-theorem makeInitAny_cost_bounded (gc jump : Bool) (maxHeap : Nat) (bitmaps : List (BitVec width)) (dataSpace : Nat)
-    (oracle : Nat → C × List (Nat × HolProg width) × List (BitVec width))
-    (bounds : BitVec width × BitVec width) (pointer : Nat) (code : Spt (HolProg width))
-    (s : StackSemStateFiniteExact width C F) (n : Nat) (p : HolProg width) :
-    computedRunCost bounds n p (InitMake.makeInitAny gc maxHeap bitmaps dataSpace oracle jump bounds pointer code s) ≤
-      max (costFromFields bounds n p code bitmaps oracle) (costFromFields bounds n p code [4] oracle) := by
-  rw [costFromFields_eq,InitAny.makeInitAnyCode,InitAny.makeInitAnyCompileOracle,InitAny.makeInitAnyBitmaps]
-  split <;> simp
-end SteppedFlapjack.StackRemoveSteps.CompCorrect
 namespace SteppedFlapjack.LoopToWordSteps
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Encoders.RiscV.Target
