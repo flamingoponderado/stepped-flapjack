@@ -65,34 +65,36 @@ theorem sixBoundedDirectTail_nonzero {width : Nat} [NeZero width] {C F : Type}
 
 /-- The zero-clock call times out at the call node on both sides. -/
 theorem sixBoundedDirectTail {width : Nat} [NeZero width] {C F : Type}
-    (loc : Nat) (body : HolLoopProg width) (shape : LoopProgram body)
-    (s : LoopSemStateFiniteExact width F)
-    (found : findCode (some loc) [] s.code = some (.ln,body)) :
-    SixBoundPropertyAt C (.call none (some loc) [] none) s := by
+    (loc : Nat) (vars : List Nat) (vals : List (WordLocW width)) (env : Spt (WordLocW width))
+    (body : HolLoopProg width) (s : LoopSemStateFiniteExact width F)
+    (bodyProp : s.clock ≠ 0 → SixBoundPropertyAt C body {decClock s with locals := env})
+    (get : getVars vars s = some vals) (found : findCode (some loc) vals s.code = some (env,body)) :
+    SixBoundPropertyAt C (.call none (some loc) vars none) s := by
   by_cases clock : s.clock = 0
   · intro res final t ctxt retv labels premises
     obtain ⟨run,nonerror,state,locals,ret,dim,notWord,acc⟩ := premises
-    have qualitative := compileCorrect_Call_TailCall (C := C) (some loc) [] none s
+    have qualitative := compileCorrect_Call_TailCall (C := C) (some loc) vars none s
       (by intro vals pair env prog h; exact False.elim (h.2.2.2.2.2 clock))
       res final t ctxt retv labels ⟨run,nonerror,state,locals,ret,dim,notWord,acc⟩
     obtain ⟨tf,rf,evalTarget,ffi,relation⟩ := qualitative
     refine ⟨tf,rf,evalTarget,ffi,relation,?_⟩
     obtain ⟨len,hm,hmd,hsmd,hclock,hbe,hffi,hcur,hlen,htop,hglob,hcode⟩ := state
     obtain ⟨args,ss,calleeCtxt,calleeLabels,wordFound,hret,hcalleelocals,hacc⟩ :=
-      findCode_rel s.code t.code t.stackSize (some loc) [] .ln body retv hcode found
-    have wordArgs : WordSemStateFiniteExact.getVars [0] t = some [retv] := by
-      simp [WordSemStateFiniteExact.getVars,WordSemStateFiniteExact.getVar,ret]
+      findCode_rel s.code t.code t.stackSize (some loc) vals env body retv hcode found
+    obtain ⟨wordGet, _⟩ := LoopToWord.localsRelHOLGetVars ctxt s t vars vals ⟨locals,get⟩
+    have wordArgs : WordSemStateFiniteExact.getVars (0 :: vars.map (LoopToWord.findVarHOL ctxt)) t = some (retv :: vals) := by
+      simp [WordSemStateFiniteExact.getVars,WordSemStateFiniteExact.getVar,ret,wordGet]
     have targetClock : t.clock = 0 := by rw [hclock]; exact clock
-    have wordSteps : WordSteps.steps (.call none (some loc) [0] none) t = 1 := by
+    have wordSteps : WordSteps.steps (.call none (some loc) (0 :: vars.map (LoopToWord.findVarHOL ctxt)) none) t = 1 := by
       rw [WordSteps.steps.eq_def]
       simp [wordArgs,wordSemBadDestArgs,wordSemAddRetLoc,wordFound,targetClock]
-    have loopSteps : LoopSteps.steps (.call none (some loc) [] none) s = 1 := by
+    have loopSteps : LoopSteps.steps (.call none (some loc) vars none) s = 1 := by
       rw [LoopSteps.steps.eq_def]
-      simp [show getVars [] s = some [] from rfl,found,clock]
-    simp only [LoopToWord.compHOL,List.map_nil]
+      simp [get,found,clock]
+    simp only [LoopToWord.compHOL]
     rw [wordSteps,loopSteps]
     omega
-  · exact sixBoundedDirectTail_nonzero loc [] [] .ln body s (loopProgram_correct_with_steps shape _) rfl found clock
+  · exact sixBoundedDirectTail_nonzero loc vars vals env body s (bodyProp clock) get found clock
 
 /-- Every supported branch is included in the quantitative Loop fragment. -/
 theorem loopBranch_program {width : Nat} [NeZero width] {p : HolLoopProg width}
@@ -129,7 +131,7 @@ theorem singleTailEntry_correct_with_steps {width : Nat} [NeZero width] {C F : T
       findCode (some loc) [] s.code = some (.ln,body) → SixBoundPropertyAt C p s := by
   induction shape with
   | branch h => intro s _; exact loopProgram_correct_with_steps (loopBranch_program h) s
-  | call => intro s found; exact sixBoundedDirectTail loc body bodyShape s found
+  | call => intro s found; exact sixBoundedDirectTail loc [] [] .ln body s (fun _ => loopProgram_correct_with_steps bodyShape _) rfl found
   | @seq a b ha hb iha ihb =>
     intro s found
     apply sixBoundedSeq a b s
