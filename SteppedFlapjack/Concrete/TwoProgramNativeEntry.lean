@@ -1,9 +1,11 @@
 import SteppedFlapjack.Concrete.CountdownStackSpan
 import SteppedFlapjack.Concrete.WordTables
 import SteppedFlapjack.Concrete.FixtureWordStarter
+import SteppedFlapjack.WordAllocSteps.CompiledCodeTail
 import Flapjack.Compiler.Backend.RegAlloc.Executable
 open Flapjack Flapjack.Basis.Pure.MlString Flapjack.Pancake.PanLang Flapjack.Compiler.Backend
 open Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Encoders.RiscV.Target
+open SteppedFlapjack.WordSimpSteps
 open SteppedFlapjack.Concrete SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.WordAllocSteps SteppedFlapjack.WordToStackSteps
 namespace SteppedFlapjack.Concrete
 
@@ -50,4 +52,37 @@ theorem twoProgram_optimizedEntry_frame (arch : Flapjack.Compiler.Encoders.Asm.A
   simp only [Option.map_some]
   rw [nativeEntryFrameSize_compile]
   with_unfolding_all rfl
+/-- The actual optimized callee of a scalar fixture is a flat loop block. -/
+theorem twoProgram_optimizedCallee (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture) (name callee : MlString)
+    (body : CrepProgHOL 64) (fresh : name ≠ callee) (shape : ScalarProgram body) :
+    let programs := loopToWordCompileHOL (compileProgHOLExact arch (twoPrograms name callee body))
+    let code := sptFromAList (compile countdownRiscVBackend.wordToWordConf riscvConfig programs).2
+    WordProps.noInstallCode code ∧ RegTailLocalCode countdownOptimizedEntry code := by
+  let programs := loopToWordCompileHOL (compileProgHOLExact arch (twoPrograms name callee body))
+  let code := sptFromAList (compile countdownRiscVBackend.wordToWordConf riscvConfig programs).2
+  let calleeWord := loopToWordCompFuncHOL 65 [] (twoCallee arch name callee body)
+  let out := (fullCompileSingle riscvConfig.twoRegArith countdownZeroLimit countdownRiscVBackend.wordToWordConf.regAlg riscvConfig
+    ((65,1,calleeWord),entryColour countdownRiscVBackend.wordToWordConf programs 65)).2.2
+  have facts := twoWordTables_facts arch name callee body fresh shape
+  have loopEq := (twoLoopPrograms_eq arch name callee body shape).symm
+  have mem : (65,1,calleeWord) ∈ programs := by simpa [programs,calleeWord,loopEq] using facts.2.1
+  have nodup : (programs.map Prod.fst).Nodup := by simpa [programs,loopEq] using facts.2.2.1
+  have shapes : TailProgramShapes programs := by simpa [programs,loopEq] using facts.2.2.2.1
+  have wordShape : LoopSequence calleeWord := by simpa [calleeWord] using facts.2.2.2.2.2.1
+  have lookup : sptLookup 65 code = some (1,out) := by
+    simpa [code,out,countdownZeroLimit] using
+      (wholeCompile_entry_lookups countdownRiscVBackend.wordToWordConf riscvConfig programs 65 1 calleeWord mem nodup).2
+  have relations := wholeCompile_tail_codeRelations countdownRiscVBackend.wordToWordConf riscvConfig programs shapes
+  have outShape : LoopSequence out := by
+    dsimp only [out]
+    rw [fullCompileSingle_eq_alloc riscvConfig riscvConfig.twoRegArith 1 65 countdownRiscVBackend.wordToWordConf.regAlg countdownZeroLimit _ wordShape]
+    simpa only using wordAlloc_loopSequence 65 riscvConfig countdownRiscVBackend.wordToWordConf.regAlg countdownZeroLimit _ (preAlloc_shape riscvConfig riscvConfig.twoRegArith 1 wordShape)
+  have flat : flatExpConventions out = true :=
+    codeRel_target_flat _ _ relations.2.2.1 relations.2.2.2.1 65 1 out lookup
+  refine ⟨relations.2.2.2.2.1,?_⟩
+  intro loc call
+  cases call with
+  | left h => cases h
+  | right h => cases h; exact ⟨1,out,lookup,flat_loopSequence_block outShape flat⟩
+
 end SteppedFlapjack.Concrete
