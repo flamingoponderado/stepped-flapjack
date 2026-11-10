@@ -173,7 +173,7 @@ private def ProgramBound {width : Nat} [NeZero width]
 /-- Sequence composition for the structural induction. -/
 private theorem programBound_seq {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) (a b : ProgHOL width)
-    (aShape : FrontendProgram context a) (aBound : ProgramBound context a)
+    (aLocalised : localisedProgHOL a = true) (aBound : ProgramBound context a)
     (bBound : ProgramBound context b) : ProgramBound context (.seq a b) := by
   intro K weight σ source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
   have factorPositive : 1 ≤ K := (CrepSteps.statementWeight_pos _).trans weight
@@ -192,7 +192,7 @@ private theorem programBound_seq {width : Nat} [NeZero width]
     (pcCompileCorrectAt_iff_HOL _ _).mpr (pcCompileCorrect_all _ _)
   obtain ⟨targetResult,targetPost,targetRun,postState,postCode,postExcp,resultRel⟩ :=
     correct firstResult middle target context firstRun firstNonerror stateRel codeRel excpRel localsRel
-      (frontendProgram_localised aShape)
+      aLocalised
   have leftSize : CrepSteps.statementWeight (compileProgExactHOLW context a) ≤
       CrepSteps.statementWeight (compileProgExactHOLW context (.seq a b)) := by
     simp only [compileProgExactHOLW]
@@ -234,11 +234,11 @@ private theorem programBound_seq {width : Nat} [NeZero width]
 /-- Loop composition for the structural induction. -/
 private theorem programBound_while {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) (condition : ExpHOL width) (body : ProgHOL width)
-    (conditionShape : FrontendScalar context condition) (bodyShape : FrontendProgram context body)
+    (conditionShape : FrontendScalar context condition) (bodyLocalised : localisedProgHOL body = true)
     (bodyBound : ProgramBound context body) : ProgramBound context (.while condition body) := by
   intro K weight σ source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
-  have localised : localisedProgHOL (.while condition body) = true :=
-    frontendProgram_localised (.while conditionShape bodyShape)
+  have localised : localisedProgHOL (.while condition body) = true := by
+    simp [localisedProgHOL,frontendScalar_localised conditionShape,bodyLocalised]
   obtain ⟨ce,compiled⟩ := frontendWhile_compile context condition body conditionShape
   have sizeBound : CrepSteps.statementWeight (compileProgExactHOLW context body) ≤ K := by
     rw [compiled] at weight
@@ -400,9 +400,9 @@ private theorem frontendProgramBound {width : Nat} [NeZero width]
   | store a v => exact programBound_static (.store a v) rfl
   | assign reg found e => exact programBound_static (.assign reg found e) rfl
   | decl e body ih => exact programBound_decl _ _ _ _ e ih
-  | seq a b iha ihb => exact programBound_seq _ _ _ a iha ihb
+  | seq a b iha ihb => exact programBound_seq _ _ _ (frontendProgram_localised a) iha ihb
   | ite condition a b iha ihb => exact programBound_ite _ _ _ _ condition iha ihb
-  | «while» condition body ih => exact programBound_while _ _ _ condition body ih
+  | «while» condition body ih => exact programBound_while _ _ _ condition (frontendProgram_localised body) ih
   | ret e => exact programBound_static (.ret e) rfl
 
 /-- Every generalized frontend program has a Crep visit bound computed only
