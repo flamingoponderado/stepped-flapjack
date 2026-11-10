@@ -1,4 +1,4 @@
-import SteppedFlapjack.Concrete.InitEMemory
+import SteppedFlapjack.Concrete.FixtureCodeMemory
 import Flapjack.Compiler.Backend.RiscVConfig.Proofs
 import SteppedFlapjack.PanToCrepSteps.RiscVBackendCountdown
 import Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
@@ -9,6 +9,97 @@ open Flapjack.Compiler.Backend.RiscVConfig
 
 namespace SteppedFlapjack.Concrete
 
+/-- The fixture uses the exact heap limit passed by the native backend. -/
+theorem fixture_backend_maxHeap :
+    2 * DataToWord.maxHeapLimit 64 countdownRiscVBackend.dataConf - 1 = 2^53-1 := by
+  decide +kernel
+
+/-- The label-removal result used to load this exact Stack program. -/
+noncomputable def fixtureCodeBytes (code : List (Nat × HolProg 64)) : List (BitVec 8) :=
+  match LabToTarget.removeLabels 5 riscvConfig 0 .ln []
+      (LabFilter.filterSkip (StackToLab.compile countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf
+        (2^53-1) 24 riscvConfig.addrOffset code)) with
+  | some (code2,_) => LabToTarget.progToBytes code2
+  | none => []
+
+/-- The machine starts immediately before the fixture's code buffer. -/
+noncomputable def fixtureCodeStart (code : List (Nat × HolProg 64)) : BitVec 64 :=
+  0x800f0134 - BitVec.ofNat 64 (fixtureCodeBytes code).length
+
+/-- Initial memory agrees on the fixture domain and contains loaded code elsewhere. -/
+noncomputable def fixtureLabMemoryFor (code : List (Nat × HolProg 64)) (a : BitVec 64) : WordLocW 64 :=
+  if fixtureLabDomain a then fixtureLabMemory a else .word (fixtureLoadedWords (fixtureCodeStart code) (fixtureCodeBytes code) a)
+
+/-- The emitted bytes end exactly at the fixture's existing code buffer. -/
+theorem fixtureCodeStart_add_length (code : List (Nat × HolProg 64)) :
+    fixtureCodeStart code + BitVec.ofNat 64 (fixtureCodeBytes code).length = 0x800f0134 := by
+  simp [fixtureCodeStart]
+
+/-- A fitting stream has the expected natural entry address. -/
+theorem fixtureCodeStart_toNat (code : List (Nat × HolProg 64))
+    (fits : (fixtureCodeBytes code).length ≤ 0x800f0134) :
+    (fixtureCodeStart code).toNat = 0x800f0134 - (fixtureCodeBytes code).length := by
+  have small : (BitVec.ofNat 64 (fixtureCodeBytes code).length).toNat = (fixtureCodeBytes code).length := by
+    rw [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hle : BitVec.ofNat 64 (fixtureCodeBytes code).length ≤ (0x800f0134 : BitVec 64) := by
+    rw [BitVec.le_def,small]
+    exact fits
+  rw [fixtureCodeStart,BitVec.toNat_sub_of_le hle,small]
+  rfl
+
+/-- Word-sized encoded instructions give a word-aligned machine entry. -/
+theorem fixtureCodeStart_aligned (code : List (Nat × HolProg 64))
+    (fits : (fixtureCodeBytes code).length ≤ 0x800f0134)
+    (aligned : (fixtureCodeBytes code).length % 4 = 0) :
+    (fixtureCodeStart code).toNat % 4 = 0 := by
+  rw [fixtureCodeStart_toNat code fits]
+  omega
+
+/-- A code stream of at most 60 KiB ends below the bitmap. -/
+theorem fixtureCodeStart_fits (code : List (Nat × HolProg 64))
+    (fits : (fixtureCodeBytes code).length ≤ 61440) :
+    (fixtureCodeStart code).toNat + (fixtureCodeBytes code).length ≤ 0xa0020018 := by
+  have hle : BitVec.ofNat 64 (fixtureCodeBytes code).length ≤ (0x800f0134 : BitVec 64) := by
+    rw [BitVec.le_def,BitVec.toNat_ofNat]
+    have small : (fixtureCodeBytes code).length < 2^64 := by omega
+    rw [Nat.mod_eq_of_lt small]
+    change (fixtureCodeBytes code).length ≤ 0x800f0134
+    omega
+  unfold fixtureCodeStart
+  rw [BitVec.toNat_sub_of_le hle,BitVec.toNat_ofNat]
+  have small : (fixtureCodeBytes code).length < 2^64 := by omega
+  rw [Nat.mod_eq_of_lt small]
+  change 0x800f0134 - (fixtureCodeBytes code).length + (fixtureCodeBytes code).length ≤ 0xa0020018
+  omega
+
+/-- For a fitting program the memory is exactly its word-backed loaded image. -/
+theorem fixtureLabMemoryFor_eq_loaded (code : List (Nat × HolProg 64))
+    (fits : (fixtureCodeBytes code).length ≤ 61440) (a : BitVec 64) :
+    fixtureLabMemoryFor code a = .word (fixtureLoadedWords (fixtureCodeStart code) (fixtureCodeBytes code) a) := by
+  by_cases domain : fixtureLabDomain a
+  · simp only [fixtureLabMemoryFor,if_pos domain]
+    exact (fixtureLoadedWords_domain (fixtureCodeStart code) (fixtureCodeBytes code)
+      (fixtureCodeStart_fits code fits) a domain).symm
+  · simp [fixtureLabMemoryFor,domain]
+
+/-- Loading code does not change the initializer's separated heap and bitmap. -/
+theorem fixtureLabMemoryFor_separated (code : List (Nat × HolProg 64)) : SetSep.star
+    (SetSep.star (Misc.wordList fixtureBitmapBase [(.word 4 : WordLocW 64)]) (Misc.wordListExists (fixtureBitmapBase+8) 0))
+    (Misc.wordListExists heapBase fixtureLabHeapWords)
+    (SetSep.fun2Set (fixtureLabMemoryFor code,fixtureLabDomain)) := by
+  have graph : SetSep.fun2Set (fixtureLabMemoryFor code,fixtureLabDomain) =
+      SetSep.fun2Set (fixtureLabMemory,fixtureLabDomain) := by
+    funext pair
+    apply propext
+    rcases pair with ⟨a,w⟩
+    simp only [SetSep.fun2SetThm]
+    constructor <;> intro ⟨h,domain⟩
+    · exact ⟨by simpa [fixtureLabMemoryFor,domain] using h,domain⟩
+    · exact ⟨by simpa [fixtureLabMemoryFor,domain] using h,domain⟩
+  rw [graph]
+  exact fixtureLabMemory_separated
+
 /-- Concrete heap and stack pointer registers for the Lab initializer. -/
 def fixtureLabRegs (r : Nat) : WordLocW 64 :=
   if r = 11 then .word heapBase else if r = 12 then .word (BitVec.ofNat 64 heapEnd)
@@ -18,7 +109,7 @@ def fixtureLabRegs (r : Nat) : WordLocW 64 :=
 noncomputable def fixtureLab (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) : LabSem.State 64 LabToTarget.Config Unit where
   regs := fixtureLabRegs
   fpRegs := fun _ => 0
-  memory := fixtureLabMemory
+  memory := fixtureLabMemoryFor code
   memDomain := fun a => decide (fixtureLabDomain a)
   sharedMemDomain := fun a => decide (sharedAddress a)
   pc := 0
@@ -28,8 +119,8 @@ noncomputable def fixtureLab (code : List (Nat × HolProg 64)) (cfg : LabToTarge
   ccRegs := fun _ _ => none
   ioFpRegs := fun _ _ => 0
   ccFpRegs := fun _ _ => 0
-  code := StackToLab.compile countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^61) 24 riscvConfig.addrOffset code
-  compile := fun _ _ => none
+  code := StackToLab.compile countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset code
+  compile := LabToTarget.compile riscvConfig
   compileOracle := fun _ => (cfg,StackToLab.compileNoStubs countdownRiscVBackend.stackConf.regNames countdownRiscVBackend.stackConf.jump riscvConfig.addrOffset 24 [])
   codeBuffer := ⟨0x800f0134,[],0xecc⟩
   clock := 0
@@ -52,8 +143,17 @@ theorem fixtureLab_memoryAssumption (code : List (Nat × HolProg 64)) (cfg : Lab
   have heapCount : ((-1 * heapBase + BitVec.ofNat 64 ramEnd).toNat / (StackRemove.bytesInWord 64).toNat) = fixtureLabHeapWords := by decide
   have bitmapEnd : fixtureBitmapBase + StackRemove.bytesInWord 64 * BitVec.ofNat 64 (([4] : List (BitVec 64)).length) = fixtureBitmapBase+8 := by decide
   simp only [List.length_cons,List.length_nil,Nat.zero_add] at bitmapEnd
-  have sep := fixtureLabMemory_separated
-  simp only [fixtureLab,r2,r3,r4,fixtureLabRegs] 
+  have sep := fixtureLabMemoryFor_separated code
+  simp only [fixtureLab,r2,r3,r4,fixtureLabRegs]
+  have memEq : ∀ a, fixtureLabDomain a → fixtureLabMemoryFor code a = fixtureLabMemory a := by
+    intro a h
+    simp [fixtureLabMemoryFor,h]
+  have h0 : fixtureLabDomain heapBase := by decide
+  have h1 : fixtureLabDomain (heapBase + StackRemove.bytesInWord 64) := by decide
+  have h2 : fixtureLabDomain (heapBase + 2 * StackRemove.bytesInWord 64) := by decide
+  have h3 : fixtureLabDomain (heapBase + 3 * StackRemove.bytesInWord 64) := by decide
+  have h4 : fixtureLabDomain (heapBase + 4 * StackRemove.bytesInWord 64) := by decide
+  rw [memEq _ h0, memEq _ h1, memEq _ h2, memEq _ h3, memEq _ h4]
   refine ⟨by decide,by decide,by decide,by decide,by decide,by decide,by decide,by decide,by trivial,
     by decide,by rw [Flapjack.Pancake.Proofs.PanToTarget.holByteAligned_iff_mod (Or.inr rfl)]; decide,
     by rw [Flapjack.Pancake.Proofs.PanToTarget.holByteAligned_iff_mod (Or.inr rfl)]; decide,
@@ -97,7 +197,7 @@ theorem fixtureRegNames_bijective : Function.Bijective (StackNames.findNameSpt c
 /-- The concrete Lab initializer meets its assumptions for well-formed Stack code. -/
 theorem fixtureLab_initAssumptions (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
     (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
-    Assumptions countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^61) 24 riscvConfig.addrOffset
+    Assumptions countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
       [4] code (fixtureLab code cfg) fixtureSavedRegs 0 (fixtureStackOracle cfg) := by
   refine ⟨Or.inr rfl, rfl, rfl, ?_, fixtureLab_memoryAssumption code cfg, ?_, ?_, rfl, ?_, ?_, ?_, ?_,
     good, ?_, by decide, ?_, rfl,rfl,rfl,rfl,rfl,fixtureRegNames_bijective⟩

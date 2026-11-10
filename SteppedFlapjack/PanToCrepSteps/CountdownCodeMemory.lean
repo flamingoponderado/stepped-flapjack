@@ -1,9 +1,13 @@
-import SteppedFlapjack.PanToCrepSteps.CountdownBitmapLayout
+import SteppedFlapjack.PanToCrepSteps.CountdownMachineState
 import Flapjack.Misc.GetByteSetByte
 
 /-! Construct word memory containing the compiled byte stream. -/
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Compiler.Backend
+
+/-- Construct byte memory from a word-backed image. -/
+noncomputable def countdownBytesOfWords (words : BitVec 64 → BitVec 64) (a : BitVec 64) : BitVec 8 :=
+  HolByte.getByte a (words (holByteAlign a)) false
 
 /-- Update one byte while retaining a word-valued memory. -/
 noncomputable def countdownStoreByte (words : BitVec 64 → BitVec 64)
@@ -65,6 +69,29 @@ theorem countdownWriteCode_get (bytes : List (BitVec 8)) (address : BitVec 64)
       rw [countdownStoreByte_other _ _ _ _ different,offset]
       exact ih (address + 1) i hiTail sizeTail
 
+
+/-- Writing code leaves a word untouched if no byte in the stream belongs to it. -/
+theorem countdownWriteCode_other_word (bytes : List (BitVec 8)) (address word : BitVec 64)
+    (words : BitVec 64 → BitVec 64)
+    (outside : ∀ i, i < bytes.length → holByteAlign (address + BitVec.ofNat 64 i) ≠ word) :
+    countdownWriteCode address bytes words word = words word := by
+  induction bytes generalizing address with
+  | nil => rfl
+  | cons b bs ih =>
+    have head : word ≠ holByteAlign address := by
+      have h := outside 0 (by simp)
+      apply Ne.symm
+      simpa using h
+    have tail : ∀ i, i < bs.length → holByteAlign ((address + 1) + BitVec.ofNat 64 i) ≠ word := by
+      intro i hi
+      have h := outside (i+1) (by simp; omega)
+      have offset : address + BitVec.ofNat 64 (i+1) = (address+1) + BitVec.ofNat 64 i := by
+        rw [BitVec.ofNat_add]
+        ac_rfl
+      simpa only [offset] using h
+    simp only [countdownWriteCode,countdownStoreByte,if_neg head]
+    exact ih (address+1) tail
+
 /-- Build the original sequential byte-loading assertion from indexed facts. -/
 theorem bytesInMem_of_indexed (bytes : List (BitVec 8)) (address : BitVec 64)
     (mem : BitVec 64 → BitVec 8) (domain excluded : BitVec 64 → Prop)
@@ -86,46 +113,5 @@ theorem bytesInMem_of_indexed (bytes : List (BitVec 8)) (address : BitVec 64)
       rw [BitVec.ofNat_add]
       ac_rfl
     simpa only [offset,List.getElem_cons_succ] using tail
-
-/-- The concrete metadata and bitmap overlays preserve the loaded code bytes. -/
-theorem countdownExample_codeLoaded (bytes : List (BitVec 8)) (cbspace : Nat)
-    (bitmap : BitVec 64) (initial : BitVec 64 → BitVec 64)
-    (fits : bytes.length + cbspace ≤ 61440) :
-    let rest := countdownWriteCode 4096 bytes initial
-    let backing := countdownExampleBitmapBacking bitmap rest
-    let words := countdownExampleWords bytes cbspace 8191 [bitmap] backing
-    let mem := countdownBytesOfWords words
-    bytesInMemHOL 4096 bytes mem countdownMachineConfig.progAddresses
-      (fun a => countdownStackByteDomain countdownRiscVBackend (countdownAsmState mem countdownExampleRegs)
-        countdownExampleBitmapsDomain a = true) := by
-  dsimp only
-  apply bytesInMem_of_indexed
-  intro i hi
-  have len : bytes.length < 2^64 := by omega
-  have addr : ((4096 : BitVec 64) + BitVec.ofNat 64 i).toNat = 4096 + i := by
-    simp only [BitVec.toNat_add,BitVec.toNat_ofNat]
-    simp
-    omega
-  have al : (holByteAlign ((4096 : BitVec 64) + BitVec.ofNat 64 i)).toNat < 65536 := by
-    rw [holByteAlign_toNat (Or.inr rfl),addr]
-    have h := Nat.div_mul_le_self (4096+i) 8
-    omega
-  refine ⟨?_,?_,?_⟩
-  · change 4096 ≤ ((4096 : BitVec 64) + BitVec.ofNat 64 i).toNat
-    rw [addr]
-    omega
-  · rw [countdownExampleByteDomain_eq]
-    simp only [countdownExampleByteDomain,decide_eq_true_eq]
-    rw [addr]
-    omega
-  · unfold countdownBytesOfWords
-    rw [countdownExampleWords_other _ _ _ _ _ _ (Or.inl al)]
-    have ne : holByteAlign ((4096 : BitVec 64) + BitVec.ofNat 64 i) ≠ (131072 : BitVec 64) := by
-      intro h
-      have hn := congrArg BitVec.toNat h
-      change (holByteAlign ((4096 : BitVec 64) + BitVec.ofNat 64 i)).toNat = 131072 at hn
-      omega
-    simp only [countdownExampleBitmapBacking,if_neg ne]
-    exact countdownWriteCode_get bytes 4096 initial i hi len
 
 end SteppedFlapjack.PanToCrepSteps

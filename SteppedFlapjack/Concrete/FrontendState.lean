@@ -1,6 +1,5 @@
 import SteppedFlapjack.Concrete.FrontendShape
 import Flapjack.Pancake.CrepInline.InlineRouteBridge
-import SteppedFlapjack.PanToCrepSteps.SourceInitialFrontend
 import SteppedFlapjack.PanToCrepSteps.TailEntryRelations
 
 /-! Concrete frontend states using the compiler's generated function tables. -/

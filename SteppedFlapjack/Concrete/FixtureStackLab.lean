@@ -13,14 +13,14 @@ noncomputable def fixtureLabTickLimit (code : List (Nat × HolProg 64)) (cfg : L
   let entry := (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
   let generated := sptFromAList (code1 countdownRiscVBackend.dataConf code)
   let factor := costFromFields riscvConfig.addrOffset 0 entry generated [4] (coracle1 (fixtureStackOracle cfg))
-  flattenStepFactor * (2 + loopOnlyCost 0 (initCode (StackToLab.isGenGc countdownRiscVBackend.dataConf.gcKind) (2^61) 24 : HolProg 64) +
+  flattenStepFactor * (2 + loopOnlyCost 0 (initCode (StackToLab.isGenGc countdownRiscVBackend.dataConf.gcKind) (2^53-1) 24 : HolProg 64) +
     factor * (uniformFactor (width := 64) countdownRiscVBackend.dataConf * n) + 4)
 
 /-- The general oracle-prefix calculation specializes to that static factor. -/
 theorem fixtureLabTickLimit_eq (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (n : Nat) :
-    stackLabTickLimit countdownRiscVBackend.dataConf (2^61) 24 riscvConfig.addrOffset [4] code (fixtureStackOracle cfg) n =
+    stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset [4] code (fixtureStackOracle cfg) n =
       fixtureLabTickLimit code cfg n := by
-  change stackLabTickLimit countdownRiscVBackend.dataConf (2^61) 24 riscvConfig.addrOffset [4] code
+  change stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset [4] code
     (fun _ => (cfg,[],[])) n = _
   rw [stackLabTickLimit_emptyOracle]
   have oracle : coracle1 (fixtureStackOracle cfg) = (fun _ => (cfg,[],[])) := by funext i; rfl
@@ -41,7 +41,7 @@ theorem fixtureStack_lab_return (code : List (Nat × HolProg 64)) (cfg : LabToTa
   have entryEq : BvlToBvi.initGlobalsLocation = 64 := by decide
   rw [← fixtureLabTickLimit_eq]
   apply fullInitStackLab_explicit countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf
-    (2^61) 24 riscvConfig.addrOffset [4] code (fixtureTargetLab code cfg ms) fixtureSavedRegs 0 (fixtureStackOracle cfg)
+    (2^53-1) 24 riscvConfig.addrOffset [4] code (fixtureTargetLab code cfg ms) fixtureSavedRegs 0 (fixtureStackOracle cfg)
     (by decide) (fixtureTargetLab_assumptions code cfg ms good) clock limit (some (.result (.loc 1 0))) post .success
   · simpa only [entryEq,fixtureTargetLab_stack] using run
   · simp

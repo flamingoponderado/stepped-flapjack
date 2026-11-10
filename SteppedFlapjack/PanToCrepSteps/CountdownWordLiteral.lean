@@ -1,4 +1,5 @@
-import SteppedFlapjack.PanToCrepSteps.CountdownStructuralLab
+import SteppedFlapjack.CrepToLoopSteps.ExecutableFrontend
+import SteppedFlapjack.PanToCrepSteps.CountdownBitmapProof
 
 /-! A kernel-checked concrete Word frontend for the countdown example. -/
 namespace SteppedFlapjack.PanToCrepSteps

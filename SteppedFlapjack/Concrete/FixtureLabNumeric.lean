@@ -10,7 +10,7 @@ set_option maxRecDepth 100000 in
 private theorem fixtureUniformFactor : uniformFactor (width := 64) countdownRiscVBackend.dataConf = 19 := by decide +kernel
 
 set_option maxRecDepth 100000 in
-private theorem fixtureInitCost : loopOnlyCost 0 (initCode (StackToLab.isGenGc countdownRiscVBackend.dataConf.gcKind) (2^61) 24 : HolProg 64) = 361 := by decide +kernel
+private theorem fixtureInitCost : loopOnlyCost 0 (initCode (StackToLab.isGenGc countdownRiscVBackend.dataConf.gcKind) (2^53-1) 24 : HolProg 64) = 361 := by decide +kernel
 
 /-- A fixture with the checked code factor uses this numeric affine Lab clock. -/
 theorem fixtureLabTick_numeric (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (n : Nat)

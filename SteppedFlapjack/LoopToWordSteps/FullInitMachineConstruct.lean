@@ -42,7 +42,7 @@ def LabMachineInitGuards
     mc.target.getPc ms ∉ mc.ffiEntryPcs.take i)
 
 /-- Derive the full machine context from Lab initialization guards and the
-Stack-to-Lab initializer assumptions, keeping byte and aligned word domains distinct. -/
+Stack-to-Lab initializer assumptions, aligning both the data and shared word domains. -/
 noncomputable def fullInitMachineContext_of_alignedFilteredLabInit {F : Type}
     (stackConf : StackToLab.Config) (dataConf : DataToWord.Config) (maxHeap sp : Nat)
     (offset : BitVec 64 × BitVec 64) (bitmaps : List (BitVec 64))
@@ -58,10 +58,10 @@ noncomputable def fullInitMachineContext_of_alignedFilteredLabInit {F : Type}
     (guards : LabMachineInitGuards mc ms (LabFilter.filterSkip code) code2 labs labelClock i cbspace t m dm sdm
       (fun n => ((labOracle n).1,LabFilter.filterSkip (labOracle n).2)) newFfiNames shmemInfo newShmemInfo)
     (stackInit : Assumptions stackConf dataConf maxHeap sp offset bitmaps inputCode
-      (LabToTarget.makeInit mc ffi t m (fun a => dm a && holByteAligned a) sdm ms code (LabToTarget.compile mc.target.config)
+      (LabToTarget.makeInit mc ffi t m (fun a => dm a && holByteAligned a) (fun a => sdm a && holByteAligned a) ms code (LabToTarget.compile mc.target.config)
         (mc.target.getPc ms + BitVec.ofNat 64 (progToBytes code2).length) cbspace labOracle)
       saveRegs dataSp stackOracle) :
-    let lab := {LabToTarget.makeInit mc ffi t m (fun a => dm a && holByteAligned a) sdm ms code (LabToTarget.compile mc.target.config)
+    let lab := {LabToTarget.makeInit mc ffi t m (fun a => dm a && holByteAligned a) (fun a => sdm a && holByteAligned a) ms code (LabToTarget.compile mc.target.config)
       (mc.target.getPc ms + BitVec.ofNat 64 (progToBytes code2).length) cbspace labOracle with clock := labClock}
     FullInitMachineContext (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps inputCode lab saveRegs dataSp stackOracle).1 := by
   let lab0 := LabToTarget.makeInit mc ffi t m dm sdm ms code (LabToTarget.compile mc.target.config)
@@ -79,17 +79,17 @@ noncomputable def fullInitMachineContext_of_alignedFilteredLabInit {F : Type}
     exact SteppedFlapjack.LabToTargetSteps.filterRel_withClock _ _ labClock filterRel
   exact {
     stackConf := stackConf, dataConf := dataConf, maxHeap := maxHeap, sp := sp, offset := offset,
-    bitmaps := bitmaps, inputCode := inputCode, lab := LabProps.alignDm {lab0 with clock := labClock}, saveRegs := saveRegs,
+    bitmaps := bitmaps, inputCode := inputCode, lab := LabProps.alignSdm (LabProps.alignDm {lab0 with clock := labClock}), saveRegs := saveRegs,
     dataSp := dataSp, coracle := stackOracle,
     initAssumptions := by
       change Assumptions stackConf dataConf maxHeap sp offset bitmaps inputCode
-        {LabToTarget.makeInit mc ffi t m (fun a => dm a && holByteAligned a) sdm ms code
+        {LabToTarget.makeInit mc ffi t m (fun a => dm a && holByteAligned a) (fun a => sdm a && holByteAligned a) ms code
           (LabToTarget.compile mc.target.config)
           (mc.target.getPc ms + BitVec.ofNat 64 (progToBytes code2).length) cbspace labOracle with clock := labClock}
         saveRegs dataSp stackOracle
-      simpa [Assumptions,StackToLab.Proofs.MakeInit.memoryAssumption] using stackInit,
+      simpa [Assumptions,StackToLab.Proofs.MakeInit.memoryAssumption,LabProps.alignSdm,LabProps.alignDm] using stackInit,
     stackEq := rfl, pc := mc.target.getPc ms, mc := mc, labCode := code2, labs := labs, asm := t,
-    machine := ms, hmc := hmc, machineLab := {filteredLab with clock := labClock}, labRelation := Or.inr (Or.inr ⟨{lab0 with clock := labClock},rfl,filterClock⟩),
+    machine := ms, hmc := hmc, machineLab := {filteredLab with clock := labClock}, labRelation := Or.inr (Or.inr (Or.inr ⟨{lab0 with clock := labClock},rfl,filterClock⟩)),
     tie := by simpa [oracleTie,filteredLab] using tie,
     machineRel := by simpa [filteredLab] using stateRelClock _ filteredLab t ms labClock rel }
 

@@ -9,7 +9,7 @@ namespace SteppedFlapjack.Concrete
 theorem fixtureStack_heapBaseAndMemory (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
     (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
     (fixtureStack code cfg).store.lookup .currHeap = some (.word heapBase) ∧
-      ∀ a, (fixtureStack code cfg).mdomain a = true → (fixtureStack code cfg).memory a = fixtureLabMemory a := by
+      ∀ a, (fixtureStack code cfg).mdomain a = true → (fixtureStack code cfg).memory a = fixtureLabMemoryFor code a := by
   let ctx := fixtureStackContext code cfg good
   obtain ⟨current,read,store,mem⟩ := ctx.heap_base_and_memory_lab
   have r2 : StackNames.findNameSpt countdownRiscVBackend.stackConf.regNames 2 = 11 := by with_unfolding_all rfl
@@ -29,7 +29,7 @@ theorem fixtureStack_heapLength (code : List (Nat × HolProg 64)) (cfg : LabToTa
   have length := ctx.heap_length_lab
   simp only [FullInitStackContext.labHeapLength,ctx,fixtureStackContext,fixtureLab,r2,r3,r4,fixtureLabRegs] at length
   simp only [show (12 : Nat) ≠ 11 by decide,show (13 : Nat) ≠ 11 by decide,show (13 : Nat) ≠ 12 by decide,if_false,if_true,wordSemTheWord] at length
-  change (fixtureStack code cfg).store.lookup .heapLength = some (.word (BitVec.ofNat 64 (Flapjack.Compiler.Backend.StackRemove.Proofs.InitLimits.getStackHeapLimit (2^61) (BitVec.ofNat 64 sourceBase,BitVec.ofNat 64 heapEnd,BitVec.ofNat 64 ramEnd)).2 * StackRemove.bytesInWord 64)) at length
+  change (fixtureStack code cfg).store.lookup .heapLength = some (.word (BitVec.ofNat 64 (Flapjack.Compiler.Backend.StackRemove.Proofs.InitLimits.getStackHeapLimit (2^53-1) (BitVec.ofNat 64 sourceBase,BitVec.ofNat 64 heapEnd,BitVec.ofNat 64 ramEnd)).2 * StackRemove.bytesInWord 64)) at length
   rw [fixture_init_limits] at length
   simpa [fixtureHeapLength,StackRemove.bytesInWord] using length
 /-- The initialized Stack heap domain is exactly the source domain. -/
@@ -60,7 +60,10 @@ theorem fixtureStack_heapMemory (code : List (Nat × HolProg 64)) (cfg : LabToTa
     intro h
     subst a
     simp [ordinaryAddress,fixtureBitmapBase,sourceBase] at member
-  simpa [fixtureLabMemory,ne] using eq
+  have labDomain : fixtureLabDomain a := Or.inr ⟨member.1, by
+    simp only [ordinaryAddress,fixtureHeapEnd,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords] at member ⊢
+    omega, member.2.2⟩
+  simpa [fixtureLabMemoryFor,labDomain,fixtureLabMemory,ne] using eq
 
 /-- The FFI, byte order and shared-memory domain match the source fixture. -/
 theorem fixtureStack_ambient (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)

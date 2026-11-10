@@ -1,5 +1,3 @@
-import SteppedFlapjack.PanToCrepSteps.LabInitializedCountdown
-import SteppedFlapjack.PanToCrepSteps.LabCountedFullCompiler
 import SteppedFlapjack.PanToCrepSteps.SourceFullInitInputs
 import SteppedFlapjack.LoopToWordSteps.FullInitMachineConstruct
 import SteppedFlapjack.PanToCrepSteps.SingleEntrySourceEnvironment
@@ -116,66 +114,5 @@ theorem riscvTarget_mcConfOk
   rw [target,ptr,len,ptr2,len2]
   refine ⟨by simp [goodDimindex],Flapjack.RiscV.TargetProof.riscv_encoder_correct,?_,?_,?_,?_,?_,
     Flapjack.RiscV.TargetProof.riscv_enc_ok⟩ <;> decide
-
-/-- The actual compiled countdown has no installation instruction, so it
-satisfies the Lab initializer's no-install/no-shared-memory disjunction. -/
-theorem countdown_compiled_noInstall (name : Flapjack.Basis.Pure.MlString.MlString)
-    (initial returned : BitVec 64) (wc : Flapjack.Compiler.Backend.WordToWord.Config)
-    (stackConf : Flapjack.Compiler.Backend.StackToLab.Config) (dataConf : Flapjack.Compiler.Backend.DataToWord.Config)
-    (limit registers : Nat) (offset : BitVec 64 × BitVec 64) (ffis : List HolFfiName) :
-    let source := singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main")
-      (.dec name .one (.const initial) (.seq .skip (.seq
-        (.while (.var .local name) (.assign .local name (.op .sub [.var .local name,.const 1])))
-        (.return (.const returned)))))
-    let word := Flapjack.Compiler.Backend.WordToWord.compile wc riscvConfig
-      (panToWordCompileProgHOL riscvConfig.isa source)
-    let native := Flapjack.Compiler.Backend.WordToStack.Native.compileNative riscvConfig false word.2
-    Flapjack.Compiler.Backend.LabToTarget.noInstallOrNoShareMem
-      (Flapjack.Compiler.Backend.StackToLab.compile stackConf dataConf limit registers offset native.2.2.2) ffis := by
-  let source := singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main")
-    (.dec name .one (.const initial) (.seq .skip (.seq
-      (.while (.var .local name) (.assign .local name (.op .sub [.var .local name,.const 1])))
-      (.return (.const returned)))))
-  let wprog := panToWordCompileProgHOL riscvConfig.isa source
-  let word := Flapjack.Compiler.Backend.WordToWord.compile wc riscvConfig wprog
-  let native := Flapjack.Compiler.Backend.WordToStack.Native.compileNative riscvConfig false word.2
-  apply Flapjack.Pancake.Proofs.PanToTarget.panToTargetNoInstallOrNoShareMem source riscvConfig riscvConfig.isa
-    wprog wc word.1 word.2 native.1 native.2.1 native.2.2.1 native.2.2.2 stackConf dataConf limit registers offset ffis
-  refine ⟨?_,?_,rfl,?_,?_⟩
-  · simp [source,singleEntryProgram,Flapjack.Pancake.PanLang.functionsHOL]
-  · decide
-  · exact Prod.mk.eta.symm
-  · simp only [Prod.mk.eta]
-    rfl
-
-/-- Native Stack output for the original singleton countdown. -/
-noncomputable def countdownNativeRiscV (name : Flapjack.Basis.Pure.MlString.MlString)
-    (initial returned : BitVec 64) (wc : Flapjack.Compiler.Backend.WordToWord.Config) :=
-  Flapjack.Compiler.Backend.WordToStack.Native.compileNative riscvConfig false
-    (Flapjack.Compiler.Backend.WordToWord.compile wc riscvConfig
-      (panToWordCompileProgHOL riscvConfig.isa (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main")
-        (.dec name .one (.const initial) (.seq .skip (.seq
-          (.while (.var .local name) (.assign .local name (.op .sub [.var .local name,.const 1])))
-          (.return (.const returned)))))))).2
-
-/-- The Stack initializer's code equality turns the compiler-derived fact
-into the Lab guard, with no separate no-install premise. -/
-theorem countdown_lab_noInstall_from_stackInit {F : Type}
-    (name : Flapjack.Basis.Pure.MlString.MlString) (initial returned : BitVec 64)
-    (wc : Flapjack.Compiler.Backend.WordToWord.Config)
-    (stackConf : Flapjack.Compiler.Backend.StackToLab.Config) (dataConf : Flapjack.Compiler.Backend.DataToWord.Config)
-    (limit registers : Nat) (offset : BitVec 64 × BitVec 64) (dataSp : Nat)
-    (saveRegs : Nat → Bool) (oracle : Nat → Flapjack.Compiler.Backend.LabToTarget.Config ×
-      List (Nat × Flapjack.Compiler.Backend.StackLang.HolProg 64) × List (BitVec 64))
-    (lab : Flapjack.Compiler.Backend.LabSem.State 64 Flapjack.Compiler.Backend.LabToTarget.Config F)
-    (ffis : List HolFfiName)
-    (stackInit : Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics.Assumptions
-      stackConf dataConf limit registers offset (countdownNativeRiscV name initial returned wc).1
-      (countdownNativeRiscV name initial returned wc).2.2.2 lab saveRegs dataSp oracle) :
-    Flapjack.Compiler.Backend.LabToTarget.noInstallOrNoShareMem lab.code ffis := by
-  have compiled := countdown_compiled_noInstall name initial returned wc stackConf dataConf limit registers offset ffis
-  have codeEq := stackInit.2.1
-  rw [codeEq]
-  simpa only [countdownNativeRiscV] using compiled
 
 end SteppedFlapjack.PanToCrepSteps

@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.InitEStack
+import SteppedFlapjack.Concrete.FixtureByteDomain
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineConfig
 import Flapjack.Compiler.Backend.LabToTarget.Initialization
 import Flapjack.Compiler.Backend.Semantics.TargetProps.CalleeSaved
@@ -23,16 +24,17 @@ def fixtureAsm : AsmState 64 := {
  failed := false }
 /-- The Lab fixture produced by the original target initializer. -/
 noncomputable def fixtureTargetLab (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (ms : RiscV.L3.riscv_state) :=
- LabToTarget.makeInit countdownMachineConfig sourceFfi fixtureAsm fixtureLabMemory (fun a => decide (fixtureLabDomain a))
-  (fun a => decide (sharedAddress a)) ms (fixtureLab code cfg).code (fun _ _ => none) 0x800f0134 0xecc
+ LabToTarget.makeInit (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi fixtureAsm (fixtureLabMemoryFor code) (fun a => decide (fixtureLabDomain a))
+  (fun a => decide (sharedAddress a)) ms (fixtureLab code cfg).code (LabToTarget.compile riscvConfig)
+  0x800f0134 0xecc
   (fixtureLab code cfg).compileOracle
 
 theorem fixtureTargetLab_shape (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (ms : RiscV.L3.riscv_state) :
  fixtureTargetLab code cfg ms = {(fixtureLab code cfg) with
-  ioRegs := targetIoRegs countdownMachineConfig sourceFfi ms,
-  ioFpRegs := targetIoFpRegs countdownMachineConfig sourceFfi ms,
-  ccRegs := targetCcRegs countdownMachineConfig sourceFfi ms,
-  ccFpRegs := targetCcFpRegs countdownMachineConfig sourceFfi ms} := by
+  ioRegs := targetIoRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms,
+  ioFpRegs := targetIoFpRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms,
+  ccRegs := targetCcRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms,
+  ccFpRegs := targetCcFpRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms} := by
  unfold fixtureTargetLab LabToTarget.makeInit fixtureLab
  congr 1
  all_goals try (with_unfolding_all rfl)
@@ -44,7 +46,7 @@ open Flapjack.Compiler.Backend.StackRemove.Proofs
 open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
 
 theorem fixtureTargetLab_stack (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (ms : RiscV.L3.riscv_state) :
- (fullMakeInit countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^61) 24 riscvConfig.addrOffset
+ (fullMakeInit countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
   [4] code (fixtureTargetLab code cfg ms) fixtureSavedRegs 0 (fixtureStackOracle cfg)).1 = fixtureStack code cfg := by
  rw [fixtureTargetLab_shape]
  unfold fixtureStack
@@ -59,7 +61,7 @@ private theorem fixtureSavedRegs_member (r : Nat) (h : fixtureSavedRegs r = true
 
 theorem fixtureTargetLab_assumptions (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (ms : RiscV.L3.riscv_state)
  (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
- Assumptions countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^61) 24 riscvConfig.addrOffset
+ Assumptions countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
  [4] code (fixtureTargetLab code cfg ms) fixtureSavedRegs 0 (fixtureStackOracle cfg) := by
  have prev := fixtureLab_initAssumptions code cfg good
  rw [fixtureTargetLab_shape]
@@ -67,8 +69,8 @@ theorem fixtureTargetLab_assumptions (code : List (Nat × HolProg 64)) (cfg : La
  rcases prev with ⟨a,b,c,d,e,f,g,h,_,_,rest⟩
  refine ⟨a,b,c,d,e,f,g,h,?_,?_,rest⟩
  · intro r i n saved
-   exact targetIoRegsCalleeSaved countdownMachineConfig sourceFfi ms n r i (fixtureSavedRegs_member r saved)
+   exact targetIoRegsCalleeSaved (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms n r i (fixtureSavedRegs_member r saved)
  · intro r n saved
-   exact targetCcRegsCalleeSaved countdownMachineConfig sourceFfi ms n r (fixtureSavedRegs_member r saved)
+   exact targetCcRegsCalleeSaved (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms n r (fixtureSavedRegs_member r saved)
 
 end SteppedFlapjack.Concrete

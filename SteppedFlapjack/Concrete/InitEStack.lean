@@ -14,7 +14,7 @@ namespace SteppedFlapjack.Concrete
 /-- The actual fullMakeInit Stack state for this Lab layout. -/
 noncomputable def fixtureStack (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) :
     StackSemStateFiniteExact 64 LabToTarget.Config Unit :=
-  (fullMakeInit countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^61) 24 riscvConfig.addrOffset
+  (fullMakeInit countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
     [4] code (fixtureLab code cfg) fixtureSavedRegs 0 (fixtureStackOracle cfg)).1
 
 /-- A native oracle that never installs additional code. -/
@@ -26,7 +26,7 @@ noncomputable def fixtureStackContext (code : List (Nat × HolProg 64)) (cfg : L
     (good : StackToLab.Proofs.GoodCode.goodCode 24 code) : FullInitStackContext (fixtureStack code cfg) where
   stackConf := countdownRiscVBackend.stackConf
   dataConf := countdownRiscVBackend.dataConf
-  maxHeap := 2^61
+  maxHeap := 2^53-1
   sp := 24
   offset := riscvConfig.addrOffset
   bitmaps := [4]
