@@ -6,6 +6,27 @@ open Flapjack Flapjack.LoopSemStateFiniteExact
 open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.LoopSteps
 variable {width : Nat} [NeZero width] {F : Type}
 
+/-- The largest Loop control weight in the actual code table. -/
+def loopCodeWeight {width : Nat} [NeZero width] (code : Spt (List Nat × HolLoopProg width)) : Nat :=
+  (sptToAList code).foldr (fun row weight => max (SteppedFlapjack.CrepToLoopSteps.loopVisitWeight row.2.2) weight) 1
+
+/-- Every reached code body is bounded by the computed table weight. -/
+theorem loopCodeWeight_lookup {width : Nat} [NeZero width]
+    (code : Spt (List Nat × HolLoopProg width)) (loc : Nat) (params : List Nat) (body : HolLoopProg width)
+    (found : sptLookup loc code = some (params,body)) : SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body ≤ loopCodeWeight code := by
+  have member : (loc,(params,body)) ∈ sptToAList code := (sptToAList_mem_iff_lookup code loc (params,body)).mpr found
+  have aux (rows : List (Nat × (List Nat × HolLoopProg width))) : ∀ row ∈ rows,
+      SteppedFlapjack.CrepToLoopSteps.loopVisitWeight row.2.2 ≤ rows.foldr (fun row weight => max (SteppedFlapjack.CrepToLoopSteps.loopVisitWeight row.2.2) weight) 1 := by
+    induction rows with
+    | nil => simp
+    | cons row rest ih =>
+      intro entry member
+      simp only [List.mem_cons] at member
+      cases member with
+      | inl same => subst entry; simp
+      | inr inRest => exact (ih entry inRest).trans (Nat.le_max_right _ _)
+  exact aux _ _ member
+
 /-- The selected zero-argument code entry has a supported shape and bounded syntax. -/
 def TailCodeBound (code : Spt (List Nat × HolLoopProg width)) (loc K : Nat) : Prop :=
   ∀ body, sptLookup loc code = some ([],body) → LoopSequenceSource body ∧ sizeOf body ≤ K
