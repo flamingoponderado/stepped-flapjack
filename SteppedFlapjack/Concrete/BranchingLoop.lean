@@ -54,20 +54,6 @@ theorem branchingLoop_crep_code : crepPrograms (progToHOL branchingLoop) =
   simp only [branchingLoop,branchingLoopCrepBody,progToHOL,expToHOL,shapeToHOL]
   simp_crep_code
 
-/-- The actual code table selects the calculated branching-loop body. -/
-theorem branchingLoop_code_lookup :
-    (crepState (progToHOL branchingLoop)).code.lookup (entryName (progToHOL branchingLoop)) =
-      some ([],branchingLoopCrepBody) := by
-  exact generated_callee_lookup (progToHOL branchingLoop) branchingLoopCrepBody branchingLoop_crep_code
-
-/-- The actual generated entry for the declared branching loop. -/
-def branchingLoopCrepEntry : CrepProgHOL 64 :=
-  .seq .skip (.call none (entryName (progToHOL branchingLoop)) [])
-
-def branchingLoopCalleeContext : PanToCrepContextExact 64 :=
-  let caller := frontendContext (progToHOL branchingLoop)
-  ctxtFcExactHOL caller.funcs caller.eids [] [] []
-
 theorem branchingLoop_simp_program : panSimpProg branchingLoop = branchingLoop := by
   simp [panSimpProg,retToTail,seqAssoc,smartSeq,seqCallRet,branchingLoop]
 

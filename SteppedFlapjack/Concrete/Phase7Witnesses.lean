@@ -83,10 +83,13 @@ private def witnessHandler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit := 
 
 /-- The comparison witness is an unconditional instance of the Phase 7 theorem. -/
 theorem comparisonFixture_machine :
+    ∃ compilerFinal, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
+      (declarations (progToHOL branching)) = some (fixtureCodeBytes comparisonNativeCode,[4],compilerFinal) ∧
     ∃ machinePost ffiPost, evaluateTargetHOL
       (fixtureMachineConfig (fixtureCodeStart comparisonNativeCode)) sourceFfi
       90715439766875148
       (fixtureMachineState comparisonNativeCode) = (.halt .success,machinePost,ffiPost) ∧
+      FfiEventListRel (executableState (progToHOL branching)).ffi.ioEvents ffiPost.ioEvents ∧
       PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
         (declarations (progToHOL branching)) = .terminate .success ffiPost.ioEvents := by
   have sourceRun := branching_run witnessContext witnessPrimitive witnessHandler
@@ -107,11 +110,12 @@ theorem comparisonFixture_machine :
       (fixtureCodeBytes (supportedNative branching).2.2.2).length % 4 = 0 := by
     rw [comparison_native]
     exact comparison_compiler_facts
-  obtain ⟨_,_,machinePost,ffiPost,machineRun,_,semantics⟩ :=
+  obtain ⟨compilerFinal,compiled,machinePost,ffiPost,machineRun,events,semantics⟩ :=
     supported_counted_machine branching branching_supported witnessContext witnessPrimitive witnessHandler 2 6 6
       _ _ _ _ 7 run (by omega) comparison_frame safe facts
   rw [comparison_ticks] at machineRun
-  exact ⟨machinePost,ffiPost,by simpa only [comparison_native] using machineRun,semantics⟩
+  exact ⟨compilerFinal,by simpa only [comparison_native] using compiled,
+    machinePost,ffiPost,by simpa only [comparison_native] using machineRun,events,semantics⟩
 
 private theorem branch_callee : supportedCallee (progToHOL branchingLoop) = branchingLoopCrepBody := by
   have h := supported_crepPrograms branchingLoop branchingLoop_supported
@@ -180,9 +184,12 @@ private theorem branch_ticks : supportedMachineFactor branchingLoop * 23 + suppo
 
 /-- The branching-loop witness is an unconditional instance of the Phase 7 theorem. -/
 theorem branchingLoopFixture_machine :
+    ∃ compilerFinal, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
+      (declarations (progToHOL branchingLoop)) = some (fixtureCodeBytes branchingLoopNativeCode,[4],compilerFinal) ∧
     ∃ machinePost ffiPost, evaluateTargetHOL
       (fixtureMachineConfig (fixtureCodeStart branchingLoopNativeCode)) sourceFfi
       36771214184170446348 (fixtureMachineState branchingLoopNativeCode) = (.halt .success,machinePost,ffiPost) ∧
+      FfiEventListRel (executableState (progToHOL branchingLoop)).ffi.ioEvents ffiPost.ioEvents ∧
       PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
         (declarations (progToHOL branchingLoop)) = .terminate .success ffiPost.ioEvents := by
   have run := branchingLoop_source_run witnessContext witnessPrimitive witnessHandler
@@ -194,11 +201,12 @@ theorem branchingLoopFixture_machine :
       (fixtureCodeBytes (supportedNative branchingLoop).2.2.2).length % 4 = 0 := by
     rw [branch_native]
     exact branching_compiler_facts
-  obtain ⟨_,_,machinePost,ffiPost,machineRun,_,semantics⟩ :=
+  obtain ⟨compilerFinal,compiled,machinePost,ffiPost,machineRun,events,semantics⟩ :=
     supported_counted_machine branchingLoop branchingLoop_supported witnessContext witnessPrimitive witnessHandler 7 23 23
       _ _ _ _ 7 run (by omega) branch_frame safe facts
   rw [branch_ticks] at machineRun
-  exact ⟨machinePost,ffiPost,by simpa only [branch_native] using machineRun,semantics⟩
+  exact ⟨compilerFinal,by simpa only [branch_native] using compiled,
+    machinePost,ffiPost,by simpa only [branch_native] using machineRun,events,semantics⟩
 
 
 private theorem natural_callee (n : Nat) : supportedCallee (naturalCountdownHOL n) = naturalCountdownCrepBody (BitVec.ofNat 64 n) := by
@@ -290,10 +298,13 @@ private theorem countdown_ticks (n : Nat) : supportedMachineFactor (countdown n)
 
 /-- The prefixed countdown derives its original numerical bound from Phase 7. -/
 theorem countdownFixture_machine (n : Nat) (range : n < 2^64) :
+    ∃ compilerFinal, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
+      (declarations (progToHOL (countdown n))) = some (fixtureCodeBytes (countdownNativeStackCode n),[4],compilerFinal) ∧
     ∃ machinePost ffiPost, evaluateTargetHOL
       (fixtureMachineConfig (fixtureCodeStart (countdownNativeStackCode n))) sourceFfi
       (167602730287449600*(6*n+9)+1592247331570371948)
       (fixtureMachineState (countdownNativeStackCode n)) = (.halt .success,machinePost,ffiPost) ∧
+      FfiEventListRel (executableState (progToHOL (countdown n))).ffi.ioEvents ffiPost.ioEvents ∧
       PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
         (declarations (progToHOL (countdown n))) = .terminate .success ffiPost.ioEvents := by
   obtain ⟨result,_,sourceRun,_,_,resultEq⟩ := countdown_run n range witnessContext witnessPrimitive witnessHandler
@@ -316,11 +327,12 @@ theorem countdownFixture_machine (n : Nat) (range : n < 2^64) :
       (fixtureCodeBytes (supportedNative (countdown n)).2.2.2).length % 4 = 0 := by
     rw [countdown_native]
     exact countdown_compiler_facts n
-  obtain ⟨_,_,machinePost,ffiPost,machineRun,_,semantics⟩ :=
+  obtain ⟨compilerFinal,compiled,machinePost,ffiPost,machineRun,events,semantics⟩ :=
     supported_counted_machine (countdown n) (countdown_supported n) witnessContext witnessPrimitive witnessHandler
       (n+4) (6*n+9) (6*n+9) _ _ _ _ 0 run (by omega) (countdown_frame n) safe facts
   rw [countdown_ticks] at machineRun
-  exact ⟨machinePost,ffiPost,by simpa only [countdown_native] using machineRun,semantics⟩
+  exact ⟨compilerFinal,by simpa only [countdown_native] using compiled,
+    machinePost,ffiPost,by simpa only [countdown_native] using machineRun,events,semantics⟩
 
 
 private theorem natural_simp (n : Nat) : panSimpProg (naturalCountdown n) = naturalCountdown n := by
@@ -358,10 +370,13 @@ private theorem natural_ticks (n : Nat) : supportedMachineFactor (naturalCountdo
 
 /-- The natural countdown is independently instantiated from the Phase 7 theorem. -/
 theorem naturalCountdownFixture_machine (n : Nat) (range : n < 2^64) :
+    ∃ compilerFinal, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
+      (declarations (progToHOL (naturalCountdown n))) = some (fixtureCodeBytes (countdownNativeStackCode n),[4],compilerFinal) ∧
     ∃ machinePost ffiPost, evaluateTargetHOL
       (fixtureMachineConfig (fixtureCodeStart (countdownNativeStackCode n))) sourceFfi
       (167602730287449600*(6*n+9)+1592247331570371948)
       (fixtureMachineState (countdownNativeStackCode n)) = (.halt .success,machinePost,ffiPost) ∧
+      FfiEventListRel (executableState (progToHOL (naturalCountdown n))).ffi.ioEvents ffiPost.ioEvents ∧
       PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
         (declarations (progToHOL (naturalCountdown n))) = .terminate .success ffiPost.ioEvents := by
   have actual := counted_decl_countdown_simplified n (executableState (naturalCountdownHOL n))
@@ -387,10 +402,11 @@ theorem naturalCountdownFixture_machine (n : Nat) (range : n < 2^64) :
       (fixtureCodeBytes (supportedNative (naturalCountdown n)).2.2.2).length % 4 = 0 := by
     rw [natural_native]
     exact countdown_compiler_facts n
-  obtain ⟨_,_,machinePost,ffiPost,machineRun,_,semantics⟩ :=
+  obtain ⟨compilerFinal,compiled,machinePost,ffiPost,machineRun,events,semantics⟩ :=
     supported_counted_machine (naturalCountdown n) (naturalCountdown_supported n) witnessContext witnessPrimitive witnessHandler
       (n+3) (6*n+7) (6*n+9) _ _ _ _ 0 run (by omega) (natural_frame n) safe facts
   rw [natural_ticks] at machineRun
-  exact ⟨machinePost,ffiPost,by simpa only [natural_native] using machineRun,semantics⟩
+  exact ⟨compilerFinal,by simpa only [natural_native] using compiled,
+    machinePost,ffiPost,by simpa only [natural_native] using machineRun,events,semantics⟩
 
 end SteppedFlapjack.Concrete

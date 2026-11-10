@@ -62,12 +62,6 @@ theorem comparison_nativeGoodCode : StackToLab.Proofs.GoodCode.goodCode 24 compa
 theorem branchingLoop_nativeGoodCode : StackToLab.Proofs.GoodCode.goodCode 24 branchingLoopNativeCode :=
   singleEntry_nativeGoodCode (progToHOL branchingLoop) branchWordPrograms branchingLoop_panToWord
 
-/-- Actual initialized Stack state for the compiled comparison witness. -/
-noncomputable def comparisonFixtureStack (cfg : LabToTarget.Config) := fixtureStack comparisonNativeCode cfg
-
-/-- Actual initialized Stack state for the compiled branching-loop witness. -/
-noncomputable def branchingLoopFixtureStack (cfg : LabToTarget.Config) := fixtureStack branchingLoopNativeCode cfg
-
 /-- Word initialization for the comparison witness. -/
 noncomputable def comparisonFixtureWord (cfg : LabToTarget.Config) := fixtureWord comparisonNativeCode
   (compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2 cfg

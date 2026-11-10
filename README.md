@@ -75,7 +75,9 @@ supportedMachineFactor program * n + supportedMachineOffset program
 
 machine ticks. Both constants depend on the generated code and the fixed
 backend configuration; `supportedMachineTicks_affine` proves this formula for
-the composed clock. The result also states that `semanticsDecls` on the
+the composed clock. The factor combines the Lab factor 948 with the
+flattening, Lab, uniform, native call-sequence, Word, Loop and Crep costs.
+The result also states that `semanticsDecls` on the
 original declarations, starting with an empty code table and clock zero,
 terminates successfully with the machine's final I/O events.
 

@@ -9,10 +9,6 @@ namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
 
-def naturalCalleeContext (n : Nat) : PanToCrepContextExact 64 :=
-  let caller := frontendContext (naturalCountdownHOL n)
-  ctxtFcExactHOL caller.funcs caller.eids [] [] []
-
 /-- The generated entry for the unprefixed countdown. -/
 def naturalCrepEntry (n : Nat) : CrepProgHOL 64 :=
   .seq .skip (.call none (entryName (naturalCountdownHOL n)) [])

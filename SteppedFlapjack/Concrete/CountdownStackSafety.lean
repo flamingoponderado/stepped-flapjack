@@ -12,22 +12,6 @@ namespace SteppedFlapjack.Concrete
 noncomputable def countdownOptimizedLoop (n : Nat) : WordLangProgHOL (BitVec 64) :=
   ((countdownOptimizedLiteral (BitVec.ofNat 64 n)).get ⟨1,by simp [countdownOptimizedLiteral]⟩).2.2
 
-/-- Word state produced by the native initializer with the actual optimized table. -/
-noncomputable def countdownInitialWord {C F : Type} (n : Nat) (stack : StackSemStateFiniteExact 64 C F)
-    (coracle : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec 64))) :
-    WordSemStateFiniteExact 64 (Nat × C) F :=
-  WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)] (some 0)
-    (WordToStack.Native.Initialization.makeInit riscvConfig countdownZeroLimit stack
-      (sptFromAList (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n)).2) coracle)
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 2000000 in
-/-- The optimized countdown loop contains no calls. -/
-theorem countdownOptimizedLoop_shape (n : Nat) : LoopSequence (countdownOptimizedLoop n) := by
-  unfold countdownOptimizedLoop countdownOptimizedLiteral
-  repeat (first | apply LoopSequence.seq | apply LoopSequence.loop | apply LoopSequence.branch |
-    apply Branch.seq | apply Branch.ite | constructor)
-
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 2000000 in
 /-- The optimized table contains the countdown loop. -/
@@ -61,14 +45,5 @@ theorem countdown_compilerSelectedEntry (n : Nat) :
     (countdownWordPrograms n) 64 1 (countdownSourceWordEntry n) member nodup).2
   rw [countdown_optimized_literal, sptLookup_sptFromAList] at h
   simpa [sptAListLookup,countdownOptimizedLiteral,countdownOptimizedEntry] using h.symm
-
-/-- Every countdown compiler-selected entry requires zero Stack frame space. -/
-theorem countdown_compilerEntryFrame_zero (n : Nat) :
-  nativeEntryFrameSize (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length))
-    (fullCompileSingle riscvConfig.twoRegArith (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length))
-      countdownRiscVBackend.wordToWordConf.regAlg riscvConfig
-        ((64,1,countdownSourceWordEntry n),entryColour countdownRiscVBackend.wordToWordConf (countdownWordPrograms n) 64)).2.2 = 0 := by
-  rw [countdown_compilerSelectedEntry]
-  with_unfolding_all rfl
 
 end SteppedFlapjack.Concrete
