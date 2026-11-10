@@ -9,7 +9,7 @@ namespace SteppedFlapjack.Concrete
 theorem fixtureStack_heapBaseAndMemory (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
     (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
     (fixtureStack code cfg).store.lookup .currHeap = some (.word heapBase) ∧
-      ∀ a, (fixtureStack code cfg).mdomain a = true → (fixtureStack code cfg).memory a = fixtureLabMemory a := by
+      ∀ a, (fixtureStack code cfg).mdomain a = true → (fixtureStack code cfg).memory a = fixtureLabMemoryFor code a := by
   let ctx := fixtureStackContext code cfg good
   obtain ⟨current,read,store,mem⟩ := ctx.heap_base_and_memory_lab
   have r2 : StackNames.findNameSpt countdownRiscVBackend.stackConf.regNames 2 = 11 := by with_unfolding_all rfl
@@ -60,7 +60,10 @@ theorem fixtureStack_heapMemory (code : List (Nat × HolProg 64)) (cfg : LabToTa
     intro h
     subst a
     simp [ordinaryAddress,fixtureBitmapBase,sourceBase] at member
-  simpa [fixtureLabMemory,ne] using eq
+  have labDomain : fixtureLabDomain a := Or.inr ⟨member.1, by
+    simp only [ordinaryAddress,fixtureHeapEnd,heapEnd,stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords] at member ⊢
+    omega, member.2.2⟩
+  simpa [fixtureLabMemoryFor,labDomain,fixtureLabMemory,ne] using eq
 
 /-- The FFI, byte order and shared-memory domain match the source fixture. -/
 theorem fixtureStack_ambient (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)

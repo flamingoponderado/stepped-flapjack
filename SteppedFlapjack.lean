@@ -1,3 +1,5 @@
+import SteppedFlapjack.Concrete.FixtureMachineState
+import SteppedFlapjack.Concrete.FixtureByteDomain
 import SteppedFlapjack.Concrete.FixtureCodeMemory
 import SteppedFlapjack.LabToTargetSteps.InitializedRiscV
 import SteppedFlapjack.Concrete.BranchingLabBounds
