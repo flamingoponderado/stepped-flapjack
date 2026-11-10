@@ -1,5 +1,4 @@
 import SteppedFlapjack.Concrete.CountdownAllocationLiteral
-import SteppedFlapjack.Concrete.NaturalCountdownWordSpan
 open Flapjack Flapjack.Basis.Pure.MlString Flapjack.RegAlloc Flapjack.Compiler.Backend Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Encoders.RiscV.Target SteppedFlapjack.Concrete SteppedFlapjack.PanToCrepSteps
 open SteppedFlapjack.WordAllocSteps
 namespace SteppedFlapjack.Concrete
@@ -90,13 +89,6 @@ theorem countdown_bound_closed (n : Nat) : countdownWordBound n = 232771968*n+71
   unfold countdownWordBound
   rw [countdownBoundCoefficient]
   unfold countdownLoopVisits countdownLoopBudget
-  omega
-
-/-- Closed-form Word visit limit for the unprefixed countdown fixture. -/
-theorem naturalCountdown_bound_closed (n : Nat) : naturalCountdownWordBound n = 232771968*n+640127863 := by
-  unfold naturalCountdownWordBound
-  rw [countdownBoundCoefficient]
-  unfold naturalCountdownLoopVisits naturalCountdownLoopBudget
   omega
 
 end SteppedFlapjack.Concrete

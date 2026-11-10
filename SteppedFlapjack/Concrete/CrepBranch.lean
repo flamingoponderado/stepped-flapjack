@@ -69,10 +69,6 @@ theorem branchCrepEntry_run :
   change (crepState branchingHOL).clock ≠ 0 at nonzero
   simp [lookupCodeFiniteHOL,branchCrepCode_lookup,crepReturnInfoNodupError,nonzero,branchCrepBody_run]
 
-def branchCalleeContext : PanToCrepContextExact 64 :=
-  let caller := frontendContext branchingHOL
-  ctxtFcExactHOL caller.funcs caller.eids [] [] []
-
 /-- Concrete source-to-Crep correspondence, obtained by directly checking
 both runs. The five-visit calculation cross-checks the general counted span. -/
 theorem branching_source_crep_correspondence

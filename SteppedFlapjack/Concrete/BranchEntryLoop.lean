@@ -7,6 +7,7 @@ namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.LoopSemStateFiniteExact Flapjack.Basis.Pure.MlString
 open Flapjack.Compiler.Encoders.Asm SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps
 
+/-- The generic `main` entry wrapper shared by all supported programs. -/
 def branchingLoopEntry : HolLoopProg 64 :=
   .mark (.seq (.mark .skip) (.mark (.seq (.mark (.call none (some 65) [] none)) (.mark .skip))))
 
@@ -28,13 +29,6 @@ theorem twoPrograms_callee_label (arch : AsmArchitecture) (name callee : MlStrin
       (crepToLoopMakeFuncsExactExecutable (twoPrograms name callee body)) 0) callee = 65 := by
   simp [findLabExact,mkCtxtExact,crepToLoopMakeFuncsExactExecutable,twoPrograms,firstLoopName,
     FUPDATE_LIST,FUPDATE,List.range_succ,fresh]
-
-/-- The actual generated, optimized entry has this concrete tail-call code. -/
-theorem branching_loop_entry_code (arch : AsmArchitecture) :
-    (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms branchingHOL) := by
-  rw [branching_loop_code]
-  exact twoLoopPrograms_entry_code arch _ _ _ (Ne.symm (entryName_fresh branchingHOL))
-
 
 /-- A generated entry reaches a returning zero-argument callee, with eight
 wrapper visits in addition to the callee visits. -/
