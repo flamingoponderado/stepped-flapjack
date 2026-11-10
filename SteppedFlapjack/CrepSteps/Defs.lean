@@ -199,4 +199,32 @@ theorem steps_call_tail {width : Nat} [NeZero width] {σ : Type}
   | none => simp only [Nat.add_zero]
   | some result => cases result <;> simp only [Nat.add_zero]
 
+/-- A non-tail call without an exception handler counts its reached callee. -/
+theorem steps_call_returning {width : Nat} [NeZero width] {σ : Type}
+    (names : List Nat) (function : Basis.Pure.MlString.MlString) (args : List (CrepExpHOL width))
+    (s : CrepSemHOLState width σ) (values : List (HolWordLab width))
+    (parameters : List Nat) (body : CrepProgHOL width)
+    (evaluated : args.mapM (evalCrepSemHOLExp s) = some values)
+    (found : s.code.lookup function = some (parameters,body))
+    (arity : parameters.length = values.length) (distinct : parameters.Nodup)
+    (namesDistinct : names.Nodup) (nonzero : s.clock ≠ 0) :
+    steps (.call (some (names,none)) function args) s = 1 + steps body
+      (decClockCrepSemHOL {s with locals :=
+        HolFiniteMapExact.empty.updateList (parameters.zip values)}) := by
+  rw [steps.eq_def]
+  have smaller : Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b)
+      ((decClockCrepSemHOL {s with locals :=
+        HolFiniteMapExact.empty.updateList (parameters.zip values)}).clock,sizeOf body)
+      (s.clock,sizeOf (.call (some (names,none)) function args : CrepProgHOL width)) := by
+    apply Prod.Lex.left
+    simp only [decClockCrepSemHOL]
+    omega
+  simp only [evaluated,found,arity,distinct,namesDistinct, true_and,dif_pos smaller]
+  simp only [if_pos nonzero]
+  let env := HolFiniteMapExact.empty.updateList (parameters.zip values)
+  rcases evalCrepSemHOLProgExact (decClockCrepSemHOL {s with locals := env}) body with ⟨res,t⟩
+  cases res with
+  | none => simp only [Nat.add_zero]
+  | some result => cases result <;> simp only [Nat.add_zero]
+
 end SteppedFlapjack.CrepSteps
