@@ -863,6 +863,7 @@ theorem decCall_return_bridge {width : Nat} [NeZero width] {σ : Type}
       evalCrepSemHOLProgExact targetEntry (compileProgExactHOLW next body) = (some (.return (flattenHOL value)),targetPost) ∧
       targetPost.code = target.code ∧
       sourcePost.code = source.code ∧
+      sourcePost.clock < source.clock ∧
       controlSteps (.decCall name shape fname argexps continuation) source =
         1 + controlSteps body sourceEntry + controlSteps continuation sourceCont ∧
       CrepSteps.steps (compileProgExactHOLW ctxt (.decCall name shape fname argexps continuation)) target =
@@ -924,7 +925,11 @@ theorem decCall_return_bridge {width : Nat} [NeZero width] {σ : Type}
   have sourceCode : sourcePost.code = source.code := by
     have h := source_code_preserved body entry sourcePost (some (.returned value)) bodyRun
     simpa [entry,callEntryStateHOLFinite] using h
-  refine ⟨shapes,targetPost,hsrc,htgt,hbodyLocal,hs,hc,he,hl,targetRun,targetCode,sourceCode,?_,?_,continuations⟩
+  have sourceClock : sourcePost.clock < source.clock := by
+    have h := evaluateHOLFiniteState_clock_le_result entry body _ sourcePost bodyRun
+    simp only [entry,callEntryStateHOLFinite] at h
+    omega
+  refine ⟨shapes,targetPost,hsrc,htgt,hbodyLocal,hs,hc,he,hl,targetRun,targetCode,sourceCode,sourceClock,?_,?_,continuations⟩
   · exact sourceCount
   · dsimp only [targetEntry,next,ns] at targetCount ⊢
     simp only [decClockCrepSemHOL] at targetCount ⊢
@@ -1032,6 +1037,7 @@ theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
       let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
       source.code.lookup fname = some (shapes,body,rsh) →
       target.code.lookup fname = some (ns,compileProgExactHOLW next body) →
+      (PanSemStateFiniteExact.callEntryStateHOLFinite source locals).clock < source.clock →
       localisedProgHOL body = true →
       panToCrepStateRelFiniteExact (PanSemStateFiniteExact.callEntryStateHOLFinite source locals)
         {decClockCrepSemHOL target with locals := tlcHOL ns args} →
@@ -1046,7 +1052,10 @@ theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
       CrepSteps.codeWeight programs * controlSteps (.call none fname argexps) source := by
   obtain ⟨shapes,hsrc,hlocal,htgt,hsource,htarget,hs,hc,he,hl⟩ :=
     tailCall_entries ctxt fname argexps source target args body locals rsh hargs found clock stateRel codeRel excpRel localsRel localised
-  have b := bodyIH shapes hsrc htgt hlocal hs hc he hl
+  have smaller : (PanSemStateFiniteExact.callEntryStateHOLFinite source locals).clock < source.clock := by
+    simp only [PanSemStateFiniteExact.callEntryStateHOLFinite]
+    omega
+  have b := bodyIH shapes hsrc htgt smaller hlocal hs hc he hl
   rw [hsource,htarget]
   have positive : 1 ≤ CrepSteps.codeWeight programs := by
     have w := SteppedFlapjack.CrepToLoopSteps.lookup_statementWeight_le_codeWeight programs fname
@@ -1083,6 +1092,7 @@ theorem decCall_return_bound_from_induction {width : Nat} [NeZero width] {σ : T
       let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
       source.code.lookup fname = some (shapes,body,rsh) →
       target.code.lookup fname = some (ns,compileProgExactHOLW next body) →
+      (callEntryStateHOLFinite source locals).clock < source.clock →
       localisedProgHOL body = true →
       panToCrepStateRelFiniteExact (callEntryStateHOLFinite source locals)
         {decClockCrepSemHOL target with locals := tlcHOL ns args} →
@@ -1098,6 +1108,7 @@ theorem decCall_return_bound_from_induction {width : Nat} [NeZero width] {σ : T
       let targetCont := {targetPost with locals := target.locals.updateListEq ((decCallSlots ctxt shape).zip (flattenHOL value))}
       targetPost.code = target.code →
       sourcePost.code = source.code →
+      sourcePost.clock < source.clock →
       panToCrepStateRelFiniteExact sourceCont targetCont →
       codeRelExactHOLW (decCallCtxt ctxt name shape) sourceCont.code targetCont.code →
       panToCrepExcpRelFiniteExact (decCallCtxt ctxt name shape).eids sourceCont.eshapes →
@@ -1106,11 +1117,14 @@ theorem decCall_return_bound_from_induction {width : Nat} [NeZero width] {σ : T
         K * controlSteps continuation sourceCont) :
     CrepSteps.steps (compileProgExactHOLW ctxt (.decCall name shape fname argexps continuation)) target ≤
       K * controlSteps (.decCall name shape fname argexps continuation) source := by
-  obtain ⟨shapes,targetPost,hsrc,htgt,hlocal,bs,bc,be,bl,_,hcode,hsourceCode,hsource,htarget,hs,hc,he,hl⟩ :=
+  obtain ⟨shapes,targetPost,hsrc,htgt,hlocal,bs,bc,be,bl,_,hcode,hsourceCode,hpostClock,hsource,htarget,hs,hc,he,hl⟩ :=
     decCall_return_bridge ctxt name fname shape argexps continuation source target args body locals rsh value sourcePost
       hargs found clock stateRel codeRel excpRel localsRel localised bodyRun valid returnValid
-  have b := bodyIH shapes hsrc htgt hlocal bs bc be bl
-  have c := contIH targetPost hcode hsourceCode hs hc he hl
+  have smaller : (callEntryStateHOLFinite source locals).clock < source.clock := by
+    simp only [callEntryStateHOLFinite]
+    omega
+  have b := bodyIH shapes hsrc htgt smaller hlocal bs bc be bl
+  have c := contIH targetPost hcode hsourceCode hpostClock hs hc he hl
   have overhead : (decCallSlots ctxt shape).length + 2 ≤ K := by
     rw [decCall_statementWeight] at weight
     simp [decCallSlots]
@@ -1141,6 +1155,7 @@ theorem decCall_terminal_bound_from_induction {width : Nat} [NeZero width] {σ :
       let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
       source.code.lookup fname = some (shapes,body,rsh) →
       target.code.lookup fname = some (ns,compileProgExactHOLW next body) →
+      (callEntryStateHOLFinite source locals).clock < source.clock →
       localisedProgHOL body = true →
       panToCrepStateRelFiniteExact (callEntryStateHOLFinite source locals)
         {decClockCrepSemHOL target with locals := tlcHOL ns args} →
@@ -1157,7 +1172,10 @@ theorem decCall_terminal_bound_from_induction {width : Nat} [NeZero width] {σ :
   obtain ⟨shapes,hsrc,htgt,hlocal,bs,bc,be,bl,hsource,htarget⟩ :=
     decCall_terminal_bridge ctxt name fname shape argexps continuation source target args body locals rsh result sourcePost
       hargs found clock stateRel codeRel excpRel localsRel localised bodyRun nonerror terminal
-  have b := bodyIH shapes hsrc htgt hlocal bs bc be bl
+  have smaller : (callEntryStateHOLFinite source locals).clock < source.clock := by
+    simp only [callEntryStateHOLFinite]
+    omega
+  have b := bodyIH shapes hsrc htgt smaller hlocal bs bc be bl
   have overhead : (decCallSlots ctxt shape).length + 2 ≤ K := by
     rw [decCall_statementWeight] at weight
     simp [decCallSlots]
