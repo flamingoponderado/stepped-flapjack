@@ -19,8 +19,26 @@ theorem compile_tailCall_nil {width : Nat} [NeZero width]
       .seq (.call none (some (findLabExact ctxt name)) [] none) .skip := by
   simp [compileHOLExact,compileExpsHOLExact,genTemps,loopNestedSeqHOL]
 
+/-- The compiler code relation determines the actual callee and its argument
+registers for every function arity. -/
+theorem call_lookup {width : Nat} [NeZero width] {F : Type}
+    (ctxt : CrepToLoopContextExact) (source : CrepSemHOLState width F)
+    (target : LoopSemStateFiniteExact width F) (name : MlString) (params : List Nat)
+    (body : CrepProgHOL width) (values : List (WordLocW width))
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (found : source.code.lookup name = some (params,body)) (arity : values.length = params.length) :
+    findCode (some (findLabExact ctxt name)) values target.code =
+      some (sptFromAList ((List.range params.length).zip values),
+        ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+          (listToNumSetHOLExact (List.range params.length)) body) := by
+  obtain ⟨loc,len,hlab,hlen,hcode⟩ := codeRel.2 name params body found
+  subst len
+  have label : findLabExact ctxt name = loc := by simp [findLabExact,hlab]
+  rw [label]
+  simp [findCode,hcode,arity]
+
 /-- The code relation identifies the exact optimized zero-argument callee and
-the Loop compiler's numeric call target. -/
+the numeric call target. -/
 theorem tailCall_nil_lookup {width : Nat} [NeZero width] {F : Type}
     (ctxt : CrepToLoopContextExact) (source : CrepSemHOLState width F)
     (target : LoopSemStateFiniteExact width F) (name : MlString) (body : CrepProgHOL width)
@@ -28,12 +46,52 @@ theorem tailCall_nil_lookup {width : Nat} [NeZero width] {F : Type}
     (found : source.code.lookup name = some ([],body)) :
     findCode (some (findLabExact ctxt name)) [] target.code =
       some (.ln,ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln body) := by
-  obtain ⟨loc,len,hlab,hlen,hcode⟩ := codeRel.2 name [] body found
-  have lenZero : len = 0 := by simpa using hlen.symm
-  subst len
-  have label : findLabExact ctxt name = loc := by simp [findLabExact,hlab]
-  rw [label]
-  simp [findCode,hcode,sptFromAList]
+  simpa [sptFromAList,listToNumSetHOLExact] using call_lookup ctxt source target name [] body [] codeRel found rfl
+
+/-- A direct call with evaluated arguments counts the actual compiled callee. -/
+theorem call_tail_steps {width : Nat} [NeZero width] {F : Type}
+    (ctxt : CrepToLoopContextExact) (source : CrepSemHOLState width F)
+    (target : LoopSemStateFiniteExact width F) (name : MlString) (params args : List Nat)
+    (body : CrepProgHOL width) (values : List (WordLocW width))
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (found : source.code.lookup name = some (params,body)) (arity : values.length = params.length)
+    (get : getVars args target = some values) (clock : target.clock ≠ 0) :
+    LoopSteps.steps (.call none (some (findLabExact ctxt name)) args none) target =
+      1 + LoopSteps.steps
+        (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+          (listToNumSetHOLExact (List.range params.length)) body)
+        {decClock target with locals := sptFromAList ((List.range params.length).zip values)} := by
+  exact LoopSteps.steps_call_tail _ _ _ _ _ _ get (call_lookup ctxt source target name params body values codeRel found arity) clock
+
+/-- A successful returning call counts its compiled callee and normal continuation. -/
+theorem call_returning_steps {width : Nat} [NeZero width] {F : Type}
+    (ctxt : CrepToLoopContextExact) (source : CrepSemHOLState width F)
+    (target cut post : LoopSemStateFiniteExact width F) (name : MlString) (params args names : List Nat)
+    (live liveOut : NumSet) (exception : Nat) (handler normal : HolLoopProg width)
+    (body : CrepProgHOL width) (values returned : List (WordLocW width))
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (found : source.code.lookup name = some (params,body)) (arity : values.length = params.length)
+    (get : getVars args target = some values) (distinct : names.Nodup)
+    (cutRun : cutRes live (none,target) = (none,cut))
+    (bodyRun : evaluate
+      (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+        (listToNumSetHOLExact (List.range params.length)) body)
+      {cut with locals := sptFromAList ((List.range params.length).zip values)} = (some (.result returned),post))
+    (returnedArity : returned.length = names.length) :
+    LoopSteps.steps (.call (some (names,live)) (some (findLabExact ctxt name)) args
+      (some (exception,handler,normal,liveOut))) target =
+      1 + LoopSteps.steps
+        (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+          (listToNumSetHOLExact (List.range params.length)) body)
+        {cut with locals := sptFromAList ((List.range params.length).zip values)} +
+      LoopSteps.steps normal (setVars names returned {post with locals := cut.locals}) := by
+  have h := LoopSteps.steps_call_returning (some (findLabExact ctxt name)) args names live
+    (some (exception,handler,normal,liveOut)) target cut post values
+    (sptFromAList ((List.range params.length).zip values))
+    (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+      (listToNumSetHOLExact (List.range params.length)) body) (some (.result returned))
+    get (call_lookup ctxt source target name params body values codeRel found arity) distinct cutRun bodyRun
+  simpa [returnedArity] using h
 
 /-- A successful compiled zero-argument tail call visits the actual optimized
 callee, with at most two extra Loop wrapper nodes. -/
@@ -45,10 +103,8 @@ theorem compile_tailCall_nil_steps {width : Nat} [NeZero width] {F : Type}
     LoopSteps.steps (compileHOLExact ctxt live (.call none name [])) target ≤
       3 + LoopSteps.steps (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln body)
         {decClock target with locals := .ln} := by
-  have lookup := tailCall_nil_lookup ctxt source target name body codeRel found
-  have call := LoopSteps.steps_call_tail (some (findLabExact ctxt name)) [] target [] .ln
-    (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln body)
-    (by rfl) lookup clock
+  have call := call_tail_steps ctxt source target name [] [] body [] codeRel found rfl (by rfl) clock
+  simp only [List.length_nil,List.range_zero,List.zip_nil_left,sptFromAList,listToNumSetHOLExact] at call
   rw [compile_tailCall_nil,LoopSteps.steps_seq,call]
   rcases run : evaluate (.call none (some (findLabExact ctxt name)) [] none) target with ⟨out,post⟩
   cases out with
@@ -84,13 +140,11 @@ theorem compile_returningCall_nil_steps {width : Nat} [NeZero width] {F : Type}
     LoopSteps.steps (compileHOLExact ctxt live (.call (some (names,none)) name [])) target ≤
       4 + LoopSteps.steps (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln body)
         {cut with locals := .ln} := by
-  have lookup := tailCall_nil_lookup ctxt source target name body codeRel found
-  have call := LoopSteps.steps_call_returning (some (findLabExact ctxt name)) [] returnNames live
-    (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live)) target cut post [] .ln
-    (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln body)
-    (some (.result values)) (by rfl) lookup distinct cutRun run
+  have call := call_returning_steps ctxt source target cut post name [] [] returnNames live live
+    (ctxt.vmax+1) (.raise (ctxt.vmax+1)) .skip body [] values codeRel found rfl (by rfl)
+    distinct cutRun (by simpa [sptFromAList,listToNumSetHOLExact] using run) arity
+  simp only [List.length_nil,List.range_zero,List.zip_nil_left,sptFromAList,listToNumSetHOLExact] at call
   rw [compile_returningCall_nil ctxt live name names returnNames mapped,LoopSteps.steps_seq,call]
-  simp only [arity,ne_eq,not_true_eq_false,if_false]
   rcases outcome : evaluate (.call (some (returnNames,live)) (some (findLabExact ctxt name)) []
     (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) target with ⟨result,final⟩
   cases result with
