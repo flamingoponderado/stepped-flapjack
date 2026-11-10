@@ -1,6 +1,7 @@
 import Flapjack.Pancake.Proofs.PanToCrep.PcCompileCorrect.Assembly
 import SteppedFlapjack.PanToCrepSteps.ControlSteps
 import SteppedFlapjack.PanToCrepSteps.FrontendProgram
+import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
 
 /-! Quantitative correctness of Pancake while compilation. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -978,5 +979,43 @@ theorem decCall_terminal_bridge {width : Nat} [NeZero width] {σ : Type}
     dsimp only [targetEntry,next,ns] at targetCount ⊢
     simp only [decClockCrepSemHOL] at targetCount ⊢
     omega
+
+/-- The quantitative induction step for a reached tail call. -/
+theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (fname : MlS) (argexps : List (ExpHOL width))
+    (source : PanSemStateFiniteExact width σ) (target : CrepSemHOLState width σ)
+    (args : List (ValueHOL width)) (body : ProgHOL width)
+    (locals : HolFiniteMapExact MlS (ValueHOL width)) (rsh : ShapeHOL)
+    (programs : List (MlS × List Nat × CrepProgHOL width))
+    (code : target.code = alistToFmapCodeExact programs)
+    (hargs : source.evalListHOLFinite (h := fun address => Classical.propDecidable (source.memaddrs address)) argexps = some args)
+    (found : PanSemStateFiniteExact.lookupCodeHOLFinite source.code.lookup fname args = some (body,locals,rsh))
+    (clock : source.clock ≠ 0) (stateRel : panToCrepStateRelFiniteExact source target)
+    (codeRel : codeRelExactHOLW ctxt source.code target.code)
+    (excpRel : panToCrepExcpRelFiniteExact ctxt.eids source.eshapes)
+    (localsRel : panToCrepLocalsRelFiniteExact ctxt source.locals target.locals)
+    (localised : everyExpListHOL localisedExpHOL argexps = true)
+    (bodyIH : ∀ (shapes : List (MlS × ShapeHOL)),
+      let ns := List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd)))
+      let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
+      source.code.lookup fname = some (shapes,body,rsh) →
+      target.code.lookup fname = some (ns,compileProgExactHOLW next body) →
+      CrepSteps.steps (compileProgExactHOLW next body) {decClockCrepSemHOL target with locals := tlcHOL ns args} ≤
+        CrepSteps.codeWeight programs * controlSteps body (PanSemStateFiniteExact.callEntryStateHOLFinite source locals)) :
+    CrepSteps.steps (compileProgExactHOLW ctxt (.call none fname argexps)) target ≤
+      CrepSteps.codeWeight programs * controlSteps (.call none fname argexps) source := by
+  obtain ⟨shapes,hsrc,_,htgt,hsource,htarget,_,_,_,_⟩ :=
+    tailCall_entries ctxt fname argexps source target args body locals rsh hargs found clock stateRel codeRel excpRel localsRel localised
+  have b := bodyIH shapes hsrc htgt
+  rw [hsource,htarget]
+  have positive : 1 ≤ CrepSteps.codeWeight programs := by
+    have w := SteppedFlapjack.CrepToLoopSteps.lookup_statementWeight_le_codeWeight programs fname
+      (List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd))))
+      (compileProgExactHOLW (ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd)
+        (List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd))))) body) (by simpa [code] using htgt)
+    have p := CrepSteps.statementWeight_pos (compileProgExactHOLW (ctxtFcExactHOL ctxt.funcs ctxt.eids
+      (shapes.map Prod.fst) (shapes.map Prod.snd) (List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd))))) body)
+    omega
+  nlinarith
 
 end SteppedFlapjack.PanToCrepSteps
