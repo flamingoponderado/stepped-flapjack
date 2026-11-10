@@ -9,6 +9,11 @@ open Flapjack.Compiler.Backend.RiscVConfig
 
 namespace SteppedFlapjack.Concrete
 
+/-- The fixture uses the exact heap limit passed by the native backend. -/
+theorem fixture_backend_maxHeap :
+    2 * DataToWord.maxHeapLimit 64 countdownRiscVBackend.dataConf - 1 = 2^53-1 := by
+  decide +kernel
+
 /-- Concrete heap and stack pointer registers for the Lab initializer. -/
 def fixtureLabRegs (r : Nat) : WordLocW 64 :=
   if r = 11 then .word heapBase else if r = 12 then .word (BitVec.ofNat 64 heapEnd)
@@ -28,7 +33,7 @@ noncomputable def fixtureLab (code : List (Nat × HolProg 64)) (cfg : LabToTarge
   ccRegs := fun _ _ => none
   ioFpRegs := fun _ _ => 0
   ccFpRegs := fun _ _ => 0
-  code := StackToLab.compile countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^61) 24 riscvConfig.addrOffset code
+  code := StackToLab.compile countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset code
   compile := fun _ _ => none
   compileOracle := fun _ => (cfg,StackToLab.compileNoStubs countdownRiscVBackend.stackConf.regNames countdownRiscVBackend.stackConf.jump riscvConfig.addrOffset 24 [])
   codeBuffer := ⟨0x800f0134,[],0xecc⟩
@@ -97,7 +102,7 @@ theorem fixtureRegNames_bijective : Function.Bijective (StackNames.findNameSpt c
 /-- The concrete Lab initializer meets its assumptions for well-formed Stack code. -/
 theorem fixtureLab_initAssumptions (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
     (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
-    Assumptions countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^61) 24 riscvConfig.addrOffset
+    Assumptions countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
       [4] code (fixtureLab code cfg) fixtureSavedRegs 0 (fixtureStackOracle cfg) := by
   refine ⟨Or.inr rfl, rfl, rfl, ?_, fixtureLab_memoryAssumption code cfg, ?_, ?_, rfl, ?_, ?_, ?_, ?_,
     good, ?_, by decide, ?_, rfl,rfl,rfl,rfl,rfl,fixtureRegNames_bijective⟩

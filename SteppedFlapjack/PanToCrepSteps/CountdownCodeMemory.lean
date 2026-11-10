@@ -65,6 +65,29 @@ theorem countdownWriteCode_get (bytes : List (BitVec 8)) (address : BitVec 64)
       rw [countdownStoreByte_other _ _ _ _ different,offset]
       exact ih (address + 1) i hiTail sizeTail
 
+
+/-- Writing code leaves a word untouched if no byte in the stream belongs to it. -/
+theorem countdownWriteCode_other_word (bytes : List (BitVec 8)) (address word : BitVec 64)
+    (words : BitVec 64 → BitVec 64)
+    (outside : ∀ i, i < bytes.length → holByteAlign (address + BitVec.ofNat 64 i) ≠ word) :
+    countdownWriteCode address bytes words word = words word := by
+  induction bytes generalizing address with
+  | nil => rfl
+  | cons b bs ih =>
+    have head : word ≠ holByteAlign address := by
+      have h := outside 0 (by simp)
+      apply Ne.symm
+      simpa using h
+    have tail : ∀ i, i < bs.length → holByteAlign ((address + 1) + BitVec.ofNat 64 i) ≠ word := by
+      intro i hi
+      have h := outside (i+1) (by simp; omega)
+      have offset : address + BitVec.ofNat 64 (i+1) = (address+1) + BitVec.ofNat 64 i := by
+        rw [BitVec.ofNat_add]
+        ac_rfl
+      simpa only [offset] using h
+    simp only [countdownWriteCode,countdownStoreByte,if_neg head]
+    exact ih (address+1) tail
+
 /-- Build the original sequential byte-loading assertion from indexed facts. -/
 theorem bytesInMem_of_indexed (bytes : List (BitVec 8)) (address : BitVec 64)
     (mem : BitVec 64 → BitVec 8) (domain excluded : BitVec 64 → Prop)

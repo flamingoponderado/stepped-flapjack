@@ -1,5 +1,6 @@
 import SteppedFlapjack.LabToTargetSteps.FilteredRiscV
 import Flapjack.Compiler.Backend.LabProps.DomainAlignmentDmEvaluate
+import Flapjack.Compiler.Backend.Semantics.TargetProps.EvaluateAddClock
 
 /-! Preserve bounded runs when the Stack-side Lab domain is word-aligned. -/
 namespace SteppedFlapjack.LabToTargetSteps
@@ -85,5 +86,26 @@ theorem connectedLabToRiscVWithin {F : Type}
   · exact labToRiscVWithin p filtered post outcome clock bound mc code labs asm machine hmc tie rel run hbound
   · exact unfilteredLabToRiscVWithin p filtered stackLab post outcome clock bound mc code labs asm machine hmc h tie rel run hbound
   · exact alignedUnfilteredLabToRiscVWithin p filtered raw post outcome clock bound mc code labs asm machine hmc h tie rel run hbound
+
+
+/-- A terminating linked Lab execution runs on RISC-V at the explicitly
+calculated bound. A halted target execution is stable under extra clock. -/
+theorem connectedLabToRiscVExplicit {F : Type}
+    (p : BitVec 64) (filtered stackLab post : LabSem.State 64 Config F)
+    (outcome : HolOutcome) (clock bound : Nat)
+    (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
+    (code : LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
+    (hmc : mc.target = riscvTarget) (link : LabExecutionLink filtered stackLab)
+    (tie : oracleTie mc machine filtered) (rel : stateRel (mc,code,labs,p) filtered asm machine)
+    (run : evaluate {stackLab with clock := clock} = (.halt outcome,post)) (hbound : clock ≤ bound) :
+    ∃ finalMachine,
+      evaluateTargetHOL mc stackLab.ffi (labTickBound 4 code filtered.codeBuffer * bound) machine =
+        (.halt outcome,finalMachine,post.ffi) := by
+  obtain ⟨ticks,finalMachine,hticks,hrun⟩ := connectedLabToRiscVWithin p filtered stackLab post
+    outcome clock bound mc code labs asm machine hmc link tie rel run hbound
+  refine ⟨finalMachine,?_⟩
+  have h := evaluateTargetAddClock mc stackLab.ffi ticks machine
+    (labTickBound 4 code filtered.codeBuffer * bound - ticks) _ finalMachine post.ffi hrun (by simp)
+  rwa [Nat.add_sub_cancel' hticks] at h
 
 end SteppedFlapjack.LabToTargetSteps

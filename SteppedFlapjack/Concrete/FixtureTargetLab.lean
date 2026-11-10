@@ -44,7 +44,7 @@ open Flapjack.Compiler.Backend.StackRemove.Proofs
 open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
 
 theorem fixtureTargetLab_stack (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (ms : RiscV.L3.riscv_state) :
- (fullMakeInit countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^61) 24 riscvConfig.addrOffset
+ (fullMakeInit countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
   [4] code (fixtureTargetLab code cfg ms) fixtureSavedRegs 0 (fixtureStackOracle cfg)).1 = fixtureStack code cfg := by
  rw [fixtureTargetLab_shape]
  unfold fixtureStack
@@ -59,7 +59,7 @@ private theorem fixtureSavedRegs_member (r : Nat) (h : fixtureSavedRegs r = true
 
 theorem fixtureTargetLab_assumptions (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (ms : RiscV.L3.riscv_state)
  (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
- Assumptions countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^61) 24 riscvConfig.addrOffset
+ Assumptions countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
  [4] code (fixtureTargetLab code cfg ms) fixtureSavedRegs 0 (fixtureStackOracle cfg) := by
  have prev := fixtureLab_initAssumptions code cfg good
  rw [fixtureTargetLab_shape]

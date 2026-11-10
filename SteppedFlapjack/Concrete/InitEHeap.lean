@@ -29,7 +29,7 @@ theorem fixtureStack_heapLength (code : List (Nat × HolProg 64)) (cfg : LabToTa
   have length := ctx.heap_length_lab
   simp only [FullInitStackContext.labHeapLength,ctx,fixtureStackContext,fixtureLab,r2,r3,r4,fixtureLabRegs] at length
   simp only [show (12 : Nat) ≠ 11 by decide,show (13 : Nat) ≠ 11 by decide,show (13 : Nat) ≠ 12 by decide,if_false,if_true,wordSemTheWord] at length
-  change (fixtureStack code cfg).store.lookup .heapLength = some (.word (BitVec.ofNat 64 (Flapjack.Compiler.Backend.StackRemove.Proofs.InitLimits.getStackHeapLimit (2^61) (BitVec.ofNat 64 sourceBase,BitVec.ofNat 64 heapEnd,BitVec.ofNat 64 ramEnd)).2 * StackRemove.bytesInWord 64)) at length
+  change (fixtureStack code cfg).store.lookup .heapLength = some (.word (BitVec.ofNat 64 (Flapjack.Compiler.Backend.StackRemove.Proofs.InitLimits.getStackHeapLimit (2^53-1) (BitVec.ofNat 64 sourceBase,BitVec.ofNat 64 heapEnd,BitVec.ofNat 64 ramEnd)).2 * StackRemove.bytesInWord 64)) at length
   rw [fixture_init_limits] at length
   simpa [fixtureHeapLength,StackRemove.bytesInWord] using length
 /-- The initialized Stack heap domain is exactly the source domain. -/
