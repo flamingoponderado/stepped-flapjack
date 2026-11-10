@@ -1004,19 +1004,29 @@ theorem decCall_terminal_bridge {width : Nat} [NeZero width] {σ : Type}
     simp only [decClockCrepSemHOL] at targetCount ⊢
     omega
 
-/-- Zero clock prevents a Crep tail call from entering a callee. -/
-theorem crep_call_zero_steps {width : Nat} [NeZero width] {σ : Type}
+/-- At zero clock, a Crep call visits only itself and cannot continue. -/
+theorem crep_call_zero {width : Nat} [NeZero width] {σ : Type}
+    (ret : Option (List Nat × Option (BitVec width × CrepProgHOL width)))
     (fname : MlS) (args : List (CrepExpHOL width)) (target : CrepSemHOLState width σ)
-    (clock : target.clock = 0) : CrepSteps.steps (.call none fname args) target = 1 := by
-  rw [CrepSteps.steps.eq_def]
-  cases hargs : args.mapM (evalCrepSemHOLExp target) with
-  | none => simp [hargs]
-  | some vals =>
-    cases hfind : target.code.lookup fname with
-    | none => simp [hargs,hfind]
-    | some entry =>
-      obtain ⟨params,body⟩ := entry
-      simp [hargs,hfind,clock]
+    (clock : target.clock = 0) : CrepSteps.steps (.call ret fname args) target = 1 ∧
+       (evalCrepSemHOLProgExact target (.call ret fname args)).1 ≠ none := by
+  constructor
+  · rw [CrepSteps.steps.eq_def]
+    cases hargs : args.mapM (evalCrepSemHOLExp target) with
+    | none => simp [hargs]
+    | some vals =>
+      cases hfind : target.code.lookup fname with
+      | none => simp [hargs,hfind]
+      | some entry => obtain ⟨params,body⟩ := entry; simp [hargs,hfind,clock]
+  · rw [evalCrepSemHOLProgExact_call_holShape]
+    cases hargs : args.mapM (evalCrepSemHOLExp target) with
+    | none => simp
+    | some vals =>
+      cases hfind : lookupCodeFiniteHOL target.code fname vals vals.length with
+      | none => simp [hfind]
+      | some entry =>
+        obtain ⟨body,locals⟩ := entry
+        simp only [hfind,clock,if_true]; split <;> simp
 
 open Flapjack.PanSemStateFiniteExact in
 /-- A non-error tail call has evaluated arguments and a matching code entry. -/
@@ -1084,7 +1094,7 @@ theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
       CrepSteps.codeWeight programs * controlSteps (.call none fname argexps) source := by
   by_cases clock : source.clock = 0
   · have targetClock : target.clock = 0 := stateRel.2.2.2.2.2.1.symm.trans clock
-    have count := crep_call_zero_steps fname ((compileExpExactHOLWList ctxt argexps).flatMap Prod.fst) target targetClock
+    have count := (crep_call_zero none fname ((compileExpExactHOLWList ctxt argexps).flatMap Prod.fst) target targetClock).1
     have sourcePositive := controlSteps_pos (.call none fname argexps) source
     have weightPositive : ∀ ps : List (MlS × List Nat × CrepProgHOL width), 1 ≤ CrepSteps.codeWeight ps := by
       intro ps
@@ -1121,6 +1131,42 @@ theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
       have p := CrepSteps.statementWeight_pos (compileProgExactHOLW (ctxtFcExactHOL ctxt.funcs ctxt.eids
         (shapes.map Prod.fst) (shapes.map Prod.snd) (List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd))))) body)
       omega
+    nlinarith
+
+/-- A zero-clock declaration call stays within its generated slot overhead. -/
+theorem decCall_zero_bound {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (name fname : MlS) (shape : ShapeHOL)
+    (args : List (ExpHOL width)) (continuation : ProgHOL width)
+    (source : PanSemStateFiniteExact width σ) (target : CrepSemHOLState width σ) (K : Nat)
+    (clock : source.clock = 0) (stateRel : panToCrepStateRelFiniteExact source target)
+    (weight : CrepSteps.statementWeight (compileProgExactHOLW ctxt (.decCall name shape fname args continuation)) ≤ K) :
+    CrepSteps.steps (compileProgExactHOLW ctxt (.decCall name shape fname args continuation)) target ≤
+      K * controlSteps (.decCall name shape fname args continuation) source := by
+  let names := decCallSlots ctxt shape
+  let pre : CrepSemHOLState width σ := {target with locals := target.locals.updateListEq (names.zip (List.replicate names.length (.word 0)))}
+  let call : CrepProgHOL width := .call (some (names,none)) fname ((compileExpExactHOLWList ctxt args).flatMap Prod.fst)
+  have preClock : pre.clock = 0 := stateRel.2.2.2.2.2.1.symm.trans clock
+  have zero := crep_call_zero (some (names,none)) fname ((compileExpExactHOLWList ctxt args).flatMap Prod.fst) pre preClock
+  have count := decCall_compiled_steps ctxt name fname shape args continuation target
+  change CrepSteps.steps (compileProgExactHOLW ctxt (.decCall name shape fname args continuation)) target =
+    names.length + (1 + CrepSteps.steps call pre + match evalCrepSemHOLProgExact pre call with
+      | (none,post) => CrepSteps.steps (compileProgExactHOLW (decCallCtxt ctxt name shape) continuation) post
+      | _ => 0) at count
+  rcases run : evalCrepSemHOLProgExact pre call with ⟨out,post⟩
+  rw [run] at count
+  have noNone : out ≠ none := by simpa [call,run] using zero.2
+  cases out with
+  | none => exact False.elim (noNone rfl)
+  | some r =>
+    simp only at count
+    have one : CrepSteps.steps call pre = 1 := zero.1
+    rw [one] at count
+    have overhead : names.length + 2 ≤ K := by
+      rw [decCall_statementWeight] at weight
+      simp [names,decCallSlots]
+      omega
+    have positive := controlSteps_pos (.decCall name shape fname args continuation) source
+    rw [count]
     nlinarith
 
 open Flapjack.PanSemStateFiniteExact
