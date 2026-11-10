@@ -19,6 +19,12 @@ def nestedCallFunctions : List (FunName × List VarName × Prog (RiscV.Word 64))
   (functionEntries nestedCallDeclarations).map fun (name, params, body, _) =>
     (name, params.map Prod.fst, body)
 
+/-- All three declarations survive conversion to the HOL source representation. -/
+theorem nestedCall_declarations_ranged :
+    ∀ declaration ∈ nestedCallDeclarations, DeclByteRanged declaration := by
+  simp [nestedCallDeclarations,nestedCallEntry,DeclByteRanged,FunDeclByteRanged,
+    ListParamByteRanged,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged]
+
 set_option maxHeartbeats 3000000 in
 /-- The two nested calls return seven in six counted source steps. -/
 theorem nestedCall_source_run (context : PanValueFfiContext (RiscV.Word 64))

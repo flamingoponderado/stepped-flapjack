@@ -1,0 +1,72 @@
+import SteppedFlapjack.Concrete.NestedCalls
+import SteppedFlapjack.Concrete.Phase7SourceClock
+
+/-! Original HOL-shaped source execution for the nested-call witness. -/
+namespace SteppedFlapjack.Concrete
+open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.PanSemStateFiniteExact
+open SteppedFlapjack.PanToCrepSteps
+
+def nestedSourceState : PanSemStateFiniteExact 64 Unit :=
+  let mainCode := sourceTemplate.code.update (ofString "main", ([], progToHOL nestedCallEntry, .one))
+  let middleCode := mainCode.update (ofString "middle", ([], .call none (ofString "leaf") [], .one))
+  let allCode := middleCode.update (ofString "leaf", ([], .return (.const 7), .one))
+  {sourceTemplate with code := allCode}
+
+/-- Observational semantics starts from the original empty declaration state. -/
+theorem nestedCall_declared_semantics :
+    semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
+      (nestedCallDeclarations.map declToHOL) = semantics nestedSourceState (ofString "main") := by
+  have same : semantics {nestedSourceState with clock := 0} (ofString "main") =
+      semantics nestedSourceState (ofString "main") := by
+    cases nestedSourceState
+    rfl
+  simpa [semanticsDecls,nestedCallDeclarations,nestedCallEntry,declToHOL,funDeclToHOL,
+    progToHOL,expToHOL,shapeToHOL,decsStcnamesHOLExact,evaluateDeclsHOLFinite,
+    nestedSourceState,sourceTemplate,isWfShapeExactHOL] using same
+
+/-- The original source entry returns the witness value with unchanged FFI. -/
+theorem nestedCall_hol_run :
+    ∃ final, evaluateHOLFiniteState {nestedSourceState with clock := 4}
+      (.call none (ofString "main") []) =
+      (some (.returned (.val (.word 7))),final) ∧ final.ffi = sourceFfi := by
+  have leafMain : (ofString "leaf" == ofString "main") = false := by decide
+  have middleMain : (ofString "middle" == ofString "main") = false := by decide
+  have leafMiddle : (ofString "leaf" == ofString "middle") = false := by decide
+  simp [leafMain,middleMain,leafMiddle,evaluateHOLFiniteState_call,nestedSourceState,nestedCallEntry,progToHOL,
+    expToHOL,shapeToHOL,sourceTemplate,evalListHOLFinite,evalListHOLExact,
+    PanSemStateFiniteExact.lookupCodeHOLFinite,lookupCodeHOLExact,HolFiniteMapExact.lookup_update,FUPDATE,
+    evaluateHOLFiniteState_decCall_fixClockRewrite,evaluateHOLFiniteState_return,callEntryStateHOLFinite,
+    evalHOLExact,shapeOfHOLExact,shapeEqHOL,setVarHOLFinite,emptyLocalsHOLFinite]
+
+/-- The original declarations terminate successfully without I/O events. -/
+theorem nestedCall_source_semantics :
+    semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
+      (nestedCallDeclarations.map declToHOL) = .terminate .success [] := by
+  obtain ⟨final,run,ffi⟩ := nestedCall_hol_run
+  rw [nestedCall_declared_semantics]
+  have result := source_semantics_of_return nestedSourceState final (ofString "main") 4
+    (.val (.word 7)) run
+  simpa [ffi,sourceFfi] using result
+
+/-- The HOL source run reaches five statement nodes across its two calls. -/
+theorem nestedCall_controlSteps :
+    controlSteps (.call none (ofString "main") []) {nestedSourceState with clock := 4} = 5 := by
+  have leafMain : (ofString "leaf" == ofString "main") = false := by decide
+  have middleMain : (ofString "middle" == ofString "main") = false := by decide
+  have leafMiddle : (ofString "leaf" == ofString "middle") = false := by decide
+  simp [controlSteps.eq_def,leafMain,middleMain,leafMiddle,evaluateHOLFiniteState_call,
+    nestedSourceState,nestedCallEntry,progToHOL,expToHOL,shapeToHOL,sourceTemplate,
+    evalListHOLFinite,evalListHOLExact,PanSemStateFiniteExact.lookupCodeHOLFinite,lookupCodeHOLExact,
+    HolFiniteMapExact.lookup_update,FUPDATE,
+    evaluateHOLFiniteState_return,callEntryStateHOLFinite,evalHOLExact,shapeOfHOLExact,shapeEqHOL,
+    setVarHOLFinite,emptyLocalsHOLFinite,fixClockHOLFinite]
+  simp only [show ∀ a b, Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b) (3,a) (4,b) from
+      by intro _ _; apply Prod.Lex.left; omega,
+    show ∀ a b, Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b) (2,a) (3,b) from
+      by intro _ _; apply Prod.Lex.left; omega,
+    show ∀ a b, Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b) (1,a) (2,b) from
+      by intro _ _; apply Prod.Lex.left; omega,
+    show ∀ a b, Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b) (1,a) (3,b) from
+      by intro _ _; apply Prod.Lex.left; omega, if_true]
+
+end SteppedFlapjack.Concrete
