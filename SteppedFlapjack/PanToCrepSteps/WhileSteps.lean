@@ -758,4 +758,92 @@ theorem decCall_continuation_relations {width : Nat} [NeZero width] {σ : Type}
   · simpa [decCallCtxt,PanSemStateFiniteExact.setVarHOLFinite] using excpRel
   · exact loc
 
+open Flapjack.PanSemStateFiniteExact in
+/-- A successful declaration call exposes exact source and Crep visits and
+the related continuation states, with no assumed callee simulation. -/
+theorem decCall_return_bridge {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (name fname : MlS) (shape : ShapeHOL)
+    (argexps : List (ExpHOL width)) (continuation : ProgHOL width)
+    (source : PanSemStateFiniteExact width σ) (target : CrepSemHOLState width σ)
+    (args : List (ValueHOL width)) (body : ProgHOL width)
+    (locals : HolFiniteMapExact MlS (ValueHOL width)) (rsh : ShapeHOL)
+    (value : ValueHOL width) (sourcePost : PanSemStateFiniteExact width σ)
+    (hargs : source.evalListHOLFinite (h := fun address => Classical.propDecidable (source.memaddrs address)) argexps = some args)
+    (found : lookupCodeHOLFinite source.code.lookup fname args = some (body,locals,rsh))
+    (clock : source.clock ≠ 0) (stateRel : panToCrepStateRelFiniteExact source target)
+    (codeRel : codeRelExactHOLW ctxt source.code target.code)
+    (excpRel : panToCrepExcpRelFiniteExact ctxt.eids source.eshapes)
+    (localsRel : panToCrepLocalsRelFiniteExact ctxt source.locals target.locals)
+    (localised : everyExpListHOL localisedExpHOL argexps = true)
+    (bodyRun : (callEntryStateHOLFinite source locals).evaluateHOLFiniteState body = (some (.returned value),sourcePost))
+    (valid : shapeOfHOLExact value = shape) (returnValid : shapeOfHOLExact value = rsh) :
+    ∃ shapes : List (MlS × ShapeHOL), ∃ targetPost : CrepSemHOLState width σ,
+      let ns := List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd)))
+      let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
+      let sourceEntry := callEntryStateHOLFinite source locals
+      let targetEntry := {decClockCrepSemHOL target with locals := tlcHOL ns args}
+      let sourceCont := setVarHOLFinite name value {sourcePost with locals := source.locals}
+      let targetCont := {targetPost with locals := target.locals.updateListEq ((decCallSlots ctxt shape).zip (flattenHOL value))}
+      evalCrepSemHOLProgExact targetEntry (compileProgExactHOLW next body) = (some (.return (flattenHOL value)),targetPost) ∧
+      controlSteps (.decCall name shape fname argexps continuation) source =
+        1 + controlSteps body sourceEntry + controlSteps continuation sourceCont ∧
+      CrepSteps.steps (compileProgExactHOLW ctxt (.decCall name shape fname argexps continuation)) target =
+        (decCallSlots ctxt shape).length + 2 + CrepSteps.steps (compileProgExactHOLW next body) targetEntry +
+          CrepSteps.steps (compileProgExactHOLW (decCallCtxt ctxt name shape) continuation) targetCont ∧
+      panToCrepStateRelFiniteExact sourceCont targetCont ∧
+      codeRelExactHOLW (decCallCtxt ctxt name shape) sourceCont.code targetCont.code ∧
+      panToCrepExcpRelFiniteExact (decCallCtxt ctxt name shape).eids sourceCont.eshapes ∧
+      panToCrepLocalsRelFiniteExact (decCallCtxt ctxt name shape) sourceCont.locals targetCont.locals := by
+  classical
+  have wfValue : isWfShapeValueHOLExact [] value = true := by
+    have h := panToCrepFiniteEvaluateShapeInvariantRetInst2 argexps source fname args body
+      locals rsh body (.returned value) sourcePost target ctxt target.locals
+      (by simpa [evalListHOLFiniteClassical] using hargs)
+      (PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some _ _ _ _ _ _ found) bodyRun stateRel localsRel
+    simpa using h
+  have wf : isWfShapeExactHOL ([] : StructContextExact) (shapeOfHOLExact value) = true := by
+    rw [isWfShapeExactHOL_shapeOfHOLExact_eq_isWfShapeValueHOLExact_nil [] rfl value]
+    exact wfValue
+  obtain ⟨shapes,hsrc,hbodyLocal,htgt,callCount,hs,hc,he,hl⟩ :=
+    decCall_entries ctxt fname shape argexps source target args body locals rsh hargs found clock stateRel codeRel excpRel localsRel localised
+  let ns := List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd)))
+  let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
+  let entry := callEntryStateHOLFinite source locals
+  let targetEntry := {decClockCrepSemHOL target with locals := tlcHOL ns args}
+  have correct : pcCompileCorrectAt body entry := (pcCompileCorrectAt_iff_HOL _ _).mpr (pcCompileCorrect_all _ _)
+  obtain ⟨result,targetPost,targetRun,postState,postCode,postExcp,resultRel⟩ :=
+    correct (some (.returned value)) sourcePost targetEntry next bodyRun (by simp) hs hc he hl hbodyLocal
+  simp only [pcCompileCorrectResultRel] at resultRel
+  subst result
+  have ccode : codeRelExactHOLW ctxt sourcePost.code targetPost.code :=
+    codeRelExactHOLW_ctxtFc ctxt _ _ _ _ _ postCode
+  have continuations := decCall_continuation_relations ctxt name shape source sourcePost target targetPost value postState ccode postExcp localsRel valid wf
+  have ⟨shapes2,hsrc2,_,_,_,htargs,htlookup,_,_,_,_⟩ :=
+    pcCompileCorrectCallPrelude source target ctxt fname argexps args body locals rsh hargs found stateRel codeRel excpRel localsRel localised
+  have shapesEq : shapes2 = shapes := by rw [hsrc] at hsrc2; exact (congrArg Prod.fst (Option.some.inj hsrc2)).symm
+  subst shapes2
+  have hdist := pcCompileCorrectCallRetSlotsDistinct ctxt argexps (sizeOfShapeHOL shape) localsRel.2.1
+  have targetClock : target.clock ≠ 0 := by rw [← stateRel.2.2.2.2.2.1]; exact clock
+  have len : (flattenHOL value).length = (decCallSlots ctxt shape).length := by
+    simp [decCallSlots,flattenHOL_length_eq_sizeOfShapeHOL value wf,valid]
+  have callRun := initializedCall_return target fname ((compileExpExactHOLWList ctxt argexps).flatMap Prod.fst)
+    (args.flatMap flattenHOL) (flattenHOL value) (compileProgExactHOLW next body) (tlcHOL ns args)
+    (decCallSlots ctxt shape) targetPost htargs htlookup targetClock (decCallSlots_nodup ctxt shape) hdist targetRun len
+  have fix : fixClockHOLFinite entry (some (PanSemResultExact.returned value),sourcePost) = (some (PanSemResultExact.returned value),sourcePost) := by
+    rw [← bodyRun,fixClockHOLFinite_evaluate]
+  have sourceCount := controlSteps_decCall_return name fname shape argexps continuation source args body locals rsh value sourcePost
+    hargs found clock bodyRun ((shapeEqHOL_eq_true _ _).mpr valid) ((shapeEqHOL_eq_true _ _).mpr returnValid)
+  dsimp only at sourceCount
+  change fixClockHOLFinite (callEntryStateHOLFinite source locals) (some (PanSemResultExact.returned value),sourcePost) = _ at fix
+  rw [fix] at sourceCount
+  have targetCount := decCall_compiled_steps ctxt name fname shape argexps continuation target
+  dsimp only at targetCount
+  rw [callCount,callRun] at targetCount
+  simp only at targetCount
+  refine ⟨shapes,targetPost,targetRun,?_,?_,continuations⟩
+  · exact sourceCount
+  · dsimp only [targetEntry,next,ns] at targetCount ⊢
+    simp only [decClockCrepSemHOL] at targetCount ⊢
+    omega
+
 end SteppedFlapjack.PanToCrepSteps
