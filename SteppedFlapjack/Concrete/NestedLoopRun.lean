@@ -13,6 +13,12 @@ private theorem nestedLoop_leaf_run (s : LoopSemStateFiniteExact 64 Unit) :
 def nestedLoopTable : Spt (List Nat × HolLoopProg 64) := sptFromAList [(64,[],nestedLoopCode64),(65,[],nestedLoopCode65),(66,[],nestedLoopCode66),(67,[],nestedLoopCode67)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
+/-- The optimized Loop code table has control weight 26. -/
+theorem nestedCall_loop_codeWeight : SteppedFlapjack.LoopLiveSteps.loopCodeWeight nestedLoopTable = 26 := by
+  with_unfolding_all rfl
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 3000000 in
 private theorem nestedLoop_middle_run (s : LoopSemStateFiniteExact 64 Unit) (code : s.code = nestedLoopTable) (clock : s.clock ≠ 0) :
   evaluate nestedLoopCode66 s = (some (.result [.word 7]),
     LoopSemStateFiniteExact.callEnv [] (setVar 1 (.word 7) {decClock s with locals := .ln})) := by
