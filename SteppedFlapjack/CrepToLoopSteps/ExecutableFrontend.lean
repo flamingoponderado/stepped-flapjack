@@ -42,17 +42,31 @@ theorem compiled_returningCall_direct_shape {width : Nat} [NeZero width]
   rw [compiled]
   exact assignmentSequence_shape _ _ _ (.returning _ _ _ _ _ _)
 
-/-- A direct condition preserves the structural optimizer shape of both
+private theorem nestedSequence_shape {width : Nat} [NeZero width]
+    (front suffix : List (HolLoopProg width))
+    (prefixShape : ∀ p ∈ front, LoopBranch p)
+    (suffixShape : SimpleLoopSequenceSource (loopNestedSeqHOL suffix)) :
+    SimpleLoopSequenceSource (loopNestedSeqHOL (front ++ suffix)) := by
+  induction front with
+  | nil => simpa using suffixShape
+  | cons p rest ih =>
+    simp only [List.cons_append,loopNestedSeqHOL]
+    exact .seq (.branch (prefixShape p (by simp)))
+      (ih (by intro q hq; exact prefixShape q (by simp [hq])))
+
+/-- A scalar condition preserves the structural optimizer shape of both
 compiled branches, including branches that contain calls. -/
-theorem compiled_conditional_direct_shape {width : Nat} [NeZero width]
+theorem compiled_conditional_scalar_shape {width : Nat} [NeZero width]
     (ctxt : CrepToLoopContextExact) (live : NumSet)
     (condition : CrepExpHOL width) (thenBranch elseBranch : CrepProgHOL width)
-    (conditionShape : DirectExpression condition)
+    (conditionShape : CompiledScalar condition)
     (thenShape : SimpleLoopSequenceSource (compileHOLExact ctxt live thenBranch))
     (elseShape : SimpleLoopSequenceSource (compileHOLExact ctxt live elseBranch)) :
     SimpleLoopSequenceSource (compileHOLExact ctxt live (.ite condition thenBranch elseBranch)) := by
-  obtain ⟨value,compiled⟩ := directExpression_noCode conditionShape ctxt (ctxt.vmax+1) live
+  obtain ⟨code,value,next,outLive,compiled,prefixShape⟩ :=
+    compiledScalar_prefix conditionShape ctxt (ctxt.vmax+1) live
   rw [compileHOLExact,compiled]
+  apply nestedSequence_shape code _ prefixShape.2.2
   exact .seq (.branch (.assign _ _))
     (.seq (.conditional _ _ _ _ thenShape elseShape) (.branch .skip))
 
