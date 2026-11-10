@@ -16,7 +16,7 @@ theorem comparisonFixture_source_lab (cfg : LabToTarget.Config) (ms : RiscV.L3.r
         (clockedFixtureSource branching 6)) branchingHOL) branchCrepEntry = (some (.return [.word 7]),final) ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       LabSem.evaluate {(fixtureTargetLab comparisonNativeCode cfg ms) with clock :=
-        27156840326100392288867315340591} = (.halt .success,labPost) ∧
+        95691392159151} = (.halt .success,labPost) ∧
       labPost.ffi.ioEvents = post.ffi.ioEvents := by
   obtain ⟨final,post,targetPost,targetResult,sourceRun,stateRel,ffi,stackRun,result,stackBound⟩ :=
     comparisonFixture_source_stack cfg context primitive handler
@@ -43,7 +43,7 @@ theorem branchingLoopFixture_source_lab (cfg : LabToTarget.Config) (ms : RiscV.L
         (clockedFixtureSource branchingLoop 23)) (progToHOL branchingLoop)) branchingLoopCrepEntry = (some (.return [.word 7]),final) ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       LabSem.evaluate {(fixtureTargetLab branchingLoopNativeCode cfg ms) with clock :=
-        11007938613030372157139427543278511} = (.halt .success,labPost) ∧
+        38788200616213551} = (.halt .success,labPost) ∧
       labPost.ffi.ioEvents = post.ffi.ioEvents := by
   obtain ⟨final,post,targetPost,targetResult,sourceRun,stateRel,ffi,stackRun,result,stackBound⟩ :=
     branchingLoopFixture_source_stack cfg context primitive handler

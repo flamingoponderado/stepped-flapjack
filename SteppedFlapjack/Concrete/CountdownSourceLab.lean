@@ -19,7 +19,7 @@ theorem countdownFixture_source_lab (n : Nat) (range : n < 2^64) (cfg : LabToTar
         (clockedFixtureSource (countdown n) (6*n+9))) (naturalCountdownHOL n)) (naturalCrepEntry n) =
         (some (.return [.word 0]),final) ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
-      LabSem.evaluate {(fixtureTargetLab (countdownNativeStackCode n) cfg ms) with clock := (301044271827414925352998591868160*n + 928226242656837292779915131748711)} =
+      LabSem.evaluate {(fixtureTargetLab (countdownNativeStackCode n) cfg ms) with clock := (1060776773971200*n + 3270750953752551)} =
         (.halt .success,labPost) ∧ labPost.ffi.ioEvents = post.ffi.ioEvents := by
   obtain ⟨final,post,targetPost,targetResult,sourceRun,stateRel,ffi,stackRun,result,stackBound⟩ :=
     countdownFixture_source_stack n range cfg context primitive handler

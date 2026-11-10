@@ -132,7 +132,7 @@ set_option maxHeartbeats 4000000 in
 private theorem countdownZeroLabFactor (cfg : LabToTarget.Config) :
     costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
       (sptFromAList (code1 countdownRiscVBackend.dataConf (countdownNativeStackCode 0))) [4]
-      (coracle1 (fixtureStackOracle cfg)) = 553402322211286548510 := by
+      (coracle1 (fixtureStackOracle cfg)) = 1950 := by
   simp only [costFromFields,oracleBitmapBudget,Nat.add_zero,List.range_zero,List.flatMap_nil,maxListNat]
   unfold countdownNativeStackCode
   rw [countdown_optimized_literal]
@@ -142,7 +142,7 @@ private theorem countdownZeroLabFactor (cfg : LabToTarget.Config) :
 source count. -/
 theorem countdownLabTick_closed (n : Nat) (cfg : LabToTarget.Config) :
     fixtureLabTickLimit (countdownNativeStackCode n) cfg (9543650688*n+29426459323) =
-      301044271827414925352998591868160*n + 928226242656837292779915131748711 := by
+      1060776773971200*n + 3270750953752551 := by
   have factor := (actualFactor n cfg).trans (countdownZeroLabFactor cfg)
   rw [fixtureLabTick_numeric _ _ _ factor]
   omega

@@ -15,8 +15,8 @@ private theorem fixtureInitCost : loopOnlyCost 0 (initCode (StackToLab.isGenGc c
 /-- A fixture with the checked code factor uses this numeric affine Lab clock. -/
 theorem fixtureLabTick_numeric (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (n : Nat)
     (factor : costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
-      (sptFromAList (code1 countdownRiscVBackend.dataConf code)) [4] (coracle1 (fixtureStackOracle cfg)) = 553402322211286548510) :
-    fixtureLabTickLimit code cfg n = 31543932366043333265070*n + 1101 := by
+      (sptFromAList (code1 countdownRiscVBackend.dataConf code)) [4] (coracle1 (fixtureStackOracle cfg)) = 1950) :
+    fixtureLabTickLimit code cfg n = 111150*n + 1101 := by
   unfold fixtureLabTickLimit
   simp only [factor,fixtureUniformFactor,fixtureInitCost,flattenStepFactor]
   omega

@@ -1,5 +1,6 @@
 import Flapjack.Compiler.Backend.StackRemove.Proofs.CopyEach
 import Flapjack.Compiler.Backend.StackProps.EvaluateAddClock
+import Mathlib.Data.Nat.BinaryRec
 import SteppedFlapjack.StackRemoveSteps.Defs
 
 /-! Fine-grained step bounds for the `copyEach` per-bitmap-word copy loop
@@ -7,7 +8,7 @@ import SteppedFlapjack.StackRemoveSteps.Defs
 
 The adapted `copyEachThmWithin` carries the same simulation result as
 Flapjack's `copyEachThm` plus the fine-grained step bound
-`15 * (pattern.toNat + 1) + 3`: each iteration costs fourteen steps (the loop,
+`15 * (Nat.log2 pattern.toNat + 1) + 3`: each iteration costs fourteen steps (the loop,
 the `If`, and the twelve-step body) and the sentinel costs three. The
 duplication of the simulation proof is deliberate (see
 `CONTINUE-STEP-PRESERVATION.md`); the source definitions stay in Flapjack. -/
@@ -35,7 +36,7 @@ set_option maxHeartbeats 1000000 in
 same source copy success, distinct registers, domain equality/inclusion, good
 word dimension, register reads and separated list/frame/memory assertion as
 `copyEachThm`, and additionally bounds the run by
-`15 * (pattern.toNat + 1) + 3` steps. -/
+`15 * (Nat.log2 pattern.toNat + 1) + 3` steps. -/
 theorem copyEachThmWithin {width : Nat} [NeZero width] {C F : Type}
     (temporary bitmap index finalIndex : Nat)
     (pattern address offset finalAddress base : BitVec width)
@@ -67,10 +68,10 @@ theorem copyEachThmWithin {width : Nat} [NeZero width] {C F : Type}
         (SetSep.star (Misc.wordList base (bitmaps.map WordLocW.word)) rest)
         (memoryHOL finalMemory domain) (SetSep.fun2Set (nextMemory, targetDomain)) ∧
       steps (copyEach temporary bitmap, {target with clock := target.clock + allowance}) ≤
-        15 * (pattern.toNat + 1) + 3 ∧
+        15 * (Nat.log2 pattern.toNat + 1) + 3 ∧
       (∀ c : Nat, target.clock + allowance ≤ c →
         steps (copyEach temporary bitmap, {target with clock := c}) ≤
-          15 * (pattern.toNat + 1) + 3) := by
+          15 * (Nat.log2 pattern.toNat + 1) + 3) := by
   fun_induction copyWordsForPattern pattern index address offset bitmaps domain memory
     generalizing finalIndex finalAddress finalMemory target
   case case1 => cases hypothesis.1
@@ -98,12 +99,12 @@ theorem copyEachThmWithin {width : Nat} [NeZero width] {C F : Type}
         exact oneRead
       have h := steps_copyEach_sentinel temporary bitmap {target with clock := c} hread
       show steps (copyEach temporary bitmap, {target with clock := c}) ≤
-        15 * ((BitVec.ofNat width 1).toNat + 1) + 3
+        15 * (Nat.log2 ((BitVec.ofNat width 1).toNat) + 1) + 3
       have hnat : (BitVec.ofNat width 1).toNat = 1 := by
         have hpos : 0 < width := Nat.pos_of_ne_zero (NeZero.ne width)
         simp [BitVec.toNat_ofNat, hpos]
       rw [hnat]
-      exact Nat.le_trans h (by omega : 3 ≤ 15 * (1 + 1) + 3)
+      exact Nat.le_trans h (by omega : 3 ≤ 15 * (Nat.log2 1 + 1) + 3)
   case case4 => cases hypothesis.1
   case case3 pattern index address memory hzero hone guard value nextMemory ih =>
     rcases hypothesis with ⟨success, distinct, domainEq, good,
@@ -174,8 +175,16 @@ theorem copyEachThmWithin {width : Nat} [NeZero width] {C F : Type}
       omega
     have hshift : (pattern >>> (1 : Nat)).toNat = pattern.toNat / 2 :=
       BitVec.toNat_ushiftRight pattern 1
-    have hdiv : pattern.toNat / 2 ≤ pattern.toNat - 1 :=
-      Nat.le_pred_of_lt (Nat.div_lt_self (by omega) (by decide))
+    have hnonzero : (pattern.toNat >>> 1) ≠ 0 := by
+      rw [Nat.shiftRight_eq_div_pow]
+      simp only [pow_one]
+      omega
+    have hlog := Nat.log2_eq_succ_log2_shiftRight hnonzero
+    rw [Nat.shiftRight_eq_div_pow] at hlog
+    simp only [pow_one] at hlog
+    have hshiftLog : Nat.log2 (pattern >>> (1 : Nat)).toNat + 1 = Nat.log2 pattern.toNat := by
+      rw [hshift]
+      omega
     refine ⟨allowance + 1,
       (if pattern >>> (1 : Nat) = 1 then
         (if pattern.getLsbD 0 then value + offset else value) else finalValue),

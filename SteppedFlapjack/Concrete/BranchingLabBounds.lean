@@ -11,7 +11,7 @@ set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
 private theorem cmpFactor (cfg : LabToTarget.Config) :
  costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
- (sptFromAList (code1 countdownRiscVBackend.dataConf comparisonNativeCode)) [4] (coracle1 (fixtureStackOracle cfg)) = 553402322211286548510 := by
+ (sptFromAList (code1 countdownRiscVBackend.dataConf comparisonNativeCode)) [4] (coracle1 (fixtureStackOracle cfg)) = 1950 := by
  simp only [costFromFields, oracleBitmapBudget, Nat.add_zero, List.range_zero, List.flatMap_nil, maxListNat]
  unfold comparisonNativeCode
  rw [comparison_optimized_table]
@@ -20,7 +20,7 @@ set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
 private theorem branchFactor (cfg : LabToTarget.Config) :
  costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
- (sptFromAList (code1 countdownRiscVBackend.dataConf branchingLoopNativeCode)) [4] (coracle1 (fixtureStackOracle cfg)) = 553402322211286548510 := by
+ (sptFromAList (code1 countdownRiscVBackend.dataConf branchingLoopNativeCode)) [4] (coracle1 (fixtureStackOracle cfg)) = 1950 := by
  simp only [costFromFields, oracleBitmapBudget, Nat.add_zero, List.range_zero, List.flatMap_nil, maxListNat]
  unfold branchingLoopNativeCode
  rw [branch_optimized_table]
@@ -28,12 +28,12 @@ private theorem branchFactor (cfg : LabToTarget.Config) :
 
 /-- Numeric Lab clock for the comparison witness. -/
 theorem comparisonLabTick_closed (cfg : LabToTarget.Config) :
-    fixtureLabTickLimit comparisonNativeCode cfg 860921207 = 27156840326100392288867315340591 := by
+    fixtureLabTickLimit comparisonNativeCode cfg 860921207 = 95691392159151 := by
   rw [fixtureLabTick_numeric _ _ _ (cmpFactor cfg)]
 
 /-- Numeric Lab clock for the branching-loop witness. -/
 theorem branchingLoopLabTick_closed (cfg : LabToTarget.Config) :
-    fixtureLabTickLimit branchingLoopNativeCode cfg 348971665463 = 11007938613030372157139427543278511 := by
+    fixtureLabTickLimit branchingLoopNativeCode cfg 348971665463 = 38788200616213551 := by
   rw [fixtureLabTick_numeric _ _ _ (branchFactor cfg)]
 
 end SteppedFlapjack.Concrete

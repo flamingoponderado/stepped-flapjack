@@ -17,7 +17,7 @@ theorem naturalCountdownFixture_source_lab (n : Nat) (range : n < 2^64) (cfg : L
         (some (.return [.word 0]),final) ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       LabSem.evaluate {(fixtureTargetLab (countdownNativeStackCode n) cfg ms) with clock :=
-        (301044271827414925352998591868160*n + 928226242656837292779915131748711)} =
+        (1060776773971200*n + 3270750953752551)} =
         (.halt .success,labPost) ∧ labPost.ffi.ioEvents = post.ffi.ioEvents := by
   refine ⟨naturalCountdown_panToWord n,?_⟩
   have h := countdownFixture_source_lab n range cfg ms context primitive handler

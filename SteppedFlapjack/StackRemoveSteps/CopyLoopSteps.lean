@@ -196,23 +196,32 @@ theorem steps_while_exit (temporary bitmap : Nat) (pattern : BitVec width)
 
 /-! ### Arithmetic of the bound -/
 
+theorem bitvec_log2_bound {width : Nat} [NeZero width] (pattern : BitVec width) :
+    Nat.log2 pattern.toNat + 1 ≤ width := by
+  by_cases hz : pattern.toNat = 0
+  · have hw : 0 < width := Nat.pos_of_ne_zero (NeZero.ne width)
+    simp only [hz, Nat.log2_zero]
+    omega
+  · have hlt : Nat.log2 pattern.toNat < width := (Nat.log2_lt hz).2 pattern.isLt
+    omega
+
 theorem copyLoopSteps_mono (width : Nat) {B1 B2 : Nat} (h : B1 ≤ B2) :
     copyLoopSteps width B1 ≤ copyLoopSteps width B2 := by
-  have h1 : 15 * B1 * 2 ^ width ≤ 15 * B2 * 2 ^ width :=
+  have h1 : 15 * B1 * width ≤ 15 * B2 * width :=
     Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 15 h)
   have h2 : 9 * B1 ≤ 9 * B2 := Nat.mul_le_mul_left 9 h
   unfold copyLoopSteps
   omega
 
 theorem copyLoopSteps_succ (width B : Nat) :
-    copyLoopSteps width B + (15 * 2 ^ width + 9) = copyLoopSteps width (B + 1) := by
+    copyLoopSteps width B + (15 * width + 9) = copyLoopSteps width (B + 1) := by
   unfold copyLoopSteps
   ring
 
-theorem copyLoopSteps_pos (width B : Nat) : 15 * 2 ^ width + 11 ≤ copyLoopSteps width B := by
+theorem copyLoopSteps_pos (width B : Nat) : 15 * width + 11 ≤ copyLoopSteps width B := by
   unfold copyLoopSteps
-  have : 0 ≤ B * (15 * 2 ^ width + 9) := Nat.zero_le _
-  nlinarith [Nat.zero_le (B * (15 * 2 ^ width + 9))]
+  have : 0 ≤ B * (15 * width + 9) := Nat.zero_le _
+  nlinarith [Nat.zero_le (B * (15 * width + 9))]
 
 /-! ### The `copyLoop` step bound -/
 
@@ -393,11 +402,9 @@ theorem copyLoopThmWithin {width : Nat} [NeZero width] {C F : Type}
       have rhsLe := steps_copyLoop_le temporary bitmap (decClock boostedCopied) ds1 (decClock next) final dp1 dp2 whileRunDec
       have whileStep := steps_while_step temporary bitmap pattern boostedLoaded next
         reads.1 sign bodyRun nonzero
-      have copyLe : steps (copyEach temporary bitmap, boostedLoaded) ≤ 15 * (pattern.toNat + 1) + 3 :=
+      have copyLe : steps (copyEach temporary bitmap, boostedLoaded) ≤ 15 * (Nat.log2 pattern.toNat + 1) + 3 :=
         copyStepsC boostedLoaded.clock (by dsimp [boostedLoaded, loaded, loadBitmapState]; omega)
-      have hpatBound : pattern.toNat + 1 ≤ 2 ^ width := by
-        have := pattern.isLt
-        omega
+      have hpatBound : Nat.log2 pattern.toNat + 1 ≤ width := bitvec_log2_bound pattern
       have hrec : steps (copyLoop temporary bitmap, decClock boostedCopied) ≤
           copyLoopSteps width (bitmaps.length - nextIndex) := by
         rw [reentryState]
@@ -406,7 +413,7 @@ theorem copyLoopThmWithin {width : Nat} [NeZero width] {C F : Type}
           6 + steps (copyEach temporary bitmap, boostedLoaded) +
             steps (copyLoop temporary bitmap, decClock boostedCopied) := by
         omega
-      have hstep : steps (copyEach temporary bitmap, boostedLoaded) ≤ 15 * 2 ^ width + 3 := by
+      have hstep : steps (copyEach temporary bitmap, boostedLoaded) ≤ 15 * width + 3 := by
         omega
       have indexLe : i + 1 ≤ nextIndex :=
         StackSemStoreConsts.copyWordsForPattern_index_le pattern (i + 1) a offset bitmaps
@@ -415,9 +422,9 @@ theorem copyLoopThmWithin {width : Nat} [NeZero width] {C F : Type}
       calc steps (copyLoop temporary bitmap, boosted)
           ≤ 6 + steps (copyEach temporary bitmap, boostedLoaded) +
               steps (copyLoop temporary bitmap, decClock boostedCopied) := hmain
-        _ ≤ 6 + (15 * 2 ^ width + 3) + copyLoopSteps width (bitmaps.length - nextIndex) := by
+        _ ≤ 6 + (15 * width + 3) + copyLoopSteps width (bitmaps.length - nextIndex) := by
             omega
-        _ = copyLoopSteps width (bitmaps.length - nextIndex) + (15 * 2 ^ width + 9) := by ring
+        _ = copyLoopSteps width (bitmaps.length - nextIndex) + (15 * width + 9) := by ring
         _ = copyLoopSteps width (bitmaps.length - nextIndex + 1) :=
             copyLoopSteps_succ width (bitmaps.length - nextIndex)
         _ ≤ copyLoopSteps width (bitmaps.length - i) := copyLoopSteps_mono width hnext
@@ -486,10 +493,8 @@ theorem copyLoopThmWithin {width : Nat} [NeZero width] {C F : Type}
         {loaded with clock := loaded.clock + allowance} bp1 bp2 whileExitRun
       have whileLe := steps_while_exit temporary bitmap pattern
         {loaded with clock := loaded.clock + allowance} reads.1 nonnegative
-      have hpatBound : pattern.toNat + 1 ≤ 2 ^ width := by
-        have := pattern.isLt
-        omega
-      have hbase : 15 * 2 ^ width + 11 ≤ copyLoopSteps width (bitmaps.length - i) := by
+      have hpatBound : Nat.log2 pattern.toNat + 1 ≤ width := bitvec_log2_bound pattern
+      have hbase : 15 * width + 11 ≤ copyLoopSteps width (bitmaps.length - i) := by
         have h := copyLoopSteps_mono width (Nat.zero_le (bitmaps.length - i))
         simp only [copyLoopSteps, Nat.mul_zero, Nat.zero_mul, Nat.add_zero, Nat.zero_add] at h ⊢
         exact h
