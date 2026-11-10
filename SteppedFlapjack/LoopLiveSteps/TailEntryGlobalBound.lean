@@ -47,13 +47,13 @@ theorem findCode_direct_weight {width : Nat} [NeZero width]
 theorem directTail_weighted_step {width : Nat} [NeZero width] {F : Type}
     (loc : Nat) (args : List Nat) (s post : LoopSemStateFiniteExact width F)
     (values : List (WordLocW width)) (env : Spt (WordLocW width)) (body : HolLoopProg width)
-    (out : Option (LoopResultExact width))
+    (out : Option (LoopResultExact width)) (extra : Nat)
     (get : getVars args s = some values) (found : findCode (some loc) values s.code = some (env,body))
     (clock : s.clock ≠ 0)
     (run : evaluate body {decClock s with locals := env} = (out,post))
     (bodyBound : steps body {decClock s with locals := env} ≤
-      SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body + (loopCodeWeight s.code+1) * ((decClock s).clock-post.clock)) :
-    steps (.call none (some loc) args none) s ≤ 1 + (loopCodeWeight s.code+1) * (s.clock-post.clock) := by
+      SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body + (loopCodeWeight s.code+extra) * ((decClock s).clock-post.clock)) :
+    steps (.call none (some loc) args none) s ≤ 1 + (loopCodeWeight s.code+extra) * (s.clock-post.clock) := by
   have weight := findCode_direct_weight s.code loc values env body found
   have count := steps_call_tail (some loc) args s values env body get found clock
   have bodyClock := evaluate_clock body {decClock s with locals := env} out post run
@@ -110,41 +110,74 @@ theorem returningCall_post_clock {width : Nat} [NeZero width] {F : Type}
 
 
 /-- A compiled returning call lifts its callee bound using the code-table weight. -/
+private theorem returningCall_weighted_step_aux {width : Nat} [NeZero width] {F : Type}
+    (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exception : Nat) (handler normal : HolLoopProg width) (continuationCost : Nat)
+    (s cut post : LoopSemStateFiniteExact width F) (values : List (WordLocW width))
+    (env : Spt (WordLocW width)) (body : HolLoopProg width) (out : Option (LoopResultExact width))
+    (get : getVars args s = some values) (found : findCode (some loc) values s.code = some (env,body))
+    (distinct : names.Nodup) (cutRun : cutRes live (none,s) = (none,cut))
+    (bodyRun : evaluate body {cut with locals := env} = (out,post))
+    (handlerBound : ∀ t : LoopSemStateFiniteExact width F, steps handler t ≤ continuationCost)
+    (normalBound : ∀ t : LoopSemStateFiniteExact width F, steps normal t ≤ continuationCost)
+    (bodyBound : steps body {cut with locals := env} ≤ SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body +
+      (loopCodeWeight s.code+continuationCost) * (cut.clock-post.clock)) :
+    let call : HolLoopProg width := .call (some (names,live)) (some loc) args
+      (some (exception,handler,normal,liveOut))
+    steps call s ≤ 1 + (loopCodeWeight s.code+continuationCost) * (s.clock-(evaluate call s).2.clock) := by
+  have weight := findCode_direct_weight s.code loc values env body found
+  have count := steps_call_returning (some loc) args names live
+    (some (exception,handler,normal,liveOut)) s cut post values env body out get found distinct cutRun bodyRun
+  have countBound : steps (.call (some (names,live)) (some loc) args
+      (some (exception,handler,normal,liveOut))) s ≤ 1 + continuationCost + steps body {cut with locals := env} := by
+    rw [count]
+    cases out with
+    | none => simp
+    | some r =>
+      cases r <;> try simp
+      case result returned =>
+        by_cases arity : returned.length = names.length
+        · simp [arity]
+          have h := normalBound (setVars names returned {post with locals := cut.locals})
+          omega
+        · simp [arity]
+      case exception value =>
+        have h := handlerBound (setVar exception value {post with locals := cut.locals})
+        omega
+  have cutClock := cutRes_none_clock cutRun
+  have bodyClock := evaluate_clock body {cut with locals := env} out post bodyRun
+  simp only at bodyClock
+  have finalClock := returningCall_post_clock (some loc) args names live
+    (some (exception,handler,normal,liveOut)) s cut post values env body out get found distinct cutRun bodyRun
+  have budget : cut.clock-post.clock + 1 ≤
+      s.clock-(evaluate (.call (some (names,live)) (some loc) args
+        (some (exception,handler,normal,liveOut))) s).2.clock := by omega
+  have scaled := Nat.mul_le_mul_left (loopCodeWeight s.code+continuationCost) budget
+  dsimp only
+  nlinarith
+
+/-- Compiler-generated returning continuations, including their optimizer marks,
+are bounded by the code-table factor plus two visits. -/
 theorem returningCall_weighted_step {width : Nat} [NeZero width] {F : Type}
     (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exception : Nat)
+    (markHandler markNormal : Bool)
     (s cut post : LoopSemStateFiniteExact width F) (values : List (WordLocW width))
     (env : Spt (WordLocW width)) (body : HolLoopProg width) (out : Option (LoopResultExact width))
     (get : getVars args s = some values) (found : findCode (some loc) values s.code = some (env,body))
     (distinct : names.Nodup) (cutRun : cutRes live (none,s) = (none,cut))
     (bodyRun : evaluate body {cut with locals := env} = (out,post))
     (bodyBound : steps body {cut with locals := env} ≤ SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body +
-      (loopCodeWeight s.code+1) * (cut.clock-post.clock)) :
-    let call : HolLoopProg width := .call (some (names,live)) (some loc) args
-      (some (exception,.raise exception,.skip,liveOut))
-    steps call s ≤ 1 + (loopCodeWeight s.code+1) * (s.clock-(evaluate call s).2.clock) := by
-  have weight := findCode_direct_weight s.code loc values env body found
-  have count := steps_call_returning (some loc) args names live
-    (some (exception,.raise exception,.skip,liveOut)) s cut post values env body out get found distinct cutRun bodyRun
-  have countBound : steps (.call (some (names,live)) (some loc) args
-      (some (exception,.raise exception,.skip,liveOut))) s ≤ 2 + steps body {cut with locals := env} := by
-    rw [count]
-    cases out with
-    | none => simp
-    | some r =>
-      cases r <;> simp [steps_leaf]
-      case result returned =>
-        split <;> simp
-  have cutClock := cutRes_none_clock cutRun
-  have bodyClock := evaluate_clock body {cut with locals := env} out post bodyRun
-  simp only at bodyClock
-  have finalClock := returningCall_post_clock (some loc) args names live
-    (some (exception,.raise exception,.skip,liveOut)) s cut post values env body out get found distinct cutRun bodyRun
-  have budget : cut.clock-post.clock + 1 ≤
-      s.clock-(evaluate (.call (some (names,live)) (some loc) args
-        (some (exception,.raise exception,.skip,liveOut))) s).2.clock := by omega
-  have scaled := Nat.mul_le_mul_left (loopCodeWeight s.code+1) budget
-  dsimp only
-  nlinarith
+      (loopCodeWeight s.code+2) * (cut.clock-post.clock)) :
+    let handler : HolLoopProg width := if markHandler then .mark (.raise exception) else .raise exception
+    let normal : HolLoopProg width := if markNormal then .mark .skip else .skip
+    let call : HolLoopProg width := .call (some (names,live)) (some loc) args (some (exception,handler,normal,liveOut))
+    steps call s ≤ 1 + (loopCodeWeight s.code+2) * (s.clock-(evaluate call s).2.clock) := by
+  apply returningCall_weighted_step_aux loc args names live liveOut exception _ _ 2 s cut post values env body out
+    get found distinct cutRun bodyRun
+  · intro t
+    cases markHandler <;> simp [steps_mark,steps_leaf]
+  · intro t
+    cases markNormal <;> simp [steps_mark,steps_leaf]
+  · exact bodyBound
 
 /-- The selected zero-argument code entry has a supported shape and bounded syntax. -/
 def TailCodeBound (code : Spt (List Nat × HolLoopProg width)) (loc K : Nat) : Prop :=
