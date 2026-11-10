@@ -1086,7 +1086,8 @@ theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
     (ctxt : PanToCrepContextExact width) (fname : MlS) (argexps : List (ExpHOL width))
     (source : PanSemStateFiniteExact width σ) (target : CrepSemHOLState width σ)
     (sourceFinal : PanSemStateFiniteExact width σ) (result : Option (PanSemResultExact width))
-    (programs : List (MlS × List Nat × CrepProgHOL width))
+    (programs : List (MlS × List Nat × CrepProgHOL width)) (K : Nat)
+    (tableWeight : CrepSteps.codeWeight programs ≤ K)
     (code : target.code = alistToFmapCodeExact programs)
     (run : source.evaluateHOLFiniteState (.call none fname argexps) = (result,sourceFinal))
     (nonerror : result ≠ some .error)
@@ -1117,9 +1118,9 @@ theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
       (PanSemStateFiniteExact.callEntryStateHOLFinite source locals).evaluateHOLFiniteState body = (calleeResult,calleePost) →
       calleeResult ≠ some .error →
       CrepSteps.steps (compileProgExactHOLW next body) {decClockCrepSemHOL target with locals := tlcHOL ns args} ≤
-        CrepSteps.codeWeight programs * controlSteps body (PanSemStateFiniteExact.callEntryStateHOLFinite source locals)) :
+        K * controlSteps body (PanSemStateFiniteExact.callEntryStateHOLFinite source locals)) :
     CrepSteps.steps (compileProgExactHOLW ctxt (.call none fname argexps)) target ≤
-      CrepSteps.codeWeight programs * controlSteps (.call none fname argexps) source := by
+      K * controlSteps (.call none fname argexps) source := by
   by_cases clock : source.clock = 0
   · have targetClock : target.clock = 0 := stateRel.2.2.2.2.2.1.symm.trans clock
     have count := (crep_call_zero none fname ((compileExpExactHOLWList ctxt argexps).flatMap Prod.fst) target targetClock).1
@@ -1131,7 +1132,7 @@ theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
       | cons row rest ih =>
         change 1 ≤ max (CrepSteps.statementWeight row.2.2) (CrepSteps.codeWeight rest)
         exact Nat.le_trans ih (Nat.le_max_right _ _)
-    have weightPositive := weightPositive programs
+    have weightPositive : 1 ≤ K := (weightPositive programs).trans tableWeight
     simp only [compileProgExactHOLW,compileCallNoReturnExactHOLW] at ⊢
     rw [count]
     nlinarith
@@ -1151,7 +1152,7 @@ theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
       exact nonerror (Prod.mk.inj run).1.symm
     have b := bodyIH args body locals rsh hargs found shapes hsrc htgt smaller hlocal hs hc he hl calleeResult calleePost bodyRun bodyNonerror
     rw [hsource,htarget]
-    have positive : 1 ≤ CrepSteps.codeWeight programs := by
+    have positive : 1 ≤ K := by
       have w := SteppedFlapjack.CrepToLoopSteps.lookup_statementWeight_le_codeWeight programs fname
         (List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd))))
         (compileProgExactHOLW (ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd)
@@ -1549,5 +1550,129 @@ def CallFrontendCode {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact 
   ∀ name params body rsh, code.lookup name = some (params,body,rsh) →
     let ns := List.range (sizeOfShapeHOL (.comb (params.map Prod.snd)))
     CallFrontend (ctxtFcExactHOL ctxt.funcs ctxt.eids (params.map Prod.fst) (params.map Prod.snd) ns) body
+
+/-- Function-table support depends only on the function and exception maps. -/
+theorem callFrontendCode_context {width : Nat} [NeZero width]
+    (a b : PanToCrepContextExact width)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
+    (funcs : a.funcs = b.funcs) (eids : a.eids = b.eids) (h : CallFrontendCode a code) :
+    CallFrontendCode b code := by
+  intro name params body rsh found
+  simpa only [← funcs,← eids] using h name params body rsh found
+
+theorem callFrontendCode_callee {width : Nat} [NeZero width]
+    (ctxt : PanToCrepContextExact width)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
+    (vs : List MlS) (shapes : List ShapeHOL) (ns : List Nat) (h : CallFrontendCode ctxt code) :
+    CallFrontendCode (ctxtFcExactHOL ctxt.funcs ctxt.eids vs shapes ns) code := by
+  apply callFrontendCode_context ctxt _ code <;> simp [ctxtFcExactHOL,h]
+
+theorem callFrontendCode_decl {width : Nat} [NeZero width]
+    (ctxt : PanToCrepContextExact width)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
+    (name : MlS) (h : CallFrontendCode ctxt code) :
+    CallFrontendCode (scalarDeclContext ctxt name) code := by
+  apply callFrontendCode_context ctxt _ code <;> simp [scalarDeclContext,h]
+
+theorem callFrontendCode_decCall {width : Nat} [NeZero width]
+    (ctxt : PanToCrepContextExact width)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
+    (name : MlS) (shape : ShapeHOL) (h : CallFrontendCode ctxt code) :
+    CallFrontendCode (decCallCtxt ctxt name shape) code := by
+  apply callFrontendCode_context ctxt _ code <;> simp [h]
+
+set_option maxHeartbeats 3000000 in
+private theorem callFrontend_global {width : Nat} [NeZero width] (limit : Nat) :
+    ∀ (ctxt : PanToCrepContextExact width) (p : ProgHOL width)
+      (sourceTable : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
+      (programs : List (MlS × List Nat × CrepProgHOL width)) (K : Nat),
+      CallFrontend ctxt p → CallFrontendCode ctxt sourceTable → CrepSteps.codeWeight programs ≤ K →
+      ProgramBound ctxt p limit sourceTable (alistToFmapCodeExact programs) K := by
+  induction limit using Nat.strong_induction_on with
+  | h limit ih =>
+    intro ctxt p sourceTable programs K shape supported weight
+    induction shape with
+    | base h => exact frontendProgramBound h limit sourceTable (alistToFmapCodeExact programs) K
+    | @tail ctxt fname argexps ha =>
+      intro programWeight σ source sourceFinal result target targetTable sourceTableEq sourceLimit run nonerror stateRel codeRel excpRel localsRel
+      apply tailCall_codeBound_from_body ctxt fname argexps source target sourceFinal result programs K weight targetTable run nonerror stateRel codeRel excpRel localsRel
+        (frontendArguments_localised ctxt argexps ha)
+      intro args body locals rsh hargs found shapes ns next hsrc htgt smaller hlocal hs hc he hl calleeResult calleePost bodyRun bodyNonerror
+      let entry := PanSemStateFiniteExact.callEntryStateHOLFinite source locals
+      let targetEntry := {decClockCrepSemHOL target with locals := tlcHOL ns args}
+      have lookup : sourceTable.lookup fname = some (shapes,body,rsh) := by simpa [← sourceTableEq] using hsrc
+      have bodyShape : CallFrontend next body := supported fname shapes body rsh lookup
+      have bodySupport : CallFrontendCode next sourceTable := callFrontendCode_callee ctxt sourceTable _ _ _ supported
+      have bodyWeight : CrepSteps.statementWeight (compileProgExactHOLW next body) ≤ K := by
+        have h := CrepToLoopSteps.lookup_statementWeight_le_codeWeight programs fname ns (compileProgExactHOLW next body) (by simpa [← targetTable] using htgt)
+        exact h.trans weight
+      have lower : entry.clock < limit := by simp only [entry] at *; omega
+      have bound := ih entry.clock lower next body sourceTable programs K bodyShape bodySupport weight
+      exact bound bodyWeight entry calleePost calleeResult targetEntry
+        (by simpa [targetEntry,decClockCrepSemHOL] using targetTable)
+        (by simpa [entry,PanSemStateFiniteExact.callEntryStateHOLFinite] using sourceTableEq)
+        (Nat.le_refl _) bodyRun bodyNonerror hs hc he hl
+    | @decCall ctxt name shape fname argexps cont ha hb ihb =>
+      intro programWeight σ source sourceFinal result target targetTable sourceTableEq sourceLimit run nonerror stateRel codeRel excpRel localsRel
+      apply decCall_bound_from_induction ctxt name fname shape argexps cont source target sourceFinal result K stateRel codeRel excpRel localsRel
+        (frontendArguments_localised ctxt argexps ha) run nonerror programWeight
+      · intro args body locals rsh hargs found shapes ns next hsrc htgt smaller hlocal hs hc he hl calleeResult calleePost bodyRun bodyNonerror
+        let entry := PanSemStateFiniteExact.callEntryStateHOLFinite source locals
+        let targetEntry := {decClockCrepSemHOL target with locals := tlcHOL ns args}
+        have lookup : sourceTable.lookup fname = some (shapes,body,rsh) := by simpa [← sourceTableEq] using hsrc
+        have bodyShape : CallFrontend next body := supported fname shapes body rsh lookup
+        have bodySupport : CallFrontendCode next sourceTable := callFrontendCode_callee ctxt sourceTable _ _ _ supported
+        have bodyWeight : CrepSteps.statementWeight (compileProgExactHOLW next body) ≤ K := by
+          have h := CrepToLoopSteps.lookup_statementWeight_le_codeWeight programs fname ns (compileProgExactHOLW next body) (by simpa [← targetTable] using htgt)
+          exact h.trans weight
+        have lower : entry.clock < limit := by simp only [entry] at *; omega
+        have bound := ih entry.clock lower next body sourceTable programs K bodyShape bodySupport weight
+        exact bound bodyWeight entry calleePost calleeResult targetEntry
+          (by simpa [targetEntry,decClockCrepSemHOL] using targetTable)
+          (by simpa [entry,PanSemStateFiniteExact.callEntryStateHOLFinite] using sourceTableEq)
+          (Nat.le_refl _) bodyRun bodyNonerror hs hc he hl
+      · intro args body locals rsh hargs found value sourcePost bodyRun targetPost sourceCont targetCont targetCode sourceCode smaller continuationPost contRun contNonerror contState contCode contExcp contLocals
+        have contWeight : CrepSteps.statementWeight (compileProgExactHOLW (decCallCtxt ctxt name shape) cont) ≤ K := by
+          rw [decCall_statementWeight] at programWeight
+          omega
+        have bound := ihb (callFrontendCode_decCall ctxt sourceTable name shape supported)
+        apply bound contWeight sourceCont continuationPost result targetCont
+        · simpa [targetCont,targetCode] using targetTable
+        · simpa [sourceCont,PanSemStateFiniteExact.setVarHOLFinite,sourceCode] using sourceTableEq
+        · simp only [sourceCont,PanSemStateFiniteExact.setVarHOLFinite]
+          omega
+        · exact contRun
+        · exact contNonerror
+        · exact contState
+        · exact contCode
+        · exact contExcp
+        · exact contLocals
+    | decl he hb ihb =>
+      apply programBound_decl _ _ _ _ limit sourceTable (alistToFmapCodeExact programs) K he
+      exact ihb (callFrontendCode_decl _ _ _ supported)
+    | seq ha hb iha ihb =>
+      exact programBound_seq _ _ _ limit sourceTable (alistToFmapCodeExact programs) K (callFrontend_localised ha) (iha supported) (ihb supported)
+    | ite he ha hb iha ihb =>
+      exact programBound_ite _ _ _ _ limit sourceTable (alistToFmapCodeExact programs) K he (iha supported) (ihb supported)
+    | «while» he hb ihb =>
+      exact programBound_while _ _ _ limit sourceTable (alistToFmapCodeExact programs) K he (callFrontend_localised hb) (ihb supported)
+
+/-- The actual source execution has a Crep visit bound computed from the
+compiled entry and the actual function table, including nested calls. -/
+theorem callFrontend_compiled_steps {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (program : ProgHOL width)
+    (shape : CallFrontend ctxt program)
+    (source sourceFinal : PanSemStateFiniteExact width σ) (result : Option (PanSemResultExact width))
+    (target : CrepSemHOLState width σ) (programs : List (MlS × List Nat × CrepProgHOL width))
+    (table : target.code = alistToFmapCodeExact programs) (supported : CallFrontendCode ctxt source.code)
+    (run : source.evaluateHOLFiniteState program = (result,sourceFinal)) (nonerror : result ≠ some .error)
+    (stateRel : panToCrepStateRelFiniteExact source target) (codeRel : codeRelExactHOLW ctxt source.code target.code)
+    (excpRel : panToCrepExcpRelFiniteExact ctxt.eids source.eshapes)
+    (localsRel : panToCrepLocalsRelFiniteExact ctxt source.locals target.locals) :
+    CrepSteps.steps (compileProgExactHOLW ctxt program) target ≤
+      max (CrepSteps.statementWeight (compileProgExactHOLW ctxt program)) (CrepSteps.codeWeight programs) * controlSteps program source := by
+  let K := max (CrepSteps.statementWeight (compileProgExactHOLW ctxt program)) (CrepSteps.codeWeight programs)
+  have bound := callFrontend_global source.clock ctxt program source.code programs K shape supported (Nat.le_max_right _ _)
+  exact bound (Nat.le_max_left _ _) source sourceFinal result target table rfl (Nat.le_refl _) run nonerror stateRel codeRel excpRel localsRel
 
 end SteppedFlapjack.PanToCrepSteps
