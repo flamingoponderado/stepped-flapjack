@@ -1088,6 +1088,9 @@ theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
       panToCrepExcpRelFiniteExact next.eids (PanSemStateFiniteExact.callEntryStateHOLFinite source locals).eshapes →
       panToCrepLocalsRelFiniteExact next (PanSemStateFiniteExact.callEntryStateHOLFinite source locals).locals
         ({decClockCrepSemHOL target with locals := tlcHOL ns args}).locals →
+      ∀ (calleeResult : Option (PanSemResultExact width)) (calleePost : PanSemStateFiniteExact width σ),
+      (PanSemStateFiniteExact.callEntryStateHOLFinite source locals).evaluateHOLFiniteState body = (calleeResult,calleePost) →
+      calleeResult ≠ some .error →
       CrepSteps.steps (compileProgExactHOLW next body) {decClockCrepSemHOL target with locals := tlcHOL ns args} ≤
         CrepSteps.codeWeight programs * controlSteps body (PanSemStateFiniteExact.callEntryStateHOLFinite source locals)) :
     CrepSteps.steps (compileProgExactHOLW ctxt (.call none fname argexps)) target ≤
@@ -1113,7 +1116,15 @@ theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
     have smaller : (PanSemStateFiniteExact.callEntryStateHOLFinite source locals).clock < source.clock := by
       simp only [PanSemStateFiniteExact.callEntryStateHOLFinite]
       omega
-    have b := bodyIH args body locals rsh hargs found shapes hsrc htgt smaller hlocal hs hc he hl
+    rcases bodyRun : (PanSemStateFiniteExact.callEntryStateHOLFinite source locals).evaluateHOLFiniteState body with ⟨calleeResult,calleePost⟩
+    have bodyNonerror : calleeResult ≠ some .error := by
+      intro bad
+      subst calleeResult
+      have failed := evaluateHOLFiniteState_call_body_fallback source none fname argexps args body locals rsh
+        .error calleePost hargs found clock bodyRun (Or.inl rfl)
+      rw [failed] at run
+      exact nonerror (Prod.mk.inj run).1.symm
+    have b := bodyIH args body locals rsh hargs found shapes hsrc htgt smaller hlocal hs hc he hl calleeResult calleePost bodyRun bodyNonerror
     rw [hsource,htarget]
     have positive : 1 ≤ CrepSteps.codeWeight programs := by
       have w := SteppedFlapjack.CrepToLoopSteps.lookup_statementWeight_le_codeWeight programs fname
