@@ -1,3 +1,13 @@
+import SteppedFlapjack.Concrete.BranchingLabBounds
+import SteppedFlapjack.Concrete.FixtureLabNumeric
+import SteppedFlapjack.Concrete.CountdownLabBounds
+import SteppedFlapjack.Concrete.FixtureTargetLab
+import SteppedFlapjack.Concrete.BranchingSourceLab
+import SteppedFlapjack.Concrete.NaturalCountdownSourceLab
+import SteppedFlapjack.Concrete.FixtureStackLab
+import SteppedFlapjack.Concrete.CountdownSourceLab
+import SteppedFlapjack.StackToLabSteps.ExplicitSpan
+import SteppedFlapjack.StackRemoveSteps.ExplicitFields
 import SteppedFlapjack.Concrete.CountdownStackBounds
 import SteppedFlapjack.Concrete.BranchingSourceStack
 import SteppedFlapjack.Concrete.TwoProgramStack
@@ -846,7 +856,7 @@ phase 4 of flapjack#1251:
   the `upshift`, `downshift` and `stackFree` expansions
   (stepped-flapjack#2, phase C3, in progress);
 - `SteppedFlapjack.StackRemoveSteps.CopyEachSteps`: the per-bitmap-word copy
-  loop's fine-grained step bound `15 * (pattern.toNat + 1) + 3`, carried by an
+  loop's fine-grained step bound `15 * (Nat.log2 pattern.toNat + 1) + 3`, carried by an
   adapted `copyEachThmWithin` (stepped-flapjack#2, phase C3, in progress);
 - `SteppedFlapjack.StackRemoveSteps.LeafCostBounds`: `leafCost` is at least one
   and dominates every subprogram's factor, which is what lets the `stack_remove`

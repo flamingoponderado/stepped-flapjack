@@ -74,11 +74,11 @@ def stackLoadSteps (n : Nat) : Nat :=
 /-- Upper bound on the number of `evaluate` invocations of `copyLoop` when at
 most `B` bitmap words remain to be copied. One outer iteration costs the loop
 and `If` nodes plus the `copyEach` body and the reload (five nodes), while
-`copyEach` itself is bounded by `15 * (pattern.toNat + 1) + 3` with
-`pattern.toNat < 2 ^ width`; the final exit check and trailing `copyEach`
+`copyEach` itself is bounded by `15 * (Nat.log2 pattern.toNat + 1) + 3` with
+`Nat.log2 pattern.toNat + 1 ≤ width`; the final exit check and trailing `copyEach`
 contribute the constant. -/
 def copyLoopSteps (width B : Nat) : Nat :=
-  15 * B * 2 ^ width + 9 * B + 15 * 2 ^ width + 11
+  15 * B * width + 9 * B + 15 * width + 11
 
 /-- Upper bound on the number of `evaluate` invocations of the `storeConsts`
 expansion, whose prefix is five instructions and whose body is `copyLoop`. -/

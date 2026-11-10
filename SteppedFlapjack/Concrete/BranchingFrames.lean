@@ -65,7 +65,7 @@ theorem branch_callee_frame : nativeEntryFrameSize countdownZeroLimit
 private def coloredRow (row : Nat × Nat × WordLangProgHOL (BitVec 64)) (colors : List (Nat × Nat)) :=
   WordRemove.removeMustTerminate (WordAlloc.applyColour (WordAlloc.totalColour (sptFromAList colors)) (RowColoring.input row))
 
-private theorem comparison_optimized_table :
+theorem comparison_optimized_table :
     (compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2 =
       [(64,1,countdownOptimizedEntry),(65,1,coloredRow comparisonRow comparisonColors)] := by
   unfold comparisonWordPrograms comparisonCrepCode
@@ -85,7 +85,7 @@ private theorem comparison_optimized_table :
   rw [countdown_entry_optimized,RowColoring.compiled_exact comparisonRow comparisonColors comparison_guard comparison_failure comparison_extract]
   rfl
 
-private theorem branch_optimized_table :
+theorem branch_optimized_table :
     (compile countdownRiscVBackend.wordToWordConf riscvConfig branchWordPrograms).2 =
       [(64,1,countdownOptimizedEntry),(65,1,coloredRow branchRow branchColors)] := by
   unfold branchWordPrograms branchCrepCode

@@ -1,37 +1,6 @@
-import SteppedFlapjack.StackRemoveSteps.OraclePrefix
+import SteppedFlapjack.StackToLabSteps.ExplicitSpan
 import SteppedFlapjack.LoopToWordSteps.FullInitNativeSetup
 import Flapjack.Compiler.Backend.StackRemove.Proofs.InitAny
-namespace SteppedFlapjack.StackRemoveSteps.CompCorrect
-open Flapjack Flapjack.Compiler.Backend.StackLang Flapjack.Compiler.Backend.StackRemove
-open Flapjack.Compiler.Backend.StackRemove.Proofs
-variable {width : Nat} [NeZero width] {C F : Type}
-
-/-- The finite code-and-oracle factor calculated from explicit compiler inputs. -/
-def costFromFields (bounds : BitVec width × BitVec width) (n : Nat) (p : HolProg width)
-    (code : Spt (HolProg width)) (bitmaps : List (BitVec width))
-    (oracle : Nat → C × List (Nat × HolProg width) × List (BitVec width)) : Nat :=
-  let budget := bitmaps.length + oracleBitmapBudget n oracle
-  max 1 (max (leafCost budget bounds p) (max
-    (maxListNat ((sptToAList code).map fun e => leafCost budget bounds e.2))
-    (maxListNat ((List.range n).flatMap fun index =>
-      ((oracle index).2.1.map fun e => leafCost budget bounds e.2)))))
-
-/-- The code-and-oracle factor depends only on those input fields. -/
-theorem costFromFields_eq (bounds : BitVec width × BitVec width) (n : Nat)
-    (p : HolProg width) (s : StackSemStateFiniteExact width C F) :
-    computedRunCost bounds n p s = costFromFields bounds n p s.code s.bitmaps s.compileOracle := by
-  rfl
-
-/-- Either initializer branch is bounded by the same explicit field calculation. -/
-theorem makeInitAny_cost_bounded (gc jump : Bool) (maxHeap : Nat) (bitmaps : List (BitVec width)) (dataSpace : Nat)
-    (oracle : Nat → C × List (Nat × HolProg width) × List (BitVec width))
-    (bounds : BitVec width × BitVec width) (pointer : Nat) (code : Spt (HolProg width))
-    (s : StackSemStateFiniteExact width C F) (n : Nat) (p : HolProg width) :
-    computedRunCost bounds n p (InitMake.makeInitAny gc maxHeap bitmaps dataSpace oracle jump bounds pointer code s) ≤
-      max (costFromFields bounds n p code bitmaps oracle) (costFromFields bounds n p code [4] oracle) := by
-  rw [costFromFields_eq,InitAny.makeInitAnyCode,InitAny.makeInitAnyCompileOracle,InitAny.makeInitAnyBitmaps]
-  split <;> simp
-end SteppedFlapjack.StackRemoveSteps.CompCorrect
 namespace SteppedFlapjack.LoopToWordSteps
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Encoders.RiscV.Target
@@ -60,14 +29,8 @@ noncomputable def explicitTickLimit
   let frameSize := if frame = 0 then 0 else frame+1
   let stackLimit := tailStackReplayLimit ac 1 firstLoopName wc.regAlg k (entryColour wc programs firstLoopName)
     p ctxt labels compiledCode limit
-  let cost := uniformFactor (width := 64) dc *
-    (3 + callSequenceCost ac stackLimit (sptFromAList inputCode) out bitmap (k,frameSize,frame))
-  let code := sptFromAList (code1 dc inputCode)
-  let co := coracle1 oracle
-  let runCost := max (costFromFields offset cost (.call none (.inl firstLoopName) none) code bitmaps co)
-    (costFromFields offset cost (.call none (.inl firstLoopName) none) code [4] co)
-  labTickBound 4 labCode buffer * (flattenStepFactor *
-    (2 + loopOnlyCost 0 (initCode (StackToLab.isGenGc dc.gcKind) maxHeap sp : HolProg 64) + runCost * cost + 4))
+  let stackVisits := 3 + callSequenceCost ac stackLimit (sptFromAList inputCode) out bitmap (k,frameSize,frame)
+  labTickBound 4 labCode buffer * stackLabTickLimit dc maxHeap sp offset bitmaps inputCode oracle stackVisits
 
 /-- The existing simulation bound is bounded by the explicit compiler calculation. -/
 theorem FullInitMachineContext.successTickLimit_le_explicit {F : Type}
@@ -81,7 +44,7 @@ theorem FullInitMachineContext.successTickLimit_le_explicit {F : Type}
   have codeEq : stack.code = sptFromAList backend.inputCode := by
     have eq := congrArg (fun s => s.code) backend.stackEq
     simpa only [fullMakeInit_eq,StackAlloc.makeInit] using eq
-  simp only [FullInitMachineContext.successTickLimit,explicitTickLimit,codeEq]
+  simp only [FullInitMachineContext.successTickLimit,explicitTickLimit,stackLabTickLimit,codeEq, ← firstLoopName_eq_initGlobalsLocation]
   apply Nat.mul_le_mul_left
   apply Nat.mul_le_mul_left
   apply Nat.add_le_add_right
