@@ -14,28 +14,14 @@ concurrency:
 jobs:
   build:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: first-large
+    runs-on: [self-hosted, linux, x64, stepped-flapjack-ci]
     steps:
       - uses: actions/checkout@v5
-      # Cache project artifacts separately from dependencies, avoiding repeated
-      # copies of the much larger dependency build on each main commit.
-      - name: Restore Lake build cache
-        id: lake-cache
-        uses: actions/cache/restore@v5.1.0
         with:
-          path: .lake/build
-          key: lake-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}
-          restore-keys: |
-            lake-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+          clean: false
 
-      # Restore the checkout as well as its build: Lake needs the Git metadata
-      # to recognize the pinned package rather than replacing the directory.
-      - name: Restore Flapjack dependency cache
-        id: flapjack-cache
-        uses: actions/cache/restore@v5.1.0
-        with:
-          path: .lake/packages/flapjack
-          key: flapjack-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+      - name: Clean the workspace except .lake
+        run: git clean -ffdx -e .lake
 
       - uses: leanprover/lean-action@v1
         with:
@@ -50,21 +36,3 @@ jobs:
 
       - name: Check non-test modules are warning-free
         run: ./scripts/check-warnings.sh
-
-      - name: Save Lake build cache
-        if: >-
-          github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
-          && steps.lake-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5.1.0
-        with:
-          path: .lake/build
-          key: ${{ steps.lake-cache.outputs.cache-primary-key }}
-
-      - name: Save Flapjack dependency cache
-        if: >-
-          github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
-          && steps.flapjack-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5.1.0
-        with:
-          path: .lake/packages/flapjack
-          key: ${{ steps.flapjack-cache.outputs.cache-primary-key }}
