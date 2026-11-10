@@ -1,7 +1,7 @@
 import SteppedFlapjack.Concrete.CountdownStackSpan
 import SteppedFlapjack.Concrete.InitEHeap
 import SteppedFlapjack.Concrete.CountdownLoopSpan
-import Flapjack.Pancake.Proofs.PanToTarget.LabelsChain
+import SteppedFlapjack.PanToCrepSteps.SingleEntryNativeGoodCode
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineConfig
 open Flapjack Flapjack.Basis.Pure.MlString Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.Pancake.PanLang SteppedFlapjack.Concrete SteppedFlapjack.PanToCrepSteps
@@ -27,20 +27,7 @@ theorem countdown_panToWord (n : Nat) :
 /-- The original compiler guarantees the countdown Stack table is well formed. -/
 theorem countdown_nativeGoodCode (n : Nat) : StackToLab.Proofs.GoodCode.goodCode 24
     (compileNative riscvConfig false (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n)).2).2.2.2 := by
-  let pan := singleEntryProgram (ofString "main") (progToHOL (countdown n))
-  let w := WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n)
-  let st := compileNative riscvConfig false w.2
-  have h := Flapjack.Pancake.Proofs.PanToTarget.word_to_stack_good_code_lemma countdownRiscVBackend countdownMachineConfig
-    pan w.1 w.2 st.1 st.2.1 st.2.2.1 st.2.2.2
-  have hw : WordToWord.compile countdownRiscVBackend.wordToWordConf countdownMachineConfig.target.config
-        (panToWordCompileProgHOL countdownMachineConfig.target.config.isa pan) = (w.1,w.2) := by
-    change WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig
-      (panToWordCompileProgHOL riscvConfig.isa pan) = _
-    rw [show panToWordCompileProgHOL riscvConfig.isa pan = countdownWordPrograms n from countdown_panToWord n]
-  have hs : compileNative countdownMachineConfig.target.config false w.2 = (st.1,st.2.1,st.2.2.1,st.2.2.2) := by rfl
-  have hn : ((functionsHOL pan).map Prod.fst).Nodup := by simp [pan,singleEntryProgram,functionsHOL]
-  have hg := h ⟨hw,by decide,hs,by decide,hn⟩
-  exact hg
+  exact singleEntry_nativeGoodCode (progToHOL (countdown n)) (countdownWordPrograms n) (countdown_panToWord n)
 
 /-- Actual compiled Stack code for the countdown. -/
 noncomputable def countdownNativeStackCode (n : Nat) : List (Nat × StackLang.HolProg 64) :=
