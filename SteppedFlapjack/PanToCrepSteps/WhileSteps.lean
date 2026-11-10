@@ -1017,6 +1017,20 @@ theorem decCall_terminal_bridge {width : Nat} [NeZero width] {σ : Type}
     simp only [decClockCrepSemHOL] at targetCount ⊢
     omega
 
+/-- Zero clock prevents a Crep tail call from entering a callee. -/
+theorem crep_call_zero_steps {width : Nat} [NeZero width] {σ : Type}
+    (fname : MlS) (args : List (CrepExpHOL width)) (target : CrepSemHOLState width σ)
+    (clock : target.clock = 0) : CrepSteps.steps (.call none fname args) target = 1 := by
+  rw [CrepSteps.steps.eq_def]
+  cases hargs : args.mapM (evalCrepSemHOLExp target) with
+  | none => simp [hargs]
+  | some vals =>
+    cases hfind : target.code.lookup fname with
+    | none => simp [hargs,hfind]
+    | some entry =>
+      obtain ⟨params,body⟩ := entry
+      simp [hargs,hfind,clock]
+
 /-- The quantitative induction step for a reached tail call. -/
 theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
     (ctxt : PanToCrepContextExact width) (fname : MlS) (argexps : List (ExpHOL width))
@@ -1027,7 +1041,7 @@ theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
     (code : target.code = alistToFmapCodeExact programs)
     (hargs : source.evalListHOLFinite (h := fun address => Classical.propDecidable (source.memaddrs address)) argexps = some args)
     (found : PanSemStateFiniteExact.lookupCodeHOLFinite source.code.lookup fname args = some (body,locals,rsh))
-    (clock : source.clock ≠ 0) (stateRel : panToCrepStateRelFiniteExact source target)
+    (stateRel : panToCrepStateRelFiniteExact source target)
     (codeRel : codeRelExactHOLW ctxt source.code target.code)
     (excpRel : panToCrepExcpRelFiniteExact ctxt.eids source.eshapes)
     (localsRel : panToCrepLocalsRelFiniteExact ctxt source.locals target.locals)
@@ -1050,22 +1064,37 @@ theorem tailCall_codeBound_from_body {width : Nat} [NeZero width] {σ : Type}
         CrepSteps.codeWeight programs * controlSteps body (PanSemStateFiniteExact.callEntryStateHOLFinite source locals)) :
     CrepSteps.steps (compileProgExactHOLW ctxt (.call none fname argexps)) target ≤
       CrepSteps.codeWeight programs * controlSteps (.call none fname argexps) source := by
-  obtain ⟨shapes,hsrc,hlocal,htgt,hsource,htarget,hs,hc,he,hl⟩ :=
-    tailCall_entries ctxt fname argexps source target args body locals rsh hargs found clock stateRel codeRel excpRel localsRel localised
-  have smaller : (PanSemStateFiniteExact.callEntryStateHOLFinite source locals).clock < source.clock := by
-    simp only [PanSemStateFiniteExact.callEntryStateHOLFinite]
-    omega
-  have b := bodyIH shapes hsrc htgt smaller hlocal hs hc he hl
-  rw [hsource,htarget]
-  have positive : 1 ≤ CrepSteps.codeWeight programs := by
-    have w := SteppedFlapjack.CrepToLoopSteps.lookup_statementWeight_le_codeWeight programs fname
-      (List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd))))
-      (compileProgExactHOLW (ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd)
-        (List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd))))) body) (by simpa [code] using htgt)
-    have p := CrepSteps.statementWeight_pos (compileProgExactHOLW (ctxtFcExactHOL ctxt.funcs ctxt.eids
-      (shapes.map Prod.fst) (shapes.map Prod.snd) (List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd))))) body)
-    omega
-  nlinarith
+  by_cases clock : source.clock = 0
+  · have targetClock : target.clock = 0 := stateRel.2.2.2.2.2.1.symm.trans clock
+    have count := crep_call_zero_steps fname ((compileExpExactHOLWList ctxt argexps).flatMap Prod.fst) target targetClock
+    have sourcePositive := controlSteps_pos (.call none fname argexps) source
+    have weightPositive : ∀ ps : List (MlS × List Nat × CrepProgHOL width), 1 ≤ CrepSteps.codeWeight ps := by
+      intro ps
+      induction ps with
+      | nil => simp [CrepSteps.codeWeight]
+      | cons row rest ih =>
+        change 1 ≤ max (CrepSteps.statementWeight row.2.2) (CrepSteps.codeWeight rest)
+        exact Nat.le_trans ih (Nat.le_max_right _ _)
+    have weightPositive := weightPositive programs
+    simp only [compileProgExactHOLW,compileCallNoReturnExactHOLW] at ⊢
+    rw [count]
+    nlinarith
+  · obtain ⟨shapes,hsrc,hlocal,htgt,hsource,htarget,hs,hc,he,hl⟩ :=
+      tailCall_entries ctxt fname argexps source target args body locals rsh hargs found clock stateRel codeRel excpRel localsRel localised
+    have smaller : (PanSemStateFiniteExact.callEntryStateHOLFinite source locals).clock < source.clock := by
+      simp only [PanSemStateFiniteExact.callEntryStateHOLFinite]
+      omega
+    have b := bodyIH shapes hsrc htgt smaller hlocal hs hc he hl
+    rw [hsource,htarget]
+    have positive : 1 ≤ CrepSteps.codeWeight programs := by
+      have w := SteppedFlapjack.CrepToLoopSteps.lookup_statementWeight_le_codeWeight programs fname
+        (List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd))))
+        (compileProgExactHOLW (ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd)
+          (List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd))))) body) (by simpa [code] using htgt)
+      have p := CrepSteps.statementWeight_pos (compileProgExactHOLW (ctxtFcExactHOL ctxt.funcs ctxt.eids
+        (shapes.map Prod.fst) (shapes.map Prod.snd) (List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd))))) body)
+      omega
+    nlinarith
 
 open Flapjack.PanSemStateFiniteExact
 
