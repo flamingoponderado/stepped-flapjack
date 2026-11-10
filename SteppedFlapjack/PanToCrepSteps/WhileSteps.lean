@@ -1145,7 +1145,8 @@ theorem decCall_return_bound_from_induction {width : Nat} [NeZero width] {σ : T
     (source : PanSemStateFiniteExact width σ) (target : CrepSemHOLState width σ)
     (args : List (ValueHOL width)) (body : ProgHOL width)
     (locals : HolFiniteMapExact MlS (ValueHOL width)) (rsh : ShapeHOL)
-    (value : ValueHOL width) (sourcePost : PanSemStateFiniteExact width σ) (K : Nat)
+    (value : ValueHOL width) (sourcePost sourceFinal : PanSemStateFiniteExact width σ)
+    (result : Option (PanSemResultExact width)) (K : Nat)
     (hargs : source.evalListHOLFinite (h := fun address => Classical.propDecidable (source.memaddrs address)) argexps = some args)
     (found : lookupCodeHOLFinite source.code.lookup fname args = some (body,locals,rsh))
     (clock : source.clock ≠ 0) (stateRel : panToCrepStateRelFiniteExact source target)
@@ -1153,6 +1154,8 @@ theorem decCall_return_bound_from_induction {width : Nat} [NeZero width] {σ : T
     (excpRel : panToCrepExcpRelFiniteExact ctxt.eids source.eshapes)
     (localsRel : panToCrepLocalsRelFiniteExact ctxt source.locals target.locals)
     (localised : everyExpListHOL localisedExpHOL argexps = true)
+    (run : source.evaluateHOLFiniteState (.decCall name shape fname argexps continuation) = (result,sourceFinal))
+    (nonerror : result ≠ some .error)
     (bodyRun : (callEntryStateHOLFinite source locals).evaluateHOLFiniteState body = (some (.returned value),sourcePost))
     (valid : shapeOfHOLExact value = shape) (returnValid : shapeOfHOLExact value = rsh)
     (weight : CrepSteps.statementWeight (compileProgExactHOLW ctxt (.decCall name shape fname argexps continuation)) ≤ K)
@@ -1178,6 +1181,9 @@ theorem decCall_return_bound_from_induction {width : Nat} [NeZero width] {σ : T
       targetPost.code = target.code →
       sourcePost.code = source.code →
       sourcePost.clock < source.clock →
+      ∀ continuationPost : PanSemStateFiniteExact width σ,
+      sourceCont.evaluateHOLFiniteState continuation = (result,continuationPost) →
+      result ≠ some .error →
       panToCrepStateRelFiniteExact sourceCont targetCont →
       codeRelExactHOLW (decCallCtxt ctxt name shape) sourceCont.code targetCont.code →
       panToCrepExcpRelFiniteExact (decCallCtxt ctxt name shape).eids sourceCont.eshapes →
@@ -1193,7 +1199,16 @@ theorem decCall_return_bound_from_induction {width : Nat} [NeZero width] {σ : T
     simp only [callEntryStateHOLFinite]
     omega
   have b := bodyIH shapes hsrc htgt smaller hlocal bs bc be bl
-  have c := contIH targetPost hcode hsourceCode hpostClock hs hc he hl
+  rcases contRun : (setVarHOLFinite name value {sourcePost with locals := source.locals}).evaluateHOLFiniteState continuation with ⟨contResult,contPost⟩
+  have resultEq : contResult = result := by
+    rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at run
+    simp only [hargs,found,clock,if_false,bodyRun] at run
+    have hv : shapeEqHOL (shapeOfHOLExact value) shape = true := (shapeEqHOL_eq_true _ _).mpr valid
+    have hr : shapeEqHOL (shapeOfHOLExact value) rsh = true := (shapeEqHOL_eq_true _ _).mpr returnValid
+    simp only [hv,hr,Bool.true_and,if_true,contRun] at run
+    exact (Prod.mk.inj run).1
+  subst contResult
+  have c := contIH targetPost hcode hsourceCode hpostClock contPost contRun nonerror hs hc he hl
   have overhead : (decCallSlots ctxt shape).length + 2 ≤ K := by
     rw [decCall_statementWeight] at weight
     simp [decCallSlots]
