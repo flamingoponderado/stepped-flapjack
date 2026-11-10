@@ -59,11 +59,13 @@ def compileProgWithStructuralLive {width : Nat} [NeZero width] (arch : AsmArchit
   List.zipWith (fun n entry => (n,List.range entry.2.1.length,
     optimiseSequence (comp entry.2.1 (crepSimpProgHOL entry.2.2)))) nums programs
 
-/-- On the supported input fragment the executable frontend is exactly the
-original compiler, including function numbering and live-set annotations. -/
-theorem compileProgWithStructuralLive_eq {width : Nat} [NeZero width] (arch : AsmArchitecture)
+/-- The executable frontend agrees with the original compiler whenever the
+actual function bodies and their compiled Loop forms satisfy the checked shapes. -/
+theorem compileProgWithStructuralLive_eq_of_shapes {width : Nat} [NeZero width] (arch : AsmArchitecture)
     (programs : List (MlString × List Nat × CrepProgHOL width))
-    (shapes : ∀ row ∈ programs, SupportedCodeBody row.2.2) :
+    (fixed : ∀ row ∈ programs, crepSimpProgHOL row.2.2 = row.2.2)
+    (shapes : ∀ row ∈ programs, SimpleLoopSequenceSource
+      (compFuncHOLExact arch (crepToLoopMakeFuncsExactExecutable programs) row.2.1 row.2.2)) :
     compileProgWithStructuralLive arch programs = compileProgHOLExact arch programs := by
   let comp : List Nat → CrepProgHOL width → HolLoopProg width :=
     compFuncHOLExact arch (crepToLoopMakeFuncsExactExecutable programs)
@@ -71,14 +73,8 @@ theorem compileProgWithStructuralLive_eq {width : Nat} [NeZero width] (arch : As
       optimiseSequence (comp row.2.1 (crepSimpProgHOL row.2.2)) =
         optimiseHOL (comp row.2.1 (crepSimpProgHOL row.2.2)) := by
     intro row member
-    have shape := shapes row member
-    rw [supportedCodeBody_simp_fixed shape]
-    have raw := supportedCodeBody_rawLoopShape
-      (mkCtxtExact arch (makeVmapExact row.2.1) (crepToLoopMakeFuncsExactExecutable programs)
-        (row.2.1.length - 1)) (listToNumSetHOLExact (List.range row.2.1.length)) shape
-    rcases raw with tail | loop
-    · exact optimiseSequence_tail_eq tail
-    · exact optimiseSequence_eq loop
+    rw [fixed row member]
+    exact optimiseSequence_eq (shapes row member)
   have zipEq : ∀ (nums : List Nat) (rows : List (MlString × List Nat × CrepProgHOL width)),
       (∀ row ∈ rows, row ∈ programs) →
       List.zipWith (fun n row => (n,List.range row.2.1.length,
@@ -98,5 +94,21 @@ theorem compileProgWithStructuralLive_eq {width : Nat} [NeZero width] (arch : As
           intro item member
           exact subset item (by simp [member]))]
   exact zipEq _ _ (by intros; assumption)
+
+/-- Existing supported bodies instantiate the shared structural compiler proof. -/
+theorem compileProgWithStructuralLive_eq {width : Nat} [NeZero width] (arch : AsmArchitecture)
+    (programs : List (MlString × List Nat × CrepProgHOL width))
+    (shapes : ∀ row ∈ programs, SupportedCodeBody row.2.2) :
+    compileProgWithStructuralLive arch programs = compileProgHOLExact arch programs := by
+  apply compileProgWithStructuralLive_eq_of_shapes arch programs
+  · intro row member
+    exact supportedCodeBody_simp_fixed (shapes row member)
+  · intro row member
+    have raw := supportedCodeBody_rawLoopShape
+      (mkCtxtExact arch (makeVmapExact row.2.1) (crepToLoopMakeFuncsExactExecutable programs)
+        (row.2.1.length - 1)) (listToNumSetHOLExact (List.range row.2.1.length)) (shapes row member)
+    rcases raw with tail | loop
+    · exact tailEntry_to_simple tail
+    · exact loop
 
 end SteppedFlapjack.CrepToLoopSteps
