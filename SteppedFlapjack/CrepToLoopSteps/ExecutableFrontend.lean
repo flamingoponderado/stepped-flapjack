@@ -1,4 +1,5 @@
 import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
+import SteppedFlapjack.CrepToLoopSteps.TailCallSteps
 import Flapjack.Compiler.Backend.WordAlloc.Proofs.SSALoopIteration
 import Flapjack.Misc.BalancedMap.Core
 import SteppedFlapjack.LoopLiveSteps.ExecutableBranch
@@ -8,6 +9,38 @@ namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 open Flapjack.Compiler.Encoders.Asm
 open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.LoopLiveSteps
+
+private theorem assignmentSequence_shape {width : Nat} [NeZero width]
+    (regs : List Nat) (values : List (HolLoopExp width)) (call : HolLoopProg width)
+    (shape : SimpleLoopSequenceSource call) :
+    SimpleLoopSequenceSource (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign values ++ [call])) := by
+  induction regs generalizing values with
+  | nil => simp [loopNestedSeqHOL]; exact .seq shape (.branch .skip)
+  | cons reg regs ih =>
+    cases values with
+    | nil => simp [loopNestedSeqHOL]; exact .seq shape (.branch .skip)
+    | cons value values =>
+      simp only [List.zipWith_cons_cons,List.cons_append,loopNestedSeqHOL]
+      exact .seq (.branch (.assign reg value)) (ih values)
+
+/-- Direct-argument tail calls have the supported structural optimizer shape. -/
+theorem compiled_tailCall_direct_shape {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, DirectExpression e) :
+    SimpleLoopSequenceSource (compileHOLExact ctxt live (.call none name args)) := by
+  obtain ⟨values,_,compiled⟩ := compile_tailCall_direct ctxt live name args shape
+  rw [compiled]
+  exact assignmentSequence_shape _ _ _ (.tail _ _)
+
+/-- Direct-argument returning calls have the supported structural optimizer shape. -/
+theorem compiled_returningCall_direct_shape {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, DirectExpression e)
+    (names returnNames : List Nat) (mapped : names.mapM ctxt.vars.lookup = some returnNames) :
+    SimpleLoopSequenceSource (compileHOLExact ctxt live (.call (some (names,none)) name args)) := by
+  obtain ⟨values,_,compiled⟩ := compile_returningCall_direct ctxt live name args shape names returnNames mapped
+  rw [compiled]
+  exact assignmentSequence_shape _ _ _ (.returning _ _ _ _ _ _)
 
 /-- Before optimization, every supported body has the shape required by the
 structural liveness evaluator. -/
