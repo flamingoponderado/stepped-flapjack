@@ -1,5 +1,6 @@
 import SteppedFlapjack.Concrete.NestedCalls
 import SteppedFlapjack.Concrete.Phase7SourceClock
+import SteppedFlapjack.PanToCrepSteps.WhileSteps
 
 /-! Original HOL-shaped source execution for the nested-call witness. -/
 namespace SteppedFlapjack.Concrete
@@ -68,5 +69,21 @@ theorem nestedCall_controlSteps :
       by intro _ _; apply Prod.Lex.left; omega,
     show ∀ a b, Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b) (1,a) (3,b) from
       by intro _ _; apply Prod.Lex.left; omega, if_true]
+
+/-- The entry with its ordinary call belongs to the call-aware frontend. -/
+theorem nestedCall_frontend (ctxt : PanToCrepContextExact 64) : CallFrontend ctxt (progToHOL nestedCallEntry) := by
+  simp only [nestedCallEntry,progToHOL,expToHOL,shapeToHOL]
+  apply CallFrontend.decCall
+  · simp
+  · apply CallFrontend.base
+    apply FrontendProgram.ret
+    apply FrontendScalar.local (ofString "answer") (ctxt.vmax+1)
+    simp [decCallSlots,HolFiniteMapExact.lookup_update,FUPDATE]
+
+/-- The remaining functions provide the tail-call and return cases. -/
+theorem nestedCall_callees_frontend (ctxt : PanToCrepContextExact 64) :
+    CallFrontend ctxt (.call none (ofString "leaf") []) ∧
+    CallFrontend ctxt (.return (.const 7)) := by
+  exact ⟨.tail (by simp), .base (.ret (.const 7))⟩
 
 end SteppedFlapjack.Concrete
