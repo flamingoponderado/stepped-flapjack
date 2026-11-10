@@ -1,4 +1,5 @@
 import SteppedFlapjack.CrepToLoopSteps.InlineEntry
+import SteppedFlapjack.CrepToLoopSteps.DirectExpressionEval
 import SteppedFlapjack.LoopSteps.Defs
 import SteppedFlapjack.LoopLiveSteps.Consumption
 import Flapjack.Pancake.CrepToLoop.StateRel
@@ -23,6 +24,58 @@ theorem directExpressions_noCode {width : Nat} [NeZero width]
     obtain ⟨values,tail,len⟩ := ih (fun x hx => shape x (by simp [hx]))
     refine ⟨value :: values,?_,by simp [len]⟩
     simp [compileExpsHOLExact,head,tail]
+
+/-- Direct call arguments are assigned to fresh Loop temporaries without extra clock. -/
+theorem directCall_argumentPrefix {width : Nat} [NeZero width] {σ : Type}
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, DirectExpression e)
+    (source : CrepSemHOLState width σ) (values : List (HolWordLab width))
+    (target : LoopSemStateFiniteExact width σ) (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (evaluated : args.mapM (evalCrepSemHOLExp source) = some values)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
+    ∃ les, compileExpsHOLExact ctxt (ctxt.vmax+1) live args = ([],les,ctxt.vmax+1,live) ∧
+      let regs := genTemps (ctxt.vmax+1) args.length
+      let vals := values.map wlabWlocExact
+      evaluate (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign les)) target =
+        (none,{target with locals := sptAlistInsert regs vals target.locals}) ∧
+      getVars regs {target with locals := sptAlistInsert regs vals target.locals} = some vals := by
+  obtain ⟨les,compiled,heval⟩ := directExpressions_preserves_eval args shape source values target ctxt (ctxt.vmax+1) live
+    evaluated stateRel memRel globalsRel codeRel localsRel (Nat.lt_succ_self _)
+  let regs := genTemps (ctxt.vmax+1) args.length
+  let vals := values.map wlabWlocExact
+  have len : les.length = args.length := by
+    have h1 := congrArg List.length ((optMmapEqSome les _ _).mp heval)
+    have h2 := congrArg List.length ((optMmapEqSome args _ _).mp evaluated)
+    simp only [List.length_map] at h1 h2
+    omega
+  have valuesLen : values.length = args.length := by
+    have h := congrArg List.length ((optMmapEqSome args _ _).mp evaluated)
+    simpa using h.symm
+  have nodup : regs.Nodup := by
+    simp only [regs,genTemps,List.Nodup,List.pairwise_map]
+    exact List.nodup_range.imp (fun h => by omega)
+  have disjoint : distinctListsHol regs (les.map holLoopLocalsTouched).flatten = true := by
+    simp only [distinctListsHol,List.all_eq_true,decide_eq_true_eq]
+    intro x hx hmem
+    have hx' : ctxt.vmax+1 ≤ x := by
+      simp only [regs,genTemps,List.mem_map,List.mem_range] at hx
+      obtain ⟨a,_,rfl⟩ := hx
+      omega
+    have h := (compile_exps_le_tmp_domain ctxt (ctxt.vmax+1) live args [] les (ctxt.vmax+1) live x
+      ⟨localsRel.2.1,compiled,Nat.lt_succ_self _,fun k hk => by
+        obtain ⟨w,hw⟩ := crepOptMmapEval_some_var_cexp_local_lookup source args values k ⟨evaluated,hk⟩
+        obtain ⟨m,hm1,hm2,_⟩ := localsRel.2.2.2 k w hw
+        exact ⟨m,hm1,hm2⟩,hmem⟩).1
+    omega
+  have regsLen : regs.length = les.length := by simp [regs,genTemps,len]
+  have valsLen : regs.length = vals.length := by simp [regs,genTemps,vals,valuesLen]
+  have mapped := (optMmapEqSome les _ _).mp heval
+  have run := loop_eval_nested_assign_distinct_eq les regs target vals ⟨mapped,disjoint,nodup,regsLen⟩
+  have get := get_vars_local_update_some_eq regs vals target nodup valsLen
+  exact ⟨les,compiled,run,get⟩
 
 /-- Direct arguments are assigned to temporaries before a tail call. -/
 theorem compile_tailCall_direct {width : Nat} [NeZero width]
@@ -446,5 +499,53 @@ theorem tailCall_nil_entry_relations {width : Nat} [NeZero width] {F : Type}
   simpa [sptFromAList,listToNumSetHOLExact] using
     call_entry_relations ctxt live source target name [] body [] [] stateRel memRel globalsRel codeRel localsRel
       found (by simp) rfl (by rfl)
+
+/-- A direct tail call inherits its reached callee visit bound. -/
+theorem compiledTailCall_bound_from_body {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, DirectExpression e)
+    (source : CrepSemHOLState width σ) (target : LoopSemStateFiniteExact width σ)
+    (values : List (HolWordLab width)) (params : List Nat) (body : CrepProgHOL width) (B : Nat)
+    (hargs : args.mapM (evalCrepSemHOLExp source) = some values)
+    (found : source.code.lookup name = some (params,body))
+    (arity : params.length = values.length) (distinct : params.Nodup) (clock : source.clock ≠ 0)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
+    (bodyBound : LoopSteps.steps
+      (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+        (listToNumSetHOLExact (List.range params.length)) body)
+      {decClock target with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))} ≤
+      B * CrepSteps.steps body (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)})) :
+    LoopSteps.steps (compileHOLExact ctxt live (.call none name args)) target ≤
+      max (2 * args.length + 3) B * CrepSteps.steps (.call none name args) source := by
+  obtain ⟨les,compiled,prefixRun,get⟩ := directCall_argumentPrefix args shape source values target ctxt live hargs stateRel memRel globalsRel codeRel localsRel
+  let regs := genTemps (ctxt.vmax+1) args.length
+  let vals := values.map wlabWlocExact
+  let middle : LoopSemStateFiniteExact width σ := {target with locals := sptAlistInsert regs vals target.locals}
+  have targetClock : middle.clock ≠ 0 := by
+    change target.clock ≠ 0
+    have rel := stateRel.2.2.1
+    rw [← rel]
+    exact clock
+  have targetCode : crepToLoopCodeRelExact ctxt source.code middle.code := by simpa [middle] using codeRel
+  have get' : getVars regs middle = some vals := get
+  have callCount := call_tail_steps ctxt source middle name params regs body vals targetCode found (by simp [vals,arity]) get' targetClock
+  have sourceCount := CrepSteps.steps_call_tail name args source values params body hargs found arity distinct clock
+  have wrapper := compile_tailCall_direct_steps ctxt live name args shape target
+  dsimp only at wrapper
+  rw [compiled] at wrapper
+  change evaluate (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign les)) target = (none,middle) at prefixRun
+  rw [prefixRun] at wrapper
+  simp only at wrapper
+  rw [callCount] at wrapper
+  have bodyBound' := bodyBound
+  simp only [middle,decClock] at wrapper bodyBound'
+  rw [sourceCount]
+  have factorA : 2 * args.length + 3 ≤ max (2 * args.length + 3) B := Nat.le_max_left _ _
+  have factorB : B ≤ max (2 * args.length + 3) B := Nat.le_max_right _ _
+  nlinarith
 
 end SteppedFlapjack.CrepToLoopSteps
