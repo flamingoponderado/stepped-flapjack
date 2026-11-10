@@ -208,14 +208,14 @@ theorem declWhile_source_fullInit_riscv {σ : Type}
     let limit := declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body
       (.return (.const returned)) budget loopCtxt .ln
     ∃ outcome ticks finalMachine finalFfi,
-      ticks ≤ max (native.backend.successTickLimit native.wc native.ac
+      ticks ≤ (native.backend.successTickLimit native.wc native.ac
         (loopToWordCompileHOL (compileProgHOLExact native.arch native.crepPrograms))
-        entry (assignLoopEntryWordContext entry) (firstLoopName,2) limit) native.backend.resourceTickLimit ∧
+        entry (assignLoopEntryWordContext entry) (firstLoopName,2) limit) ∧
       evaluateTargetHOL native.backend.mc native.backend.lab.ffi ticks native.backend.machine =
         (.halt outcome,finalMachine,finalFfi) ∧
       ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
         (outcome = .resourceLimitHit ∧
-          (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = native.stack.ffi.ioEvents))) := by
+          finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents)) := by
   let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
   let limit := declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body
     (.return (.const returned)) budget loopCtxt .ln
@@ -285,15 +285,15 @@ theorem declWhile_noGlobals_source_fullInit_riscv {σ : Type}
       (declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body (.return (.const returned)) budget loopCtxt .ln) target) :
     let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
     ∃ outcome ticks finalMachine finalFfi,
-      ticks ≤ max (native.backend.successTickLimit native.wc native.ac
+      ticks ≤ (native.backend.successTickLimit native.wc native.ac
           (loopToWordCompileHOL (compileProgHOLExact native.arch native.crepPrograms))
           entry (assignLoopEntryWordContext entry) (firstLoopName,2)
-          (declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body (.return (.const returned)) budget loopCtxt .ln)) native.backend.resourceTickLimit ∧
+          (declWhileSourceLoopLimit declarations initializers globals caller name initializer condition body (.return (.const returned)) budget loopCtxt .ln)) ∧
       evaluateTargetHOL native.backend.mc native.backend.lab.ffi ticks native.backend.machine =
           (.halt outcome,finalMachine,finalFfi) ∧
       ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧
-            (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = native.stack.ffi.ioEvents))) := by
+            finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents)) := by
   have callerVars : caller.vars = HolFiniteMapExact.empty := by
     apply HolFiniteMapExact.ext_lookup
     intro key

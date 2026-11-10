@@ -73,17 +73,17 @@ theorem counted_singleEntry_declared_fullCompiler_riscv {σ : Type}
         (.assign .local (ofString name) (expToHOL assignment))) (.return (.const returned))))) =
           (some (.returned (.val (.word returned))),sourceFinal) ∧
       ∃ outcome ticks finalMachine finalFfi,
-        ticks ≤ max (native.backend.successTickLimit native.wc native.ac
+        ticks ≤ (native.backend.successTickLimit native.wc native.ac
           (panToWordCompileProgHOL native.arch (singleEntryProgram (ofString "main")
             (.dec (ofString name) .one (.const initial) (.seq .skip
               (.seq (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment))) (.return (.const returned)))))))
           entry (assignLoopEntryWordContext entry) (firstLoopName,2)
-          (declWhileSourceLoopLimit declarations initializers globals caller (ofString name) (.const initial) (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment)) (.return (.const returned)) budget loopCtxt .ln)) native.backend.resourceTickLimit ∧
+          (declWhileSourceLoopLimit declarations initializers globals caller (ofString name) (.const initial) (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment)) (.return (.const returned)) budget loopCtxt .ln)) ∧
         evaluateTargetHOL native.backend.mc native.backend.lab.ffi ticks native.backend.machine =
           (.halt outcome,finalMachine,finalFfi) ∧
         ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧
-            (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = native.stack.ffi.ioEvents))) := by
+            finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents)) := by
   classical
   obtain ⟨finalLocals,loopCost,loopExec,costEq⟩ := counted_declared_assignLoop_whole_invert condition assignment name initial returned
     context primitive handler functions fuel production cost returnLocals returnGlobals returnMemory returnFfi returnValues wholeRun

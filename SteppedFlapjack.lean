@@ -229,8 +229,6 @@ import Flapjack.Pancake.Proofs.PanToWord.LabPres
 import Flapjack.Pancake.LoopToWord.Proofs.ProgramNames
 import SteppedFlapjack.LoopLiveSteps.Consumption
 import SteppedFlapjack.LoopLiveSteps.FrontendMember
-import SteppedFlapjack.WordToStackSteps.WholeEntryRiscV
-import SteppedFlapjack.WordToStackSteps.WholeEntryFrame
 import SteppedFlapjack.WordToStackSteps.InitialFrame
 import SteppedFlapjack.WordToStackSteps.WholeInitialization
 import SteppedFlapjack.WordToStackSteps.WholeProgram

@@ -67,17 +67,17 @@ theorem counted_simplifiedCountdown_fullCompiler_riscv {σ : Type}
         (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))) =
           (some (.returned (.val (.word returned))),sourceFinal) ∧
     ∃ outcome ticks finalMachine finalFfi,
-      ticks ≤ max (native.backend.successTickLimit native.wc native.ac
+      ticks ≤ (native.backend.successTickLimit native.wc native.ac
           (panToWordCompileProgHOL native.arch (singleEntryProgram (ofString "main")
             (.dec (ofString name) .one (.const (BitVec.ofNat 64 count)) (.seq .skip
               (.seq (.while (.var .local (ofString name)) (countdownBodyHOL name)) (.return (.const returned)))))))
           entry (assignLoopEntryWordContext entry) (firstLoopName,2)
-          (declWhileSourceLoopLimit declarations initializers globals caller (ofString name) (.const (BitVec.ofNat 64 count)) (.var .local (ofString name)) (.assign .local (ofString name) (.op .sub [.var .local (ofString name),.const 1])) (.return (.const returned)) budget loopCtxt .ln)) native.backend.resourceTickLimit ∧
+          (declWhileSourceLoopLimit declarations initializers globals caller (ofString name) (.const (BitVec.ofNat 64 count)) (.var .local (ofString name)) (.assign .local (ofString name) (.op .sub [.var .local (ofString name),.const 1])) (.return (.const returned)) budget loopCtxt .ln)) ∧
       evaluateTargetHOL native.backend.mc native.backend.lab.ffi ticks native.backend.machine =
           (.halt outcome,finalMachine,finalFfi) ∧
       ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧
-            (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = native.stack.ffi.ioEvents))) := by
+            finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents)) := by
   obtain ⟨originalResult,originalFinal,originalExec,originalRun,originalBound,originalShape,originalResultEq⟩ :=
     counted_decl_countdown_return count production source rel ranged name nameRanged wordRange sourceClock returned
       (ctxtFcExactHOL caller.funcs caller.eids [] [] []) context primitive handler functions fuel

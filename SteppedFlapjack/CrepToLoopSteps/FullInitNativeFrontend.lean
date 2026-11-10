@@ -16,10 +16,11 @@ open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend
 open Flapjack.Compiler.Backend.StackLang Flapjack.Compiler.Backend.WordToWord
 open Flapjack.Compiler.Backend.Semantics.TargetProps Flapjack.Compiler.Encoders.RiscV.Target
 open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.WordAllocSteps SteppedFlapjack.LabToTargetSteps
+open SteppedFlapjack.WordToStackSteps
 
 /-- Actual whole-program compilation constructs a related Word state and
-full-initialization setup, or yields a bounded entry-frame resource outcome. -/
-theorem wholeFullInitTail_frontend_setup_or_resource {F : Type}
+full-initialization setup when its compiler-selected frame fits. -/
+theorem wholeFullInitTail_frontend_setup {F : Type}
     (arch : AsmArchitecture) (crepPrograms : List (MlString × List Nat × CrepProgHOL 64))
     (programShapes : ∀ name params body, (name,params,body) ∈ crepPrograms → SupportedCodeBody body)
     (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact 64)
@@ -41,18 +42,18 @@ theorem wholeFullInitTail_frontend_setup_or_resource {F : Type}
         (Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack
           (sptFromAList (compile wc ac (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms))).2) coracle)
         with code := sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms))})
-    (backend : FullInitMachineContext stack) :
-    (∃ (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
+    (backend : FullInitMachineContext stack)
+    (fits : nativeEntryFrameSize (ac.regCount-(5+ac.avoidRegs.length))
+      (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+        ((firstLoopName,1,(LoopToWord.compHOL ctxt p labels).1),entryColour wc
+          (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)) firstLoopName)).2.2 ≤ stack.stackSpace) :
+    ∃ (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
        (setup : FullInitTailSetup p word limit),
       setup.ctxt = ctxt ∧ setup.machine = backend.machine ∧ setup.mc = backend.mc ∧ setup.lab = backend.lab ∧
       setup.tickLimit = backend.successTickLimit wc ac (loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)) p ctxt labels limit ∧
       loopToWordStateRelHOLExact loop word ∧
       ∃ (base : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F) (frameSize : Nat),
-        word.locals = (callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize) base).locals) ∨
-    ∃ ticks finalMachine finalFfi,
-      ticks ≤ backend.resourceTickLimit ∧
-      evaluateTargetHOL backend.mc backend.lab.ffi ticks backend.machine =
-        (.halt .resourceLimitHit,finalMachine,finalFfi) ∧ finalFfi.ioEvents = stack.ffi.ioEvents := by
+        word.locals = (callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize) base).locals := by
   let programs := loopToWordCompileHOL (compileProgHOLExact arch crepPrograms)
   let k := ac.regCount-(5+ac.avoidRegs.length)
   let compiledCode := sptFromAList (compile wc ac programs).2
@@ -75,22 +76,20 @@ theorem wholeFullInitTail_frontend_setup_or_resource {F : Type}
     rw [hname] at lower
     simp [storeConstsStubLocation,wordNumStubs,stackNumStubs] at lower
   have shapes : TailProgramShapes programs := wholeCrep_word_shapes arch crepPrograms programShapes
-  rcases fullInitNativeTail_setup_or_resource wc ac programs p ctxt labels shapes member nodup stack coracle
-      noRaise noStore codeEq bitmapsPrefix ok limit backend with success | resource
-  · obtain ⟨word,setup,contextEq,machineEq,mcEq,labEq,tickEq,frameSize,wordEq⟩ := success
-    have stackData := (nativeEntry_loopWordDataRel_iff ac k 0 stack compiledCode originalCode coracle loop).mp data
-    have frameData := (nativeEntry_loopWordDataRel_iff ac k frameSize stack compiledCode originalCode coracle loop).mpr stackData
-    have wordData : LoopWordDataRel loop word := by simpa only [wordEq] using frameData
-    obtain ⟨len,hm,hd,hs,hc,hbe,hffi,hbase,hlen,htop,hglobals⟩ := wordData
-    have wordCode : word.code = originalCode := by simp [wordEq,originalCode]
-    have codeRel : loopToWordCodeRelHOLExact loop.code word.code := by
-      rw [loopCode,wordCode]
-      exact wholeCrepLoopWord_codeRel arch crepPrograms
-    refine Or.inl ⟨word,setup,contextEq,machineEq,mcEq,labEq,tickEq,
-      ⟨len,hm,hd,hs,hc,hbe,hffi,hbase,hlen,htop,hglobals,codeRel⟩,?_⟩
-    exact ⟨(Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit ac k stack compiledCode coracle :
-      WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F), frameSize,by rw [wordEq]⟩
-  · exact Or.inr resource
-
+  obtain ⟨word,setup,contextEq,machineEq,mcEq,labEq,tickEq,frameSize,wordEq⟩ :=
+    fullInitNativeTail_setup wc ac programs p ctxt labels shapes member nodup stack coracle
+      noRaise noStore codeEq bitmapsPrefix ok limit backend fits
+  have stackData := (nativeEntry_loopWordDataRel_iff ac k 0 stack compiledCode originalCode coracle loop).mp data
+  have frameData := (nativeEntry_loopWordDataRel_iff ac k frameSize stack compiledCode originalCode coracle loop).mpr stackData
+  have wordData : LoopWordDataRel loop word := by simpa only [wordEq] using frameData
+  obtain ⟨len,hm,hd,hs,hc,hbe,hffi,hbase,hlen,htop,hglobals⟩ := wordData
+  have wordCode : word.code = originalCode := by simp [wordEq,originalCode]
+  have codeRel : loopToWordCodeRelHOLExact loop.code word.code := by
+    rw [loopCode,wordCode]
+    exact wholeCrepLoopWord_codeRel arch crepPrograms
+  refine ⟨word,setup,contextEq,machineEq,mcEq,labEq,tickEq,
+    ⟨len,hm,hd,hs,hc,hbe,hffi,hbase,hlen,htop,hglobals,codeRel⟩,?_⟩
+  exact ⟨(Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit ac k stack compiledCode coracle :
+    WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F), frameSize,by rw [wordEq]⟩
 
 end SteppedFlapjack.CrepToLoopSteps
