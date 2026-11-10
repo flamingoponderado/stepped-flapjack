@@ -65,6 +65,20 @@ theorem countdownMachineState_initialFacts (mem : BitVec 64 → BitVec 8) (regs 
   · change (BitVec.ofNat 64 (2 ^ 2 - 1) &&& (4096 : BitVec 64)) = 0
     decide
 
+/-- A sequential byte assertion can be read back from its domain. -/
+theorem bytesInMem_readBytes (mem : BitVec 64 → BitVec 8) (domain excluded : BitVec 64 → Prop) [DecidablePred domain]
+    (address : BitVec 64) (bytes : List (BitVec 8))
+    (loaded : bytesInMemHOL address bytes mem domain excluded) :
+    readBytearrayWordHOL (byteWidth := 8) address bytes.length
+      (fun a => if domain a then some (mem a) else none) = some bytes := by
+  classical
+  induction bytes generalizing address with
+  | nil => simp [readBytearrayWordHOL]
+  | cons byte rest ih =>
+    obtain ⟨inside,_,value,tail⟩ := loaded
+    simp only [List.length_cons,readBytearrayWordHOL,if_pos inside,value,ih _ tail]
+    rfl
+
 /-- A byte layout in the machine's program domain gives the target's actual
 code-loading predicate; the exclusion domain is shared with the heap proof. -/
 theorem bytesInMem_codeLoaded (mem : BitVec 64 → BitVec 8) (regs : BitVec 5 → BitVec 64)
@@ -72,19 +86,7 @@ theorem bytesInMem_codeLoaded (mem : BitVec 64 → BitVec 8) (regs : BitVec 5 �
     (loaded : bytesInMemHOL 4096 bytes mem countdownMachineConfig.progAddresses excluded) :
     codeLoaded bytes countdownMachineConfig (countdownMachineState mem regs) := by
   classical
-  have readBytes : ∀ (address : BitVec 64) (bs : List (BitVec 8)),
-      bytesInMemHOL address bs mem countdownMachineConfig.progAddresses excluded →
-      readBytearrayWordHOL (byteWidth := 8) address bs.length
-        (fun a => if countdownMachineConfig.progAddresses a then some (mem a) else none) = some bs := by
-    intro address bs
-    induction bs generalizing address with
-    | nil => simp [readBytearrayWordHOL]
-    | cons byte rest ih =>
-      intro h
-      obtain ⟨domain,_,value,tail⟩ := h
-      simp only [List.length_cons,readBytearrayWordHOL,if_pos domain,value,ih _ tail]
-      rfl
-  exact readBytes 4096 bytes loaded
+  exact bytesInMem_readBytes mem countdownMachineConfig.progAddresses excluded 4096 bytes loaded
 
 /-- For the concrete target states and an empty shared domain, only the
 physical byte/word layout, heap domain and code-buffer conditions remain. -/

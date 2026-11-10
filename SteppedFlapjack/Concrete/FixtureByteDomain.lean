@@ -161,4 +161,41 @@ theorem fixtureByteDomain_false_below (a : BitVec 64) (below : a.toNat < 0xa0020
     · simp only [sourceBase] at heap
       omega
 
+
+/-- The fixture machine has identity ordinary interference and no FFI entries. -/
+theorem fixtureMachineConfig_interference (pc : BitVec 64) :
+    interferenceOk (fixtureMachineConfig pc).nextInterfer
+      ((fixtureMachineConfig pc).target.proj (fixtureMachineConfig pc).progAddresses) ∧
+    ∀ start, ffiInterferOkHOL start (fixtureMachineConfig pc) := by
+  constructor
+  · intro i state
+    rfl
+  · intro start state k index newBytes asm bytes bytes2 i h
+    simp [fixtureMachineConfig,countdownMachineConfig] at h
+
+set_option maxRecDepth 4096 in
+/-- The fixture cache-flush service preserves memory and registers. -/
+theorem fixtureMachineConfig_ccache (pc start : BitVec 64) :
+    ccacheInterferOkHOL start (fixtureMachineConfig pc) := by
+  intro state asm k a1 a2 ⟨rel,aligned⟩
+  have ok : riscvOk state = true := rel.1
+  have regs := rel.2.2.2.1
+  have link : state.c_gpr state.procID 1 = asm.regs 1 := by
+    have h := regs 1 (by
+      change 1 < riscvConfig.regCount ∧ riscvConfig.avoidRegs.contains 1 = false
+      decide)
+    exact h
+  have valid := (riscvOk_iff state).mp ok
+  refine ⟨?_,?_,?_,?_⟩
+  · apply (riscvOk_iff _).mpr
+    refine ⟨valid.1,valid.2.1,valid.2.2.1,valid.2.2.2.1,?_⟩
+    simp only [fixtureMachineConfig,countdownMachineConfig]
+    rw [link]
+    exact aligned
+  · simpa [fixtureMachineConfig,countdownMachineConfig,riscvTarget,riscvConfig] using link
+  · intro a ha
+    exact rel.2.2.1 a ha
+  · intro r hr
+    exact regs r ⟨hr.2.1,by simpa using hr.2.2⟩
+
 end SteppedFlapjack.Concrete
