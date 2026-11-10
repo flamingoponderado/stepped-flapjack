@@ -1,10 +1,12 @@
 import SteppedFlapjack.Concrete.CountdownStackSpan
-import SteppedFlapjack.Concrete.InitEStack
+import SteppedFlapjack.Concrete.InitEHeap
+import SteppedFlapjack.Concrete.CountdownLoopSpan
 import Flapjack.Pancake.Proofs.PanToTarget.LabelsChain
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineConfig
 open Flapjack Flapjack.Basis.Pure.MlString Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.Pancake.PanLang SteppedFlapjack.Concrete SteppedFlapjack.PanToCrepSteps
 open SteppedFlapjack.CrepToLoopSteps
+open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open Flapjack.Compiler.Backend.WordToStack.Native
 
 namespace SteppedFlapjack.Concrete
@@ -80,5 +82,55 @@ theorem countdownFixture_stack_span (n clock limit : Nat) (cfg : LabToTarget.Con
   · exact notTimeout
   · exact complete
   · exact bound
+
+
+/-- The initializer's heap agrees with the countdown source on its accessible domain. -/
+theorem countdownFixture_crep_memory (n : Nat) (cfg : LabToTarget.Config) :
+    let source := panSimpSourceState (countdown n) (clockedFixtureSource (countdown n) (6*n+9))
+    crepToLoopMemRelHOLExact
+      (crepStateFrom source (naturalCountdownHOL n)).memory (countdownFixtureStack n cfg).memory
+      (crepStateFrom source (naturalCountdownHOL n)).memaddrs := by
+  dsimp only
+  intro a member
+  have h := fixtureStack_heapMemory (countdownNativeStackCode n) cfg (countdown_nativeGoodCode n) a
+  change (WordLocW.word (initialWord a)) = (fixtureStack (countdownNativeStackCode n) cfg).memory a
+  apply Eq.symm
+  apply h
+  simpa [crepStateFrom,concreteDeclCrepState,loweredStateFrom,noGlobalsLoweredPreCall,
+    panSimpSourceState,clockedFixtureSource,exactState,singleEntrySourceTemplate,sourceTemplate] using member
+
+/-- The counted countdown source reaches Loop code using the actual initialized
+Stack memory, with an explicit Loop visit bound. -/
+theorem countdownFixture_initialized_loop (n : Nat) (range : n < 2^64) (cfg : LabToTarget.Config)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
+    let source := panSimpSourceState (countdown n) (clockedFixtureSource (countdown n) (6*n+9))
+    let target := {(loopStateFrom riscvConfig.isa source (naturalCountdownHOL n)) with
+      memory := (countdownFixtureStack n cfg).memory}
+    let ctxt := witnessLoopContext riscvConfig.isa (naturalCountdownHOL n)
+    let bound := 156*(3 + 8*(6*n+18)+1)
+    ∃ final post,
+      evalCrepSemHOLProgExact (crepStateFrom source (naturalCountdownHOL n)) (naturalCrepEntry n) =
+        (some (.return [.word 0]),final) ∧
+      (64,[],branchingLoopEntry) ∈ compileProgHOLExact riscvConfig.isa (crepPrograms (naturalCountdownHOL n)) ∧
+      Flapjack.LoopSemStateFiniteExact.evaluate branchingLoopEntry {target with clock := target.clock+bound} =
+        (some (.result [.word 0]),post) ∧
+      LoopSteps.steps branchingLoopEntry {target with clock := target.clock+bound} ≤
+        52*(3 + 8*(6*n+18)+bound+1)+8 ∧
+      crepToLoopStateRelExact final {post with clock := final.clock} ∧
+      crepToLoopMemRelHOLExact final.memory post.memory final.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact final.globals post.globals ∧
+      crepToLoopCodeRelExact ctxt final.code post.code := by
+  let source := panSimpSourceState (countdown n) (clockedFixtureSource (countdown n) (6*n+9))
+  obtain ⟨final,run,bound⟩ := countdown_counted_fixture n range context primitive handler
+  have nonzero : (crepStateFrom source (naturalCountdownHOL n)).clock ≠ 0 := by
+    simp [source,crepStateFrom,concreteDeclCrepState,panSimpSourceState,clockedFixtureSource,
+      loweredStateFrom,noGlobalsLoweredPreCall]
+  obtain ⟨post,compiled,entry,steps,state,mem,globals,codeRel⟩ :=
+    naturalCountdown_entry_loop riscvConfig.isa source final n (3+8*(6*n+18))
+      (countdownFixtureStack n cfg).memory (countdownFixture_crep_memory n cfg) nonzero run bound
+  refine ⟨final,post,run,compiled,?_,?_,state,mem,globals,codeRel⟩
+  · simpa only [countdown_optimized_weight] using entry
+  · simpa only [countdown_optimized_weight] using steps
 
 end SteppedFlapjack.Concrete
