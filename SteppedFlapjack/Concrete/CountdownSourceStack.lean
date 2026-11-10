@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.CountdownNativeStarter
+import SteppedFlapjack.Concrete.CountdownStackBounds
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.WordSemStateFiniteExact SteppedFlapjack.Concrete SteppedFlapjack.PanToCrepSteps
 namespace SteppedFlapjack.Concrete
@@ -45,7 +46,7 @@ theorem countdownFixture_source_stack (n : Nat) (range : n < 2^64) (cfg : LabToT
       some (compileResult (.result (.loc 1 0) [.word 0])) = targetResult ∧
       SteppedFlapjack.StackSteps.steps (.call none (.inl 64) none,
         {(countdownFixtureStack n cfg) with clock := countdownWordBound n+1}) ≤
-        nativeTailEntryBound countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n) 64 (countdownSourceWordEntry n) (countdownWordBound n) := by
+        9543650688*n+29426459323 := by
   let clock := 6*countdownLoopVisits n
   let body := {(countdownInitialWord n (countdownFixtureStack n cfg) (fixtureWordOracle cfg)) with clock := clock}
   let word := {(countdownFixtureWord n cfg) with clock := clock+1}
@@ -80,5 +81,10 @@ theorem countdownFixture_source_stack (n : Nat) (range : n < 2^64) (cfg : LabToT
   obtain ⟨targetPost,targetResult,targetRun,targetRel,targetFfi,targetBound⟩ :=
     countdownFixture_stack_span n clock (countdownWordBound n) cfg (some (.result (.loc 1 0) [.word 0])) entryPost
       run (by simp) (by simp) (.return [.word 0]) bodyBound
+  have closed : nativeTailEntryBound countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n) 64
+      (countdownSourceWordEntry n) (countdownWordBound n) = 9543650688*n+29426459323 := by
+    rw [countdown_stackBound_closed,countdown_bound_closed]
+    omega
+  rw [closed] at targetBound
   exact ⟨final,post,targetPost,targetResult,crepRun,stateRel,targetFfi.symm.trans entryFfi,targetRun,targetRel,targetBound⟩
 end SteppedFlapjack.Concrete

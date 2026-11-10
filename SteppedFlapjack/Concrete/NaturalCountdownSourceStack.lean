@@ -44,7 +44,7 @@ theorem naturalCountdownFixture_source_stack (n : Nat) (range : n < 2^64) (cfg :
       some (compileResult (.result (.loc 1 0) [.word 0])) = targetResult ∧
       SteppedFlapjack.StackSteps.steps (.call none (.inl 64) none,
         {(countdownFixtureStack n cfg) with clock := countdownWordBound n+1}) ≤
-        nativeTailEntryBound countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n) 64 (countdownSourceWordEntry n) (countdownWordBound n) := by
+        9543650688*n+29426459323 := by
   have h := countdownFixture_source_stack n range cfg context primitive handler
   rw [countdownFixtures_crep_equal n (6*n+9)] at h
   exact h
