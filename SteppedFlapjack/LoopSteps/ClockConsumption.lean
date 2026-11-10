@@ -90,4 +90,44 @@ theorem branchedProgram_clock_consumed {width : Nat} [NeZero width] {F : Type}
       rw [ht] at hc
       omega
 
+/-- Combine consumption bounds for a reached callee and its normal continuation. -/
+theorem returning_clock_consumed {width : Nat} [NeZero width] {F : Type}
+    (dest : Option Nat) (args names : List Nat) (live liveOut : NumSet)
+    (exception : Nat) (handler normal : HolLoopProg width)
+    (s cut post middle final : LoopSemStateFiniteExact width F)
+    (values returned : List (WordLocW width)) (env : Spt (WordLocW width)) (body : HolLoopProg width)
+    (out result : Option (LoopResultExact width))
+    (get : getVars args s = some values) (found : findCode dest values s.code = some (env,body))
+    (distinct : names.Nodup) (cutRun : cutRes live (none,s) = (none,cut))
+    (bodyRun : evaluate body {cut with locals := env} = (some (.result returned),post))
+    (arity : returned.length = names.length)
+    (normalRun : evaluate normal (setVars names returned {post with locals := cut.locals}) = (out,middle))
+    (finalCut : cutRes liveOut (out,middle) = (result,final))
+    (bodyBound : cut.clock - post.clock ≤ 2 * steps body {cut with locals := env})
+    (normalBound : post.clock - middle.clock ≤
+      2 * steps normal (setVars names returned {post with locals := cut.locals})) :
+    evaluate (.call (some (names,live)) dest args (some (exception,handler,normal,liveOut))) s = (result,final) ∧
+    s.clock - final.clock ≤ 2 * steps (.call (some (names,live)) dest args
+      (some (exception,handler,normal,liveOut))) s := by
+  have execution := evaluate_call_returning_success dest args names live liveOut exception handler normal s cut post values returned env body get found distinct cutRun bodyRun arity
+  rw [normalRun,finalCut] at execution
+  refine ⟨execution, ?_⟩
+  have count := steps_call_returning dest args names live (some (exception,handler,normal,liveOut))
+    s cut post values env body (some (.result returned)) get found distinct cutRun bodyRun
+  simp only [arity,ne_eq,not_true_eq_false,if_false] at count
+  have first := cutRes_clock_consumed live none s
+  have last := cutRes_clock_consumed liveOut out middle
+  rw [cutRun] at first
+  rw [finalCut] at last
+  have firstLe := cutRes_clock_le live (none,s)
+  have lastLe := cutRes_clock_le liveOut (out,middle)
+  rw [cutRun] at firstLe
+  rw [finalCut] at lastLe
+  have bodyLe := evaluate_clock body {cut with locals := env} (some (.result returned)) post bodyRun
+  have normalLe := evaluate_clock normal (setVars names returned {post with locals := cut.locals}) out middle normalRun
+  simp only [setVars] at normalLe
+  simp only at first last firstLe lastLe bodyLe
+  rw [count]
+  omega
+
 end SteppedFlapjack.LoopSteps
