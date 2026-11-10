@@ -1306,4 +1306,97 @@ theorem decCall_terminal_bound_from_induction {width : Nat} [NeZero width] {σ :
   rw [hsource,htarget]
   nlinarith
 
+/-- All entered declaration-call outcomes share the same induction step. -/
+theorem decCall_entered_bound_from_induction {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (name fname : MlS) (shape : ShapeHOL)
+    (argexps : List (ExpHOL width)) (continuation : ProgHOL width)
+    (source : PanSemStateFiniteExact width σ) (target : CrepSemHOLState width σ)
+    (args : List (ValueHOL width)) (body : ProgHOL width)
+    (locals : HolFiniteMapExact MlS (ValueHOL width)) (rsh : ShapeHOL)
+    (sourceFinal : PanSemStateFiniteExact width σ)
+    (result : Option (PanSemResultExact width)) (K : Nat)
+    (hargs : source.evalListHOLFinite (h := fun address => Classical.propDecidable (source.memaddrs address)) argexps = some args)
+    (found : lookupCodeHOLFinite source.code.lookup fname args = some (body,locals,rsh))
+    (clock : source.clock ≠ 0) (stateRel : panToCrepStateRelFiniteExact source target)
+    (codeRel : codeRelExactHOLW ctxt source.code target.code)
+    (excpRel : panToCrepExcpRelFiniteExact ctxt.eids source.eshapes)
+    (localsRel : panToCrepLocalsRelFiniteExact ctxt source.locals target.locals)
+    (localised : everyExpListHOL localisedExpHOL argexps = true)
+    (run : source.evaluateHOLFiniteState (.decCall name shape fname argexps continuation) = (result,sourceFinal))
+    (nonerror : result ≠ some .error)
+    (weight : CrepSteps.statementWeight (compileProgExactHOLW ctxt (.decCall name shape fname argexps continuation)) ≤ K)
+    (bodyIH : ∀ (shapes : List (MlS × ShapeHOL)),
+      let ns := List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd)))
+      let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
+      source.code.lookup fname = some (shapes,body,rsh) →
+      target.code.lookup fname = some (ns,compileProgExactHOLW next body) →
+      (callEntryStateHOLFinite source locals).clock < source.clock →
+      localisedProgHOL body = true →
+      panToCrepStateRelFiniteExact (callEntryStateHOLFinite source locals)
+        {decClockCrepSemHOL target with locals := tlcHOL ns args} →
+      codeRelExactHOLW next (callEntryStateHOLFinite source locals).code
+        ({decClockCrepSemHOL target with locals := tlcHOL ns args}).code →
+      panToCrepExcpRelFiniteExact next.eids (callEntryStateHOLFinite source locals).eshapes →
+      panToCrepLocalsRelFiniteExact next (callEntryStateHOLFinite source locals).locals
+        ({decClockCrepSemHOL target with locals := tlcHOL ns args}).locals →
+      ∀ (calleeResult : Option (PanSemResultExact width)) (calleePost : PanSemStateFiniteExact width σ),
+      (callEntryStateHOLFinite source locals).evaluateHOLFiniteState body = (calleeResult,calleePost) →
+      calleeResult ≠ some .error →
+      CrepSteps.steps (compileProgExactHOLW next body) {decClockCrepSemHOL target with locals := tlcHOL ns args} ≤
+        K * controlSteps body (callEntryStateHOLFinite source locals))
+    (contIH : ∀ (value : ValueHOL width) (sourcePost : PanSemStateFiniteExact width σ),
+      (callEntryStateHOLFinite source locals).evaluateHOLFiniteState body = (some (.returned value),sourcePost) →
+      ∀ targetPost : CrepSemHOLState width σ,
+      let sourceCont := setVarHOLFinite name value {sourcePost with locals := source.locals}
+      let targetCont := {targetPost with locals := target.locals.updateListEq ((decCallSlots ctxt shape).zip (flattenHOL value))}
+      targetPost.code = target.code →
+      sourcePost.code = source.code →
+      sourcePost.clock < source.clock →
+      ∀ continuationPost : PanSemStateFiniteExact width σ,
+      sourceCont.evaluateHOLFiniteState continuation = (result,continuationPost) →
+      result ≠ some .error →
+      panToCrepStateRelFiniteExact sourceCont targetCont →
+      codeRelExactHOLW (decCallCtxt ctxt name shape) sourceCont.code targetCont.code →
+      panToCrepExcpRelFiniteExact (decCallCtxt ctxt name shape).eids sourceCont.eshapes →
+      panToCrepLocalsRelFiniteExact (decCallCtxt ctxt name shape) sourceCont.locals targetCont.locals →
+      CrepSteps.steps (compileProgExactHOLW (decCallCtxt ctxt name shape) continuation) targetCont ≤
+        K * controlSteps continuation sourceCont) :
+    CrepSteps.steps (compileProgExactHOLW ctxt (.decCall name shape fname argexps continuation)) target ≤
+      K * controlSteps (.decCall name shape fname argexps continuation) source := by
+  rcases bodyRun : (callEntryStateHOLFinite source locals).evaluateHOLFiniteState body with ⟨out,post⟩
+  have bodyNonerror : out ≠ some .error := by
+    intro bad
+    subst out
+    have hr := run
+    rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hr
+    simp only [hargs,found,clock,if_false,bodyRun] at hr
+    exact nonerror (Prod.mk.inj hr).1.symm
+  have hr := run
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hr
+  simp only [hargs,found,clock,if_false,bodyRun] at hr
+  cases out with
+  | none => simp at hr; exact False.elim (nonerror hr.1.symm)
+  | some r =>
+    cases r with
+    | returned value =>
+      by_cases hv : shapeEqHOL (shapeOfHOLExact value) shape = true
+      · by_cases hret : shapeEqHOL (shapeOfHOLExact value) rsh = true
+        · exact decCall_return_bound_from_induction ctxt name fname shape argexps continuation source target args body locals rsh
+            value post sourceFinal result K hargs found clock stateRel codeRel excpRel localsRel localised run nonerror bodyRun
+            ((shapeEqHOL_eq_true _ _).mp hv) ((shapeEqHOL_eq_true _ _).mp hret) weight bodyIH (contIH value post bodyRun)
+        · simp [hv,hret] at hr; exact False.elim (nonerror hr.1.symm)
+      · simp [hv] at hr; exact False.elim (nonerror hr.1.symm)
+    | «break» => simp at hr; exact False.elim (nonerror hr.1.symm)
+    | «continue» => simp at hr; exact False.elim (nonerror hr.1.symm)
+    | error => exact False.elim (bodyNonerror rfl)
+    | timeOut =>
+      exact decCall_terminal_bound_from_induction ctxt name fname shape argexps continuation source target args body locals rsh
+          (some .timeOut) post K hargs found clock stateRel codeRel excpRel localsRel localised bodyRun (by simp) (by simp) weight bodyIH
+    | finalFfi event =>
+      exact decCall_terminal_bound_from_induction ctxt name fname shape argexps continuation source target args body locals rsh
+          (some (.finalFfi event)) post K hargs found clock stateRel codeRel excpRel localsRel localised bodyRun (by simp) (by simp) weight bodyIH
+    | exception eid value =>
+      exact decCall_terminal_bound_from_induction ctxt name fname shape argexps continuation source target args body locals rsh
+          (some (.exception eid value)) post K hargs found clock stateRel codeRel excpRel localsRel localised bodyRun (by simp) (by simp) weight bodyIH
+
 end SteppedFlapjack.PanToCrepSteps
