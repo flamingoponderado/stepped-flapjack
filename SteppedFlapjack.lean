@@ -1,4 +1,4 @@
-import SteppedFlapjack.Concrete.Phase7InitializedWord
+import SteppedFlapjack.Concrete.Phase7Machine
 import SteppedFlapjack.LabToTargetSteps.GoodCodeFilter
 import SteppedFlapjack.Concrete.FixtureMachineResults
 import SteppedFlapjack.Concrete.FixtureMachineGuards
