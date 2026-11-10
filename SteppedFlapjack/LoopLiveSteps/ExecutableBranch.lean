@@ -50,27 +50,31 @@ theorem shrinkBranch_eq {p : HolLoopProg width} (shape : LoopBranch p) :
       intro lt live
       cases ri <;> simp only [shrinkBranch,shrinkHOL,iha,ihb]
 
-/-- The original fixed-point iteration, with a visible recursion bound and
-structural shrinking of its supported branch body. -/
-def fixedpointBranch : Nat → List (NumSet × NumSet) → NumSet → NumSet → NumSet →
-    HolLoopProg width → Option (HolLoopProg width × NumSet)
-  | 0, _, _, _, _, _ => none
-  | fuel+1, lt, liveIn, l1, l2, body =>
-      let (b,l0) := shrinkBranch ((sptInter liveIn l1,l2)::lt) body l2
+/-- Bounded fixed-point iteration parameterized by the body shrinker.  This
+allows the same computation to handle loop bodies that contain calls or loops. -/
+def fixedpointUsing
+    (step : List (NumSet × NumSet) → NumSet → HolLoopProg width × NumSet) :
+    Nat → List (NumSet × NumSet) → NumSet → NumSet → NumSet →
+      Option (HolLoopProg width × NumSet)
+  | 0, _, _, _, _ => none
+  | fuel+1, lt, liveIn, l1, l2 =>
+      let (b,l0) := step ((sptInter liveIn l1,l2)::lt) l2
       if sptInter liveIn l0 = l1 then some (b,l0)
       else if sptSize (sptInter liveIn l0) ≤ sptSize l1 then none
-      else fixedpointBranch fuel lt liveIn (sptInter liveIn l0) l2 body
+      else fixedpointUsing step fuel lt liveIn (sptInter liveIn l0) l2
 
-/-- The number of iterations is bounded by the size of the loop live-in set.
-This equality contains no assumption about termination or a successful result. -/
-theorem fixedpointBranch_eq {body : HolLoopProg width} (shape : LoopBranch body)
+/-- The bounded iteration agrees with the original fixed point whenever its
+body shrinker does, with no convergence hypothesis. -/
+theorem fixedpointUsing_eq {body : HolLoopProg width}
+    (step : List (NumSet × NumSet) → NumSet → HolLoopProg width × NumSet)
+    (stepEq : ∀ lt live, step lt live = shrinkHOL lt body live)
     (fuel : Nat) (lt : List (NumSet × NumSet)) (liveIn l1 l2 : NumSet)
     (enough : sptSize liveIn - sptSize l1 < fuel) :
-    fixedpointBranch fuel lt liveIn l1 l2 body = fixedpointHOL lt liveIn l1 l2 body := by
+    fixedpointUsing step fuel lt liveIn l1 l2 = fixedpointHOL lt liveIn l1 l2 body := by
   induction fuel generalizing l1 with
   | zero => omega
   | succ fuel ih =>
-    rw [fixedpointBranch, fixedpointHOL, shrinkBranch_eq shape]
+    rw [fixedpointUsing, fixedpointHOL, stepEq]
     rcases h : shrinkHOL ((sptInter liveIn l1,l2)::lt) body l2 with ⟨b,l0⟩
     simp only
     split
@@ -82,16 +86,7 @@ theorem fixedpointBranch_eq {body : HolLoopProg width} (shape : LoopBranch body)
         have bound := sptSize_inter_le liveIn l0
         omega
 
-/-- The actual fixed point is computable with one more iteration than the
-number of live-in variables. -/
-theorem fixedpointBranch_complete {body : HolLoopProg width} (shape : LoopBranch body)
-    (lt : List (NumSet × NumSet)) (liveIn l1 l2 : NumSet) :
-    fixedpointBranch (sptSize liveIn + 1) lt liveIn l1 l2 body =
-      fixedpointHOL lt liveIn l1 l2 body := by
-  apply fixedpointBranch_eq shape
-  omega
-
-/-- Executable shrinking for sequences of loops with branch-shaped bodies. -/
+/-- Executable shrinking, with bounded iteration for each loop body. -/
 def shrinkSequence (lt : List (NumSet × NumSet)) :
     HolLoopProg width → NumSet → HolLoopProg width × NumSet
   | .seq p q, live =>
@@ -107,12 +102,13 @@ def shrinkSequence (lt : List (NumSet × NumSet)) :
   | .loop liveIn body liveOut, live =>
       let l2 := sptInter liveOut live
       let bex := sptUnion liveIn l2
-      match fixedpointBranch (sptSize liveIn + 1) lt liveIn .ln bex body with
+      match fixedpointUsing (fun lt live => shrinkSequence lt body live)
+          (sptSize liveIn + 1) lt liveIn .ln bex with
       | some (body,l0) =>
           let l := sptInter liveIn l0
           (.loop l body l2,l)
       | none =>
-          let (body,_) := shrinkBranch ((liveIn,l2)::lt) body bex
+          let (body,_) := shrinkSequence ((liveIn,l2)::lt) body bex
           (.loop liveIn body l2,liveIn)
   | .mark p, live => shrinkSequence lt p live
   | .call none dest args _, live =>
@@ -128,6 +124,7 @@ def shrinkSequence (lt : List (NumSet × NumSet)) :
       (.call (some (names,before)) dest args (some (exception,handler',normal',sptInter live liveOut)),
         sptUnion (sptFromAList (args.map fun x => (x,()))) before)
   | p, live => shrinkBranch lt p live
+termination_by p _ => sizeOf p
 
 /-- A returning call without a handler is computed exactly by the structural pass. -/
 theorem shrinkSequence_returningCall_noHandler (lt : List (NumSet × NumSet))
@@ -154,7 +151,7 @@ theorem shrinkSequence_branch {p : HolLoopProg width} (shape : LoopBranch p) :
   induction shape with
   | skip | tick | assign _ _ | store _ _ | setGlobal _ _ | ret _ | «break» _ | «continue» _ =>
       intro lt live
-      rfl
+      simp only [shrinkSequence]
   | @seq a b ha hb iha ihb =>
       intro lt live
       simp only [shrinkSequence,shrinkBranch,iha,ihb]
@@ -212,7 +209,15 @@ theorem shrinkSequence_eq {p : HolLoopProg width} (shape : SimpleLoopSequenceSou
       simp only [shrinkSequence,shrinkHOL,iha,ihb]
   | @loop liveIn liveOut body h =>
       intro lt live
-      simp only [shrinkSequence,shrinkHOL,fixedpointBranch_complete h,shrinkBranch_eq h]; rfl
+      have bodyEq : ∀ lt live, shrinkSequence lt body live = shrinkHOL lt body live := by
+        intro lt live
+        rw [shrinkSequence_branch h,shrinkBranch_eq h]
+      have fixedEq := fixedpointUsing_eq _ bodyEq (sptSize liveIn + 1) lt liveIn .ln
+        (sptUnion liveIn (sptInter liveOut live)) (by omega)
+      simp only [shrinkSequence,shrinkHOL]
+      rw [fixedEq]
+      simp only [bodyEq]
+      rfl
   | tail loc args => intro lt live; simp only [shrinkSequence,shrinkHOL]
   | returning names callLive loc exception args liveOut =>
       intro lt live
@@ -231,6 +236,20 @@ theorem optimiseSequence_eq {p : HolLoopProg width} (shape : SimpleLoopSequenceS
     optimiseSequence p = optimiseHOL p := by
   simp only [optimiseSequence,optimiseHOL,loopCall_simpleSequence shape .ln,compHOL,shrinkSequence_eq shape]
 
+
+/-- The executable optimizer also handles an enclosing loop whose body is a
+supported sequence, including calls and already-supported loops. -/
+theorem optimiseSequence_loop_eq {body : HolLoopProg width}
+    (shape : SimpleLoopSequenceSource body) (liveIn liveOut : NumSet) :
+    optimiseSequence (.loop liveIn body liveOut) = optimiseHOL (.loop liveIn body liveOut) := by
+  have bodyEq := shrinkSequence_eq shape
+  have fixedEq := fixedpointUsing_eq _ bodyEq (sptSize liveIn + 1) [] liveIn .ln
+    (sptUnion liveIn (sptInter liveOut (.ln : NumSet))) (by omega)
+  simp only [optimiseSequence,optimiseHOL,compHOL,loopCallCompHOL,
+    loopCall_simpleSequence shape .ln,shrinkSequence,shrinkHOL]
+  rw [fixedEq]
+  simp only [bodyEq]
+  rfl
 
 theorem shrink_simpleSequence {p : HolLoopProg width} (shape : SimpleLoopSequenceSource p) :
     ∀ lt live, SimpleLoopSequenceSource (shrinkHOL lt p live).1 := by
