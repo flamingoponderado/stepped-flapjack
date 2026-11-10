@@ -130,4 +130,20 @@ theorem returning_clock_consumed {width : Nat} [NeZero width] {F : Type}
   rw [count]
   omega
 
+/-- Lift a callee consumption bound through a direct tail call. -/
+theorem tail_clock_consumed_from_body {width : Nat} [NeZero width] {F : Type}
+    (dest : Option Nat) (args : List Nat) (s post : LoopSemStateFiniteExact width F)
+    (values : List (WordLocW width)) (env : Spt (WordLocW width)) (body : HolLoopProg width)
+    (out : Option (LoopResultExact width))
+    (get : getVars args s = some values) (found : findCode dest values s.code = some (env,body))
+    (clock : s.clock ≠ 0)
+    (bodyRun : evaluate body {decClock s with locals := env} = (out,post))
+    (bodyBound : (decClock s).clock - post.clock ≤ 2 * steps body {decClock s with locals := env}) :
+    s.clock - post.clock ≤ 2 * steps (.call none dest args none) s := by
+  have count := steps_call_tail dest args s values env body get found clock
+  have bodyClock := evaluate_clock body {decClock s with locals := env} out post bodyRun
+  simp only [decClock] at bodyBound bodyClock count
+  rw [count]
+  omega
+
 end SteppedFlapjack.LoopSteps

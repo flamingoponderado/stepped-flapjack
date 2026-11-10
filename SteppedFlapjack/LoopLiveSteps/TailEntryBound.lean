@@ -145,24 +145,18 @@ theorem directTail_clock_consumed (loc : Nat) (args : List Nat) (values : List (
     (get : getVars args s = some values) (lookup : findCode (some loc) values s.code = some (env,body)) (clock : s.clock ≠ 0)
     (run : evaluate (.call none (some loc) args none) s = (result,post)) :
     s.clock-post.clock ≤ 2 * steps (.call none (some loc) args none) s := by
-  have count := steps_call_tail (some loc) args s values env body get lookup clock
   rcases bodyRun : evaluate body {decClock s with locals := env} with ⟨out,final⟩
-  have bound := sequence_consumed shape {decClock s with locals := env} final out bodyRun
-  have bodyClock := evaluate_clock body {decClock s with locals := env} out final bodyRun
+  have bodyBound := sequence_consumed shape {decClock s with locals := env} final out bodyRun
   have execution := run
   rw [evaluate] at execution
-  simp only [get,lookup,Option.isSome_none,Bool.false_eq_true,if_false,
-    clock,dite_false] at execution
-  rw [bodyRun] at execution
-  simp only [decClock] at bound bodyClock count
+  simp only [get,lookup,Option.isSome_none,Bool.false_eq_true,if_false,clock,dite_false,bodyRun] at execution
   cases out with
   | none =>
     simp only [Prod.mk.injEq] at execution
     obtain ⟨_,rfl⟩ := execution
-    rw [count]
-    omega
+    exact tail_clock_consumed_from_body (some loc) args s final values env body none get lookup clock bodyRun bodyBound
   | some r =>
-    cases r <;> simp only [Prod.mk.injEq] at execution <;> obtain ⟨_,rfl⟩ := execution <;>
-      rw [count] <;> omega
+    cases r <;> simp only [Prod.mk.injEq] at execution <;> obtain ⟨_,rfl⟩ := execution
+    all_goals exact tail_clock_consumed_from_body (some loc) args s final values env body _ get lookup clock bodyRun bodyBound
 
 end SteppedFlapjack.LoopLiveSteps
