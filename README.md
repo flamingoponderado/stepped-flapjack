@@ -58,35 +58,52 @@ keep their names in the `Flapjack` namespace.
   and `SteppedFlapjack.Test.PanValueFfiSemantics` holds the shared stateful-FFI
   fixtures.
 
-The `*Steps` directories also contain the quantitative compiler chain:
-Pancake → Crep → Loop → Word passes → Stack → Lab → RISC-V. The
-`PanToCrepSteps` modules connect counted source execution to global lowering,
-including a scalar declaration around an initialized loop. The general
-`panOriginalDeclEntry_riscvWithin` theorem carries a source control-step bound
-through this chain under the stated state and compilation conditions.
+The `*Steps` directories contain the quantitative compiler chain:
+Pancake → Crep → Loop → Word passes → Stack → Lab → RISC-V.
 
-`counted_singleEntry_declared_fullCompiler_riscv` takes a separately bounded,
-successful fine-grained Pancake execution of a supported scalar assignment loop
-and gives a RISC-V halt bound for the original singleton program's full compiler
-output. The bound depends on the program and backend configuration; the result
-covers successful return and resource exhaustion. The theorem assumes the
-stated source clock, source layout, compiler input, and full-initialization
-machine relations. `labInitialized_counted_declared_fullCompiler_riscv` constructs the
-source and native inputs for this supported fragment from a Lab initialization
-context.
-The aligned initialization construction keeps the byte-closed machine domain
-separate from the word-aligned Stack domain. The earlier results that required
-one nonempty domain to be both byte-closed and word-aligned have been removed;
-`unalignedLabInit_incompatible` proves why those assumptions conflict.
+## Source-to-machine bound
 
-The zero-count source has an independently proved nine-step execution and its
-actual compiler artifact has at most 1,040 bytes. A concrete RISC-V theorem
-with an explicit, independently fixed tick bound remains to be proved.
+`SteppedFlapjack.Concrete.supported_counted_machine` composes the spans for a
+`Supported` singleton Pancake program. Given a returning run of
+`evalPanValueFfiProgSteps` with at most `n` steps, the theorem proves that the
+original Pancake compiler emits the bytes loaded into the fixture's RISC-V
+machine and that the machine halts successfully within
 
-The concrete declaration example includes an independently counted 13-step
-source execution. The previous machine theorem that selected part of its tick
-bound existentially has been removed; an independently fixed machine bound
-remains to be proved.
+```text
+supportedMachineFactor program * n + supportedMachineOffset program
+```
+
+machine ticks. Both constants depend on the generated code and the fixed
+backend configuration; `supportedMachineTicks_affine` proves this formula for
+the composed clock. The result also states that `semanticsDecls` on the
+original declarations, starting with an empty code table and clock zero,
+terminates successfully with the machine's final I/O events.
+
+`Supported` currently covers a single parameter-free function with scoped
+scalar locals, scalar expressions, declarations, sequencing, conditionals,
+loops and word returns. Names must be representable as HOL byte strings. The
+counted source run uses the init-e-shaped fixture state in `Concrete.SourceState`;
+its memory, FFI and layout are fixed by that fixture. The theorem additionally
+requires concrete checks on the generated native code: its callee frame fits
+the initialized stack, its Stack instructions are FFI- and shared-operation
+free, label removal succeeds, and the emitted bytes fit the aligned code
+buffer. It derives the compiler's bitmap and good-code conditions. These checks
+refer to the program and configuration and can be discharged for a concrete
+program; they do not quantify over a machine tick bound.
+
+`countdownFixture_machine`, `naturalCountdownFixture_machine`,
+`comparisonFixture_machine` and `branchingLoopFixture_machine` instantiate the
+common theorem and discharge those checks. For countdown input `n < 2^64`,
+the machine clock is `167602730287449600 * (6*n+9) + 1592247331570371948`.
+The comparison and branching-loop clocks are `90715439766875148` and
+`36771214184170446348` respectively.
+
+This fragment and fixture do not yet cover init-e's full guest: its multiple
+functions, calls, globals, heap and shared-memory operations, exceptions, FFI,
+primitive behavior and host input are part of the widening work in the
+[roadmap](https://github.com/flamingoponderado/stepped-flapjack/issues/19).
+The eventual theorem must apply to init-e's `Guest.Software.guestAst` and
+`InitE.sourceBehaviour` with its actual initialization and host input.
 
 The pinned historical Flapjack revision also contains the clocked/stepped
 shared FFI definitions. The expression-evaluator route and memory-aware counted

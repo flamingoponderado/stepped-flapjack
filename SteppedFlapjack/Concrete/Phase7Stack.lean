@@ -10,6 +10,14 @@ open Flapjack.Compiler.Backend.WordToStack.Native Flapjack.Compiler.Backend.Word
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps
 open SteppedFlapjack.WordToStackSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.WordAllocSteps
 
+/-- Stack cells required by the actual compiled callee, calculated from its code. -/
+def supportedCalleeFrame (program : Prog (RiscV.Word 64)) : Nat :=
+  match sptLookup 65 (sptFromAList (supportedAllocated program).2) with
+  | none => 0
+  | some (arity,callee) =>
+      1 + (compileProgNative riscvConfig false callee arity
+        (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1
+
 /-- Explicit Stack visit budget derived from the generated native code. -/
 noncomputable def supportedStackBound (program : Prog (RiscV.Word 64)) (n : Nat) : Nat :=
   nativeTailEntryBound countdownRiscVBackend.wordToWordConf riscvConfig (supportedWordPrograms program) 64
@@ -33,11 +41,7 @@ theorem supported_counted_nativeStack
         some (.returned postLocals postGlobals postMemory postFfi [.word word],count)) (countBound : count ≤ n)
     (cfg : LabToTarget.Config)
     (good : StackToLab.Proofs.GoodCode.goodCode 24 (supportedNative program).2.2.2)
-    (bitmap : (supportedNative program).1 = [4])
-    (calleeFits : ∀ arity callee,
-      sptLookup 65 (sptFromAList (supportedAllocated program).2) = some (arity,callee) →
-      1 + (compileProgNative riscvConfig false callee arity (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1 ≤
-        (fixtureStack (supportedNative program).2.2.2 cfg).stack.length) :
+    (calleeFits : supportedCalleeFrame program ≤ (fixtureStack (supportedNative program).2.2.2 cfg).stack.length) :
     let code := (supportedNative program).2.2.2
     ∃ post, StackSemEvaluate.evaluate (.call none (.inl 64) none,
       {(fixtureStack code cfg) with clock := supportedWordBound program n+1}) = (some (.result (.loc 1 0)),post) ∧
@@ -80,7 +84,7 @@ theorem supported_counted_nativeStack
   have bitmaps : (compileNative riscvConfig false (WordToWord.compile wc riscvConfig words).2).1.IsPrefix stack.bitmaps := by
     rw [← alloc]
     change (supportedNative program).1.IsPrefix (fixtureStack code cfg).bitmaps
-    rw [bitmap,fixtureStack_bitmaps]
+    rw [supported_native_bitmap program supported,fixtureStack_bitmaps]
   have init := fixtureStack_nativeInitOk code cfg good
   have frameZero : nativeEntryFrameSize (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) countdownOptimizedEntry = 0 := by
     with_unfolding_all rfl
@@ -108,8 +112,9 @@ theorem supported_counted_nativeStack
       rw [selected] at call
       have locEq : loc = 65 := by cases call with | left h => cases h | right h => cases h; rfl
       subst loc
-      apply calleeFits arity callee
-      simpa only [alloc] using found
+      have found' : sptLookup 65 (sptFromAList (supportedAllocated program).2) = some (arity,callee) := by
+        simpa only [alloc] using found
+      simpa only [supportedCalleeFrame,found'] using calleeFits
   obtain ⟨targetPost,targetResult,targetRun,targetResultEq,targetFfi,targetBound⟩ :=
     nativeTailEntry_span wc riscvConfig words 64 entry facts.1 facts.2.1 stack (fixtureWordOracle cfg)
       noRaise noStore codeEq bitmaps init fits clock limit (some (.result (.loc 1 0) [.word word])) wordPost

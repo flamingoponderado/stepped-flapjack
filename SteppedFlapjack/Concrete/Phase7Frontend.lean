@@ -95,7 +95,7 @@ theorem supported_entry_loop {σ : Type} (arch : AsmArchitecture)
 def supportedCrepBudget (program : Prog (RiscV.Word 64)) (n : Nat) : Nat :=
   let body := progToHOL (panSimpProg program)
   let weight := CrepSteps.statementWeight (supportedCallee body)
-  3 + weight * (n + 2 + weight)
+  3 + weight * (n + 1 + weight)
 
 /-- The counted source run reaches the actual generated Loop entry. Its
 extra clock and visit bounds are calculated from the generated code. -/
@@ -114,11 +114,11 @@ theorem supported_counted_loop (arch : AsmArchitecture)
         some (.returned postLocals postGlobals postMemory postFfi [.word word],count)) (countBound : count ≤ n)
     (memory : BitVec 64 → WordLocW 64)
     (memoryRel : crepToLoopMemRelHOLExact
-      (crepStateFrom (panSimpSourceState program (clockedFixtureSource program (n+1))) (progToHOL (panSimpProg program))).memory memory
-      (crepStateFrom (panSimpSourceState program (clockedFixtureSource program (n+1))) (progToHOL (panSimpProg program))).memaddrs) :
+      (crepStateFrom (panSimpSourceState program (clockedFixtureSource program n)) (progToHOL (panSimpProg program))).memory memory
+      (crepStateFrom (panSimpSourceState program (clockedFixtureSource program n)) (progToHOL (panSimpProg program))).memaddrs) :
     let simple := panSimpProg program
     let body := progToHOL simple
-    let source := panSimpSourceState program (clockedFixtureSource program (n+1))
+    let source := panSimpSourceState program (clockedFixtureSource program n)
     let crep := crepStateFrom source body
     let target := {(loopStateFrom arch source body) with memory := memory}
     let ctxt := witnessLoopContext arch body
@@ -138,9 +138,9 @@ theorem supported_counted_loop (arch : AsmArchitecture)
       crepToLoopCodeRelExact ctxt final.code post.code ∧ FfiStateRel postFfi final.ffi := by
   let simple := panSimpProg program
   let body := progToHOL simple
-  let source := panSimpSourceState program (clockedFixtureSource program (n+1))
-  obtain ⟨final,crepRun,crepBound,crepFfi⟩ := fixture_counted_span program supported context primitive handler fuel count (n+1)
-    postLocals postGlobals postMemory postFfi word run (by omega)
+  let source := panSimpSourceState program (clockedFixtureSource program n)
+  obtain ⟨final,crepRun,crepBound,crepFfi⟩ := fixture_counted_span program supported context primitive handler fuel count n
+    postLocals postGlobals postMemory postFfi word run countBound
   have scalar := (supported_panSimp program supported).1
   have nonzero : (crepStateFrom source body).clock ≠ 0 := by
     simp [source,crepStateFrom,PanToCrepSteps.concreteDeclCrepState,panSimpSourceState,clockedFixtureSource,

@@ -1,5 +1,6 @@
 import SteppedFlapjack.Concrete.Phase7InitializedWord
 import SteppedFlapjack.Concrete.TwoProgramNativeEntry
+import SteppedFlapjack.Concrete.WordBitmap
 
 /-! The actual supported program uses the fixed native tail-entry wrapper. -/
 namespace SteppedFlapjack.Concrete
@@ -45,4 +46,23 @@ theorem supported_nativeEntry_facts (program : Prog (RiscV.Word 64)) (supported 
   · simpa [supportedWordPrograms,body,simple,code,supportedEntry] using twoProgram_selectedEntry riscvConfig.isa (ofString "main") (entryName body) callee fresh shape
   · rw [alloc]
     simpa [supportedWordPrograms,body,simple,code] using twoProgram_optimizedEntry_frame riscvConfig.isa (ofString "main") (entryName body) callee fresh shape (supportedNative program).2.2.2 cfg
+/-- The generated native program uses exactly the initializer bitmap. -/
+theorem supported_native_bitmap (program : Prog (RiscV.Word 64)) (supported : Supported program) :
+    (supportedNative program).1 = [4] := by
+  let simple := panSimpProg program
+  let body := progToHOL simple
+  let callee := supportedCallee body
+  have shape := supportedCallee_scalar simple (supported_panSimp program supported).1
+  have code := supported_crepPrograms simple (supported_panSimp program supported).1
+  have fresh : ofString "main" ≠ entryName body := Ne.symm (entryName_fresh body)
+  have loops := (twoLoopPrograms_eq riscvConfig.isa (ofString "main") (entryName body) callee shape).symm
+  have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
+    funext a b c d e f g
+    exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
+  simp only [supportedNative,supportedAllocated,phase3WordConfig_eq,compileWith_eq_compile _ allocator]
+  change (WordToStack.Native.compileNative riscvConfig false (compile countdownRiscVBackend.wordToWordConf riscvConfig
+    (loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (crepPrograms body)))).2).1 = [4]
+  rw [code,loops]
+  exact twoWordTables_native_bitmaps riscvConfig.isa (ofString "main") (entryName body) callee fresh shape
+    countdownRiscVBackend.wordToWordConf riscvConfig
 end SteppedFlapjack.Concrete

@@ -29,13 +29,6 @@ theorem twoPrograms_callee_label (arch : AsmArchitecture) (name callee : MlStrin
   simp [findLabExact,mkCtxtExact,crepToLoopMakeFuncsExactExecutable,twoPrograms,firstLoopName,
     FUPDATE_LIST,FUPDATE,List.range_succ,fresh]
 
-/-- The actual generated, optimized entry has this concrete tail-call code. -/
-theorem branching_loop_entry_code (arch : AsmArchitecture) :
-    (64,[],branchingLoopEntry) ∈ compileProgHOLExact arch (crepPrograms branchingHOL) := by
-  rw [branching_loop_code]
-  exact twoLoopPrograms_entry_code arch _ _ _ (Ne.symm (entryName_fresh branchingHOL))
-
-
 /-- A generated entry reaches a returning zero-argument callee, with eight
 wrapper visits in addition to the callee visits. -/
 theorem generatedEntry_return {σ : Type} (target post : LoopSemStateFiniteExact 64 σ)

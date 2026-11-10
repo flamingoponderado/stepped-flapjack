@@ -1,4 +1,4 @@
-import SteppedFlapjack.Concrete.Phase7Machine
+import SteppedFlapjack.Concrete.Phase7Witnesses
 import SteppedFlapjack.LabToTargetSteps.GoodCodeFilter
 import SteppedFlapjack.Concrete.FixtureMachineResults
 import SteppedFlapjack.Concrete.FixtureMachineGuards
@@ -15,15 +15,10 @@ import SteppedFlapjack.Concrete.BranchingLabBounds
 import SteppedFlapjack.Concrete.FixtureLabNumeric
 import SteppedFlapjack.Concrete.CountdownLabBounds
 import SteppedFlapjack.Concrete.FixtureTargetLab
-import SteppedFlapjack.Concrete.BranchingSourceLab
-import SteppedFlapjack.Concrete.NaturalCountdownSourceLab
 import SteppedFlapjack.Concrete.FixtureStackLab
-import SteppedFlapjack.Concrete.CountdownSourceLab
 import SteppedFlapjack.StackToLabSteps.ExplicitSpan
 import SteppedFlapjack.StackRemoveSteps.ExplicitFields
 import SteppedFlapjack.Concrete.CountdownStackBounds
-import SteppedFlapjack.Concrete.BranchingSourceStack
-import SteppedFlapjack.Concrete.TwoProgramStack
 import SteppedFlapjack.Concrete.BranchingFrames
 import SteppedFlapjack.PanToCrepSteps.RowColoring
 import SteppedFlapjack.Concrete.TwoProgramNativeEntry
@@ -32,9 +27,6 @@ import SteppedFlapjack.Concrete.FixtureCrepMemory
 import SteppedFlapjack.Concrete.BranchingNativeInit
 import SteppedFlapjack.PanToCrepSteps.SingleEntryNativeGoodCode
 import SteppedFlapjack.WordToStackSteps.TailFrameBound
-import SteppedFlapjack.Concrete.NaturalCountdownSourceStack
-import SteppedFlapjack.Concrete.CountdownSourceStack
-import SteppedFlapjack.Concrete.CountdownNativeStarter
 import SteppedFlapjack.Concrete.InitEHeap
 import SteppedFlapjack.Concrete.CountdownInitE
 import SteppedFlapjack.Concrete.InitEStack
@@ -48,13 +40,10 @@ import SteppedFlapjack.WordToStackSteps.CallSequenceLinear
 import SteppedFlapjack.WordToStackSteps.ResourceSafeResult
 import SteppedFlapjack.CrepToLoopSteps.ScalarPrefixOutput
 import SteppedFlapjack.CrepToLoopSteps.ScalarLoopWeight
-import SteppedFlapjack.Concrete.ComparisonLoopSpan
 import SteppedFlapjack.Concrete.ScalarEntry
 import SteppedFlapjack.CrepToLoopSteps.ScalarSequenceBound
 import SteppedFlapjack.Concrete.CrepLoopError
-import SteppedFlapjack.Concrete.ConditionalLoopSpan
 import SteppedFlapjack.CrepSteps.ScalarClock
-import SteppedFlapjack.Concrete.CountdownLoopSpan
 import SteppedFlapjack.Concrete.WordStarter
 import SteppedFlapjack.Concrete.WordTables
 import SteppedFlapjack.Concrete.WordSpan
@@ -66,7 +55,6 @@ import SteppedFlapjack.Concrete.CountdownDeadLiteral
 import SteppedFlapjack.Concrete.CountdownAllocationLiteral
 import SteppedFlapjack.Concrete.CountdownOptimized
 import SteppedFlapjack.Concrete.FixedWordBounds
-import SteppedFlapjack.Concrete.NaturalCountdownWordSpan
 import SteppedFlapjack.Concrete.BranchingWordSpan
 import SteppedFlapjack.Concrete.ComparisonWordSpan
 import SteppedFlapjack.Concrete.BranchEntryLoop

@@ -1,5 +1,4 @@
-import SteppedFlapjack.Concrete.Phase7Stack
-import SteppedFlapjack.Concrete.FixtureStackLab
+import SteppedFlapjack.Concrete.Phase7SourceBehaviour
 
 /-! Explicit source-to-RISC-V composition for supported programs. -/
 namespace SteppedFlapjack.Concrete
@@ -8,15 +7,9 @@ open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang Flapjack.Comp
 open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.WordToStack.Native
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.LoopToWordSteps
 
-/-- Machine ticks calculated from the source budget and generated code. -/
-noncomputable def supportedMachineTicks (program : Prog (RiscV.Word 64)) (n : Nat) : Nat :=
-  let code := (supportedNative program).2.2.2
-  948 * fixtureLabTickLimit code (fixtureCompilerConfig code) (supportedStackBound program n)
-
 set_option maxHeartbeats 1000000 in
 /-- A supported counted source return reaches a successfully halting RISC-V
-machine at a code-derived clock, with the source FFI state related to the
-machine's final FFI state. -/
+machine at a code-derived clock, with matching source and machine observable events. -/
 theorem supported_counted_machine
     (program : Prog (RiscV.Word 64)) (supported : Supported program)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
@@ -30,37 +23,39 @@ theorem supported_counted_machine
       (executableState (progToHOL program)).ffi program
       (memoryAccess := some (panSemBitVec64MemoryAccess (executableState (progToHOL program)))) =
         some (.returned postLocals postGlobals postMemory postFfi [.word word],count)) (countBound : count ≤ n)
-    (compilerFinal : Backend.Config)
-    (compiled : Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
-      (declarations (progToHOL program)) = some (fixtureCodeBytes (supportedNative program).2.2.2,[4],compilerFinal))
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 (supportedNative program).2.2.2)
-    (bitmap : (supportedNative program).1 = [4])
-    (calleeFits : ∀ arity callee,
-      sptLookup 65 (sptFromAList (supportedAllocated program).2) = some (arity,callee) →
-      1 + (compileProgNative riscvConfig false callee arity (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1 ≤
-        (fixtureStack (supportedNative program).2.2.2 (fixtureCompilerConfig (supportedNative program).2.2.2)).stack.length)
-    (labGood : goodCode riscvConfig (.ln : Spt (Spt Nat))
-      (LabFilter.filterSkip (fixtureLab (supportedNative program).2.2.2
-        (fixtureCompilerConfig (supportedNative program).2.2.2)).code))
+    (calleeFits : supportedCalleeFrame program ≤
+      (fixtureStack (supportedNative program).2.2.2 (fixtureCompilerConfig (supportedNative program).2.2.2)).stack.length)
     (safe : fixtureStackSafe (supportedNative program).2.2.2 = true)
     (facts : (fixtureRemoveLabels (supportedNative program).2.2.2).isSome = true ∧
       (fixtureCodeBytes (supportedNative program).2.2.2).length ≤ 0xecc ∧
       (fixtureCodeBytes (supportedNative program).2.2.2).length % 4 = 0) :
     let code := (supportedNative program).2.2.2
-    Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
+    ∃ compilerFinal, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
       (declarations (progToHOL program)) = some (fixtureCodeBytes code,[4],compilerFinal) ∧
     ∃ machinePost ffiPost, evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
-      (supportedMachineTicks program n) (fixtureMachineState code) = (.halt .success,machinePost,ffiPost) ∧
-      FfiEventListRel postFfi.ioEvents ffiPost.ioEvents := by
+      (supportedMachineFactor program * n + supportedMachineOffset program) (fixtureMachineState code) = (.halt .success,machinePost,ffiPost) ∧
+      FfiEventListRel postFfi.ioEvents ffiPost.ioEvents ∧
+      PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
+        (declarations (progToHOL program)) = .terminate .success ffiPost.ioEvents := by
   let code := (supportedNative program).2.2.2
   let cfg := fixtureCompilerConfig code
+  have good := supported_nativeGoodCode program supported
+  have labGood := supported_labGoodCode program supported
+  obtain ⟨compilerFinal,compiled⟩ := supported_compiler_output program supported safe facts.1
   obtain ⟨stackPost,stackRun,stackBound,stackFfi⟩ := supported_counted_nativeStack program supported
     context primitive handler fuel count n postLocals postGlobals postMemory postFfi word run countBound
-    cfg good bitmap calleeFits
+    cfg good calleeFits
   obtain ⟨labPost,labRun,labFfi⟩ := fixtureStack_lab_return code cfg (fixtureMachineState code) good
     (supportedWordBound program n+1) (supportedStackBound program n) stackPost stackRun stackBound
   obtain ⟨machinePost,machineRun⟩ := fixtureLabMachineReturn code labGood safe facts
     (fixtureLabTickLimit code cfg (supportedStackBound program n)) labPost labRun
-  refine ⟨compiled,machinePost,labPost.ffi,machineRun,?_⟩
-  simpa [labFfi] using stackFfi.2.1
+  obtain ⟨events,semantics,sourceEvents⟩ := supported_counted_semantics program supported
+    context primitive handler fuel count n postLocals postGlobals postMemory postFfi word run countBound
+  have machineEvents : FfiEventListRel postFfi.ioEvents labPost.ffi.ioEvents := by
+    simpa [labFfi] using stackFfi.2.1
+  have sameEvents := ffiEventListRel_unique postFfi.ioEvents events labPost.ffi.ioEvents sourceEvents machineEvents
+  refine ⟨compilerFinal,compiled,machinePost,labPost.ffi,?_,machineEvents,?_⟩
+  · rw [← supportedMachineTicks_affine]
+    exact machineRun
+  · simpa only [sameEvents] using semantics
 end SteppedFlapjack.Concrete

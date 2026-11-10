@@ -44,12 +44,12 @@ theorem supported_counted_word {C : Type}
         some (.returned postLocals postGlobals postMemory postFfi [.word word],count)) (countBound : count ≤ n)
     (memory : BitVec 64 → WordLocW 64)
     (memoryRel : crepToLoopMemRelHOLExact
-      (crepStateFrom (panSimpSourceState program (clockedFixtureSource program (n+1))) (progToHOL (panSimpProg program))).memory memory
-      (crepStateFrom (panSimpSourceState program (clockedFixtureSource program (n+1))) (progToHOL (panSimpProg program))).memaddrs)
+      (crepStateFrom (panSimpSourceState program (clockedFixtureSource program n)) (progToHOL (panSimpProg program))).memory memory
+      (crepStateFrom (panSimpSourceState program (clockedFixtureSource program n)) (progToHOL (panSimpProg program))).memaddrs)
     (template : WordSemStateFiniteExact 64 C Unit) (frame : Nat) :
     let simple := panSimpProg program
     let body := progToHOL simple
-    let pan := panSimpSourceState program (clockedFixtureSource program (n+1))
+    let pan := panSimpSourceState program (clockedFixtureSource program n)
     let crep := crepStateFrom pan body
     let timed := {crep with clock := crep.clock + supportedLoopBudget program n}
     let code := crepPrograms body
@@ -65,7 +65,7 @@ theorem supported_counted_word {C : Type}
       FfiStateRel postFfi final.ffi := by
   let simple := panSimpProg program
   let body := progToHOL simple
-  let pan := panSimpSourceState program (clockedFixtureSource program (n+1))
+  let pan := panSimpSourceState program (clockedFixtureSource program n)
   let crep := crepStateFrom pan body
   let timed := {crep with clock := crep.clock + supportedLoopBudget program n}
   let code := crepPrograms body
@@ -76,7 +76,7 @@ theorem supported_counted_word {C : Type}
     supported_counted_loop riscvConfig.isa program supported context primitive handler fuel count n
       postLocals postGlobals postMemory postFfi word run countBound memory memoryRel
   have heap : timed.topAddr = timed.baseAddr + 2*fixtureHeapLength := by
-    simpa [timed,crep,pan] using fixture_heap program (n+1) body
+    simpa [timed,crep,pan] using fixture_heap program n body
   have loopEq : concreteDeclLoopState riscvConfig.isa timed code =
       {loopStateFrom riscvConfig.isa pan body with clock :=
         (loopStateFrom riscvConfig.isa pan body).clock + supportedLoopBudget program n} := by

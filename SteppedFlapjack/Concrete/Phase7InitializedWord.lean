@@ -44,7 +44,7 @@ theorem supported_counted_initializedWord
     let target := WordSemStateFiniteExact.evaluate (.call none (some 64) [0] none) state
     ∃ (final : CrepSemHOLState 64 Unit) (post : LoopSemStateFiniteExact 64 Unit),
       evalCrepSemHOLProgExact
-        (crepStateFrom (panSimpSourceState program (clockedFixtureSource program (n+1))) (progToHOL (panSimpProg program)))
+        (crepStateFrom (panSimpSourceState program (clockedFixtureSource program n)) (progToHOL (panSimpProg program)))
         (.seq .skip (.call none (entryName (progToHOL (panSimpProg program))) [])) =
         (some (.return [.word word]),final) ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
@@ -63,13 +63,13 @@ theorem supported_counted_initializedWord
       funext a b c d e f g
       exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
     rw [Flapjack.Compiler.Backend.WordToWord.compileWith_eq_compile _ allocator]
-  have memoryRel := fixtureCrep_memory program (n+1) body code cfg good
+  have memoryRel := fixtureCrep_memory program n body code cfg good
   obtain ⟨final,post,crepRun,stateRel,result,ffi,bound,crepFfi⟩ := supported_counted_word program supported
     context primitive handler fuel count n postLocals postGlobals postMemory postFfi word run countBound
     (fixtureStack code cfg).memory memoryRel starter frame
-  have startEq := fixtureStarter program (n+1) (supportedLoopBudget program n) body creps code words cfg good frame
+  have startEq := fixtureStarter program n (supportedLoopBudget program n) body creps code words cfg good frame
     (6*supportedLoopVisits program n+1) frameLookup
-  let pan := panSimpSourceState program (clockedFixtureSource program (n+1))
+  let pan := panSimpSourceState program (clockedFixtureSource program n)
   let crep := crepStateFrom pan body
   let timed := {crep with clock := crep.clock + supportedLoopBudget program n}
   let wordState := {(phase3Starter riscvConfig.isa timed creps starter fixtureHeapLength 64 frame) with
