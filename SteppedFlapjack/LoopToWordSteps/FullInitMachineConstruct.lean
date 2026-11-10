@@ -89,7 +89,7 @@ noncomputable def fullInitMachineContext_of_alignedFilteredLabInit {F : Type}
         saveRegs dataSp stackOracle
       simpa [Assumptions,StackToLab.Proofs.MakeInit.memoryAssumption] using stackInit,
     stackEq := rfl, pc := mc.target.getPc ms, mc := mc, labCode := code2, labs := labs, asm := t,
-    machine := ms, hmc := hmc, machineLab := {filteredLab with clock := labClock}, labRelation := Or.inr (Or.inr ⟨{lab0 with clock := labClock},rfl,filterClock⟩),
+    machine := ms, hmc := hmc, machineLab := {filteredLab with clock := labClock}, labRelation := Or.inr (Or.inr (Or.inl ⟨{lab0 with clock := labClock},rfl,filterClock⟩)),
     tie := by simpa [oracleTie,filteredLab] using tie,
     machineRel := by simpa [filteredLab] using stateRelClock _ filteredLab t ms labClock rel }
 

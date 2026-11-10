@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.FixtureMachineLab
 import SteppedFlapjack.Concrete.FixtureMachineState
 import SteppedFlapjack.Concrete.FixtureByteDomain
 import SteppedFlapjack.Concrete.FixtureCodeMemory

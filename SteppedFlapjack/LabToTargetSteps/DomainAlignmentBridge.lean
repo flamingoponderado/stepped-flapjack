@@ -1,4 +1,5 @@
 import SteppedFlapjack.LabToTargetSteps.FilteredRiscV
+import SteppedFlapjack.LabToTargetSteps.ByteClosure
 import Flapjack.Compiler.Backend.LabProps.DomainAlignmentDmEvaluate
 import Flapjack.Compiler.Backend.Semantics.TargetProps.EvaluateAddClock
 
@@ -48,15 +49,19 @@ theorem alignedUnfilteredLabToRiscVWithin {F : Type}
 or the filtered byte-domain state corresponding to an aligned Stack domain. -/
 def LabExecutionLink {F : Type} (filtered stackLab : LabSem.State 64 Config F) : Prop :=
   filtered = stackLab ∨ LabFilter.Proofs.stateRel filtered stackLab ∨
-    ∃ raw, stackLab = alignDm raw ∧ LabFilter.Proofs.stateRel filtered raw
+    (∃ raw, stackLab = alignDm raw ∧ LabFilter.Proofs.stateRel filtered raw) ∨
+    ∃ raw, stackLab = alignSdm (alignDm raw) ∧ LabFilter.Proofs.stateRel filtered raw
 
 /-- Every supported relation preserves the code buffer. -/
 theorem LabExecutionLink.codeBuffer {F : Type} {filtered stackLab : LabSem.State 64 Config F}
     (link : LabExecutionLink filtered stackLab) : filtered.codeBuffer = stackLab.codeBuffer := by
-  rcases link with rfl | h | ⟨raw,rfl,h⟩
+  rcases link with rfl | h | ⟨raw,rfl,h⟩ | ⟨raw,rfl,h⟩
   · rfl
   · obtain ⟨⟨_,eq,_⟩,_⟩ := h
     rw [eq]
+  · obtain ⟨⟨_,eq,_⟩,_⟩ := h
+    rw [eq]
+    rfl
   · obtain ⟨⟨_,eq,_⟩,_⟩ := h
     rw [eq]
     rfl
@@ -65,10 +70,11 @@ theorem LabExecutionLink.codeBuffer {F : Type} {filtered stackLab : LabSem.State
 theorem LabExecutionLink.withClock {F : Type} {filtered stackLab : LabSem.State 64 Config F}
     (link : LabExecutionLink filtered stackLab) (clock : Nat) :
     LabExecutionLink {filtered with clock := clock} {stackLab with clock := clock} := by
-  rcases link with rfl | h | ⟨raw,rfl,h⟩
+  rcases link with rfl | h | ⟨raw,rfl,h⟩ | ⟨raw,rfl,h⟩
   · exact Or.inl rfl
   · exact Or.inr (Or.inl (filterRel_withClock _ _ clock h))
-  · exact Or.inr (Or.inr ⟨{raw with clock := clock},rfl,filterRel_withClock _ _ clock h⟩)
+  · exact Or.inr (Or.inr (Or.inl ⟨{raw with clock := clock},rfl,filterRel_withClock _ _ clock h⟩))
+  · exact Or.inr (Or.inr (Or.inr ⟨{raw with clock := clock},rfl,filterRel_withClock _ _ clock h⟩))
 
 /-- Either supported Lab execution link transfers a bounded Stack-side run to
 RISC-V with the same clock and FFI observation. -/
@@ -82,10 +88,14 @@ theorem connectedLabToRiscVWithin {F : Type}
     (run : evaluate {stackLab with clock := clock} = (.halt outcome,post)) (hbound : clock ≤ bound) :
     ∃ ticks finalMachine, ticks ≤ labTickBound 4 code filtered.codeBuffer * bound ∧
       evaluateTargetHOL mc stackLab.ffi ticks machine = (.halt outcome,finalMachine,post.ffi) := by
-  rcases link with rfl | h | ⟨raw,rfl,h⟩
+  rcases link with rfl | h | ⟨raw,rfl,h⟩ | ⟨raw,rfl,h⟩
   · exact labToRiscVWithin p filtered post outcome clock bound mc code labs asm machine hmc tie rel run hbound
   · exact unfilteredLabToRiscVWithin p filtered stackLab post outcome clock bound mc code labs asm machine hmc h tie rel run hbound
   · exact alignedUnfilteredLabToRiscVWithin p filtered raw post outcome clock bound mc code labs asm machine hmc h tie rel run hbound
+  · obtain ⟨alignedPost,alignedRun,ffi⟩ := halt_of_alignSdm (alignDm raw) clock outcome post run
+    obtain ⟨ticks,finalMachine,hticks,hrun⟩ := alignedUnfilteredLabToRiscVWithin p filtered raw alignedPost
+      outcome clock bound mc code labs asm machine hmc h tie rel alignedRun hbound
+    exact ⟨ticks,finalMachine,hticks,by simpa only [ffi,alignDm,alignSdm] using hrun⟩
 
 
 /-- A terminating linked Lab execution runs on RISC-V at the explicitly

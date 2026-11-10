@@ -39,10 +39,10 @@ theorem initializedLabToRiscVExplicit {F : Type}
     (compileLab mc.target.config) cbpos cbspace filteredOracle
   have filterRel := makeInit_filterRel mc ffi asm memory dm sdm machine code
     (compileLab mc.target.config) cbpos cbspace oracle
-  have link : LabExecutionLink filtered (alignDm original) := Or.inr (Or.inr ⟨original,rfl,by exact filterRel⟩)
-  obtain ⟨unalignedPost,unalignedRun,postFfi⟩ := halt_of_alignSdm (alignDm original) clock outcome post run
-  have result := connectedLabToRiscVExplicit (mc.target.getPc machine) filtered (alignDm original) unalignedPost
-    outcome clock bound mc code2 labs asm machine hmc link tie rel unalignedRun hbound
-  simpa [filtered,original,makeInit,alignDm,cbpos,postFfi] using result
+  have link : LabExecutionLink filtered (alignSdm (alignDm original)) :=
+    Or.inr (Or.inr (Or.inr ⟨original,rfl,by exact filterRel⟩))
+  have result := connectedLabToRiscVExplicit (mc.target.getPc machine) filtered (alignSdm (alignDm original)) post
+    outcome clock bound mc code2 labs asm machine hmc link tie rel run hbound
+  simpa [filtered,original,makeInit,alignDm,alignSdm,cbpos] using result
 
 end SteppedFlapjack.LabToTargetSteps
