@@ -69,38 +69,41 @@ theorem loopBlock_stackMax {p : WordLangProgHOL (BitVec width)} (hp : LoopBlock 
     all_goals repeat (first | split)
     all_goals rfl
 
-/-- A tail call uses only its own frame in addition to the initial stack. -/
-theorem directTail_stackMax_bound (loc reg size m L : Nat) (callee : WordLangProgHOL (BitVec width))
+set_option maxHeartbeats 1000000 in
+/-- A tail call adds its callee frame to the existing stack usage. -/
+theorem directTail_stackMax_bound (loc size m L arity stackWords : Nat) (args : List Nat)
+    (callee : WordLangProgHOL (BitVec width))
     (shape : LoopBlock callee) (noInstall : noInstallSubprogsHOL callee = true)
     (s : WordSemStateFiniteExact width C F)
-    (lookup : sptLookup loc s.code = some (1,callee)) (frame : sptLookup loc s.stackSize = some size)
-    (stack : wordSemStackSize s.stack = some 1) (maximum : s.stackMax = some m)
-    (mFits : m ≤ L) (frameFits : 1+size ≤ L) :
-    ∃ m', (evaluate (.call none (some loc) [reg] none) s).2.stackMax = some m' ∧ m' ≤ L ∧
-      (evaluate (.call none (some loc) [reg] none) s).1 ≠ none := by
-  cases hvar : getVar reg s with
+    (lookup : sptLookup loc s.code = some (arity,callee)) (frame : sptLookup loc s.stackSize = some size)
+    (argsArity : args.length = arity)
+    (stack : wordSemStackSize s.stack = some stackWords) (maximum : s.stackMax = some m)
+    (mFits : m ≤ L) (frameFits : stackWords+size ≤ L) :
+    ∃ m', (evaluate (.call none (some loc) args none) s).2.stackMax = some m' ∧ m' ≤ L ∧
+      (evaluate (.call none (some loc) args none) s).1 ≠ none := by
+  cases hv : WordSemStateFiniteExact.getVars args s with
   | none =>
-    refine ⟨m,?_,mFits,?_⟩ <;> rw [evaluate] <;> simp [WordSemStateFiniteExact.getVars,hvar,maximum]
-  | some value =>
-    have args : WordSemStateFiniteExact.getVars [reg] s = some [value] := by simp [WordSemStateFiniteExact.getVars,hvar]
-    have found : wordSemFindCode (some loc) [value] s.code s.stackSize = some ([value],callee,some size) := by
-      simp [wordSemFindCode,lookup,frame]
+    refine ⟨m,?_,mFits,?_⟩ <;> rw [evaluate] <;> simp [hv,maximum]
+  | some values =>
+    have len : values.length = arity := (WordSemStateFiniteExact.getVarsLengthLemma args s values hv).trans argsArity
+    have found : wordSemFindCode (some loc) values s.code s.stackSize = some (values,callee,some size) := by
+      simp [wordSemFindCode,lookup,frame,len]
     by_cases hz : s.clock = 0
-    · refine ⟨m,?_,mFits,?_⟩ <;> rw [evaluate] <;> simp [args,wordSemBadDestArgs,wordSemAddRetLoc,found,hz,flushState,maximum]
-    · let env := WordSemStateFiniteExact.callEnv [value] (some size) (decClock s)
-      have init : env.stackMax = some (max m (1+size)) := by
+    · refine ⟨m,?_,mFits,?_⟩ <;> rw [evaluate] <;> simp [hv,wordSemBadDestArgs,wordSemAddRetLoc,found,hz,flushState,maximum]
+    · let env := WordSemStateFiniteExact.callEnv values (some size) (decClock s)
+      have init : env.stackMax = some (max m (stackWords+size)) := by
         simp [env,WordSemStateFiniteExact.callEnv,decClock,maximum,stack,wordSemOptionMax,wordSemOptionAdd]
       have h := loopBlock_stackMax shape noInstall env
       rw [init] at h
       rcases he : evaluate callee env with ⟨result,post⟩
       rw [he] at h
-      refine ⟨max m (1+size),?_,Nat.max_le.mpr ⟨mFits,frameFits⟩,?_⟩ <;> rw [evaluate]
-      · simp only [args,wordSemBadDestArgs,wordSemAddRetLoc,found,hz,↓reduceDIte,Option.some_ne_none,false_and,decide_false,Bool.false_eq_true,if_false]
-        rw [show evaluate callee (WordSemStateFiniteExact.callEnv [value] (some size) (decClock s)) = (result,post) from he]
+      refine ⟨max m (stackWords+size),?_,Nat.max_le.mpr ⟨mFits,frameFits⟩,?_⟩ <;> rw [evaluate]
+      · simp only [hv,wordSemBadDestArgs,wordSemAddRetLoc,found,hz,↓reduceDIte,Option.some_ne_none,false_and,decide_false,Bool.false_eq_true,if_false]
+        rw [show evaluate callee (WordSemStateFiniteExact.callEnv values (some size) (decClock s)) = (result,post) from he]
         change (if wordSemBadFunReturn result then (some .error,post) else (result,post)).2.stackMax = _
         split <;> exact h
-      · simp only [args,wordSemBadDestArgs,wordSemAddRetLoc,found,hz,↓reduceDIte,Option.some_ne_none,false_and,decide_false,Bool.false_eq_true,if_false]
-        rw [show evaluate callee (WordSemStateFiniteExact.callEnv [value] (some size) (decClock s)) = (result,post) from he]
+      · simp only [hv,wordSemBadDestArgs,wordSemAddRetLoc,found,hz,↓reduceDIte,Option.some_ne_none,false_and,decide_false,Bool.false_eq_true,if_false]
+        rw [show evaluate callee (WordSemStateFiniteExact.callEnv values (some size) (decClock s)) = (result,post) from he]
         change (if wordSemBadFunReturn result then (some .error,post) else (result,post)).1 ≠ none
         cases result with
         | none => simp [wordSemBadFunReturn]
@@ -126,7 +129,7 @@ theorem regTail_stackMax_bound {p : WordLangProgHOL (BitVec width)} (shape : Reg
     by_cases arityOne : arity = 1
     · subst arity
       have noInstall := noCode loc 1 callee lookup
-      obtain ⟨m',max',bound,notNone⟩ := directTail_stackMax_bound loc reg size m L callee calleeShape noInstall s lookup frame stack maximum fits frameFits
+      obtain ⟨m',max',bound,notNone⟩ := directTail_stackMax_bound loc size m L 1 1 [reg] callee calleeShape noInstall s lookup frame rfl stack maximum fits frameFits
       exact ⟨m',max',bound,fun h => False.elim (notNone h)⟩
     · cases hvar : getVar reg s with
       | none =>

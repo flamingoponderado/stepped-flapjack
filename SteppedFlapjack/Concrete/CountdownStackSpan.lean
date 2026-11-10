@@ -30,7 +30,7 @@ set_option maxHeartbeats 1000000 in
 /-- The countdown callee requires no native frame space. -/
 theorem countdownCallee_entryFrame_zero (n : Nat) :
     nativeEntryFrameSize countdownZeroLimit (countdownOptimizedLoop n) = 0 := by
-  simp [nativeEntryFrameSize,nativeEntryFrame,countdownOptimizedLoop,countdownOptimizedLiteral,maxVarHOL,countdownZeroLimit,maxVarInstHOL]
+  simp [nativeEntryFrameSize,nativeFrameSize,nativeFrame,countdownOptimizedLoop,countdownOptimizedLiteral,maxVarHOL,countdownZeroLimit,maxVarInstHOL]
   constructor <;> with_unfolding_all rfl
 
 end SteppedFlapjack.Concrete

@@ -28,24 +28,36 @@ theorem nativeEntry_locals {width : Nat} [NeZero width] {C F : Type}
       (sptDomainFromList2 [(.loc 1 0 : WordLocW width)])
   · simp [WordSemStateFiniteExact.callEnv,sptFromList2,sptLookup]
 
-/-- The compiler-selected one-argument entry frame. -/
-def nativeEntryFrame (k : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
-  max (maxVarHOL q / 2 + 1 - k) (1-k)
-/-- Stack allocation required by that frame. -/
-def nativeEntryFrameSize (k : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
-  let frame := nativeEntryFrame k q
+/-- The compiler-selected frame for a function with the given arity. -/
+def nativeFrame (k count : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
+  max (maxVarHOL q / 2 + 1 - k) (count-k)
+def nativeFrameSize (k count : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
+  let frame := nativeFrame k count q
   if frame = 0 then 0 else frame+1
 
-/-- The compiler's returned frame size is the source-derived frame formula. -/
+theorem nativeFrameSize_compile (ac : AsmConfigExact 64) (p : WordLangProgHOL (BitVec 64))
+    (k count : Nat) (bitmaps : AppList (BitVec 64) × Nat) :
+    (compileProgNative ac false p count k bitmaps).2.1 = nativeFrameSize k count p := by
+  unfold compileProgNative nativeFrameSize nativeFrame
+  generalize compNative ac false p bitmaps
+    (k, (if max (maxVarHOL p / 2 + 1 - k) (count-k) = 0 then 0 else max (maxVarHOL p / 2 + 1 - k) (count-k) + 1),
+      max (maxVarHOL p / 2 + 1 - k) (count-k)) = x
+  cases x
+  rfl
+
+/-- The compiler-selected one-argument entry frame. -/
+def nativeEntryFrame (k : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
+  nativeFrame k 1 q
+/-- Stack allocation required by that frame. -/
+def nativeEntryFrameSize (k : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
+  nativeFrameSize k 1 q
+
+/-- The compiler-selected entry frame is the one-argument instance of the
+frame formula. -/
 theorem nativeEntryFrameSize_compile (ac : AsmConfigExact 64) (p : WordLangProgHOL (BitVec 64))
     (k : Nat) (bitmaps : AppList (BitVec 64) × Nat) :
     (compileProgNative ac false p 1 k bitmaps).2.1 = nativeEntryFrameSize k p := by
-  unfold compileProgNative nativeEntryFrameSize nativeEntryFrame
-  generalize compNative ac false p bitmaps
-    (k, (if max (maxVarHOL p / 2 + 1 - k) (1-k) = 0 then 0 else max (maxVarHOL p / 2 + 1 - k) (1-k) + 1),
-      max (maxVarHOL p / 2 + 1 - k) (1-k)) = x
-  cases x
-  rfl
+  exact nativeFrameSize_compile ac p k 1 bitmaps
 
 /-- A fitting compiler-selected frame starts in the native state relation. -/
 theorem wholeWordStack_tailEntryFrame_safe {C F : Type}
@@ -92,7 +104,7 @@ theorem wholeWordStack_tailEntryFrame_safe {C F : Type}
             ((name,1,p),entryColour wc programs name)).2.2 =
         nativeEntryFrame (ac.regCount-(5+ac.avoidRegs.length))
           (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
-            ((name,1,p),entryColour wc programs name)).2.2 + 1 := by simp [nativeEntryFrameSize]
+            ((name,1,p),entryColour wc programs name)).2.2 + 1 := by simp [nativeEntryFrameSize,nativeFrameSize,nativeEntryFrame]
   have related := wholeWordStack_initialFrame wc ac programs t coracle noRaise noStore codeEq bitmapsPrefix ok
     _ _ frameShape fits
   exact ⟨bs,n,bsPost,nPost,body,selected,compilation,found,lengthBound,gapBound,bitmapPrefix,related⟩
