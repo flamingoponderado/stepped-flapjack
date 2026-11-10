@@ -44,7 +44,7 @@ theorem tailEntry_consumption_bound {p : HolLoopProg width} {loc : Nat} (shape :
             clock,beq_self_eq_true,if_true]
           simp_wf
           nlinarith
-        · have bound := directTail_consumption_bound loc s post body calleeShape result lookup clock run
+        · have bound := directTail_consumption_bound loc [] [] .ln s post body calleeShape result (by rfl) lookup clock run
           have sz : 1 + sizeOf body ≤ sizeOf (.call none (some loc) [] none : HolLoopProg width) + K := by simp_wf; omega
           exact bound.trans (Nat.mul_le_mul_right _ sz)
   | @seq a b ha hb iha ihb =>
@@ -106,7 +106,7 @@ theorem tailEntry_clock_consumed {p : HolLoopProg width} {loc : Nat} (shape : Si
         have lookup : findCode (some loc) [] s.code = some (.ln,body) := by simp [findCode,hlookup,sptFromAList]
         by_cases clock : s.clock = 0
         · omega
-        · exact directTail_clock_consumed loc s post body calleeShape result lookup clock run
+        · exact directTail_clock_consumed loc [] [] .ln s post body calleeShape result (by rfl) lookup clock run
   | @seq a b ha hb iha ihb =>
     rw [steps_seq,evaluate_seq] at *
     rcases first : evaluate a s with ⟨out,middle⟩

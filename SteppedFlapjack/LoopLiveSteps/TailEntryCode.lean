@@ -69,7 +69,7 @@ theorem tailEntry_none_code {p : HolLoopProg width} (shape : TailEntryShape p)
     (s post : LoopSemStateFiniteExact width F) (run : evaluate p s = (none,post)) : post.code = s.code := by
   induction shape generalizing s post with
   | branch h => exact branch_code h s post none run
-  | call loc => exact ((directTail_ne_none loc s) (by rw [run])).elim
+  | call loc => exact ((directTail_ne_none loc [] s) (by rw [run])).elim
   | @seq a b ha hb iha ihb =>
     rw [evaluate_seq] at run
     rcases first : evaluate a s with ⟨out,middle⟩
