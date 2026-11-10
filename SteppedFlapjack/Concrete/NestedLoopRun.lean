@@ -115,86 +115,39 @@ theorem nestedCall_loop_run :
   · simp [nestedLoopState,concreteDeclLoopState,nestedCall_loop_code,nestedLoopTable]
   · rfl
 
-open SteppedFlapjack.LoopSteps
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-private theorem nestedLoop_leaf_count (s : LoopSemStateFiniteExact 64 Unit) : steps nestedLoopCode67 s = 8 := by
-  simp [nestedLoopCode67,steps_mark,steps_seq,steps_leaf,evaluate,eval,
-    LoopSemStateFiniteExact.setVar, LoopSemStateFiniteExact.getVars,
-    sptLookup_sptInsert_same,LoopSemStateFiniteExact.callEnv]
+open SteppedFlapjack.LoopSteps SteppedFlapjack.LoopLiveSteps SteppedFlapjack.LoopToWordSteps SteppedFlapjack.CrepToLoopSteps
 
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-private theorem nestedLoop_middle_count (s : LoopSemStateFiniteExact 64 Unit) (code : s.code = nestedLoopTable) (clock : s.clock ≠ 0) : steps nestedLoopCode66 s = 12 := by
-  have empty : sptFromAList ([] : List (Nat × WordLocW 64)) = .ln := rfl
-  have found : findCode (some 67) [] s.code = some (.ln,nestedLoopCode67) := by
-    simp [findCode,code,nestedLoopTable,sptLookup_sptFromAList,sptAListLookup,empty]
-  have call := steps_call_tail (some 67) [] s [] .ln nestedLoopCode67 (by rfl) found clock
-  have run : ∃ t, evaluate (.mark (.call none (some 67) [] none) : HolLoopProg 64) s = (some (.result [.word 7]),t) := by
-    refine ⟨callEnv [] (setVar 1 (.word 7) {decClock s with locals := .ln}), ?_⟩
-    simp [evaluate,found,clock,nestedLoopCode67,evaluate_seq,eval,LoopSemStateFiniteExact.setVar,LoopSemStateFiniteExact.getVars,sptLookup_sptInsert_same,LoopSemStateFiniteExact.callEnv]
-  obtain ⟨t, run⟩ := run
-  simp [nestedLoopCode66,steps_mark,steps_seq,call,nestedLoop_leaf_count,run]
+private theorem nestedTable_supported : LoopTableSupported nestedLoopTable := by
+  intro loc params body found
+  rw [nestedLoopTable,sptLookup_sptFromAList] at found
+  have member := sptAListLookup_mem loc
+    [(64,([],nestedLoopCode64)),(65,([],nestedLoopCode65)),(66,([],nestedLoopCode66)),(67,([],nestedLoopCode67))]
+    (params,body) found
+  simp only [List.mem_cons,List.not_mem_nil,or_false] at member
+  rcases member with h | h | h | h <;> cases h
+  all_goals simp only [nestedLoopCode64,nestedLoopCode65,nestedLoopCode66,nestedLoopCode67]
+  all_goals repeat' first
+    | apply SimpleLoopSequenceSource.mark
+    | apply SimpleLoopSequenceSource.seq
+    | apply SimpleLoopSequenceSource.tail
+    | apply SimpleLoopSequenceSource.returningMarked
+    | apply SimpleLoopSequenceSource.branch
+    | exact LoopBranch.skip
+    | exact LoopBranch.assign _ _
+    | exact LoopBranch.ret _
 
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-private theorem nestedLoop_returning_count (s : LoopSemStateFiniteExact 64 Unit) (code : s.code = nestedLoopTable) (clock : s.clock = 3) :
-  steps (.call (some ([1],.ln)) (some 66) []
-    (some (2,.mark (.raise 2),.mark .skip,nestedLoopLive1))) s = 15 := by
-  let cut : LoopSemStateFiniteExact 64 Unit := {s with locals := .ln, clock := 2}
-  let called : LoopSemStateFiniteExact 64 Unit := {cut with locals := .ln}
-  let post := LoopSemStateFiniteExact.callEnv [] (setVar 1 (.word 7) {decClock called with locals := .ln})
-  have interEmpty : sptInter s.locals (.ln : NumSet) = .ln := by cases s.locals <;> simp [sptInter]
-  have empty : sptFromAList ([] : List (Nat × WordLocW 64)) = .ln := rfl
-  have cutRun : cutRes .ln (none,s) = (none,cut) := by
-    simp [cutRes,cutState,sptSubsetLive,clock,cut,decClock,interEmpty]
-  have found : findCode (some 66) [] s.code = some (.ln,nestedLoopCode66) := by
-    simp [findCode,code,nestedLoopTable,sptLookup_sptFromAList,sptAListLookup,empty]
-  have calledCode : called.code = nestedLoopTable := by simpa [called,cut] using code
-  have calledClock : called.clock ≠ 0 := by simp [called,cut]
-  have run : evaluate nestedLoopCode66 {cut with locals := .ln} = (some (.result [.word 7]),post) := by
-    exact nestedLoop_middle_run called calledCode calledClock
-  have count := nestedLoop_middle_count called calledCode calledClock
-  have call := steps_call_returning (some 66) [] [1] .ln (some (2,.mark (.raise 2),.mark .skip,nestedLoopLive1)) s cut post [] .ln nestedLoopCode66 (some (.result [.word 7])) (by rfl) found (by simp) cutRun run
-  simp [call,steps_mark,steps_leaf,count,called]
-
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-private theorem nestedLoop_main_count (s : LoopSemStateFiniteExact 64 Unit) (code : s.code = nestedLoopTable) (clock : s.clock = 3) :
-  steps nestedLoopCode65 s = 38 := by
-  have call := nestedLoop_returning_count s code clock
-  have run := nestedLoop_returning_run s code clock
-  simp [nestedLoopCode65,steps_mark,steps_seq,steps_leaf,evaluate_seq,evaluate,call,run,eval,
-    LoopSemStateFiniteExact.setVar,LoopSemStateFiniteExact.getVars,
-    sptLookup_sptInsert_same,LoopSemStateFiniteExact.callEnv]
-
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-private theorem nestedLoop_entry_count (s : LoopSemStateFiniteExact 64 Unit) (code : s.code = nestedLoopTable) (clock : s.clock = 4) :
-  steps nestedLoopCode64 s = 46 := by
-  let entry : LoopSemStateFiniteExact 64 Unit := {decClock s with locals := .ln}
-  have entryCode : entry.code = nestedLoopTable := by simpa [entry,decClock] using code
-  have entryClock : entry.clock = 3 := by simp [entry,decClock,clock]
-  have run := nestedLoop_main_run entry entryCode entryClock
-  have count := nestedLoop_main_count entry entryCode entryClock
-  have empty : sptFromAList ([] : List (Nat × WordLocW 64)) = .ln := rfl
-  have found : findCode (some 65) [] s.code = some (.ln,nestedLoopCode65) := by
-    simp [findCode,code,nestedLoopTable,sptLookup_sptFromAList,sptAListLookup,empty]
-  have nonzero : s.clock ≠ 0 := by simp [clock]
-  have call := steps_call_tail (some 65) [] s [] .ln nestedLoopCode65 (by rfl) found nonzero
-  have callRun : evaluate (.call none (some 65) [] none : HolLoopProg 64) s =
-      (some (.result [.word 7]),{s with locals := .ln,clock := 0}) := by
-    simp [entry,decClock,clock] at run
-    simp [evaluate,found,decClock,clock,run]
-  simp [nestedLoopCode64,steps_mark,steps_seq,steps_leaf,evaluate,call,callRun,count,entry]
-
-/-- The optimized Loop witness visits exactly 46 evaluator nodes. -/
-theorem nestedCall_loop_steps : steps nestedLoopCode64 nestedLoopState = 46 := by
-  apply nestedLoop_entry_count nestedLoopState
-  · simp [nestedLoopState,concreteDeclLoopState,nestedCall_loop_code,nestedLoopTable]
-  · rfl
+/-- The actual nested-call entry is bounded by the general code-table theorem. -/
+theorem nestedCall_loop_steps_bound : steps nestedLoopCode64 nestedLoopState ≤ 122 := by
+  have codeEq : nestedLoopState.code = nestedLoopTable := by
+    simp [nestedLoopState,concreteDeclLoopState,nestedCall_loop_code,nestedLoopTable]
+  have found : sptLookup 64 nestedLoopTable = some ([],nestedLoopCode64) := by
+    simp [nestedLoopTable,sptLookup_sptFromAList,sptAListLookup]
+  have bound := loopTable_entry_bound nestedLoopTable 64 [] nestedLoopCode64 nestedLoopState codeEq nestedTable_supported found
+  rw [nestedCall_loop_codeWeight] at bound
+  have clock : nestedLoopState.clock = 4 := rfl
+  rw [clock] at bound
+  have entryWeight : loopVisitWeight nestedLoopCode64 = 10 := by with_unfolding_all rfl
+  rw [entryWeight] at bound
+  omega
 
 end SteppedFlapjack.Concrete
