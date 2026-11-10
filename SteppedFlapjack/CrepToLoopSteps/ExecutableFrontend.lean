@@ -42,6 +42,20 @@ theorem compiled_returningCall_direct_shape {width : Nat} [NeZero width]
   rw [compiled]
   exact assignmentSequence_shape _ _ _ (.returning _ _ _ _ _ _)
 
+/-- A direct condition preserves the structural optimizer shape of both
+compiled branches, including branches that contain calls. -/
+theorem compiled_conditional_direct_shape {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (condition : CrepExpHOL width) (thenBranch elseBranch : CrepProgHOL width)
+    (conditionShape : DirectExpression condition)
+    (thenShape : SimpleLoopSequenceSource (compileHOLExact ctxt live thenBranch))
+    (elseShape : SimpleLoopSequenceSource (compileHOLExact ctxt live elseBranch)) :
+    SimpleLoopSequenceSource (compileHOLExact ctxt live (.ite condition thenBranch elseBranch)) := by
+  obtain ⟨value,compiled⟩ := directExpression_noCode conditionShape ctxt (ctxt.vmax+1) live
+  rw [compileHOLExact,compiled]
+  exact .seq (.branch (.assign _ _))
+    (.seq (.conditional _ _ _ _ thenShape elseShape) (.branch .skip))
+
 /-- Before optimization, every supported body has the shape required by the
 structural liveness evaluator. -/
 theorem supportedCodeBody_rawLoopShape {width : Nat} [NeZero width]
