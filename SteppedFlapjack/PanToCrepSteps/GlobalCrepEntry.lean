@@ -6,27 +6,6 @@ namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 open SteppedFlapjack.CrepToLoopSteps
 
-/-- The zero-argument wrapper produced by global lowering is the first entry
-in the pre-inlining Crep function list, with the actual compiler context. -/
-theorem globalEntry_preInline {width : Nat} [NeZero width]
-    (declarations : List (DeclHOL width)) (start : MlString)
-    (original : ProgHOL width) (returnShape : ShapeHOL)
-    (found : (functionsHOL declarations).lookup start = some ([],original,returnShape)) :
-    ∃ initializers rest,
-      let lowered := compileTopExactHOL declarations start
-      let ctxt : PanToCrepContextExact width := mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
-        (makeFuncsExactHOL (functionsHOL lowered)) (sizeOfShapeHOL (.comb [])-1) (getEidsFromDeclsHOL lowered)
-      compileToCrepExactHOLW lowered =
-        (start,[],.seq (compileProgExactHOLW ctxt (nestedSeqHOL initializers))
-          (.call none (newMainNameHOL declarations) [])) :: rest := by
-  obtain ⟨initializers,functions,hfirst⟩ := compileTop_first_function declarations start [] original returnShape found
-  refine ⟨initializers,functions.map (fun entry => (entry.1,crepVarsHOL entry.2.1,
-    compFuncExactHOLW (makeFuncsExactHOL (functionsHOL (compileTopExactHOL declarations start)))
-      (getEidsFromDeclsHOL (compileTopExactHOL declarations start)) entry.2.1 entry.2.2.1)),?_⟩
-  simp only [compileToCrepExactHOLW,hfirst,List.map_cons,crepVarsHOL,List.map_nil,
-    sizeOfShapeHOL,sizeOfShapesHOL,List.range_zero,compFuncExactHOLW,Nat.zero_sub,
-    compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,List.flatMap_nil]
-
 /-- If the generated initializer is in the supported branch fragment and the
 renamed main is not inline-marked, the actual compiled entry retains the
 initializer and tail call, with exactly the same Crep execution count. -/

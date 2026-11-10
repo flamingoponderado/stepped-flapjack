@@ -92,25 +92,4 @@ theorem wholeCompile_tailOrLoop_shape {width : Nat} [NeZero width]
   · exact Or.inr (Or.inr (fullCompileSingle_stackReady ac ac.twoRegArith count name wc.regAlg
       (ac.regCount-(5+ac.avoidRegs.length)) col loop).1)
 
-/-- Preserve the stronger source shape, before forgetting loop information
-for the Stack simulation. -/
-theorem wholeCompile_tailOrLoop_exactShape {width : Nat} [NeZero width]
-    (wc : Config) (ac : AsmConfigExact width)
-    (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
-    (shapes : ∀ row ∈ programs, WordTailEntryShape row.2.2 ∨ LoopSequence row.2.2) :
-    ∀ row ∈ (compile wc ac programs).2, RegTailShape row.2.2 ∨ LoopSequence row.2.2 := by
-  intro row member
-  change row ∈ ((programs.zip (nextNOracle programs.length wc.colOracle).1).map
-    (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac)) at member
-  obtain ⟨⟨⟨name,count,p⟩,col⟩,hin,rfl⟩ := List.mem_map.mp member
-  have source := shapes (name,count,p) (zip_left_member programs _ _ _ hin)
-  rcases source with tail | loop
-  · exact Or.inl (fullCompileSingle_tailEntry_shape ac ac.twoRegArith count name wc.regAlg
-      (ac.regCount-(5+ac.avoidRegs.length)) col tail)
-  · right
-    rw [fullCompileSingle_eq_alloc ac ac.twoRegArith count name wc.regAlg
-      (ac.regCount-(5+ac.avoidRegs.length)) col loop]
-    exact wordAlloc_loopSequence name ac wc.regAlg (ac.regCount-(5+ac.avoidRegs.length)) col
-      (preAlloc_shape ac ac.twoRegArith count loop)
-
 end SteppedFlapjack.WordAllocSteps

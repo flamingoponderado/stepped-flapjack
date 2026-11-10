@@ -104,18 +104,6 @@ theorem singleEntry_compiled_code_lookup {σ : Type}
   · simp at found
 
 
-/-- Global lowering of a single function has no initialization or global
-context, with the callee body compiled in the empty context. -/
-theorem singleEntry_globalLowered (start : MlString) (body : ProgHOL 64) :
-    let declarations := singleEntryProgram start body
-    let renamed := newMainNameHOL declarations
-    globalLoweredDecs declarations start =
-      ([],[.function ⟨renamed,false,false,[],
-        compileProgExactHOL emptyGlobalsContext (fpermHOL start renamed body),.one⟩],[],emptyGlobalsContext) := by
-  simp [globalLoweredDecs,singleEntryProgram,resortDeclsHOL,isNameHOL,isExnDeclHOL,
-    isDeclHOL,isFunctionHOL,List.filter,fpermDecsHOL,fpermName,compileDecsExactHOL,
-    decShapesHOL,emptyGlobalsContext]
-
 /-- The actual code table meets the source-first machine theorem's globals
 lookup premise for every declared assignment loop of the supported shape. -/
 theorem singleEntry_declared_code_lookup {σ : Type}
@@ -199,61 +187,5 @@ theorem declaredWhileAssignLoop_fperm (start renamed name : MlString) (initial r
       .dec name .one (.const initial)
         (.seq (.while condition (.assign .local name assignment)) (.return (.const returned))) := by
   simp [fpermHOL]
-
-/-- The unprefixed singleton's actual generated functions are localized. -/
-theorem singleEntry_declaredWhile_localised (start name : MlString) (initial returned : BitVec 64)
-    (condition assignment : ExpHOL 64) (ctxt : PanToCrepContextExact 64)
-    (conditionShape : ScalarExpression ctxt condition) (assignmentShape : ScalarExpression ctxt assignment) :
-    ∀ entry ∈ functionsHOL (compileTopExactHOL
-      (singleEntryProgram start (.dec name .one (.const initial)
-        (.seq (.while condition (.assign .local name assignment)) (.return (.const returned))))) start),
-      localisedProgHOL entry.2.2.1 = true := by
-  have hc := scalarExpression_localised (globalCompile_scalar_shape emptyGlobalsContext conditionShape)
-  have ha := scalarExpression_localised (globalCompile_scalar_shape emptyGlobalsContext assignmentShape)
-  rw [singleEntry_compileTop]
-  simp [functionsHOL,declaredWhileAssignLoop_fperm,compileProgExactHOL,compileExpExactHOL,localisedProgHOL,
-    localisedExpHOL,everyExpHOL,everyExpListHOL] at hc ha ⊢
-  exact ⟨hc,ha⟩
-
-/-- Struct lowering preserves every supported scalar expression. -/
-theorem scalarExpression_structs_fixed {width : Nat} [NeZero width]
-    {ctxt : PanToCrepContextExact width} {e : ExpHOL width} (shape : ScalarExpression ctxt e)
-    (structCtxt : Pancake.PanStructs.CompileShapeExact.ContextExact) :
-    Pancake.PanStructs.CompileShapeExact.compileExpExact structCtxt e = e := by
-  induction shape with
-  | const v => simp [Pancake.PanStructs.CompileShapeExact.compileExpExact]
-  | «local» name n found => simp [Pancake.PanStructs.CompileShapeExact.compileExpExact]
-  | baseAddr => simp [Pancake.PanStructs.CompileShapeExact.compileExpExact]
-  | topAddr => simp [Pancake.PanStructs.CompileShapeExact.compileExpExact]
-  | bytesInWord => simp [Pancake.PanStructs.CompileShapeExact.compileExpExact]
-  | shift op ha hb iha ihb => simp [Pancake.PanStructs.CompileShapeExact.compileExpExact,iha,ihb]
-  | op operator ha hb iha ihb =>
-    simp [Pancake.PanStructs.CompileShapeExact.compileExpExact,
-      Pancake.PanStructs.CompileShapeExact.compileExpsExact,iha,ihb]
-
-/-- Both pre-global passes preserve a supported scalar assignment loop, apart
-from removing its leading skip. -/
-theorem singleEntry_declaredWhile_panToWord (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture)
-    (name : MlString) (initial returned : BitVec 64) (condition assignment : ExpHOL 64)
-    (ctxt : PanToCrepContextExact 64) (conditionShape : ScalarExpression ctxt condition)
-    (assignmentShape : ScalarExpression ctxt assignment) :
-    let start := ofString "main"
-    let body : ProgHOL 64 := .dec name .one (.const initial)
-      (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))
-    panToWordCompileProgHOL arch (singleEntryProgram start (.dec name .one (.const initial) (.seq .skip
-      (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))))) =
-      loopToWordCompileHOL (compileProgHOLExact arch
-        (compileProgDeclsHOLW (compileTopExactHOL (singleEntryProgram start body) start))) := by
-  simp only [panToWordCompileProgHOL,singleEntry_declared_panSimp]
-  have fixed : Pancake.PanStructs.CompileShapeExact.compileTopExact
-      (singleEntryProgram (ofString "main") (.dec name .one (.const initial)
-        (.seq (.while condition (.assign .local name assignment)) (.return (.const returned))))) =
-      singleEntryProgram (ofString "main") (.dec name .one (.const initial)
-        (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))) := by
-    simp [singleEntryProgram,Pancake.PanStructs.CompileShapeExact.compileTopExact,
-      Pancake.PanStructs.CompileShapeExact.getNamesExact,Pancake.PanStructs.CompileShapeExact.compileDeclsExact,
-      Pancake.PanStructs.CompileShapeExact.compileProgExact,Pancake.PanStructs.CompileShapeExact.compileShapeExact,
-      Pancake.PanStructs.CompileShapeExact.compileExpExact,scalarExpression_structs_fixed conditionShape,scalarExpression_structs_fixed assignmentShape]
-  rw [fixed]
 
 end SteppedFlapjack.PanToCrepSteps

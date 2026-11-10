@@ -1,6 +1,4 @@
 import SteppedFlapjack.PanToCrepSteps.CountdownCompilerShape
-import SteppedFlapjack.PanToCrepSteps.DeclWhileSingleEntry
-import SteppedFlapjack.CrepToLoopSteps.BitmapSourceShape
 
 /-! Derive bitmap behavior from the concrete countdown source. -/
 namespace SteppedFlapjack.PanToCrepSteps

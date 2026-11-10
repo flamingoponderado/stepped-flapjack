@@ -1,5 +1,4 @@
 import SteppedFlapjack.LoopToWordSteps.FullInitTailSetup
-import SteppedFlapjack.LoopToWordSteps.NativeTailCompilerFacts
 import SteppedFlapjack.StackToLabSteps.FullInitStackLabSteps
 import SteppedFlapjack.LabToTargetSteps.LabRiscVComposition
 import SteppedFlapjack.StackToLabSteps.EntryLocation
@@ -189,71 +188,5 @@ noncomputable def FullInitMachineContext.successTickLimit {F : Type}
   labTickBound 4 backend.labCode backend.lab.codeBuffer * (flattenStepFactor *
     (2 + loopOnlyCost 0 (initCode (StackToLab.isGenGc backend.dataConf.gcKind) backend.maxHeap backend.sp : HolProg 64) +
       computedRunCost backend.offset cost (.call none (.inl firstLoopName) none) base * cost + 4))
-
-/-- A fitting compiler-selected frame gives a full-initialization setup. -/
-theorem fullInitNativeTail_setup {F : Type}
-    (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact 64)
-    (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
-    (p : HolLoopProg 64) (ctxt : Spt Nat) (labels : Nat × Nat)
-    (shapes : TailProgramShapes programs)
-    (member : (firstLoopName,1,(LoopToWord.compHOL ctxt p labels).1) ∈ programs)
-    (nodup : (programs.map Prod.fst).Nodup)
-    (stack : StackSemStateFiniteExact 64 LabToTarget.Config F)
-    (coracle : Nat → (Nat × LabToTarget.Config) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
-    (noRaise : raiseStubLocation ∉ programs.map Prod.fst) (noStore : storeConstsStubLocation ∉ programs.map Prod.fst)
-    (codeEq : stack.code = sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2)
-    (bitmapsPrefix : (compileNative ac false (compile wc ac programs).2).1.IsPrefix stack.bitmaps)
-    (ok : initStateOk ac (ac.regCount-(5+ac.avoidRegs.length)) stack coracle) (limit : Nat)
-    (backend : FullInitMachineContext stack)
-    (fits : nativeEntryFrameSize (ac.regCount-(5+ac.avoidRegs.length))
-      (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
-        ((firstLoopName,1,(LoopToWord.compHOL ctxt p labels).1),entryColour wc programs firstLoopName)).2.2 ≤ stack.stackSpace) :
-    ∃ (word : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
-       (setup : FullInitTailSetup p word limit),
-      setup.ctxt = ctxt ∧ setup.machine = backend.machine ∧ setup.mc = backend.mc ∧ setup.lab = backend.lab ∧
-      setup.tickLimit = backend.successTickLimit wc ac programs p ctxt labels limit ∧
-      ∃ frameSize,
-        word = {callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
-          (makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) stack
-            (sptFromAList (compile wc ac programs).2) coracle) with code := sptFromAList programs} := by
-  let k := ac.regCount-(5+ac.avoidRegs.length)
-  let compiledCode := sptFromAList (compile wc ac programs).2
-  let originalCode := sptFromAList programs
-  let replay := tailWordReplayLimit p ctxt labels compiledCode limit
-  obtain ⟨bs,n,bsPost,nPost,body,frame,frameSize,selected,frameDef,sizeDef,native,found,lengthBound,bitmapBound,bitmapPrefix,facts⟩ :=
-    nativeTail_compilerFacts wc ac programs p ctxt labels firstLoopName shapes member nodup stack coracle
-      noRaise noStore codeEq bitmapsPrefix ok limit fits
-  obtain ⟨noInstall,codeRel,codeDomain,domain,localsRel,lookup,labelCheck,maxBound,space,stackRel⟩ := facts
-  let base := makeInit ac k stack compiledCode coracle
-  let word := {callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize) base with code := originalCode}
-  let entry := {stack with clock := replay}
-  have stackGc : gcFunConstOk stack.gcFun := by
-    rw [backend.stackEq,fullMakeInit_eq]
-    simpa [StackAlloc.makeInit] using Flapjack.Compiler.Backend.DataToWord.Proofs.Gc.gcFunConstOkWordGcFun (width := 64) (c := backend.dataConf)
-  have gc : gcFunConstOk word.gcFun := by
-    simpa [word,base,WordSemStateFiniteExact.callEnv,makeInit] using stackGc
-  let setup : FullInitTailSetup p word limit := {
-    ac := ac, count := 1, name := firstLoopName, alg := wc.regAlg, regCount := k,
-    col := entryColour wc programs firstLoopName, ctxt := ctxt, labels := labels, compiledCode := compiledCode,
-    locals := word.locals, gc := gc, noInstall := noInstall, codeRel := codeRel, codeDomain := codeDomain,
-    localsRel := localsRel, domain := domain, entry := entry, frameSize := frameSize, frame := frame, lens := [],
-    bs := bs, bsPost := bsPost, n := n, nPost := nPost, compiled := body, argumentCount := 1,
-    stackRel := by simpa [entry] using stackRel,
-    native := native, lengthBound := lengthBound, bitmapBound := by simpa [entry] using bitmapBound,
-    bitmapPrefix := by simpa [entry] using bitmapPrefix,
-    labelCheck := by simpa [entry] using labelCheck, maxBound := maxBound, frameDef := frameDef,
-    frameSizeDef := sizeDef, space := by simpa [entry] using space, found := by simpa [entry] using found,
-    stackConf := backend.stackConf, dataConf := backend.dataConf, maxHeap := backend.maxHeap, sp := backend.sp,
-    offset := backend.offset, bitmaps := backend.bitmaps, inputCode := backend.inputCode, lab := backend.lab,
-    saveRegs := backend.saveRegs, dataSp := backend.dataSp, coracle := backend.coracle,
-    initAssumptions := backend.initAssumptions, entryEq := by simp [entry,backend.stackEq],
-    pc := backend.pc, mc := backend.mc, labCode := backend.labCode, labs := backend.labs,
-    asm := backend.asm, machine := backend.machine, hmc := backend.hmc, machineLab := backend.machineLab,
-    labRelation := backend.labRelation, tie := backend.tie, machineRel := backend.machineRel }
-  have tickEq : setup.tickLimit = backend.successTickLimit wc ac programs p ctxt labels limit := by
-    dsimp only [setup,FullInitTailSetup.tickLimit,FullInitMachineContext.successTickLimit,entry,k,compiledCode]
-    rw [selected]
-    simp only [Option.getD_some,← frameDef,← sizeDef]
-  exact ⟨word,setup,rfl,rfl,rfl,rfl,tickEq,frameSize,rfl⟩
 
 end SteppedFlapjack.LoopToWordSteps
