@@ -68,7 +68,7 @@ theorem source_globals_related (program : Prog (RiscV.Word 64)) (supported : Sup
     panGlobalsStateRelHOLExact true emptyGlobalsContext (exactState (progToHOL program))
       (callEntryStateHOLFinite (loweredState (progToHOL program)) HolFiniteMapExact.empty) := by
   apply source_globals_related_from program supported (exactState (progToHOL program)) rfl rfl rfl
-  · simp [exactState,singleEntrySourceTemplate,sourceTemplate,ordinaryAddress,heapTop,heapEnd,
+  · simp [exactState,singleEntrySourceTemplate,sourceTemplate,ordinaryAddress,heapTop,fixtureHeapEnd,heapEnd,
       stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords,sourceBase]
   · change panGlobalsByteAlignedHOL heapTop
     change BitVec.ofNat 64 ((heapTop.toNat / 8) * 8) = heapTop

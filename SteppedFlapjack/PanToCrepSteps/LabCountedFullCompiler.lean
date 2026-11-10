@@ -87,6 +87,8 @@ theorem labInitialized_counted_declared_fullCompiler_riscv {σ : Type}
     (bitmapPrefix : (Flapjack.Compiler.Backend.WordToStack.Native.compileNative ac false programs).1.IsPrefix backend.bitmaps)
     (registers : 4 < ac.regCount-(5+ac.avoidRegs.length))
     (stackOracle : backend.coracle = fun _ => (cfg, [], []))
+    (fits : assignLoopFrameFits arch (compileProgDeclsHOLW (compileTopExactHOL declarations start))
+      wc ac (assignLoopEntryProgram declarations [] caller loopCtxt .ln) stack)
     (wordMemory : ∀ address, (labInitializedOriginal template stack backend).memaddrs address →
       ∃ word, backend.lab.memory address = .word word) :
     let source := labInitializedOriginal template stack backend
@@ -99,15 +101,15 @@ theorem labInitialized_counted_declared_fullCompiler_riscv {σ : Type}
         (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment))) (.return (.const returned))))) =
         (some (.returned (.val (.word returned))),sourceFinal) ∧
       ∃ outcome ticks finalMachine finalFfi,
-        ticks ≤ max (backend.successTickLimit wc ac
+        ticks ≤ (backend.successTickLimit wc ac
           (panToWordCompileProgHOL arch (singleEntryProgram (ofString "main")
             (.dec (ofString name) .one (.const initial) (.seq .skip
               (.seq (.while (expToHOL condition) (.assign .local (ofString name) (expToHOL assignment))) (.return (.const returned)))))))
-          entry (assignLoopEntryWordContext entry) (firstLoopName,2) limit) backend.resourceTickLimit ∧
+          entry (assignLoopEntryWordContext entry) (firstLoopName,2) limit) ∧
         evaluateTargetHOL backend.mc backend.lab.ffi ticks backend.machine = (.halt outcome,finalMachine,finalFfi) ∧
         ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧
-            (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = stack.ffi.ioEvents))) := by
+            finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents)) := by
   classical
   let source := labInitializedOriginal template stack backend
   let panCode := HolFiniteMapExact.empty.updateList (functionsHOL (compileTopExactHOL declarations start)).reverse
@@ -151,7 +153,7 @@ theorem labInitialized_counted_declared_fullCompiler_riscv {σ : Type}
     simpa only [compilerEq] using programsEq
   let native := sourceFullInitEmptyOracleInputs declarations start caller loopCtxt entry limit arch pan wc ac stack cfg
     callerEq loopContextEq programs programsEq' backend inputCodeEq bitmapPrefix registers stackOracle
-    panDomain panShared panClock panEndian panFfi panBase panHeap
+    panDomain panShared panClock panEndian panFfi panBase panHeap fits
   have result := counted_singleEntry_declared_fullCompiler_riscv declarations start [] emptyGlobalsContext caller
     condition assignment name initial context primitive handler functions conditionRanged assignmentRanged nameRanged fuel
     (labInitializedProduction production template stack backend) source pan pan crep

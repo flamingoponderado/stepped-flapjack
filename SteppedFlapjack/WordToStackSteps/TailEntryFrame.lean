@@ -1,7 +1,7 @@
 import SteppedFlapjack.WordToStackSteps.InitialFrame
 import SteppedFlapjack.WordToStackSteps.EntryComposition
 import SteppedFlapjack.WordToStackSteps.WholeTailInitialization
-import SteppedFlapjack.WordToStackSteps.FixedEntryFrame
+import Flapjack.Misc.Sptree.FromList2
 import Flapjack.Pancake.LoopToWord.Proofs.CompileCorrect.Call.Support
 
 /-! The actual compiled initial entry either obtains its frame or hits the
@@ -13,11 +13,42 @@ open Flapjack.Compiler.Backend.WordToStack.Native
 open Flapjack.Compiler.Backend.WordToStack.Native.Initialization
 open Flapjack.Compiler.Backend.WordToWord
 open Flapjack.WordToStackProofs.InitializationStateRel
-open SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackAllocSteps
+open SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackAllocSteps SteppedFlapjack.WordAllocSteps
 
-/-- The compiler-selected one-argument tail entry either starts in the
-proved frame relation or takes the actual bounded Stack resource-limit path. -/
-theorem wholeWordStack_tailEntryFrame_or_resource {C F : Type}
+/-- The native one-argument call environment meets SSA’s exact input-domain
+and instruction-selection local-relation requirements. -/
+theorem nativeEntry_locals {width : Nat} [NeZero width] {C F : Type}
+    (source : WordSemStateFiniteExact width C F) (size temp : Nat) :
+    let entry := callEnv [(.loc 1 0 : WordLocW width)] (some size) source
+    sptDomain entry.locals = (fun key => key ∈ Flapjack.Compiler.Backend.WordAlloc.evenList 1) ∧
+    wordLocalsRel temp entry.locals entry.locals ∧
+    sptLookup 0 entry.locals = some (.loc 1 0) := by
+  refine ⟨?_,(fun _ _ => rfl),?_⟩
+  · simpa only [WordSemStateFiniteExact.callEnv, Flapjack.Compiler.Backend.WordAlloc.evenList, List.length_cons, List.length_nil] using
+      (sptDomainFromList2 [(.loc 1 0 : WordLocW width)])
+  · simp [WordSemStateFiniteExact.callEnv,sptFromList2,sptLookup]
+
+/-- The compiler-selected one-argument entry frame. -/
+def nativeEntryFrame (k : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
+  max (maxVarHOL q / 2 + 1 - k) (1-k)
+/-- Stack allocation required by that frame. -/
+def nativeEntryFrameSize (k : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
+  let frame := nativeEntryFrame k q
+  if frame = 0 then 0 else frame+1
+
+/-- The compiler's returned frame size is the source-derived frame formula. -/
+theorem nativeEntryFrameSize_compile (ac : AsmConfigExact 64) (p : WordLangProgHOL (BitVec 64))
+    (k : Nat) (bitmaps : AppList (BitVec 64) × Nat) :
+    (compileProgNative ac false p 1 k bitmaps).2.1 = nativeEntryFrameSize k p := by
+  unfold compileProgNative nativeEntryFrameSize nativeEntryFrame
+  generalize compNative ac false p bitmaps
+    (k, (if max (maxVarHOL p / 2 + 1 - k) (1-k) = 0 then 0 else max (maxVarHOL p / 2 + 1 - k) (1-k) + 1),
+      max (maxVarHOL p / 2 + 1 - k) (1-k)) = x
+  cases x
+  rfl
+
+/-- A fitting compiler-selected frame starts in the native state relation. -/
+theorem wholeWordStack_tailEntryFrame_safe {C F : Type}
     (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact 64)
     (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
     (name : Nat) (p : WordLangProgHOL (BitVec 64)) (member : (name,1,p) ∈ programs)
@@ -28,50 +59,43 @@ theorem wholeWordStack_tailEntryFrame_or_resource {C F : Type}
     (codeEq : t.code = sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2)
     (bitmapsPrefix : (compileNative ac false (compile wc ac programs).2).1.IsPrefix t.bitmaps)
     (ok : initStateOk ac (ac.regCount-(5+ac.avoidRegs.length)) t coracle)
-    (limit : Nat) :
-    let q := (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
-      ((name,1,p),SteppedFlapjack.WordAllocSteps.entryColour wc programs name)).2.2
-    ∃ bs n bsPost nPost body frame frameSize,
-      nativeEntryBitmap ac false (ac.regCount-(5+ac.avoidRegs.length)) name (compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
-      frame = max (maxVarHOL q / 2 + 1 - (ac.regCount-(5+ac.avoidRegs.length))) (1-(ac.regCount-(5+ac.avoidRegs.length))) ∧
-      frameSize = (if frame = 0 then 0 else frame+1) ∧
-      compNative ac false q (bs,n) (ac.regCount-(5+ac.avoidRegs.length),frameSize,frame) = (body,(bsPost,nPost)) ∧
-      sptLookup name t.code = some (compileProgNative ac false q 1 (ac.regCount-(5+ac.avoidRegs.length)) (bs,n)).1 ∧
+    (fits : nativeEntryFrameSize (ac.regCount-(5+ac.avoidRegs.length))
+      (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+        ((name,1,p),entryColour wc programs name)).2.2 ≤ t.stackSpace) :
+    let k := ac.regCount-(5+ac.avoidRegs.length)
+    let q := (fullCompileSingle ac.twoRegArith k wc.regAlg ac ((name,1,p),entryColour wc programs name)).2.2
+    let frame := nativeEntryFrame k q
+    let size := nativeEntryFrameSize k q
+    ∃ bs n bsPost nPost body,
+      nativeEntryBitmap ac false k name (compile wc ac programs).2 (.list [4],1) = some (bs,n) ∧
+      compNative ac false q (bs,n) (k,size,frame) = (body,(bsPost,nPost)) ∧
+      sptLookup name t.code = some (compileProgNative ac false q 1 k (bs,n)).1 ∧
       (appListAppend bs).length ≤ n ∧ n-(appListAppend bs).length ≤ t.bitmaps.length ∧
       (appListAppend bsPost).IsPrefix (t.bitmaps.drop (n-(appListAppend bs).length)) ∧
-      (frameSize ≤ t.stackSpace ∧
-       stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
-        (callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
-          (makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) t (sptFromAList (compile wc ac programs).2) coracle))
-        {t with stackSpace := t.stackSpace-frameSize} [] 0 ∧
-       stateRel ac (ac.regCount-(5+ac.avoidRegs.length)) frameSize frame
-        {(callEnv [(.loc 1 0 : WordLocW 64)] (some frameSize)
-          (makeInit ac (ac.regCount-(5+ac.avoidRegs.length)) t (sptFromAList (compile wc ac programs).2) coracle)) with clock := limit}
-        {t with stackSpace := t.stackSpace-frameSize,clock := limit} [] 0 ∨
-       ∃ post, StackSemEvaluate.evaluate (.call none (.inl name) none,{t with clock := limit+1}) =
-            (some (.halt (.word 2)),post) ∧ post.ffi = t.ffi ∧
-          StackSteps.steps (.call none (.inl name) none,{t with clock := limit+1}) ≤ 3) := by
+      stateRel ac k size frame
+        (callEnv [(.loc 1 0 : WordLocW 64)] (some size)
+          (makeInit ac k t (sptFromAList (compile wc ac programs).2) coracle))
+        {t with stackSpace := t.stackSpace-size} [] 0 := by
   obtain ⟨_,bs,n,bsPost,nPost,body,frame,frameSize,
     selected,frameDef,sizeDef,compilation,found,lengthBound,gapBound,bitmapPrefix⟩ :=
     wholeWordStack_tail_initialized_inputs wc ac programs name 1 p member nodup t coracle noRaise noStore codeEq bitmapsPrefix ok
-  have regBound : 1 ≤ ac.regCount-(5+ac.avoidRegs.length) := by have h := ok.1; omega
-  have argSpace : 1-(ac.regCount-(5+ac.avoidRegs.length)) = 0 := by omega
-  have foundBody : sptLookup name t.code = some (.seq (.stackAlloc frameSize) body) := by
-    simp only [compileProgNative, ← frameDef, ← sizeDef, compilation] at found
-    simpa only [argSpace,Nat.sub_zero] using found
-  refine ⟨bs,n,bsPost,nPost,body,frame,frameSize,
-    selected,frameDef,sizeDef,compilation,found,lengthBound,gapBound,bitmapPrefix,?_⟩
-  by_cases fits : frameSize ≤ t.stackSpace
-  · left
-    have frameShape : if frame = 0 then frameSize = 0 else frameSize = frame+1 := by
-      split <;> simp_all
-    have related := wholeWordStack_initialFrame wc ac programs t coracle noRaise noStore codeEq bitmapsPrefix ok
-      frameSize frame frameShape fits
-    exact ⟨fits,related,stateRel_setClocks ac _ frameSize frame _ _ [] 0 limit related⟩
-  · right
-    obtain ⟨post,run,_,ffi,bound⟩ := allocationFailure_entry t name limit frameSize body foundBody ok.2.2.2.1 (by omega)
-    exact ⟨post,run,ffi,bound⟩
-
+  subst frameSize
+  subst frame
+  have frameShape : if nativeEntryFrame (ac.regCount-(5+ac.avoidRegs.length))
+      (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+        ((name,1,p),entryColour wc programs name)).2.2 = 0 then
+        nativeEntryFrameSize (ac.regCount-(5+ac.avoidRegs.length))
+          (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+            ((name,1,p),entryColour wc programs name)).2.2 = 0 else
+        nativeEntryFrameSize (ac.regCount-(5+ac.avoidRegs.length))
+          (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+            ((name,1,p),entryColour wc programs name)).2.2 =
+        nativeEntryFrame (ac.regCount-(5+ac.avoidRegs.length))
+          (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+            ((name,1,p),entryColour wc programs name)).2.2 + 1 := by simp [nativeEntryFrameSize]
+  have related := wholeWordStack_initialFrame wc ac programs t coracle noRaise noStore codeEq bitmapsPrefix ok
+    _ _ frameShape fits
+  exact ⟨bs,n,bsPost,nPost,body,selected,compilation,found,lengthBound,gapBound,bitmapPrefix,related⟩
 
 /-- The initialized frame gives the exact local-domain and state premises for
 simulating an original Word entry against the compiled code table. Replacing

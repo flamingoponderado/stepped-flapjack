@@ -76,8 +76,8 @@ theorem setupReturning_bound {C F : Type} (setup ret : HolProg width)
     (retShape : loopOnly ret = true)
     (handlerShape : ∀ p a b, handler = some (p, a, b) → loopOnly p = true) :
     steps (.seq setup (.call (some (ret, link, l1, l2)) dest handler), s) ≤
-      2 + loopOnlyCost k setup + loopCodeCost k s.code + loopOnlyCost k ret + handlerCost k handler := by
-  have setupCost := loopOnlyCostBound k setup (setupOnly_loopOnly setup setupShape) s clockBound
+      2 + linearLoopCost k setup + loopCodeCost k s.code + linearLoopCost k ret + handlerCost k handler := by
+  have setupCost := linearLoopCostBound k setup (setupOnly_loopOnly setup setupShape) s clockBound
   rw [steps_seq, StackSemEvaluateClock.fixClockEvaluate]
   rcases run : evaluate (setup, s) with ⟨res, post⟩
   cases res with
@@ -142,7 +142,7 @@ inductive SetupWrap (call : HolProg width) : HolProg width → Prop
   | step {prep rest} : setupOnly prep = true → SetupWrap call rest → SetupWrap call (.seq prep rest)
 
 def setupChainCost (k : Nat) : HolProg width → Nat
-  | .seq a b => 1 + loopOnlyCost k a + setupChainCost k b
+  | .seq a b => 1 + linearLoopCost k a + setupChainCost k b
   | _ => 0
 
 /-- Every generated setup chain preserves the code bound until the call and
@@ -155,13 +155,13 @@ theorem setupChainReturning_bound {C F : Type} (ret : HolProg width) (link l1 l2
     (retShape : loopOnly ret = true)
     (handlerShape : ∀ p a b, handler = some (p, a, b) → loopOnly p = true) :
     steps (program, s) ≤ setupChainCost k program + 1 + loopCodeCost k s.code +
-      loopOnlyCost k ret + handlerCost k handler := by
+      linearLoopCost k ret + handlerCost k handler := by
   induction chain generalizing s with
   | done =>
     have h := targetReturningCall_bound ret link l1 l2 dest handler k s clockBound codeShape retShape handlerShape
     simpa [setupChainCost] using h
   | @step prep rest shape chain ih =>
-    have prepCost := loopOnlyCostBound k prep (setupOnly_loopOnly prep shape) s clockBound
+    have prepCost := linearLoopCostBound k prep (setupOnly_loopOnly prep shape) s clockBound
     rw [steps_seq, StackSemEvaluateClock.fixClockEvaluate]
     rcases run : evaluate (prep, s) with ⟨res, post⟩
     cases res with
@@ -179,9 +179,9 @@ theorem setupChainReturning_bound {C F : Type} (ret : HolProg width) (link l1 l2
 
 /-- Computable target cost of a right-associated call-setup chain. -/
 def returningChainCost (k : Nat) (code : Spt (HolProg width)) : HolProg width → Nat
-  | .seq a b => 1 + loopOnlyCost k a + returningChainCost k code b
+  | .seq a b => 1 + linearLoopCost k a + returningChainCost k code b
   | .call (some (ret, _, _, _)) _ handler =>
-      1 + loopCodeCost k code + loopOnlyCost k ret + handlerCost k handler
+      1 + loopCodeCost k code + linearLoopCost k ret + handlerCost k handler
   | _ => 0
 
 theorem setupChain_cost (ret : HolProg width) (link l1 l2 : Nat) (dest : Sum Nat Nat)
@@ -189,7 +189,7 @@ theorem setupChain_cost (ret : HolProg width) (link l1 l2 : Nat) (dest : Sum Nat
     (chain : SetupWrap (.call (some (ret, link, l1, l2)) dest handler) program)
     (k : Nat) (code : Spt (HolProg width)) :
     returningChainCost k code program = setupChainCost k program + 1 + loopCodeCost k code +
-      loopOnlyCost k ret + handlerCost k handler := by
+      linearLoopCost k ret + handlerCost k handler := by
   induction chain with
   | done => simp [returningChainCost, setupChainCost]
   | step hs chain ih => simp only [returningChainCost, setupChainCost, ih]; omega

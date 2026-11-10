@@ -66,6 +66,7 @@ noncomputable def sourceFullInitInputs {σ : Type}
     (current : stack.store.lookup .currHeap = some (.word source.baseAddr))
     (length : stack.store.lookup .heapLength = some (.word heapLength))
     (heap : source.topAddr = source.baseAddr + 2 * heapLength)
+    (fits : assignLoopFrameFits arch (compileProgDeclsHOLW (compileTopExactHOL declarations start)) wc ac entry stack)
  :
     FullInitAssignLoopInputs declarations start caller loopCtxt entry limit
       (concreteDeclLoopState arch (concreteDeclCrepState source
@@ -82,7 +83,7 @@ noncomputable def sourceFullInitInputs {σ : Type}
         (compileProgDeclsHOLW (compileTopExactHOL declarations start))))).2).1.IsPrefix stack.bitmaps := by
     simpa only [programsEq] using codeFacts.2
   exact ⟨sourceCompilerInputs declarations start caller loopCtxt entry limit arch source wc ac stack coracle heapLength
-    callerEq loopContextEq codeEq prefixEq ok memory domain shared clock endian ffi current length heap,backend⟩
+    callerEq loopContextEq codeEq prefixEq ok memory domain shared clock endian ffi current length heap,backend,fits⟩
 
 /-- Lab/source memory agreement on the source domain gives the frontend
 memory relation for the actual initialized Stack memory. -/
@@ -177,7 +178,7 @@ theorem labInitializedProduction_withClock {σ : Type}
     labInitializedProduction production template _ (backend.withClock clock) =
       {labInitializedProduction production template stack backend with clock := clock-1} := by
   simp [labInitializedProduction,labInitializedOriginal,labInitializedSource,
-    FullInitMachineContext.withClock,FullInitMachineContext.labHeapLength]
+    FullInitMachineContext.withClock,FullInitStackContext.labHeapLength]
   funext address
   exact decide_eq_decide.mpr Iff.rfl
 
@@ -349,7 +350,7 @@ theorem labInitializedOriginal_top_outside {σ : Type}
     rw [heapEnd]
     omega
   have lenEq : backend.labHeapLength = BitVec.ofNat 64 (heapWords / 2) * bytes := by
-    simp only [FullInitMachineContext.labHeapLength,r2,r3,r4,wordSemTheWord,limitValue,bytes]
+    simp only [FullInitStackContext.labHeapLength,r2,r3,r4,wordSemTheWord,limitValue,bytes]
   have halfBound : (heapWords / 2) * 8 < 2^64 := by
     have := p4.isLt
     simp only [Flapjack.Compiler.Backend.StackRemove.maxStackAlloc] at stackMin
@@ -493,6 +494,7 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
     (clock : backend.lab.clock = source.clock) (endian : backend.lab.be = source.be) (ffi : backend.lab.ffi = source.ffi)
     (baseReg : backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 2) = .word source.baseAddr)
     (heap : source.topAddr = source.baseAddr + 2 * backend.labHeapLength)
+    (fits : assignLoopFrameFits arch (compileProgDeclsHOLW (compileTopExactHOL declarations start)) wc ac entry stack)
  :
     FullInitAssignLoopInputs declarations start caller loopCtxt entry limit
       {concreteDeclLoopState arch (concreteDeclCrepState source
@@ -545,7 +547,7 @@ noncomputable def sourceFullInitEmptyOracleInputs {σ : Type}
     · simpa [target,concreteDeclLoopState,concreteDeclCrepState] using heap
     · simp [target,concreteDeclLoopState,loopToWordGlobalsRelHOLExact,HolFiniteMapExact.lookup_empty]
   exact ⟨⟨arch,crepPrograms,rfl,callerEq,loopContextEq,wc,ac,rfl,stack,
-    emptyNativeWordOracle backend.bitmaps.length cfg,codeEq,prefixEq,ok,data⟩,backend⟩
+    emptyNativeWordOracle backend.bitmaps.length cfg,codeEq,prefixEq,ok,data⟩,backend,fits⟩
 
 /-- Assemble compiler inputs for the canonical Lab-aligned source. -/
 noncomputable def labInitializedSource_inputs {σ : Type}
@@ -568,7 +570,9 @@ noncomputable def labInitializedSource_inputs {σ : Type}
     (inputCodeEq : backend.inputCode = (Flapjack.Compiler.Backend.WordToStack.Native.compileNative ac false programs).2.2.2)
     (bitmapPrefix : (Flapjack.Compiler.Backend.WordToStack.Native.compileNative ac false programs).1.IsPrefix backend.bitmaps)
     (registers : 4 < ac.regCount-(5+ac.avoidRegs.length))
-    (stackOracle : backend.coracle = fun _ => (cfg, [], [])) :
+    (stackOracle : backend.coracle = fun _ => (cfg, [], []))
+    (fits : assignLoopFrameFits arch (compileProgDeclsHOLW (compileTopExactHOL declarations start)) wc ac entry stack)
+ :
     FullInitAssignLoopInputs declarations start caller loopCtxt entry limit
       {concreteDeclLoopState arch (concreteDeclCrepState (labInitializedSource template stack backend)
         (compileProgDeclsHOLW (compileTopExactHOL declarations start)))
@@ -578,6 +582,6 @@ noncomputable def labInitializedSource_inputs {σ : Type}
     (labInitializedSource template stack backend) wc ac stack cfg callerEq loopContextEq programs programsEq
     backend inputCodeEq bitmapPrefix registers stackOracle fields.2.1
     (labInitializedSource_shared template _ arch stack backend)
-    fields.2.2.2.1.symm fields.2.2.2.2.1.symm fields.2.2.2.2.2.1.symm fields.1 fields.2.2.1
+    fields.2.2.2.1.symm fields.2.2.2.2.1.symm fields.2.2.2.2.2.1.symm fields.1 fields.2.2.1 fits
 
 end SteppedFlapjack.PanToCrepSteps

@@ -47,15 +47,15 @@ theorem declWhile_singleEntry_source_fullInit_riscv {σ : Type}
       (declWhileSourceLoopLimit declarations initializers globals caller name (.const initial) condition (.assign .local name assignment) (.return (.const returned)) budget loopCtxt .ln) target) :
     let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
     ∃ outcome ticks finalMachine finalFfi,
-      ticks ≤ max (native.backend.successTickLimit native.wc native.ac
+      ticks ≤ (native.backend.successTickLimit native.wc native.ac
           (loopToWordCompileHOL (compileProgHOLExact native.arch native.crepPrograms))
           entry (assignLoopEntryWordContext entry) (firstLoopName,2)
-          (declWhileSourceLoopLimit declarations initializers globals caller name (.const initial) condition (.assign .local name assignment) (.return (.const returned)) budget loopCtxt .ln)) native.backend.resourceTickLimit ∧
+          (declWhileSourceLoopLimit declarations initializers globals caller name (.const initial) condition (.assign .local name assignment) (.return (.const returned)) budget loopCtxt .ln)) ∧
       evaluateTargetHOL native.backend.mc native.backend.lab.ffi ticks native.backend.machine =
           (.halt outcome,finalMachine,finalFfi) ∧
       ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧
-            (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = native.stack.ffi.ioEvents))) := by
+            finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents)) := by
   let body : ProgHOL 64 := (.dec name .one (.const initial) (.seq
         (.while condition (.assign .local name assignment)) (.return (.const returned))))
   have assignmentShape : ScalarExpression
@@ -185,17 +185,17 @@ theorem declWhile_singleEntry_fullCompiler_riscv {σ : Type}
       (declWhileSourceLoopLimit declarations initializers globals caller name (.const initial) condition (.assign .local name assignment) (.return (.const returned)) budget loopCtxt .ln) target) :
     let entry := assignLoopEntryProgram declarations initializers caller loopCtxt .ln
     ∃ outcome ticks finalMachine finalFfi,
-      ticks ≤ max (native.backend.successTickLimit native.wc native.ac
+      ticks ≤ (native.backend.successTickLimit native.wc native.ac
           (panToWordCompileProgHOL native.arch (singleEntryProgram (ofString "main")
             (.dec name .one (.const initial) (.seq .skip
               (.seq (.while condition (.assign .local name assignment)) (.return (.const returned)))))))
           entry (assignLoopEntryWordContext entry) (firstLoopName,2)
-          (declWhileSourceLoopLimit declarations initializers globals caller name (.const initial) condition (.assign .local name assignment) (.return (.const returned)) budget loopCtxt .ln)) native.backend.resourceTickLimit ∧
+          (declWhileSourceLoopLimit declarations initializers globals caller name (.const initial) condition (.assign .local name assignment) (.return (.const returned)) budget loopCtxt .ln)) ∧
       evaluateTargetHOL native.backend.mc native.backend.lab.ffi ticks native.backend.machine =
           (.halt outcome,finalMachine,finalFfi) ∧
       ((outcome = .success ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧
-            (finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents ∨ finalFfi.ioEvents = native.stack.ffi.ioEvents))) := by
+            finalFfi.ioEvents <+: sourceFinal.ffi.ioEvents)) := by
   have skipFacts := scalarDecl_skip_execution_steps name initial
     (.seq (.while condition (.assign .local name assignment)) (.return (.const returned))) source
   have simplifiedRun : source.evaluateHOLFiniteState (.dec name .one (.const initial)

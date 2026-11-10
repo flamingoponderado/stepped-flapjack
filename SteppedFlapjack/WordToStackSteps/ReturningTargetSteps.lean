@@ -9,7 +9,7 @@ open SteppedFlapjack.StackSteps SteppedFlapjack.StackAllocSteps
 variable {width : Nat} [NeZero width]
 
 def handlerCost (k : Nat) (handler : Option (HolProg width × Nat × Nat)) : Nat :=
-  match handler with | none => 0 | some (p, _, _) => loopOnlyCost k p
+  match handler with | none => 0 | some (p, _, _) => linearLoopCost k p
 
 /-- One returning target call costs its callee plus at most one continuation.
 All bounds are structural and use a common upper bound on the initial clock. -/
@@ -20,7 +20,7 @@ theorem targetReturningCall_bound {C F : Type} (ret : HolProg width) (link l1 l2
     (retShape : loopOnly ret = true)
     (handlerShape : ∀ p a b, handler = some (p, a, b) → loopOnly p = true) :
     steps (.call (some (ret, link, l1, l2)) dest handler, s) ≤
-      1 + loopCodeCost k s.code + loopOnlyCost k ret + handlerCost k handler := by
+      1 + loopCodeCost k s.code + linearLoopCost k ret + handlerCost k handler := by
   rw [steps_call_some]
   cases found : findCode dest (s.regs.eraseEq link) s.code with
   | none => simp [handlerCost]; omega
@@ -29,13 +29,13 @@ theorem targetReturningCall_bound {C F : Type} (ret : HolProg width) (link l1 l2
     · simp [zero, handlerCost]; omega
     · simp only [zero, if_false, StackSemEvaluateClock.fixClockEvaluate]
       have ⟨label, lookup⟩ := findCode_entry dest {s with regs := s.regs.eraseEq link} callee found
-      have calleeCost := loopOnlyCostBound k callee (codeShape label callee lookup)
+      have calleeCost := linearLoopCostBound k callee (codeShape label callee lookup)
         (decClock (setVar link (.loc l1 l2) s)) (by simp only [decClock, setVar]; omega)
       have maxCost := loopCodeCost_bound k s.code label callee lookup
       rcases run : evaluate (callee, decClock (setVar link (.loc l1 l2) s)) with ⟨res, post⟩
       have postClock := StackSemEvaluateClock.evaluateClock callee _ res post run
       have postBound : post.clock ≤ k := by simp only [decClock, setVar] at postClock; omega
-      have returnCost := loopOnlyCostBound k ret retShape post postBound
+      have returnCost := linearLoopCostBound k ret retShape post postBound
       cases res with
       | none => simp [handlerCost]; omega
       | some res =>
@@ -48,7 +48,7 @@ theorem targetReturningCall_bound {C F : Type} (ret : HolProg width) (link l1 l2
           | none => simp [handlerCost]; omega
           | some h =>
             obtain ⟨hp, a, b⟩ := h
-            have cost := loopOnlyCostBound k hp (handlerShape hp a b rfl) post postBound
+            have cost := linearLoopCostBound k hp (handlerShape hp a b rfl) post postBound
             by_cases hx : x = .loc a b <;> simp [handlerCost, hx] <;> omega
 
 
@@ -113,7 +113,7 @@ theorem relatedReturningCall_bound {C F : Type} (ac : AsmConfigExact width)
     (retShape : loopOnly ret = true)
     (handlerShape : ∀ p a b, handler = some (p, a, b) → loopOnly p = true) :
     steps (.call (some (ret, link, l1, l2)) dest handler, target) ≤
-      1 + loopCodeCost clock target.code + loopOnlyCost clock ret + handlerCost clock handler :=
+      1 + loopCodeCost clock target.code + linearLoopCost clock ret + handlerCost clock handler :=
   targetReturningCall_bound ret link l1 l2 dest handler clock target clockBound
     (relatedLoopCode ac regCount frame stackFrame source target lens related code) retShape handlerShape
 

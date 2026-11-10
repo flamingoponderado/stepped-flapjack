@@ -1,5 +1,5 @@
 import SteppedFlapjack.PanToCrepSteps.CountdownAllocationMoves
-import SteppedFlapjack.RegAllocSteps.ListInitializer
+import SteppedFlapjack.PanToCrepSteps.RowColoring
 
 /-! Staged graph coloring for the actual zero-count loop. -/
 namespace SteppedFlapjack.PanToCrepSteps
@@ -8,39 +8,10 @@ open Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.RegAlloc Flapjack.RiscV Flapjack.RiscV.CakeRegAlloc
 open SteppedFlapjack.RegAllocSteps
 
-def countdownZeroRendered := nativeClashTreeToProduction countdownZeroClashTree
-
-def countdownZeroForced := WordAlloc.getForced riscvConfig countdownZeroAllocInput []
-def countdownZeroStackOnly := (sptToAList (WordAlloc.getStackOnly countdownZeroAllocInput)).map Prod.fst
-
-def countdownZeroState := listDecoderInit countdownZeroBijection countdownZeroRendered
-  countdownZeroForced countdownZeroStackOnly
-
-def countdownZeroLimit := riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)
-
-def countdownZeroDecodedMoves := countdownZeroMoves.map
-  (cakeUpdateMove (CakeAlloc.spDefault countdownZeroBijection.toAllocator))
-
-def countdownZeroAdmitted := filterReversed
-  (fun (m : Nat × (Nat × Nat)) => cakeFullConsistencyOk countdownZeroState countdownZeroLimit m.2.1 m.2.2)
-  countdownZeroDecodedMoves
-
-def countdownZeroStart := cakeInitAlloc1Heu countdownZeroAdmitted countdownZeroLimit countdownZeroState
-
-def countdownZeroCosts := (WordAlloc.getHeuristics 3 countdownZeroLoopRow.1 countdownZeroAllocInput).2.map
-  (fun costs => cakeSpillCostMap countdownZeroBijection.nextNode (sptToAList costs))
-
-def countdownZeroAllocated := cakeRptDoStep countdownZeroCosts countdownZeroLimit
-  countdownZeroStart.1 countdownZeroStart.2
-
-def countdownZeroPreferences := cakeResortMovesSp
-  (cakeMovesToSp countdownZeroDecodedMoves (CakeNodeMap.ofSize countdownZeroBijection.nextNode))
-
-def countdownZeroColoredA := cakeAssignAtemps countdownZeroLimit countdownZeroAllocated.stack
-  (fun s n ks => cakeBiasedPref s countdownZeroPreferences n ks) countdownZeroAllocated
-
-def countdownZeroColored := cakeAssignStemps countdownZeroLimit
-  (fun s n bads => cakeNegBiasedPref s countdownZeroLimit countdownZeroPreferences n bads) countdownZeroColoredA
+def countdownZeroForced := RowColoring.forced countdownZeroLoopRow
+def countdownZeroLimit := RowColoring.limit
+def countdownZeroStart := RowColoring.start countdownZeroLoopRow
+def countdownZeroColored := RowColoring.colored countdownZeroLoopRow
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 2000000 in
@@ -80,16 +51,6 @@ theorem countdownZero_extracted_colors : cakeExtractColor countdownZeroColored c
   rw [cakeExtractColor,countdownZero_bijection_exact]
   simp [cakeTagCol,CakeNodeMap.get,slots,List.mergeSort]
 
-/-- The complete list-decoder coloring produces the exact concrete result. -/
-theorem countdownZero_listColor_exact :
-    listDecoderColor .irc countdownZeroCosts countdownZeroLimit countdownZeroMoves
-      countdownZeroRendered countdownZeroForced countdownZeroStackOnly =
-      some [(0,0),(2,1),(9,0),(13,1),(17,0),(21,1),(25,1),(29,1),(33,1),(41,1),(53,1)] := by
-  change (if countdownZeroColored.failure.isSome then none else
-    some (cakeExtractColor countdownZeroColored countdownZeroBijection.toAllocator)) = _
-  rw [countdownZero_colored_no_failure]
-  simp only [Option.isSome_none,Bool.false_eq_true,if_false,countdownZero_extracted_colors]
-
 /-- The executable allocator returns this exact coloring for the actual
 zero-count loop function. -/
 theorem countdownZero_graphAllocation_exact :
@@ -100,20 +61,10 @@ theorem countdownZero_graphAllocation_exact :
     .success (sptFromAList [(0,0),(2,1),(9,0),(13,1),(17,0),(21,1),(25,1),(29,1),(33,1),(41,1),(53,1)]) := by
   have guard := countdown_zero_allocator_guard
   rw [countdownZeroLoopRow_from_compiler] at guard
-  have accepted : nativeRegAllocInputGuard
-      (WordAlloc.getHeuristics 3 countdownZeroLoopRow.1 countdownZeroAllocInput).2
-      countdownZeroClashTree countdownZeroForced (WordAlloc.getStackOnly countdownZeroAllocInput) = true := by
-    simpa only [List.map_cons,List.map_nil,List.cons.injEq,true_and,and_true,countdownAllocatorGuard,
-      countdownZeroAllocInput,countdownZeroClashTree,countdownZeroForced] using guard
-  have colors := countdownZero_listColor_exact
-  rw [listDecoderColor_eq] at colors
-  unfold regAllocExecutable
-  rw [accepted]
-  change (match cakeDoRegAlloc .irc countdownZeroCosts countdownZeroLimit countdownZeroMoves
-      countdownZeroRendered countdownZeroForced countdownZeroStackOnly with
-    | some cols => Translator.Monadic.MonadBase.Exc.success (sptFromAList cols)
-    | none => _) = _
-  rw [colors]
+  have accepted : countdownAllocatorGuard countdownZeroLoopRow = true := by
+    simpa only [List.map_cons,List.map_nil,List.cons.injEq,true_and,and_true] using guard
+  exact RowColoring.graphAllocation_exact countdownZeroLoopRow _ accepted
+    countdownZero_colored_no_failure countdownZero_extracted_colors
 
 /-- The exact register coloring computed by the graph allocator. -/
 def countdownZeroColor : Spt Nat :=
@@ -126,33 +77,12 @@ theorem countdownZero_compiledLoop_exact :
       riscvConfig.twoRegArith countdownZeroLimit 3 riscvConfig (countdownZeroLoopRow,none) =
       (countdownZeroLoopRow.1,countdownZeroLoopRow.2.1,
         WordRemove.removeMustTerminate (WordAlloc.applyColour (WordAlloc.totalColour countdownZeroColor) countdownZeroAllocInput)) := by
-  have hcolor : WordToWord.selectRegAllocWith regAllocExecutable 3
-      (WordAlloc.getHeuristics 3 countdownZeroLoopRow.1 countdownZeroAllocInput).2
-      countdownZeroLimit countdownZeroMoves countdownZeroClashTree countdownZeroForced
-      (WordAlloc.getStackOnly countdownZeroAllocInput) = .success countdownZeroColor := by
-    simpa only [WordToWord.selectRegAllocWith,show ¬ 4 ≤ 3 by decide,if_false,
-      show ¬ 3 ≤ 1 by decide,countdownZeroColor] using countdownZero_graphAllocation_exact
-  cases hrow : countdownZeroLoopRow with
-  | mk name rest =>
-    cases rest with
-    | mk arity prog =>
-      simp only [hrow,countdownZeroMoves,countdownZeroClashTree,countdownZeroForced,
-        countdownZeroLimit] at hcolor ⊢
-      simp only [WordToWord.fullCompileSingleWith,WordToWord.compileSingleWith,
-        WordToWord.wordAllocWith,WordAlloc.oracleColourOk]
-      change (_,_, WordRemove.removeMustTerminate
-        (match WordToWord.selectRegAllocWith regAllocExecutable 3
-          (WordAlloc.getHeuristics 3 name (countdownPreAllocation arity prog)).2
-          (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length))
-          (WordAlloc.getHeuristics 3 name (countdownPreAllocation arity prog)).1
-          (WordAlloc.getClashTree (countdownPreAllocation arity prog) [])
-          (WordAlloc.getForced riscvConfig (countdownPreAllocation arity prog) [])
-          (WordAlloc.getStackOnly (countdownPreAllocation arity prog)) with
-        | .success col => WordAlloc.applyColour (WordAlloc.totalColour col) (countdownPreAllocation arity prog)
-        | .failure _ => countdownPreAllocation arity prog)) = _
-      rw [show countdownZeroAllocInput = countdownPreAllocation arity prog by simp only [countdownZeroAllocInput,hrow]] at hcolor
-      rw [hcolor]
-      simp only [countdownZeroAllocInput,hrow]
+  have guard := countdown_zero_allocator_guard
+  rw [countdownZeroLoopRow_from_compiler] at guard
+  have accepted : countdownAllocatorGuard countdownZeroLoopRow = true := by
+    simpa only [List.map_cons,List.map_nil,List.cons.injEq,true_and,and_true] using guard
+  exact RowColoring.compiled_exact countdownZeroLoopRow _ accepted
+    countdownZero_colored_no_failure countdownZero_extracted_colors
 
 /-- The exact optimized Word functions with the entry and loop allocations. -/
 def countdownZeroOptimizedWord : List (Nat × Nat × WordLangProgHOL (BitVec 64)) :=

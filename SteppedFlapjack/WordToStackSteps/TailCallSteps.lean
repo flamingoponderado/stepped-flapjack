@@ -1,4 +1,5 @@
 import SteppedFlapjack.WordToStackSteps.TailCallZeroClock
+import SteppedFlapjack.StackAllocSteps.LoopClockLinear
 import SteppedFlapjack.StackRemoveSteps.OraclePrefix
 
 namespace SteppedFlapjack.WordToStackSteps
@@ -22,11 +23,11 @@ theorem callDest_straight (dest : Option Nat) (args : List Nat) (kf : Nat × Nat
 
 /-- A call-free code tree's maximum structural cost is computable. -/
 def loopCodeCost (clock : Nat) (code : Spt (HolProg width)) : Nat :=
-  maxListNat ((sptToAList code).map fun entry => loopOnlyCost clock entry.2)
+  maxListNat ((sptToAList code).map fun entry => linearLoopCost clock entry.2)
 
 theorem loopCodeCost_bound (clock : Nat) (code : Spt (HolProg width))
     (label : Nat) (p : HolProg width) (lookup : sptLookup label code = some p) :
-    loopOnlyCost clock p ≤ loopCodeCost clock code := by
+    linearLoopCost clock p ≤ loopCodeCost clock code := by
   have hlist : sptAListLookup label (sptToAList code) = some p := by
     have h := sptLookup_sptFromAList_sptToAList label code
     rw [lookup] at h
@@ -61,7 +62,7 @@ theorem targetTailCall_bound {C F : Type} (dest : Sum Nat Nat)
     by_cases zero : s.clock = 0
     · simp [zero]
     · have ⟨label, lookup⟩ := findCode_entry dest s p found
-      have cost := loopOnlyCostBound s.clock p (shape label p lookup) (decClock s) (by simp [decClock])
+      have cost := linearLoopCostBound s.clock p (shape label p lookup) (decClock s) (by simp [decClock])
       have maxBound := loopCodeCost_bound s.clock s.code label p lookup
       simp only [zero, if_false]
       omega
@@ -79,7 +80,7 @@ theorem targetTailCall_bound_at {C F : Type} (dest : Sum Nat Nat) (k : Nat)
     by_cases zero : s.clock = 0
     · simp [zero]
     · have ⟨label, lookup⟩ := findCode_entry dest s p found
-      have cost := loopOnlyCostBound k p (shape label p lookup) (decClock s) (by simp [decClock]; omega)
+      have cost := linearLoopCostBound k p (shape label p lookup) (decClock s) (by simp [decClock]; omega)
       have maxBound := loopCodeCost_bound k s.code label p lookup
       simp only [zero, if_false]
       omega

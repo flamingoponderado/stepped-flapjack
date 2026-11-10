@@ -7,9 +7,6 @@ open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.WordToWor
 open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps SteppedFlapjack.WordAllocSteps
 variable {C : Type}
-/-- Heap length corresponding to the init-e-shaped source fixture. -/
-def fixtureHeapLength : BitVec 64 := 0x39efffef4
-
 /-- The fixed source fixture satisfies the Word heap-length equation. -/
 theorem fixture_heap (program : Prog (RiscV.Word 64)) (fuel : Nat) (body : ProgHOL 64) :
     let source := crepStateFrom (panSimpSourceState program (clockedFixtureSource program fuel)) body
@@ -82,7 +79,7 @@ theorem countdown_wholeWord (n : Nat) (range : n < 2^64)
   have span := twoProgram_wholeWord_span riscvConfig.isa (ofString "main") (entryName (naturalCountdownHOL n))
     (phase3CountdownCrepBody n) (Ne.symm (entryName_fresh (naturalCountdownHOL n))) (naturalCountdown_scalar n)
     timed post [.word 0] (countdownLoopVisits n) template fixtureHeapLength frame
-    countdownRiscVBackend.wordToWordConf riscvConfig heap sourceRun sourceBound
+    countdownRiscVBackend.wordToWordConf riscvConfig (phase3Starter riscvConfig.isa timed (countdownCrepCode n) template fixtureHeapLength 64 frame).memory heap sourceRun sourceBound
   obtain ⟨_,wordPost,wordResult,relation,result,ffi,bound⟩ := span
   simp only [LoopToWord.CompileCorrect.resultCase] at relation
   refine ⟨final,post,?_,stateRel,?_,?_,?_⟩

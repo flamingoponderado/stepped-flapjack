@@ -12,33 +12,6 @@ def countdownWordFrameSize (row : Nat × Nat × WordLangProgHOL (BitVec 64)) : N
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 2000000 in
-/-- Both actual optimized functions of the zero-count program need no stack
-frame. In particular, entry-frame allocation fits any stack-space value. -/
-theorem countdownZero_optimized_frame_sizes :
-    (WordToWord.compileWith Flapjack.RegAlloc.regAllocExecutable countdownRiscVBackend.wordToWordConf riscvConfig
-      (panToWordCompileProgHOL riscvConfig.isa
-        (singleEntryProgram (ofString "main") (.dec (ofString "x") .one (.const (0 : BitVec 64)) (.seq .skip (.seq
-          (.while (.var .local (ofString "x")) (.assign .local (ofString "x") (.op .sub [.var .local (ofString "x"),.const 1])))
-          (.return (.const (0 : BitVec 64))))))))).2.map countdownWordFrameSize = [0,0] := by
-  rw [countdownZero_optimizedWord_exact]
-  with_unfolding_all rfl
-
-/-- Every compiled zero-count function satisfies the native frame-fit test,
-independently of the initialized stack-space value. -/
-theorem countdownZero_all_frames_fit (space : Nat) :
-    ∀ row ∈ (WordToWord.compileWith Flapjack.RegAlloc.regAllocExecutable countdownRiscVBackend.wordToWordConf riscvConfig
-      (panToWordCompileProgHOL riscvConfig.isa
-        (singleEntryProgram (ofString "main") (.dec (ofString "x") .one (.const (0 : BitVec 64)) (.seq .skip (.seq
-          (.while (.var .local (ofString "x")) (.assign .local (ofString "x") (.op .sub [.var .local (ofString "x"),.const 1])))
-          (.return (.const (0 : BitVec 64))))))))).2, countdownWordFrameSize row ≤ space := by
-  intro row member
-  have mapped := List.mem_map_of_mem (f := countdownWordFrameSize) member
-  rw [countdownZero_optimized_frame_sizes] at mapped
-  simp only [List.mem_cons,List.not_mem_nil,or_false] at mapped
-  rcases mapped with h | h <;> omega
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 2000000 in
 /-- The actual native compiler records the initial zero and then a zero
 frame for each of the entry and countdown functions. -/
 theorem countdownZero_native_frame_sizes :
