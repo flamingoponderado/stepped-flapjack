@@ -58,6 +58,52 @@ theorem compile_tailCall_nil_steps {width : Nat} [NeZero width] {F : Type}
     omega
   | some result => simp only; omega
 
+/-- A zero-argument returning call without an exception handler compiles to a
+Loop call with the compiler-generated normal and exceptional continuations. -/
+theorem compile_returningCall_nil {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
+    (names returnNames : List Nat) (mapped : names.mapM ctxt.vars.lookup = some returnNames) :
+    compileHOLExact ctxt live (.call (some (names,none)) name [] : CrepProgHOL width) =
+      .seq (.call (some (returnNames,live)) (some (findLabExact ctxt name)) []
+        (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) .skip := by
+  simp [compileHOLExact,compileExpsHOLExact,genTemps,loopNestedSeqHOL,mapped]
+
+/-- A successful compiled returning call counts its reached callee and at most
+four call and continuation nodes. The code relation selects the actual callee. -/
+theorem compile_returningCall_nil_steps {width : Nat} [NeZero width] {F : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (source : CrepSemHOLState width F)
+    (target cut post : LoopSemStateFiniteExact width F) (name : MlString) (body : CrepProgHOL width)
+    (names returnNames : List Nat) (values : List (WordLocW width))
+    (mapped : names.mapM ctxt.vars.lookup = some returnNames) (distinct : returnNames.Nodup)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (found : source.code.lookup name = some ([],body))
+    (cutRun : cutRes live (none,target) = (none,cut))
+    (run : evaluate (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln body)
+      {cut with locals := .ln} = (some (.result values),post))
+    (arity : values.length = returnNames.length) :
+    LoopSteps.steps (compileHOLExact ctxt live (.call (some (names,none)) name [])) target ≤
+      4 + LoopSteps.steps (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln body)
+        {cut with locals := .ln} := by
+  have lookup := tailCall_nil_lookup ctxt source target name body codeRel found
+  have call := LoopSteps.steps_call_returning (some (findLabExact ctxt name)) [] returnNames live
+    (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live)) target cut post [] .ln
+    (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln body)
+    (some (.result values)) (by rfl) lookup distinct cutRun run
+  rw [compile_returningCall_nil ctxt live name names returnNames mapped,LoopSteps.steps_seq,call]
+  simp only [arity,ne_eq,not_true_eq_false,if_false]
+  rcases outcome : evaluate (.call (some (returnNames,live)) (some (findLabExact ctxt name)) []
+    (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) target with ⟨result,final⟩
+  cases result with
+  | none =>
+    simp only
+    have first := LoopSteps.steps_leaf (.skip : HolLoopProg width) (setVars returnNames values {post with locals := cut.locals}) rfl
+    have second := LoopSteps.steps_leaf (.skip : HolLoopProg width) final rfl
+    omega
+  | some result =>
+    simp only
+    have first := LoopSteps.steps_leaf (.skip : HolLoopProg width) (setVars returnNames values {post with locals := cut.locals}) rfl
+    omega
+
 /-- A completed supported callee execution gives a source-visit bound for its
 actual optimized Loop tail call, with a constant call-wrapper overhead. -/
 theorem compile_tailCall_nil_optimised_bound {F : Type}
