@@ -587,7 +587,7 @@ theorem simpleSequence_global_consumed (p : HolLoopProg width) (s : LoopSemState
 /-- A completed supported execution bounds the optimized execution using the
 unoptimized visit count and the weight of the actual function table. -/
 theorem optimise_simpleSequence_source_bound {p : HolLoopProg 64}
-    (shape : SimpleLoopSequenceSource p) (optShape : SimpleLoopSequenceSource (optimiseHOL p))
+    (shape : SimpleLoopSequenceSource p)
     (s post : LoopSemStateFiniteExact 64 F) (result : Option (LoopResultExact 64))
     (code : LoopTableSupported s.code)
     (weight : loopVisitWeight (optimiseHOL p) ≤ loopCodeWeight s.code + 2)
@@ -598,7 +598,7 @@ theorem optimise_simpleSequence_source_bound {p : HolLoopProg 64}
   have optRun : evaluate (optimiseHOL p) s = (result,post) := by
     apply optimise_correct p s result post
     refine ⟨run,?_,?_,?_,?_⟩ <;> cases complete <;> simp_all
-  have optBound := simpleSequence_global_bound (optimiseHOL p) s optShape code weight
+  have optBound := simpleSequence_global_bound (optimiseHOL p) s (optimise_simpleSequence shape) code weight
   have consumed := simpleSequence_global_consumed p s shape code
   rw [optRun] at optBound
   rw [run] at consumed

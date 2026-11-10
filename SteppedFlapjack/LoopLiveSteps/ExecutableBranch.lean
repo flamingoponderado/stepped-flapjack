@@ -217,6 +217,57 @@ theorem optimiseSequence_eq {p : HolLoopProg width} (shape : SimpleLoopSequenceS
   simp only [optimiseSequence,optimiseHOL,loopCall_simpleSequence shape .ln,compHOL,shrinkSequence_eq shape]
 
 
+theorem shrink_simpleSequence {p : HolLoopProg width} (shape : SimpleLoopSequenceSource p) :
+    ∀ lt live, SimpleLoopSequenceSource (shrinkHOL lt p live).1 := by
+  induction shape with
+  | branch h => intro lt live; exact .branch (shrink_branch h lt live)
+  | @loop liveIn liveOut body h =>
+    intro lt live
+    simp only [shrinkHOL]
+    cases fixed : fixedpointHOL lt liveIn .ln (sptUnion liveIn (sptInter liveOut live)) body with
+    | none => exact .loop _ _ (shrink_branch h _ _)
+    | some pair =>
+      cases pair with
+      | mk body out => exact .loop _ _ (fixedpoint_preserves LoopBranch (shrink_branch h) lt liveIn .ln _ body out fixed)
+  | tail loc args => intro lt live; simp only [shrinkHOL]; exact .tail loc args
+  | returning names callLive loc exception args liveOut =>
+    intro lt live
+    simp only [shrinkHOL]
+    exact .returning names _ loc exception args _
+  | returningMarked names callLive loc exception args liveOut =>
+    intro lt live
+    simp only [shrinkHOL]
+    exact .returning names _ loc exception args _
+  | @seq a b ha hb iha ihb =>
+    intro lt live
+    simp only [shrinkHOL]
+    exact .seq (iha lt (shrinkHOL lt b live).2) (ihb lt live)
+  | mark h ih => intro lt live; simpa only [shrinkHOL] using ih lt live
+
+theorem markAll_simpleSequence {p : HolLoopProg width} (shape : SimpleLoopSequenceSource p) :
+    SimpleLoopSequenceSource (markAllHOL p).1 := by
+  induction shape with
+  | branch h => exact .branch (markAll_branch h).1
+  | loop live exits h => simp only [markAllHOL]; exact .loop _ _ (markAll_branch h).1
+  | tail loc args => simp only [markAllHOL]; exact .mark (.tail loc args)
+  | returning names callLive loc exception args liveOut => simp only [markAllHOL,Bool.true_and,if_true]; exact .mark (.returningMarked names callLive loc exception args liveOut)
+  | returningMarked names callLive loc exception args liveOut => simp only [markAllHOL,Bool.true_and,if_true]; exact .mark (.returningMarked names callLive loc exception args liveOut)
+  | @seq a b ha hb iha ihb =>
+    simp only [markAllHOL]
+    cases (markAllHOL a).2 <;> cases (markAllHOL b).2 <;>
+      simp only [Bool.false_and,Bool.true_and,if_true]
+    · exact .seq iha ihb
+    · exact .seq iha ihb
+    · exact .seq iha ihb
+    · exact .mark (.seq iha ihb)
+  | mark h ih => simpa only [markAllHOL] using ih
+
+/-- The real optimizer preserves direct calls and their compiler-generated handlers. -/
+theorem optimise_simpleSequence {p : HolLoopProg width} (shape : SimpleLoopSequenceSource p) :
+    SimpleLoopSequenceSource (optimiseHOL p) := by
+  simp only [optimiseHOL,loopCall_simpleSequence shape .ln,compHOL]
+  exact markAll_simpleSequence (shrink_simpleSequence shape [] .ln)
+
 /-- A tail-only entry is covered by the shared call-aware optimizer. -/
 theorem tailEntry_to_simple {p : HolLoopProg width} (shape : TailEntryShape p) : SimpleLoopSequenceSource p := by
   induction shape with
