@@ -1,9 +1,10 @@
 import SteppedFlapjack.LoopLiveSteps.TailEntryCode
+import SteppedFlapjack.LoopLiveSteps.ExecutableBranch
 
 /-! Whole tail-entry bounds from code shape and clock consumption. -/
 namespace SteppedFlapjack.LoopLiveSteps
 open Flapjack Flapjack.LoopSemStateFiniteExact
-open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.LoopSteps
+open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.LoopSteps SteppedFlapjack.CrepToLoopSteps
 variable {width : Nat} [NeZero width] {F : Type}
 
 /-- The largest Loop control weight in the actual code table. -/
@@ -187,6 +188,183 @@ theorem returningCall_weighted_step {width : Nat} [NeZero width] {F : Type}
   · intro t
     cases markNormal <;> simp [steps_mark,steps_leaf]
   · exact bodyBound
+
+/-- Every function body in the table has the call-aware Loop shape. -/
+def LoopTableSupported (code : Spt (List Nat × HolLoopProg width)) : Prop :=
+  ∀ loc params body, sptLookup loc code = some (params,body) → SimpleLoopSequenceSource body
+
+set_option maxHeartbeats 5000000 in
+/-- A call-aware Loop execution is bounded by its control weight and actual
+clock consumption, using a factor computed from the complete code table. -/
+theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFiniteExact width F)
+    (shape : SimpleLoopSequenceSource p) (code : LoopTableSupported s.code)
+    (weight : loopVisitWeight p ≤ loopCodeWeight s.code + 2) :
+    steps p s ≤ loopVisitWeight p + (loopCodeWeight s.code+2) * (s.clock-(evaluate p s).2.clock) := by
+  have key : ∀ (x : Nat × Nat) (p : HolLoopProg width) (s : LoopSemStateFiniteExact width F),
+      (s.clock,sizeOf p) = x → SimpleLoopSequenceSource p → LoopTableSupported s.code →
+      loopVisitWeight p ≤ loopCodeWeight s.code+2 →
+      steps p s ≤ loopVisitWeight p + (loopCodeWeight s.code+2) * (s.clock-(evaluate p s).2.clock) := by
+    intro x
+    induction x using (Prod.lex Nat.lt_wfRel Nat.lt_wfRel).wf.induction with
+    | h x ih0 =>
+      intro p s hx shape code weight
+      have ih : ∀ (q : HolLoopProg width) (t : LoopSemStateFiniteExact width F),
+          Prod.Lex (· < ·) (· < ·) (t.clock,sizeOf q) (s.clock,sizeOf p) →
+          SimpleLoopSequenceSource q → t.code = s.code → loopVisitWeight q ≤ loopCodeWeight s.code+2 →
+          steps q t ≤ loopVisitWeight q + (loopCodeWeight s.code+2) * (t.clock-(evaluate q t).2.clock) := by
+        intro q t smaller hshape hcode hweight
+        have supported : LoopTableSupported t.code := by rw [hcode]; exact code
+        have bound := ih0 _ (hx ▸ smaller) q t rfl hshape supported (by simpa only [hcode] using hweight)
+        simpa only [hcode] using bound
+      clear ih0 hx
+      cases shape with
+      | branch h =>
+        have bound := branchedProgram_structural_bound (branch_branched h) s
+        rw [branch_visitWeight h]
+        omega
+      | @loop live exits body h =>
+        rcases run : evaluate (.loop live body exits) s with ⟨out,post⟩
+        have bound := scalarLoop_control_consumption_bound (.loop live exits (.branch h)) s post out run
+        have scaled := Nat.mul_le_mul_right (s.clock-post.clock) weight
+        simp only at ⊢
+        nlinarith
+      | tail loc args =>
+        cases hg : getVars args s with
+        | none =>
+          rw [steps.eq_def]
+          simp [hg,loopVisitWeight]
+        | some vals =>
+          cases hf : findCode (some loc) vals s.code with
+          | none =>
+            rw [steps.eq_def]
+            simp [hg,hf,loopVisitWeight]
+          | some pair =>
+            obtain ⟨env,body⟩ := pair
+            by_cases clock : s.clock = 0
+            · rw [steps.eq_def]
+              simp [hg,hf,clock,loopVisitWeight]
+            · obtain ⟨params,lookup⟩ := findCode_direct_body s.code loc vals env body hf
+              have bodyShape := code loc params body lookup
+              have bodyWeight := loopCodeWeight_lookup s.code loc params body lookup
+              rcases bodyRun : evaluate body {decClock s with locals := env} with ⟨out,post⟩
+              have smaller : (decClock s).clock < s.clock := by simp [decClock]; omega
+              have bodyBound := ih body {decClock s with locals := env} (lexLtClock smaller) bodyShape rfl (by omega)
+              rw [bodyRun] at bodyBound
+              have bound := directTail_weighted_step loc args s post vals env body out 2 hg hf clock bodyRun bodyBound
+              have after : (evaluate (.call none (some loc) args none) s).2.clock = post.clock := by
+                rw [evaluate]
+                simp only [hg,hf,Option.isSome_none,Bool.false_eq_true,if_false,clock,dite_false,bodyRun]
+                cases out with
+                | none => rfl
+                | some r => cases r <;> rfl
+              rw [after]
+              simpa [loopVisitWeight] using bound
+
+      | returning names callLive loc exception args liveOut =>
+        cases hg : getVars args s with
+        | none =>
+          rw [steps.eq_def]
+          simp [hg,loopVisitWeight]
+        | some vals =>
+          cases hf : findCode (some loc) vals s.code with
+          | none =>
+            rw [steps.eq_def]
+            simp [hg,hf,loopVisitWeight]
+          | some pair =>
+            obtain ⟨env,body⟩ := pair
+            by_cases distinct : names.Nodup
+            · rcases hcut : cutRes callLive (none,s) with ⟨cutResult,cut⟩
+              cases cutResult with
+              | some r =>
+                rw [steps.eq_def]
+                simp [hg,hf,distinct,hcut,loopVisitWeight]
+              | none =>
+                obtain ⟨params,lookup⟩ := findCode_direct_body s.code loc vals env body hf
+                have bodyShape := code loc params body lookup
+                have bodyWeight := loopCodeWeight_lookup s.code loc params body lookup
+                rcases bodyRun : evaluate body {cut with locals := env} with ⟨out,post⟩
+                have cutCode : cut.code = s.code := by have h := cutRes_code callLive none s; rw [hcut] at h; exact h
+                have smaller := cutRes_none_clock hcut
+                have bodyBound := ih body {cut with locals := env} (lexLtClock smaller) bodyShape cutCode (by omega)
+                rw [bodyRun] at bodyBound
+                have bound := returningCall_weighted_step loc args names callLive liveOut exception false false s cut post vals env body out
+                  hg hf distinct hcut bodyRun bodyBound
+                simpa [loopVisitWeight] using bound
+            · rw [steps.eq_def]
+              simp [hg,hf,distinct,loopVisitWeight]
+
+      | returningMarked names callLive loc exception args liveOut =>
+        cases hg : getVars args s with
+        | none =>
+          rw [steps.eq_def]
+          simp [hg,loopVisitWeight]
+        | some vals =>
+          cases hf : findCode (some loc) vals s.code with
+          | none =>
+            rw [steps.eq_def]
+            simp [hg,hf,loopVisitWeight]
+          | some pair =>
+            obtain ⟨env,body⟩ := pair
+            by_cases distinct : names.Nodup
+            · rcases hcut : cutRes callLive (none,s) with ⟨cutResult,cut⟩
+              cases cutResult with
+              | some r =>
+                rw [steps.eq_def]
+                simp [hg,hf,distinct,hcut,loopVisitWeight]
+              | none =>
+                obtain ⟨params,lookup⟩ := findCode_direct_body s.code loc vals env body hf
+                have bodyShape := code loc params body lookup
+                have bodyWeight := loopCodeWeight_lookup s.code loc params body lookup
+                rcases bodyRun : evaluate body {cut with locals := env} with ⟨out,post⟩
+                have cutCode : cut.code = s.code := by have h := cutRes_code callLive none s; rw [hcut] at h; exact h
+                have smaller := cutRes_none_clock hcut
+                have bodyBound := ih body {cut with locals := env} (lexLtClock smaller) bodyShape cutCode (by omega)
+                rw [bodyRun] at bodyBound
+                have bound := returningCall_weighted_step loc args names callLive liveOut exception true true s cut post vals env body out
+                  hg hf distinct hcut bodyRun bodyBound
+                simpa [loopVisitWeight] using bound
+            · rw [steps.eq_def]
+              simp [hg,hf,distinct,loopVisitWeight]
+
+      | @seq a b ha hb =>
+        have wa : loopVisitWeight a ≤ loopCodeWeight s.code+2 := by simp only [loopVisitWeight] at weight; omega
+        have wb : loopVisitWeight b ≤ loopCodeWeight s.code+2 := by simp only [loopVisitWeight] at weight; omega
+        have firstBound := ih a s (lexLt (Nat.le_refl _) (by simp_wf; omega)) ha rfl wa
+        rw [steps_seq,evaluate_seq]
+        rcases first : evaluate a s with ⟨out,middle⟩
+        rw [first] at firstBound
+        have firstClock := evaluate_clock a s out middle first
+        cases out with
+        | none =>
+          simp only
+          have codeEq := evaluate_code a s middle none first
+          have secondBound := ih b middle (lexLt firstClock (by simp_wf)) hb codeEq wb
+          rcases second : evaluate b middle with ⟨result,post⟩
+          rw [second] at secondBound
+          have secondClock := evaluate_clock b middle result post second
+          have delta : s.clock-middle.clock + (middle.clock-post.clock) = s.clock-post.clock := by omega
+          simp only [loopVisitWeight]
+          nlinarith
+        | some result =>
+          simp only [loopVisitWeight]
+          nlinarith
+
+      | @mark q h =>
+        have wq : loopVisitWeight q ≤ loopCodeWeight s.code+2 := by simp only [loopVisitWeight] at weight; omega
+        have bound := ih q s (lexLt (Nat.le_refl _) (by simp_wf)) h rfl wq
+        simp only [steps_mark,evaluate,loopVisitWeight]
+        omega
+  exact key _ p s rfl shape code weight
+
+/-- Every table entry has the global control-node bound. -/
+theorem loopTable_entry_bound (code : Spt (List Nat × HolLoopProg width))
+    (loc : Nat) (params : List Nat) (body : HolLoopProg width)
+    (s : LoopSemStateFiniteExact width F) (codeEq : s.code = code)
+    (supported : LoopTableSupported code) (found : sptLookup loc code = some (params,body)) :
+    steps body s ≤ loopVisitWeight body + (loopCodeWeight code+2) * (s.clock-(evaluate body s).2.clock) := by
+  have h := simpleSequence_global_bound body s (supported loc params body found) (by simpa [codeEq] using supported)
+    (by have w := loopCodeWeight_lookup code loc params body found; simpa [codeEq] using Nat.le_add_right_of_le w)
+  simpa only [codeEq] using h
 
 /-- The selected zero-argument code entry has a supported shape and bounded syntax. -/
 def TailCodeBound (code : Spt (List Nat × HolLoopProg width)) (loc K : Nat) : Prop :=
