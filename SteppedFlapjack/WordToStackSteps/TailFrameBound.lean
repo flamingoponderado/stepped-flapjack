@@ -70,10 +70,13 @@ theorem loopBlock_stackMax {p : WordLangProgHOL (BitVec width)} (hp : LoopBlock 
     all_goals rfl
 
 set_option maxHeartbeats 1000000 in
-/-- A tail call adds its callee frame to the existing stack usage. -/
-theorem directTail_stackMax_bound (loc size m L arity stackWords : Nat) (args : List Nat)
+/-- A tail call preserves a stack limit when its reached callee does.
+The callee premise is the inductive hypothesis for nested calls. -/
+theorem directTail_stackMax_from_callee (loc size m L arity stackWords : Nat) (args : List Nat)
     (callee : WordLangProgHOL (BitVec width))
-    (shape : LoopBlock callee) (noInstall : noInstallSubprogsHOL callee = true)
+    (calleeBound : ∀ (t : WordSemStateFiniteExact width C F) (n : Nat),
+      t.stackMax = some n → n ≤ L →
+      ∃ n', (evaluate callee t).2.stackMax = some n' ∧ n' ≤ L)
     (s : WordSemStateFiniteExact width C F)
     (lookup : sptLookup loc s.code = some (arity,callee)) (frame : sptLookup loc s.stackSize = some size)
     (argsArity : args.length = arity)
@@ -93,11 +96,10 @@ theorem directTail_stackMax_bound (loc size m L arity stackWords : Nat) (args : 
     · let env := WordSemStateFiniteExact.callEnv values (some size) (decClock s)
       have init : env.stackMax = some (max m (stackWords+size)) := by
         simp [env,WordSemStateFiniteExact.callEnv,decClock,maximum,stack,wordSemOptionMax,wordSemOptionAdd]
-      have h := loopBlock_stackMax shape noInstall env
-      rw [init] at h
+      obtain ⟨n',h,hFits⟩ := calleeBound env (max m (stackWords+size)) init (Nat.max_le.mpr ⟨mFits,frameFits⟩)
       rcases he : evaluate callee env with ⟨result,post⟩
       rw [he] at h
-      refine ⟨max m (stackWords+size),?_,Nat.max_le.mpr ⟨mFits,frameFits⟩,?_⟩ <;> rw [evaluate]
+      refine ⟨n',?_,hFits,?_⟩ <;> rw [evaluate]
       · simp only [hv,wordSemBadDestArgs,wordSemAddRetLoc,found,hz,↓reduceDIte,Option.some_ne_none,false_and,decide_false,Bool.false_eq_true,if_false]
         rw [show evaluate callee (WordSemStateFiniteExact.callEnv values (some size) (decClock s)) = (result,post) from he]
         change (if wordSemBadFunReturn result then (some .error,post) else (result,post)).2.stackMax = _
@@ -108,6 +110,21 @@ theorem directTail_stackMax_bound (loc size m L arity stackWords : Nat) (args : 
         cases result with
         | none => simp [wordSemBadFunReturn]
         | some r => split <;> simp
+
+/-- A call-free callee preserves the initial stack limit. -/
+theorem directTail_stackMax_bound (loc size m L arity stackWords : Nat) (args : List Nat)
+    (callee : WordLangProgHOL (BitVec width))
+    (shape : LoopBlock callee) (noInstall : noInstallSubprogsHOL callee = true)
+    (s : WordSemStateFiniteExact width C F)
+    (lookup : sptLookup loc s.code = some (arity,callee)) (frame : sptLookup loc s.stackSize = some size)
+    (argsArity : args.length = arity)
+    (stack : wordSemStackSize s.stack = some stackWords) (maximum : s.stackMax = some m)
+    (mFits : m ≤ L) (frameFits : stackWords+size ≤ L) :
+    ∃ m', (evaluate (.call none (some loc) args none) s).2.stackMax = some m' ∧ m' ≤ L ∧
+      (evaluate (.call none (some loc) args none) s).1 ≠ none := by
+  apply directTail_stackMax_from_callee loc size m L arity stackWords args callee
+    (fun t n maxEq fits => ⟨n,(loopBlock_stackMax shape noInstall t).trans maxEq,fits⟩)
+    s lookup frame argsArity stack maximum mFits frameFits
 
 /-- A returning call accounts for its saved caller frame, optional handler
 slots, and callee frame in the actual maximum stack usage. -/
@@ -130,6 +147,89 @@ theorem pushed_call_frame_usage (s : WordSemStateFiniteExact width C F)
     obtain ⟨v,p,l1,l2⟩ := h
     simp [pushEnv,WordSemStateFiniteExact.callEnv,wordSemStackSize,wordSemStackSizeFrame,wordSemOptionAdd,wordSemOptionMax,caller,maxEq,stack]
     omega
+
+/-- Restoring a caller frame leaves the recorded maximum unchanged. -/
+theorem popEnv_stackMax (s t : WordSemStateFiniteExact width C F) (h : popEnv s = some t) : t.stackMax = s.stackMax := by
+  unfold popEnv at h
+  split at h <;> try contradiction
+  all_goals simp only [Option.some.injEq] at h; subst t; rfl
+
+/-- A normal return composes the callee and continuation stack bounds. -/
+theorem returningCall_stackMax_from_bounds
+    (dest : Option Nat) (args names : List Nat) (cuts : WordLangCutsetsHOL)
+    (continuation : WordLangProgHOL (BitVec width)) (l1 l2 : Nat)
+    (handler : Option (Nat × WordLangProgHOL (BitVec width) × Nat × Nat))
+    (s middle restored : WordSemStateFiniteExact width C F)
+    (xs values ys : List (WordLocW width)) (callee : WordLangProgHOL (BitVec width))
+    (envs : Spt (WordLocW width) × Spt (WordLocW width))
+    (callerSize calleeSize stackWords maximum limit : Nat)
+    (hargs : getVars args s = some xs) (hbad : wordSemBadDestArgs dest args = false)
+    (hfind : wordSemFindCode dest (wordSemAddRetLoc (some (names,cuts,continuation,l1,l2)) xs)
+      s.code s.stackSize = some (values,callee,some calleeSize))
+    (hvalid : ¬ (sptDomainEmpty cuts.1 ∨ ¬ names.Nodup))
+    (hcut : wordSemCutEnvs cuts s.locals = some envs) (hclock : s.clock ≠ 0)
+    (caller : s.localsSize = some callerSize) (stack : wordSemStackSize s.stack = some stackWords)
+    (maxEq : s.stackMax = some maximum) (maxFits : maximum ≤ limit)
+    (frameFits : callerSize + (if handler.isSome then 3 else 0) + stackWords + calleeSize ≤ limit)
+    (bodyRun : evaluate callee (callEnv values (some calleeSize) (pushEnv envs handler (decClock s))) =
+      (some (.result (.loc l1 l2) ys),middle))
+    (arity : ys.length = names.length) (pop : popEnv middle = some restored)
+    (dom : sptDomainEqUnion restored.locals envs.1 envs.2)
+    (bodyIH : ∀ n, (callEnv values (some calleeSize) (pushEnv envs handler (decClock s))).stackMax = some n → n ≤ limit →
+      ∃ n', middle.stackMax = some n' ∧ n' ≤ limit)
+    (continuationIH : ∀ n, (setVars names ys restored).stackMax = some n → n ≤ limit →
+      ∃ n', (evaluate continuation (setVars names ys restored)).2.stackMax = some n' ∧ n' ≤ limit) :
+    ∃ n', (evaluate (.call (some (names,cuts,continuation,l1,l2)) dest args handler) s).2.stackMax = some n' ∧ n' ≤ limit := by
+  have init := pushed_call_frame_usage (decClock s) envs handler values callerSize calleeSize stackWords maximum
+    (by simpa [decClock] using caller) (by simpa [decClock] using stack) (by simpa [decClock] using maxEq)
+  have bounded : max maximum (callerSize + (if handler.isSome then 3 else 0) + stackWords + calleeSize) ≤ limit := Nat.max_le.mpr ⟨maxFits,frameFits⟩
+  obtain ⟨n,hmax,hn⟩ := bodyIH _ init.2 bounded
+  have hrest := popEnv_stackMax middle restored pop
+  obtain ⟨n',hfinal,hbound⟩ := continuationIH n (by simpa [setVars,hrest] using hmax) hn
+  refine ⟨n',?_,hbound⟩
+  rw [evaluate]
+  simp only [hargs,hbad,Bool.false_eq_true,if_false,hfind,if_neg hvalid,hcut]
+  rw [dif_neg hclock,fix_clock_evaluate,bodyRun]
+  simp only [arity,ne_eq,not_true_eq_false,or_self,if_false]
+  rw [pop]
+  simpa [dom] using hfinal
+
+/-- A matching exception composes the callee and handler stack bounds. -/
+theorem exceptionCall_stackMax_from_bounds
+    (dest : Option Nat) (args names : List Nat) (cuts : WordLangCutsetsHOL)
+    (continuation : WordLangProgHOL (BitVec width)) (l1 l2 : Nat)
+    (v hl1 hl2 : Nat) (hprog : WordLangProgHOL (BitVec width))
+    (value : WordLocW width)
+    (s middle : WordSemStateFiniteExact width C F)
+    (xs values : List (WordLocW width)) (callee : WordLangProgHOL (BitVec width))
+    (envs : Spt (WordLocW width) × Spt (WordLocW width))
+    (callerSize calleeSize stackWords maximum limit : Nat)
+    (hargs : getVars args s = some xs) (hbad : wordSemBadDestArgs dest args = false)
+    (hfind : wordSemFindCode dest (wordSemAddRetLoc (some (names,cuts,continuation,l1,l2)) xs)
+      s.code s.stackSize = some (values,callee,some calleeSize))
+    (hvalid : ¬ (sptDomainEmpty cuts.1 ∨ ¬ names.Nodup))
+    (hcut : wordSemCutEnvs cuts s.locals = some envs) (hclock : s.clock ≠ 0)
+    (caller : s.localsSize = some callerSize) (stack : wordSemStackSize s.stack = some stackWords)
+    (maxEq : s.stackMax = some maximum) (maxFits : maximum ≤ limit)
+    (frameFits : callerSize + (if (some (v,hprog,hl1,hl2) : Option (Nat × WordLangProgHOL (BitVec width) × Nat × Nat)).isSome then 3 else 0) + stackWords + calleeSize ≤ limit)
+    (bodyRun : evaluate callee (callEnv values (some calleeSize) (pushEnv envs (some (v,hprog,hl1,hl2)) (decClock s))) =
+      (some (.exception (.loc hl1 hl2) value),middle))
+    (dom : sptDomainEqUnion middle.locals envs.1 envs.2)
+    (bodyIH : ∀ n, (callEnv values (some calleeSize) (pushEnv envs (some (v,hprog,hl1,hl2)) (decClock s))).stackMax = some n → n ≤ limit →
+      ∃ n', middle.stackMax = some n' ∧ n' ≤ limit)
+    (continuationIH : ∀ n, (setVar v value middle).stackMax = some n → n ≤ limit →
+      ∃ n', (evaluate hprog (setVar v value middle)).2.stackMax = some n' ∧ n' ≤ limit) :
+    ∃ n', (evaluate (.call (some (names,cuts,continuation,l1,l2)) dest args (some (v,hprog,hl1,hl2))) s).2.stackMax = some n' ∧ n' ≤ limit := by
+  have init := pushed_call_frame_usage (decClock s) envs (some (v,hprog,hl1,hl2)) values callerSize calleeSize stackWords maximum
+    (by simpa [decClock] using caller) (by simpa [decClock] using stack) (by simpa [decClock] using maxEq)
+  have bounded : max maximum (callerSize + (if (some (v,hprog,hl1,hl2) : Option (Nat × WordLangProgHOL (BitVec width) × Nat × Nat)).isSome then 3 else 0) + stackWords + calleeSize) ≤ limit := Nat.max_le.mpr ⟨maxFits,frameFits⟩
+  obtain ⟨n,hmax,hn⟩ := bodyIH _ init.2 bounded
+  obtain ⟨n',hfinal,hbound⟩ := continuationIH n (by simpa [setVar] using hmax) hn
+  refine ⟨n',?_,hbound⟩
+  rw [evaluate]
+  simp only [hargs,hbad,Bool.false_eq_true,if_false,hfind,if_neg hvalid,hcut]
+  rw [dif_neg hclock,fix_clock_evaluate,bodyRun]
+  simpa [dom] using hfinal
 
 open SteppedFlapjack.WordAllocSteps
 set_option maxHeartbeats 1000000 in
