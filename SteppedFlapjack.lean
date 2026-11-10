@@ -1,3 +1,5 @@
+import SteppedFlapjack.Concrete.BranchingSourceStack
+import SteppedFlapjack.Concrete.TwoProgramStack
 import SteppedFlapjack.Concrete.BranchingFrames
 import SteppedFlapjack.PanToCrepSteps.RowColoring
 import SteppedFlapjack.Concrete.TwoProgramNativeEntry
