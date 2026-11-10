@@ -39,6 +39,22 @@ theorem twoProgram_optimizedEntry_lookup (arch : Flapjack.Compiler.Encoders.Asm.
   rw [opt] at lookup
   exact lookup
 
+/-- The entry selected by the native span is the compiler's fixed tail entry. -/
+theorem twoProgram_selectedEntry (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture) (name callee : MlString)
+    (body : CrepProgHOL 64) (fresh : name ≠ callee) (shape : ScalarProgram body) :
+    let programs := loopToWordCompileHOL (compileProgHOLExact arch (twoPrograms name callee body))
+    nativeTailEntryCode countdownRiscVBackend.wordToWordConf riscvConfig programs 64
+      (loopToWordCompFuncHOL 64 [] branchingLoopEntry) = countdownOptimizedEntry := by
+  let programs := loopToWordCompileHOL (compileProgHOLExact arch (twoPrograms name callee body))
+  let entry := loopToWordCompFuncHOL 64 [] branchingLoopEntry
+  have table := twoWordTables_facts arch name callee body fresh shape
+  have loopEq := (twoLoopPrograms_eq arch name callee body shape).symm
+  have mem : (64,1,entry) ∈ programs := by simpa [programs,entry,loopEq] using table.1
+  have nodup : (programs.map Prod.fst).Nodup := by simpa [programs,loopEq] using table.2.2.1
+  have lookup := twoProgram_optimizedEntry_lookup arch name callee body fresh shape
+  have compiled := (wholeCompile_entry_lookups countdownRiscVBackend.wordToWordConf riscvConfig programs 64 1 entry mem nodup).2
+  exact congrArg Prod.snd (Option.some.inj (compiled.symm.trans lookup))
+
 /-- That optimized entry uses a zero-sized native frame. -/
 theorem twoProgram_optimizedEntry_frame (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture) (name callee : MlString)
     (body : CrepProgHOL 64) (fresh : name ≠ callee) (shape : ScalarProgram body)

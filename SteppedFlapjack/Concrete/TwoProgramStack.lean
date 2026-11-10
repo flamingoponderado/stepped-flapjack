@@ -58,9 +58,7 @@ theorem twoProgram_fixture_stack
   have frame : sptLookup 64 word.stackSize = some 0 :=
     twoProgram_optimizedEntry_frame arch name callee body fresh shape code cfg
   have selected : nativeTailEntryCode countdownRiscVBackend.wordToWordConf riscvConfig programs 64 entry = countdownOptimizedEntry := by
-    have compiled := (wholeCompile_entry_lookups countdownRiscVBackend.wordToWordConf riscvConfig programs 64 1 entry member nodup).2
-    change sptLookup 64 word.code = some (1,_) at compiled
-    exact congrArg Prod.snd (Option.some.inj (compiled.symm.trans lookup))
+    exact twoProgram_selectedEntry arch name callee body fresh shape
   have zeroEntry : nativeEntryFrameSize (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) countdownOptimizedEntry = 0 := by
     with_unfolding_all rfl
   have wordEq : nativeTailEntryWord countdownRiscVBackend.wordToWordConf riscvConfig programs 64 entry stack (fixtureWordOracle cfg) clock = entryWord := by
