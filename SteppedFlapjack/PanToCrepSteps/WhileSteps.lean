@@ -601,20 +601,90 @@ private theorem nestedDecs_zero_steps {width : Nat} [NeZero width] {σ : Type}
     rw [ih]
     omega
 
+private theorem zeroInit_eq {width : Nat} [NeZero width] {σ : Type} (names : List Nat) (s : CrepSemHOLState width σ) :
+    names.foldl (fun st name => CrepSemHOLState.setVar name (.word 0) st) s =
+      {s with locals := s.locals.updateListEq (names.zip (List.replicate names.length (.word 0)))} := by
+  induction names generalizing s with
+  | nil => simp [HolFiniteMapExact.updateListEq, FUPDATE_LIST_HOL]
+  | cons n ns ih =>
+    simp only [List.foldl_cons,List.length_cons,List.replicate_succ,List.zip_cons_cons]
+    rw [ih]
+    simp [CrepSemHOLState.setVar,HolFiniteMapExact.updateListEq,HolFiniteMapExact.updateEq,FUPDATE_LIST_HOL_cons]
+
 /-- The generated return slots and selected continuation contribute their exact
 Crep visits to a declaration call. -/
 theorem decCall_compiled_steps {width : Nat} [NeZero width] {σ : Type}
     (ctxt : PanToCrepContextExact width) (name fname : MlS) (shape : ShapeHOL)
     (args : List (ExpHOL width)) (continuation : ProgHOL width) (target : CrepSemHOLState width σ) :
     let names := decCallSlots ctxt shape
-    let pre := names.foldl (fun st name => CrepSemHOLState.setVar name (.word 0) st) target
+    let pre := {target with locals := target.locals.updateListEq (names.zip (List.replicate names.length (.word 0)))}
     let call : CrepProgHOL width := .call (some (names,none)) fname ((compileExpExactHOLWList ctxt args).flatMap Prod.fst)
     let cont := compileProgExactHOLW (decCallCtxt ctxt name shape) continuation
     CrepSteps.steps (compileProgExactHOLW ctxt (.decCall name shape fname args continuation)) target =
       names.length + (1 + CrepSteps.steps call pre + match evalCrepSemHOLProgExact pre call with
         | (none,post) => CrepSteps.steps cont post
         | _ => 0) := by
-  rw [compileDecCallShape,nestedDecs_zero_steps,CrepSteps.steps_seq]
+  rw [compileDecCallShape,nestedDecs_zero_steps,zeroInit_eq,CrepSteps.steps_seq]
   rfl
+
+/-- Return-slot initialization preserves the corresponding callee entries. -/
+theorem decCall_entries {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (fname : MlS) (shape : ShapeHOL) (argexps : List (ExpHOL width))
+    (source : PanSemStateFiniteExact width σ) (target : CrepSemHOLState width σ)
+    (args : List (ValueHOL width)) (body : ProgHOL width)
+    (locals : HolFiniteMapExact MlS (ValueHOL width)) (rsh : ShapeHOL)
+    (hargs : source.evalListHOLFinite (h := fun address => Classical.propDecidable (source.memaddrs address)) argexps = some args)
+    (found : PanSemStateFiniteExact.lookupCodeHOLFinite source.code.lookup fname args = some (body,locals,rsh))
+    (clock : source.clock ≠ 0) (stateRel : panToCrepStateRelFiniteExact source target)
+    (codeRel : codeRelExactHOLW ctxt source.code target.code)
+    (excpRel : panToCrepExcpRelFiniteExact ctxt.eids source.eshapes)
+    (localsRel : panToCrepLocalsRelFiniteExact ctxt source.locals target.locals)
+    (localised : everyExpListHOL localisedExpHOL argexps = true) :
+    ∃ shapes : List (MlS × ShapeHOL),
+      let ns := List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd)))
+      let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
+      let pre := {target with locals := target.locals.updateListEq ((decCallSlots ctxt shape).zip
+        (List.replicate (decCallSlots ctxt shape).length (.word 0)))}
+      let sourceEntry := PanSemStateFiniteExact.callEntryStateHOLFinite source locals
+      let targetEntry := {decClockCrepSemHOL target with locals := tlcHOL ns args}
+      source.code.lookup fname = some (shapes,body,rsh) ∧
+      localisedProgHOL body = true ∧
+      target.code.lookup fname = some (ns,compileProgExactHOLW next body) ∧
+      CrepSteps.steps (.call (some (decCallSlots ctxt shape,none)) fname
+          ((compileExpExactHOLWList ctxt argexps).flatMap Prod.fst)) pre =
+        1 + CrepSteps.steps (compileProgExactHOLW next body) targetEntry ∧
+      panToCrepStateRelFiniteExact sourceEntry targetEntry ∧
+      codeRelExactHOLW next sourceEntry.code targetEntry.code ∧
+      panToCrepExcpRelFiniteExact next.eids sourceEntry.eshapes ∧
+      panToCrepLocalsRelFiniteExact next sourceEntry.locals targetEntry.locals := by
+  classical
+  obtain ⟨shapes, hsrc, hbodyLocal, _, hlen, htargs, htlookup, hs, hc, he, hl⟩ :=
+    pcCompileCorrectCallPrelude source target ctxt fname argexps args body locals rsh hargs found stateRel codeRel excpRel localsRel localised
+  let ns := List.range (sizeOfShapeHOL (.comb (shapes.map Prod.snd)))
+  let next := ctxtFcExactHOL ctxt.funcs ctxt.eids (shapes.map Prod.fst) (shapes.map Prod.snd) ns
+  have htgt := (codeRelExactHOLW_imp ctxt source.code target.code codeRel fname shapes body rsh hsrc).2.2
+  have targetClock : target.clock ≠ 0 := by rw [← stateRel.2.2.2.2.2.1]; exact clock
+  have localsEq : tlcHOL ns args = HolFiniteMapExact.empty.updateList (ns.zip (args.flatMap flattenHOL)) := by
+    simp only [lookupCodeFiniteHOL, htgt, hlen, List.nodup_range, and_self, if_true, Option.some.injEq,
+      Prod.mk.injEq, true_and] at htlookup
+    exact htlookup.symm
+  let slots := decCallSlots ctxt shape
+  let zeros := List.replicate slots.length (HolWordLab.word (0 : BitVec width))
+  let pre : CrepSemHOLState width σ := {target with locals := target.locals.updateListEq (slots.zip zeros)}
+  have distinct : distinctListsHol slots (((compileExpExactHOLWList ctxt argexps).flatMap Prod.fst).flatMap crepExpVarsHOL) = true := by
+    exact pcCompileCorrectCallRetSlotsDistinct ctxt argexps (sizeOfShapeHOL shape) localsRel.2.1
+  have targetArgs : ((compileExpExactHOLWList ctxt argexps).flatMap Prod.fst).mapM
+      (@evalCrepSemHOLExp width _ σ pre) = some (args.flatMap flattenHOL) := by
+    apply optMmapEvalDistinctListsNotAffectHOL _ target _ slots zeros
+    exact ⟨htargs,by simp [zeros],distinct⟩
+  have targetFound : pre.code.lookup fname = some (ns,compileProgExactHOLW next body) := htgt
+  have count := CrepSteps.steps_call_returning slots fname ((compileExpExactHOLWList ctxt argexps).flatMap Prod.fst) pre
+    (args.flatMap flattenHOL) ns (compileProgExactHOLW next body) targetArgs targetFound hlen List.nodup_range
+    (decCallSlots_nodup ctxt shape) targetClock
+  refine ⟨shapes,hsrc,hbodyLocal,htgt,?_,hs,hc,he,hl⟩
+  dsimp [next,ns,pre,slots,zeros] at count localsEq
+  rw [localsEq]
+  simpa [decClockCrepSemHOL] using count
+
 
 end SteppedFlapjack.PanToCrepSteps
