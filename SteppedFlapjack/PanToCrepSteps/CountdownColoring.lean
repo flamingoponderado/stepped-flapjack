@@ -8,18 +8,9 @@ open Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.RegAlloc Flapjack.RiscV Flapjack.RiscV.CakeRegAlloc
 open SteppedFlapjack.RegAllocSteps
 
-def countdownZeroRendered := RowColoring.rendered countdownZeroLoopRow
 def countdownZeroForced := RowColoring.forced countdownZeroLoopRow
-def countdownZeroStackOnly := RowColoring.stackOnly countdownZeroLoopRow
-def countdownZeroState := RowColoring.state countdownZeroLoopRow
 def countdownZeroLimit := RowColoring.limit
-def countdownZeroDecodedMoves := RowColoring.decoded countdownZeroLoopRow
-def countdownZeroAdmitted := RowColoring.admitted countdownZeroLoopRow
 def countdownZeroStart := RowColoring.start countdownZeroLoopRow
-def countdownZeroCosts := RowColoring.costs countdownZeroLoopRow
-def countdownZeroAllocated := RowColoring.allocated countdownZeroLoopRow
-def countdownZeroPreferences := RowColoring.prefs countdownZeroLoopRow
-def countdownZeroColoredA := RowColoring.coloredA countdownZeroLoopRow
 def countdownZeroColored := RowColoring.colored countdownZeroLoopRow
 
 set_option maxRecDepth 100000 in

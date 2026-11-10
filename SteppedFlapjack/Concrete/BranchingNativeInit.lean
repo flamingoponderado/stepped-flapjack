@@ -46,22 +46,6 @@ theorem branchingLoop_panToWord : panToWordCompileProgHOL riscvConfig.isa (singl
   rw [branchingLoop_crep_code]
   rfl
 
-/-- The comparison compiler emits one bitmap word. -/
-theorem comparison_nativeBitmaps :
- (compileNative riscvConfig false (compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2).1 = [4] := by
-  unfold comparisonWordPrograms comparisonCrepCode
-  rw [← twoLoopPrograms_eq riscvConfig.isa (ofString "main") (entryName branchingHOL) branchCrepBody branching_scalar]
-  exact twoWordTables_native_bitmaps riscvConfig.isa (ofString "main") (entryName branchingHOL) branchCrepBody
-    (Ne.symm (entryName_fresh branchingHOL)) branching_scalar countdownRiscVBackend.wordToWordConf riscvConfig
-
-/-- The branching-loop compiler emits one bitmap word. -/
-theorem branchingLoop_nativeBitmaps :
- (compileNative riscvConfig false (compile countdownRiscVBackend.wordToWordConf riscvConfig branchWordPrograms).2).1 = [4] := by
-  unfold branchWordPrograms branchCrepCode
-  rw [← twoLoopPrograms_eq riscvConfig.isa (ofString "main") (entryName (progToHOL branchingLoop)) branchingLoopCrepBody branchingLoop_scalar]
-  exact twoWordTables_native_bitmaps riscvConfig.isa (ofString "main") (entryName (progToHOL branchingLoop)) branchingLoopCrepBody
-    (Ne.symm (entryName_fresh (progToHOL branchingLoop))) branchingLoop_scalar countdownRiscVBackend.wordToWordConf riscvConfig
-
 /-- Native Stack code emitted for the comparison witness. -/
 noncomputable def comparisonNativeCode :=
   (compileNative riscvConfig false (compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2).2.2.2
@@ -83,18 +67,6 @@ noncomputable def comparisonFixtureStack (cfg : LabToTarget.Config) := fixtureSt
 
 /-- Actual initialized Stack state for the compiled branching-loop witness. -/
 noncomputable def branchingLoopFixtureStack (cfg : LabToTarget.Config) := fixtureStack branchingLoopNativeCode cfg
-
-/-- The original compiler supplies the comparison initializer validity. -/
-theorem comparisonFixture_initOk (cfg : LabToTarget.Config) :
-    Flapjack.WordToStackProofs.InitializationStateRel.initStateOk riscvConfig
-      (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (comparisonFixtureStack cfg) (fixtureWordOracle cfg) :=
-  fixtureStack_nativeInitOk _ cfg comparison_nativeGoodCode
-
-/-- The original compiler supplies the branching-loop initializer validity. -/
-theorem branchingLoopFixture_initOk (cfg : LabToTarget.Config) :
-    Flapjack.WordToStackProofs.InitializationStateRel.initStateOk riscvConfig
-      (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (branchingLoopFixtureStack cfg) (fixtureWordOracle cfg) :=
-  fixtureStack_nativeInitOk _ cfg branchingLoop_nativeGoodCode
 
 /-- Word initialization for the comparison witness. -/
 noncomputable def comparisonFixtureWord (cfg : LabToTarget.Config) := fixtureWord comparisonNativeCode

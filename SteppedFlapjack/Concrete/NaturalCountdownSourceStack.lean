@@ -29,10 +29,11 @@ theorem naturalCountdown_panToWord (n : Nat) :
 open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open SteppedFlapjack.WordToStackSteps Flapjack.WordToStackProofs.CompCorrect
 
-/-- The unprefixed source uses the same Stack run and explicit bound at clock `6*n+9`. -/
+/-- The unprefixed source is re-instantiated at the prefixed clock `6*n+9` and uses the same Stack run and bound. -/
 theorem naturalCountdownFixture_source_stack (n : Nat) (range : n < 2^64) (cfg : LabToTarget.Config)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
+    panToWordCompileProgHOL riscvConfig.isa (singleEntryProgram (ofString "main") (progToHOL (naturalCountdown n))) = countdownWordPrograms n ∧
     ∃ (final : CrepSemHOLState 64 Unit) (post : LoopSemStateFiniteExact 64 Unit)
       (targetPost : StackSemStateFiniteExact 64 LabToTarget.Config Unit) (targetResult : Option (StackSemResult 64)),
       evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState (naturalCountdown n)
@@ -45,6 +46,7 @@ theorem naturalCountdownFixture_source_stack (n : Nat) (range : n < 2^64) (cfg :
       SteppedFlapjack.StackSteps.steps (.call none (.inl 64) none,
         {(countdownFixtureStack n cfg) with clock := countdownWordBound n+1}) ≤
         9543650688*n+29426459323 := by
+  refine ⟨naturalCountdown_panToWord n, ?_⟩
   have h := countdownFixture_source_stack n range cfg context primitive handler
   rw [countdownFixtures_crep_equal n (6*n+9)] at h
   exact h
