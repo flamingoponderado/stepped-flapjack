@@ -221,7 +221,6 @@ import SteppedFlapjack.LoopToWordSteps.WordAllocatedRiscV
 import SteppedFlapjack.LoopToWordSteps.WordAllocatedSequence
 import SteppedFlapjack.LoopToWordSteps.WholeWordSpan
 import SteppedFlapjack.WordToStackSteps.EntryComposition
-import SteppedFlapjack.WordToStackSteps.FixedEntryFrame
 import SteppedFlapjack.CrepToLoopSteps.WordSimpSequence
 import Flapjack.Pancake.Semantics.PanSem.EvaluateClock
 import SteppedFlapjack.LoopToWordSteps.SelectedRiscV

@@ -1,7 +1,7 @@
 import SteppedFlapjack.WordToStackSteps.InitialFrame
 import SteppedFlapjack.WordToStackSteps.EntryComposition
 import SteppedFlapjack.WordToStackSteps.WholeTailInitialization
-import SteppedFlapjack.WordToStackSteps.FixedEntryFrame
+import Flapjack.Misc.Sptree.FromList2
 import Flapjack.Pancake.LoopToWord.Proofs.CompileCorrect.Call.Support
 
 /-! The actual compiled initial entry either obtains its frame or hits the
@@ -14,6 +14,19 @@ open Flapjack.Compiler.Backend.WordToStack.Native.Initialization
 open Flapjack.Compiler.Backend.WordToWord
 open Flapjack.WordToStackProofs.InitializationStateRel
 open SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackAllocSteps SteppedFlapjack.WordAllocSteps
+
+/-- The native one-argument call environment meets SSA’s exact input-domain
+and instruction-selection local-relation requirements. -/
+theorem nativeEntry_locals {width : Nat} [NeZero width] {C F : Type}
+    (source : WordSemStateFiniteExact width C F) (size temp : Nat) :
+    let entry := callEnv [(.loc 1 0 : WordLocW width)] (some size) source
+    sptDomain entry.locals = (fun key => key ∈ Flapjack.Compiler.Backend.WordAlloc.evenList 1) ∧
+    wordLocalsRel temp entry.locals entry.locals ∧
+    sptLookup 0 entry.locals = some (.loc 1 0) := by
+  refine ⟨?_,(fun _ _ => rfl),?_⟩
+  · simpa only [WordSemStateFiniteExact.callEnv, Flapjack.Compiler.Backend.WordAlloc.evenList, List.length_cons, List.length_nil] using
+      (sptDomainFromList2 [(.loc 1 0 : WordLocW width)])
+  · simp [WordSemStateFiniteExact.callEnv,sptFromList2,sptLookup]
 
 /-- The compiler-selected one-argument entry frame. -/
 def nativeEntryFrame (k : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
