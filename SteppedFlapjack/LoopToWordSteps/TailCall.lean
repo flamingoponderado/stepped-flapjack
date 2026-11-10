@@ -7,33 +7,32 @@ namespace SteppedFlapjack.LoopToWordSteps
 open Flapjack Flapjack.LoopSemStateFiniteExact Flapjack.LoopToWord
 open Flapjack.LoopToWord.CompileCorrect Flapjack.Compiler.Encoders.Asm
 
-/-- A reached call to a supported Loop body obeys the same sixfold bound as
-its callee. The compiler's code relation supplies the actual Word body. -/
+/-- A reached call obeys the same sixfold bound as its callee. The code
+relation supplies the actual Word body. -/
 theorem sixBoundedDirectTail_nonzero {width : Nat} [NeZero width] {C F : Type}
-    (loc : Nat) (body : HolLoopProg width) (shape : LoopProgram body)
-    (s : LoopSemStateFiniteExact width F)
-    (found : findCode (some loc) [] s.code = some (.ln,body)) (clock : s.clock ≠ 0) :
-    SixBoundPropertyAt C (.call none (some loc) [] none) s := by
+    (loc : Nat) (vars : List Nat) (vals : List (WordLocW width)) (env : Spt (WordLocW width))
+    (body : HolLoopProg width) (s : LoopSemStateFiniteExact width F)
+    (bodyProp : SixBoundPropertyAt C body {decClock s with locals := env})
+    (get : getVars vars s = some vals) (found : findCode (some loc) vals s.code = some (env,body)) (clock : s.clock ≠ 0) :
+    SixBoundPropertyAt C (.call none (some loc) vars none) s := by
   intro res final t ctxt retv labels premises
   obtain ⟨run,nonerror,state,locals,ret,dim,notWord,acc⟩ := premises
-  have bodyProp : SixBoundPropertyAt C body {decClock s with locals := .ln} :=
-    loopProgram_correct_with_steps shape _
-  have bodyRun : evaluate body {decClock s with locals := .ln} = (res,final) := by
+  have bodyRun : evaluate body {decClock s with locals := env} = (res,final) := by
     rw [evaluate] at run
-    simp only [show getVars [] s = some [] from rfl,found,Option.isSome_none,clock] at run
-    cases h : evaluate body {decClock s with locals := .ln} with
+    simp only [get,found,Option.isSome_none,clock] at run
+    cases h : evaluate body {decClock s with locals := env} with
     | mk r st =>
       rw [h] at run
       cases r with
       | none => simp at run; obtain ⟨rfl,_⟩ := run; exact False.elim (nonerror rfl)
       | some x =>
         cases x <;> simp_all
-  have qualitative := compileCorrect_Call_TailCall (C := C) (some loc) [] none s
+  have qualitative := compileCorrect_Call_TailCall (C := C) (some loc) vars none s
     (by
-      intro vals pair env prog h
-      have heq : (env,prog) = (.ln,body) := by
-        have hv : vals = [] := Option.some.inj h.1.symm
-        subst vals
+      intro argvals pair env2 prog h
+      have heq : (env2,prog) = (env,body) := by
+        have hv : argvals = vals := Option.some.inj (h.1.symm.trans get)
+        subst argvals
         rw [h.2.2.1] at h
         exact Option.some.inj (h.2.1.symm.trans found)
       cases heq
@@ -45,9 +44,10 @@ theorem sixBoundedDirectTail_nonzero {width : Nat} [NeZero width] {C F : Type}
   refine ⟨tf,rf,evalTarget,ffi,relation,?_⟩
   obtain ⟨len,hm,hmd,hsmd,hclock,hbe,hffi,hcur,hlen,htop,hglob,hcode⟩ := state
   obtain ⟨args,ss,calleeCtxt,calleeLabels,wordFound,hret,hcalleelocals,hacc⟩ :=
-    findCode_rel s.code t.code t.stackSize (some loc) [] .ln body retv hcode found
-  have wordArgs : WordSemStateFiniteExact.getVars [0] t = some [retv] := by
-    simp [WordSemStateFiniteExact.getVars,WordSemStateFiniteExact.getVar,ret]
+    findCode_rel s.code t.code t.stackSize (some loc) vals env body retv hcode found
+  obtain ⟨wordGet, _⟩ := LoopToWord.localsRelHOLGetVars ctxt s t vars vals ⟨locals,get⟩
+  have wordArgs : WordSemStateFiniteExact.getVars (0 :: vars.map (LoopToWord.findVarHOL ctxt)) t = some (retv :: vals) := by
+    simp [WordSemStateFiniteExact.getVars,WordSemStateFiniteExact.getVar,ret,wordGet]
   have targetClock : t.clock ≠ 0 := by rw [hclock]; exact clock
   obtain ⟨_,_,_,_,_,calleeBound⟩ := bodyProp res final
     (WordSemStateFiniteExact.callEnv args ss (WordSemStateFiniteExact.decClock t))
@@ -55,11 +55,11 @@ theorem sixBoundedDirectTail_nonzero {width : Nat} [NeZero width] {C F : Type}
       ⟨len,hm,hmd,hsmd,by simp [WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.decClock,
         LoopSemStateFiniteExact.decClock,hclock],hbe,hffi,hcur,hlen,htop,hglob,hcode⟩,
       hcalleelocals,hret,dim,notWord,hacc⟩
-  have wordSteps := WordSteps.steps_call_tail (some loc) [0] t [retv] args ss
+  have wordSteps := WordSteps.steps_call_tail (some loc) (0 :: vars.map (LoopToWord.findVarHOL ctxt)) t (retv :: vals) args ss
     (LoopToWord.compHOL calleeCtxt body calleeLabels).1 wordArgs (by simp [wordSemBadDestArgs])
     wordFound targetClock
-  have loopSteps := LoopSteps.steps_call_tail (some loc) [] s [] .ln body rfl found clock
-  simp only [LoopToWord.compHOL,List.map_nil] at ⊢
+  have loopSteps := LoopSteps.steps_call_tail (some loc) vars s vals env body get found clock
+  simp only [LoopToWord.compHOL] at ⊢
   rw [wordSteps,loopSteps]
   omega
 
@@ -92,7 +92,7 @@ theorem sixBoundedDirectTail {width : Nat} [NeZero width] {C F : Type}
     simp only [LoopToWord.compHOL,List.map_nil]
     rw [wordSteps,loopSteps]
     omega
-  · exact sixBoundedDirectTail_nonzero loc body shape s found clock
+  · exact sixBoundedDirectTail_nonzero loc [] [] .ln body s (loopProgram_correct_with_steps shape _) rfl found clock
 
 /-- Every supported branch is included in the quantitative Loop fragment. -/
 theorem loopBranch_program {width : Nat} [NeZero width] {p : HolLoopProg width}
