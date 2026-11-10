@@ -27,6 +27,34 @@ theorem loopCodeWeight_lookup {width : Nat} [NeZero width]
       | inr inRest => exact (ih entry inRest).trans (Nat.le_max_right _ _)
   exact aux _ _ member
 
+/-- A reached direct tail call lifts its callee bound using the actual code-table weight. -/
+theorem directTail_weighted_step {width : Nat} [NeZero width] {F : Type}
+    (loc : Nat) (args : List Nat) (s post : LoopSemStateFiniteExact width F)
+    (values : List (WordLocW width)) (env : Spt (WordLocW width)) (body : HolLoopProg width)
+    (out : Option (LoopResultExact width))
+    (get : getVars args s = some values) (found : findCode (some loc) values s.code = some (env,body))
+    (clock : s.clock ≠ 0)
+    (run : evaluate body {decClock s with locals := env} = (out,post))
+    (bodyBound : steps body {decClock s with locals := env} ≤
+      SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body + loopCodeWeight s.code * ((decClock s).clock-post.clock)) :
+    steps (.call none (some loc) args none) s ≤ 1 + loopCodeWeight s.code * (s.clock-post.clock) := by
+  have weight : SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body ≤ loopCodeWeight s.code := by
+    cases lookup : sptLookup loc s.code with
+    | none => simp [findCode,lookup] at found
+    | some pair =>
+      obtain ⟨params,callee⟩ := pair
+      by_cases arity : values.length = params.length
+      · simp [findCode,lookup,arity] at found
+        obtain ⟨_,rfl⟩ := found
+        exact loopCodeWeight_lookup s.code loc params callee lookup
+      · simp [findCode,lookup,arity] at found
+  have count := steps_call_tail (some loc) args s values env body get found clock
+  have bodyClock := evaluate_clock body {decClock s with locals := env} out post run
+  simp only [decClock] at bodyClock bodyBound count
+  have difference : s.clock-post.clock = (s.clock-1-post.clock)+1 := by omega
+  rw [count,difference]
+  nlinarith
+
 /-- The selected zero-argument code entry has a supported shape and bounded syntax. -/
 def TailCodeBound (code : Spt (List Nat × HolLoopProg width)) (loc K : Nat) : Prop :=
   ∀ body, sptLookup loc code = some ([],body) → LoopSequenceSource body ∧ sizeOf body ≤ K
