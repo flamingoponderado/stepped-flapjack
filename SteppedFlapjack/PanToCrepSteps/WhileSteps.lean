@@ -156,10 +156,11 @@ private theorem while_compiled_steps_compositional {width : Nat} [NeZero width] 
       nlinarith
 
 
-/-- Internal induction predicate: all related executions are bounded by the
-size of the actual Crep output times the source control visits. -/
+/-- Internal induction predicate: any factor covering the compiled control
+weight bounds related executions per source control visit. -/
 private def ProgramBound {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) (program : ProgHOL width) : Prop :=
+  ∀ (K : Nat), CrepSteps.statementWeight (compileProgExactHOLW context program) ≤ K →
   ∀ {σ : Type} (source sourceFinal : PanSemStateFiniteExact width σ)
     (result : Option (PanSemResultExact width)) (target : CrepSemHOLState width σ),
     source.evaluateHOLFiniteState program = (result,sourceFinal) → result ≠ some .error →
@@ -167,14 +168,15 @@ private def ProgramBound {width : Nat} [NeZero width]
     panToCrepExcpRelFiniteExact context.eids source.eshapes →
     panToCrepLocalsRelFiniteExact context source.locals target.locals →
     CrepSteps.steps (compileProgExactHOLW context program) target ≤
-      CrepSteps.statementWeight (compileProgExactHOLW context program) * controlSteps program source
+      K * controlSteps program source
 
 /-- Sequence composition for the structural induction. -/
 private theorem programBound_seq {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) (a b : ProgHOL width)
     (aShape : FrontendProgram context a) (aBound : ProgramBound context a)
     (bBound : ProgramBound context b) : ProgramBound context (.seq a b) := by
-  intro σ source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
+  intro K weight σ source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
+  have factorPositive : 1 ≤ K := (CrepSteps.statementWeight_pos _).trans weight
   have seqRun := run
   rw [evaluateHOLFiniteState_seq_line780] at seqRun
   rcases firstRun : source.evaluateHOLFiniteState a with ⟨firstResult,middle⟩
@@ -191,7 +193,6 @@ private theorem programBound_seq {width : Nat} [NeZero width]
   obtain ⟨targetResult,targetPost,targetRun,postState,postCode,postExcp,resultRel⟩ :=
     correct firstResult middle target context firstRun firstNonerror stateRel codeRel excpRel localsRel
       (frontendProgram_localised aShape)
-  have firstBound := aBound source middle firstResult target firstRun firstNonerror stateRel codeRel excpRel localsRel
   have leftSize : CrepSteps.statementWeight (compileProgExactHOLW context a) ≤
       CrepSteps.statementWeight (compileProgExactHOLW context (.seq a b)) := by
     simp only [compileProgExactHOLW]
@@ -202,17 +203,14 @@ private theorem programBound_seq {width : Nat} [NeZero width]
     simp only [compileProgExactHOLW]
     simp only [CrepSteps.statementWeight]
     omega
-  have firstBound' := firstBound.trans (Nat.mul_le_mul_right (controlSteps a source) leftSize)
+  have firstBound' := aBound K (leftSize.trans weight) source middle firstResult target firstRun firstNonerror stateRel codeRel excpRel localsRel
   rw [compileProgExactHOLW,CrepSteps.steps_seq,targetRun]
   cases firstResult with
   | none =>
     obtain ⟨rfl,postLocals⟩ := resultRel
     simp only
-    have secondBound := bBound middle sourceFinal result targetPost seqRun nonerror postState postCode postExcp postLocals
-    have secondBound' := secondBound.trans (Nat.mul_le_mul_right (controlSteps b middle) rightSize)
+    have secondBound' := bBound K (rightSize.trans weight) middle sourceFinal result targetPost seqRun nonerror postState postCode postExcp postLocals
     simp only at sourceCount
-    simp only [compileProgExactHOLW] at firstBound' secondBound'
-    simp only [CrepSteps.statementWeight]
     nlinarith
   | some r =>
     have notNone : targetResult ≠ none := by
@@ -230,8 +228,6 @@ private theorem programBound_seq {width : Nat} [NeZero width]
     | some t =>
       simp only
       simp only at sourceCount
-      simp only [compileProgExactHOLW] at firstBound'
-      simp only [CrepSteps.statementWeight]
       nlinarith
 
 
@@ -240,22 +236,21 @@ private theorem programBound_while {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) (condition : ExpHOL width) (body : ProgHOL width)
     (conditionShape : FrontendScalar context condition) (bodyShape : FrontendProgram context body)
     (bodyBound : ProgramBound context body) : ProgramBound context (.while condition body) := by
-  intro σ source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
+  intro K weight σ source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
   have localised : localisedProgHOL (.while condition body) = true :=
     frontendProgram_localised (.while conditionShape bodyShape)
-  have bounded := while_compiled_steps_compositional condition body context conditionShape
-    (CrepSteps.statementWeight (compileProgExactHOLW context body))
-    (CrepSteps.statementWeight_pos _) (by
-      intro bs bf br bt hrun hgood hstate hcode hexcp hlocals _
-      exact bodyBound bs bf br bt hrun hgood hstate hcode hexcp hlocals)
-    source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel localised
   obtain ⟨ce,compiled⟩ := frontendWhile_compile context condition body conditionShape
-  have sizeBound : CrepSteps.statementWeight (compileProgExactHOLW context body) ≤
-      CrepSteps.statementWeight (compileProgExactHOLW context (.while condition body)) := by
-    rw [compiled]
-    simp only [CrepSteps.statementWeight]
+  have sizeBound : CrepSteps.statementWeight (compileProgExactHOLW context body) ≤ K := by
+    rw [compiled] at weight
+    simp only [CrepSteps.statementWeight] at weight
     omega
-  exact bounded.trans (Nat.mul_le_mul_right _ sizeBound)
+  have positive : 1 ≤ K := (CrepSteps.statementWeight_pos _).trans sizeBound
+  have bounded := while_compiled_steps_compositional condition body context conditionShape
+    K positive (by
+      intro bs bf br bt hrun hgood hstate hcode hexcp hlocals _
+      exact bodyBound K sizeBound bs bf br bt hrun hgood hstate hcode hexcp hlocals)
+    source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel localised
+  exact bounded
 
 
 /-- Conditional composition for the structural induction. -/
@@ -265,7 +260,8 @@ private theorem programBound_ite {width : Nat} [NeZero width]
     (aBound : ProgramBound context a) (bBound : ProgramBound context b) :
     ProgramBound context (.ite condition a b) := by
   classical
-  intro σ source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
+  intro K weight σ source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
+  have factorPositive : 1 ≤ K := (CrepSteps.statementWeight_pos _).trans weight
   rw [PanSemStateFiniteExact.evaluateHOLFiniteState_ite] at run
   split at run
   case h_2 => exact absurd (Prod.mk.inj run).1.symm nonerror
@@ -294,17 +290,11 @@ private theorem programBound_ite {width : Nat} [NeZero width]
   by_cases zero : w = 0
   · simp only [zero] at run
     simp only [zero,ne_eq,not_true_eq_false,if_false] at sourceCount ⊢
-    have bound := bBound source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
-    have scaled := bound.trans (Nat.mul_le_mul_right (controlSteps b source) rightSize)
-    rw [comp] at scaled
-    simp only [CrepSteps.statementWeight]
+    have scaled := bBound K (rightSize.trans weight) source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
     nlinarith
   · simp only [if_neg zero] at run
     simp only [if_pos zero] at sourceCount ⊢
-    have bound := aBound source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
-    have scaled := bound.trans (Nat.mul_le_mul_right (controlSteps a source) leftSize)
-    rw [comp] at scaled
-    simp only [CrepSteps.statementWeight]
+    have scaled := aBound K (leftSize.trans weight) source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
     nlinarith
 
 
@@ -315,7 +305,8 @@ private theorem programBound_decl {width : Nat} [NeZero width]
     (bodyBound : ProgramBound (scalarDeclContext context name) body) :
     ProgramBound context (.dec name .one initializer body) := by
   classical
-  intro σ source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
+  intro K weight σ source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
+  have factorPositive : 1 ≤ K := (CrepSteps.statementWeight_pos _).trans weight
   rw [PanSemStateFiniteExact.evaluateHOLFiniteState_dec_total] at run
   dsimp only at run
   cases heval : @evalHOLExact width σ _ source.toExact
@@ -362,9 +353,6 @@ private theorem programBound_decl {width : Nat} [NeZero width]
             (CrepSemHOLState.setVar (context.vmax+1) word target).locals := by
           simpa [scalarDeclContext,PanSemStateFiniteExact.setVarHOLFinite,CrepSemHOLState.setVar,
             shapeOfHOLExact,Flapjack.Pancake.PanLang.sizeOfShapeHOL,flattenHOL,singletonUpdate] using innerLocals
-        have bound := bodyBound _ bodyFinal bodyResult _ bodyRun nonerror innerState
-          (by simpa [codeRelExactHOLW,scalarDeclContext,PanSemStateFiniteExact.setVarHOLFinite,CrepSemHOLState.setVar] using codeRel)
-          (by simpa [scalarDeclContext,PanSemStateFiniteExact.setVarHOLFinite] using excpRel) innerLocals'
         have count := controlSteps_dec name .one initializer body source (.val word) heval
           (by simp [shapeEqHOL,shapeOfHOLExact])
         obtain ⟨compiledValue,comp⟩ := frontendDecl_compile context name initializer body initializerShape
@@ -379,12 +367,11 @@ private theorem programBound_decl {width : Nat} [NeZero width]
           omega
         have childSize : CrepSteps.statementWeight (compileProgExactHOLW (scalarDeclContext context name) body) ≤
             CrepSteps.statementWeight (compileProgExactHOLW context (.dec name .one initializer body)) := by omega
-        have scaled := bound.trans (Nat.mul_le_mul_right
-          (controlSteps body (PanSemStateFiniteExact.setVarHOLFinite name (.val word) source)) childSize)
+        have bound := bodyBound K (childSize.trans weight) _ bodyFinal bodyResult _ bodyRun nonerror innerState
+          (by simpa [codeRelExactHOLW,scalarDeclContext,PanSemStateFiniteExact.setVarHOLFinite,CrepSemHOLState.setVar] using codeRel)
+          (by simpa [scalarDeclContext,PanSemStateFiniteExact.setVarHOLFinite] using excpRel) innerLocals'
+        have scaled := bound
         rw [comp,CrepSteps.steps_dec,hce,count]
-        rw [comp] at scaled
-        simp only
-        simp only [CrepSteps.statementWeight]
         nlinarith
       | rStruct fields => simp [shapeOfHOLExact] at shape
       | nStruct name fields => simp [shapeOfHOLExact] at shape
@@ -397,7 +384,7 @@ private theorem programBound_static {width : Nat} [NeZero width]
     {context : PanToCrepContextExact width} {program : ProgHOL width}
     (shape : FrontendProgram context program) (loopFree : noWhile program = true) :
     ProgramBound context program := by
-  intro σ source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
+  intro K weight σ source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
   have static := CrepSteps.staticProgram_statementWeight (frontendLoopFree_static shape loopFree) target
   have positive := controlSteps_pos program source
   nlinarith
@@ -433,7 +420,7 @@ theorem frontend_compiled_steps {width : Nat} [NeZero width] {σ : Type}
     (localsRel : panToCrepLocalsRelFiniteExact context source.locals target.locals) :
     CrepSteps.steps (compileProgExactHOLW context program) target ≤
       CrepSteps.statementWeight (compileProgExactHOLW context program) * controlSteps program source := by
-  exact frontendProgramBound shape source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
+  exact frontendProgramBound shape _ (Nat.le_refl _) source sourceFinal result target run nonerror stateRel codeRel excpRel localsRel
 
 
 /-- A frontend run has a corresponding Crep run with a code-derived visit
