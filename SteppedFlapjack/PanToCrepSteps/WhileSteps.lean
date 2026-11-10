@@ -7,16 +7,26 @@ import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang
 
+/-- Source evaluation retains the function table across every outcome. -/
+theorem source_code_preserved {width : Nat} [NeZero width] {σ : Type}
+    (p : ProgHOL width) (s t : PanSemStateFiniteExact width σ) (r : Option (PanSemResultExact width))
+    (run : s.evaluateHOLFiniteState p = (r,t)) : t.code = s.code := by
+  have h := evaluateInvariantsHOLFinite p (PanPropsEvalStateFiniteExact.ofPanSemFinite s) r
+    (PanPropsEvalStateFiniteExact.ofPanSemFinite t) (by
+      simp [PanPropsEvalStateFiniteExact.evaluateHOLFinitePair,run])
+  exact h.2.2.2.2.2.2.1
+
 /-- For a non-error source run, the actual compiled Crep while visits at most
 the body factor per Pancake control visit when that factor is positive. -/
 private theorem while_compiled_steps_compositional {width : Nat} [NeZero width] {σ : Type}
     (condition : ExpHOL width) (body : ProgHOL width) (context : PanToCrepContextExact width)
     (conditionShape : FrontendScalar context condition)
+    (sourceTable : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
     (codeTable : HolFiniteMapExact MlS (List Nat × CrepProgHOL width))
     (clockLimit : Nat) (bodyFactor : Nat) (factorPositive : 1 ≤ bodyFactor)
     (bodyBound : ∀ (bs bf : PanSemStateFiniteExact width σ) (br : Option (PanSemResultExact width))
       (bt : CrepSemHOLState width σ),
-      bs.clock ≤ clockLimit →
+      bs.clock ≤ clockLimit → bs.code = sourceTable →
       bs.evaluateHOLFiniteState body = (br,bf) → br ≠ some .error →
       bt.code = codeTable →
       panToCrepStateRelFiniteExact bs bt → codeRelExactHOLW context bs.code bt.code →
@@ -25,7 +35,7 @@ private theorem while_compiled_steps_compositional {width : Nat} [NeZero width] 
       CrepSteps.steps (compileProgExactHOLW context body) bt ≤ bodyFactor * controlSteps body bs)
     (source sourceFinal : PanSemStateFiniteExact width σ) (result : Option (PanSemResultExact width))
     (target : CrepSemHOLState width σ) (targetTable : target.code = codeTable)
-    (sourceLimit : source.clock ≤ clockLimit)
+    (sourceLimit : source.clock ≤ clockLimit) (sourceTableEq : source.code = sourceTable)
     (run : source.evaluateHOLFiniteState (.while condition body) = (result,sourceFinal))
     (nonerror : result ≠ some .error)
     (stateRel : panToCrepStateRelFiniteExact source target)
@@ -85,7 +95,8 @@ private theorem while_compiled_steps_compositional {width : Nat} [NeZero width] 
             bodyState codeRel excpRel localsRel locs.2
         rw [targetRun]
         have bodyStepBound := bodyBound source.decClockHOLFinite sourcePost bodyResult (decClockCrepSemHOL target)
-          (by simp [PanSemStateFiniteExact.decClockHOLFinite]; omega) bodyRun bodyNonerror (by simpa [decClockCrepSemHOL] using targetTable) bodyState codeRel excpRel localsRel locs.2
+          (by simp [PanSemStateFiniteExact.decClockHOLFinite]; omega)
+          (by simpa [PanSemStateFiniteExact.decClockHOLFinite] using sourceTableEq) bodyRun bodyNonerror (by simpa [decClockCrepSemHOL] using targetTable) bodyState codeRel excpRel localsRel locs.2
         have bodyClock := evaluateHOLFiniteState_clock_le source.decClockHOLFinite body
         rw [bodyRun] at bodyClock
         have smaller : sourcePost.clock < clock := by
@@ -111,7 +122,10 @@ private theorem while_compiled_steps_compositional {width : Nat} [NeZero width] 
           have postTable : targetPost.code = codeTable := by
             have invariant := evaluateCodeInvariantHOL _ _ _ _ targetRun
             exact invariant.trans (by simpa [decClockCrepSemHOL] using targetTable)
-          have recurse := ih sourcePost.clock smaller sourcePost sourceFinal result targetPost postTable (by omega) tailRun nonerror
+          have postSourceTable : sourcePost.code = sourceTable := by
+            have invariant := source_code_preserved body source.decClockHOLFinite sourcePost bodyResult bodyRun
+            exact invariant.trans (by simpa [PanSemStateFiniteExact.decClockHOLFinite] using sourceTableEq)
+          have recurse := ih sourcePost.clock smaller sourcePost sourceFinal result targetPost postTable (by omega) postSourceTable tailRun nonerror
             postState postCode postExcp postLocals rfl
           rw [comp] at recurse
           have counts : controlSteps (.while condition body) source ≥
@@ -167,11 +181,12 @@ private theorem while_compiled_steps_compositional {width : Nat} [NeZero width] 
 weight bounds related executions per source control visit. -/
 private def ProgramBound {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) (program : ProgHOL width) (clockLimit : Nat)
+    (sourceTable : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
     (codeTable : HolFiniteMapExact MlS (List Nat × CrepProgHOL width)) (K : Nat) : Prop :=
   CrepSteps.statementWeight (compileProgExactHOLW context program) ≤ K →
   ∀ {σ : Type} (source sourceFinal : PanSemStateFiniteExact width σ)
     (result : Option (PanSemResultExact width)) (target : CrepSemHOLState width σ),
-    target.code = codeTable → source.clock ≤ clockLimit →
+    target.code = codeTable → source.code = sourceTable → source.clock ≤ clockLimit →
     source.evaluateHOLFiniteState program = (result,sourceFinal) → result ≠ some .error →
     panToCrepStateRelFiniteExact source target → codeRelExactHOLW context source.code target.code →
     panToCrepExcpRelFiniteExact context.eids source.eshapes →
@@ -182,10 +197,11 @@ private def ProgramBound {width : Nat} [NeZero width]
 /-- Sequence composition for the structural induction. -/
 private theorem programBound_seq {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) (a b : ProgHOL width) (clockLimit : Nat)
+    (sourceTable : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
     (codeTable : HolFiniteMapExact MlS (List Nat × CrepProgHOL width)) (K : Nat)
-    (aLocalised : localisedProgHOL a = true) (aBound : ProgramBound context a clockLimit codeTable K)
-    (bBound : ProgramBound context b clockLimit codeTable K) : ProgramBound context (.seq a b) clockLimit codeTable K := by
-  intro weight σ source sourceFinal result target targetTable sourceLimit run nonerror stateRel codeRel excpRel localsRel
+    (aLocalised : localisedProgHOL a = true) (aBound : ProgramBound context a clockLimit sourceTable codeTable K)
+    (bBound : ProgramBound context b clockLimit sourceTable codeTable K) : ProgramBound context (.seq a b) clockLimit sourceTable codeTable K := by
+  intro weight σ source sourceFinal result target targetTable sourceTableEq sourceLimit run nonerror stateRel codeRel excpRel localsRel
   have factorPositive : 1 ≤ K := (CrepSteps.statementWeight_pos _).trans weight
   have seqRun := run
   rw [evaluateHOLFiniteState_seq_line780] at seqRun
@@ -213,15 +229,16 @@ private theorem programBound_seq {width : Nat} [NeZero width]
     simp only [compileProgExactHOLW]
     simp only [CrepSteps.statementWeight]
     omega
-  have firstBound' := aBound (leftSize.trans weight) source middle firstResult target targetTable sourceLimit firstRun firstNonerror stateRel codeRel excpRel localsRel
+  have firstBound' := aBound (leftSize.trans weight) source middle firstResult target targetTable sourceTableEq sourceLimit firstRun firstNonerror stateRel codeRel excpRel localsRel
   rw [compileProgExactHOLW,CrepSteps.steps_seq,targetRun]
   cases firstResult with
   | none =>
     obtain ⟨rfl,postLocals⟩ := resultRel
     simp only
     have postTable : targetPost.code = codeTable := (evaluateCodeInvariantHOL _ _ _ _ targetRun).trans targetTable
+    have middleTable : middle.code = sourceTable := (source_code_preserved a source middle none firstRun).trans sourceTableEq
     have middleLimit : middle.clock ≤ clockLimit := (evaluateHOLFiniteState_clock_le_result source a _ middle firstRun).trans sourceLimit
-    have secondBound' := bBound (rightSize.trans weight) middle sourceFinal result targetPost postTable middleLimit seqRun nonerror postState postCode postExcp postLocals
+    have secondBound' := bBound (rightSize.trans weight) middle sourceFinal result targetPost postTable middleTable middleLimit seqRun nonerror postState postCode postExcp postLocals
     simp only at sourceCount
     nlinarith
   | some r =>
@@ -246,10 +263,11 @@ private theorem programBound_seq {width : Nat} [NeZero width]
 /-- Loop composition for the structural induction. -/
 private theorem programBound_while {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) (condition : ExpHOL width) (body : ProgHOL width) (clockLimit : Nat)
+    (sourceTable : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
     (codeTable : HolFiniteMapExact MlS (List Nat × CrepProgHOL width)) (K : Nat)
     (conditionShape : FrontendScalar context condition) (bodyLocalised : localisedProgHOL body = true)
-    (bodyBound : ProgramBound context body clockLimit codeTable K) : ProgramBound context (.while condition body) clockLimit codeTable K := by
-  intro weight σ source sourceFinal result target targetTable sourceLimit run nonerror stateRel codeRel excpRel localsRel
+    (bodyBound : ProgramBound context body clockLimit sourceTable codeTable K) : ProgramBound context (.while condition body) clockLimit sourceTable codeTable K := by
+  intro weight σ source sourceFinal result target targetTable sourceTableEq sourceLimit run nonerror stateRel codeRel excpRel localsRel
   have localised : localisedProgHOL (.while condition body) = true := by
     simp [localisedProgHOL,frontendScalar_localised conditionShape,bodyLocalised]
   obtain ⟨ce,compiled⟩ := frontendWhile_compile context condition body conditionShape
@@ -259,22 +277,23 @@ private theorem programBound_while {width : Nat} [NeZero width]
     omega
   have positive : 1 ≤ K := (CrepSteps.statementWeight_pos _).trans sizeBound
   have bounded := while_compiled_steps_compositional condition body context conditionShape
-    codeTable clockLimit K positive (by
-      intro bs bf br bt hlimit hrun hgood htable hstate hcode hexcp hlocals _
-      exact bodyBound sizeBound bs bf br bt htable hlimit hrun hgood hstate hcode hexcp hlocals)
-    source sourceFinal result target targetTable sourceLimit run nonerror stateRel codeRel excpRel localsRel localised
+    sourceTable codeTable clockLimit K positive (by
+      intro bs bf br bt hlimit hsTable hrun hgood htable hstate hcode hexcp hlocals _
+      exact bodyBound sizeBound bs bf br bt htable hsTable hlimit hrun hgood hstate hcode hexcp hlocals)
+    source sourceFinal result target targetTable sourceLimit sourceTableEq run nonerror stateRel codeRel excpRel localsRel localised
   exact bounded
 
 
 /-- Conditional composition for the structural induction. -/
 private theorem programBound_ite {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) (condition : ExpHOL width) (a b : ProgHOL width) (clockLimit : Nat)
+    (sourceTable : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
     (codeTable : HolFiniteMapExact MlS (List Nat × CrepProgHOL width)) (K : Nat)
     (conditionShape : FrontendScalar context condition)
-    (aBound : ProgramBound context a clockLimit codeTable K) (bBound : ProgramBound context b clockLimit codeTable K) :
-    ProgramBound context (.ite condition a b) clockLimit codeTable K := by
+    (aBound : ProgramBound context a clockLimit sourceTable codeTable K) (bBound : ProgramBound context b clockLimit sourceTable codeTable K) :
+    ProgramBound context (.ite condition a b) clockLimit sourceTable codeTable K := by
   classical
-  intro weight σ source sourceFinal result target targetTable sourceLimit run nonerror stateRel codeRel excpRel localsRel
+  intro weight σ source sourceFinal result target targetTable sourceTableEq sourceLimit run nonerror stateRel codeRel excpRel localsRel
   have factorPositive : 1 ≤ K := (CrepSteps.statementWeight_pos _).trans weight
   rw [PanSemStateFiniteExact.evaluateHOLFiniteState_ite] at run
   split at run
@@ -304,23 +323,24 @@ private theorem programBound_ite {width : Nat} [NeZero width]
   by_cases zero : w = 0
   · simp only [zero] at run
     simp only [zero,ne_eq,not_true_eq_false,if_false] at sourceCount ⊢
-    have scaled := bBound (rightSize.trans weight) source sourceFinal result target targetTable sourceLimit run nonerror stateRel codeRel excpRel localsRel
+    have scaled := bBound (rightSize.trans weight) source sourceFinal result target targetTable sourceTableEq sourceLimit run nonerror stateRel codeRel excpRel localsRel
     nlinarith
   · simp only [if_neg zero] at run
     simp only [if_pos zero] at sourceCount ⊢
-    have scaled := aBound (leftSize.trans weight) source sourceFinal result target targetTable sourceLimit run nonerror stateRel codeRel excpRel localsRel
+    have scaled := aBound (leftSize.trans weight) source sourceFinal result target targetTable sourceTableEq sourceLimit run nonerror stateRel codeRel excpRel localsRel
     nlinarith
 
 
 /-- Declaration composition for the structural induction. -/
 private theorem programBound_decl {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) (name : MlS) (initializer : ExpHOL width) (body : ProgHOL width) (clockLimit : Nat)
+    (sourceTable : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
     (codeTable : HolFiniteMapExact MlS (List Nat × CrepProgHOL width)) (K : Nat)
     (initializerShape : FrontendScalar context initializer)
-    (bodyBound : ProgramBound (scalarDeclContext context name) body clockLimit codeTable K) :
-    ProgramBound context (.dec name .one initializer body) clockLimit codeTable K := by
+    (bodyBound : ProgramBound (scalarDeclContext context name) body clockLimit sourceTable codeTable K) :
+    ProgramBound context (.dec name .one initializer body) clockLimit sourceTable codeTable K := by
   classical
-  intro weight σ source sourceFinal result target targetTable sourceLimit run nonerror stateRel codeRel excpRel localsRel
+  intro weight σ source sourceFinal result target targetTable sourceTableEq sourceLimit run nonerror stateRel codeRel excpRel localsRel
   have factorPositive : 1 ≤ K := (CrepSteps.statementWeight_pos _).trans weight
   rw [PanSemStateFiniteExact.evaluateHOLFiniteState_dec_total] at run
   dsimp only at run
@@ -382,7 +402,7 @@ private theorem programBound_decl {width : Nat} [NeZero width]
           omega
         have childSize : CrepSteps.statementWeight (compileProgExactHOLW (scalarDeclContext context name) body) ≤
             CrepSteps.statementWeight (compileProgExactHOLW context (.dec name .one initializer body)) := by omega
-        have bound := bodyBound (childSize.trans weight) _ bodyFinal bodyResult _ (by simpa [CrepSemHOLState.setVar] using targetTable) (by simpa [PanSemStateFiniteExact.setVarHOLFinite] using sourceLimit) bodyRun nonerror innerState
+        have bound := bodyBound (childSize.trans weight) _ bodyFinal bodyResult _ (by simpa [CrepSemHOLState.setVar] using targetTable) (by simpa [PanSemStateFiniteExact.setVarHOLFinite] using sourceTableEq) (by simpa [PanSemStateFiniteExact.setVarHOLFinite] using sourceLimit) bodyRun nonerror innerState
           (by simpa [codeRelExactHOLW,scalarDeclContext,PanSemStateFiniteExact.setVarHOLFinite,CrepSemHOLState.setVar] using codeRel)
           (by simpa [scalarDeclContext,PanSemStateFiniteExact.setVarHOLFinite] using excpRel) innerLocals'
         have scaled := bound
@@ -398,28 +418,29 @@ private theorem programBound_decl {width : Nat} [NeZero width]
 private theorem programBound_static {width : Nat} [NeZero width]
     {context : PanToCrepContextExact width} {program : ProgHOL width}
     (shape : FrontendProgram context program) (loopFree : noWhile program = true) (clockLimit : Nat)
+    (sourceTable : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
     (codeTable : HolFiniteMapExact MlS (List Nat × CrepProgHOL width)) (K : Nat) :
-    ProgramBound context program clockLimit codeTable K := by
-  intro weight σ source sourceFinal result target targetTable sourceLimit run nonerror stateRel codeRel excpRel localsRel
+    ProgramBound context program clockLimit sourceTable codeTable K := by
+  intro weight σ source sourceFinal result target targetTable sourceTableEq sourceLimit run nonerror stateRel codeRel excpRel localsRel
   have static := CrepSteps.staticProgram_statementWeight (frontendLoopFree_static shape loopFree) target
   have positive := controlSteps_pos program source
   nlinarith
 
 private theorem frontendProgramBound {width : Nat} [NeZero width]
     {context : PanToCrepContextExact width} {program : ProgHOL width}
-    (shape : FrontendProgram context program) : ∀ clockLimit codeTable K, ProgramBound context program clockLimit codeTable K := by
+    (shape : FrontendProgram context program) : ∀ clockLimit sourceTable codeTable K, ProgramBound context program clockLimit sourceTable codeTable K := by
   induction shape with
-  | skip => intro n t k; exact programBound_static .skip rfl n t k
-  | «break» => intro n t k; exact programBound_static .break rfl n t k
-  | «continue» => intro n t k; exact programBound_static .continue rfl n t k
-  | tick => intro n t k; exact programBound_static .tick rfl n t k
-  | store a v => intro n t k; exact programBound_static (.store a v) rfl n t k
-  | assign reg found e => intro n t k; exact programBound_static (.assign reg found e) rfl n t k
-  | decl e body ih => intro n t k; exact programBound_decl _ _ _ _ n t k e (ih n t k)
-  | seq a b iha ihb => intro n t k; exact programBound_seq _ _ _ n t k (frontendProgram_localised a) (iha n t k) (ihb n t k)
-  | ite condition a b iha ihb => intro n t k; exact programBound_ite _ _ _ _ n t k condition (iha n t k) (ihb n t k)
-  | «while» condition body ih => intro n t k; exact programBound_while _ _ _ n t k condition (frontendProgram_localised body) (ih n t k)
-  | ret e => intro n t k; exact programBound_static (.ret e) rfl n t k
+  | skip => intro n st t k; exact programBound_static .skip rfl n st t k
+  | «break» => intro n st t k; exact programBound_static .break rfl n st t k
+  | «continue» => intro n st t k; exact programBound_static .continue rfl n st t k
+  | tick => intro n st t k; exact programBound_static .tick rfl n st t k
+  | store a v => intro n st t k; exact programBound_static (.store a v) rfl n st t k
+  | assign reg found e => intro n st t k; exact programBound_static (.assign reg found e) rfl n st t k
+  | decl e body ih => intro n st t k; exact programBound_decl _ _ _ _ n st t k e (ih n st t k)
+  | seq a b iha ihb => intro n st t k; exact programBound_seq _ _ _ n st t k (frontendProgram_localised a) (iha n st t k) (ihb n st t k)
+  | ite condition a b iha ihb => intro n st t k; exact programBound_ite _ _ _ _ n st t k condition (iha n st t k) (ihb n st t k)
+  | «while» condition body ih => intro n st t k; exact programBound_while _ _ _ n st t k condition (frontendProgram_localised body) (ih n st t k)
+  | ret e => intro n st t k; exact programBound_static (.ret e) rfl n st t k
 
 /-- Every generalized frontend program has a Crep visit bound computed only
 from its generated code and its actual source control visits. -/
@@ -436,7 +457,7 @@ theorem frontend_compiled_steps {width : Nat} [NeZero width] {σ : Type}
     (localsRel : panToCrepLocalsRelFiniteExact context source.locals target.locals) :
     CrepSteps.steps (compileProgExactHOLW context program) target ≤
       CrepSteps.statementWeight (compileProgExactHOLW context program) * controlSteps program source := by
-  exact frontendProgramBound shape source.clock target.code _ (Nat.le_refl _) source sourceFinal result target rfl (Nat.le_refl _) run nonerror stateRel codeRel excpRel localsRel
+  exact frontendProgramBound shape source.clock source.code target.code _ (Nat.le_refl _) source sourceFinal result target rfl rfl (Nat.le_refl _) run nonerror stateRel codeRel excpRel localsRel
 
 
 /-- A frontend run has a corresponding Crep run with a code-derived visit
@@ -487,9 +508,9 @@ theorem while_compiled_steps_general {width : Nat} [NeZero width] {σ : Type}
     CrepSteps.steps (compileProgExactHOLW context (.while condition body)) target ≤
       (1 + sizeOf (compileProgExactHOLW context body)) * controlSteps (.while condition body) source := by
   apply while_compiled_steps_compositional condition body context conditionShape
-    target.code source.clock (1 + sizeOf (compileProgExactHOLW context body)) (by omega) ?_ source sourceFinal result target rfl (Nat.le_refl _)
+    source.code target.code source.clock (1 + sizeOf (compileProgExactHOLW context body)) (by omega) ?_ source sourceFinal result target rfl (Nat.le_refl _) rfl
     run nonerror stateRel codeRel excpRel localsRel localised
-  intro bs bf br bt _ _ _ _ _ _ _ _ _
+  intro bs bf br bt _ _ _ _ _ _ _ _ _ _
   have static := CrepSteps.staticProgram_steps bodyShape bt
   have positive := controlSteps_pos body bs
   nlinarith
@@ -820,15 +841,6 @@ theorem decCall_continuation_relations {width : Nat} [NeZero width] {σ : Type}
   · simpa [decCallCtxt,PanSemStateFiniteExact.setVarHOLFinite,codeRelExactHOLW] using codeRel
   · simpa [decCallCtxt,PanSemStateFiniteExact.setVarHOLFinite] using excpRel
   · exact loc
-
-/-- Source evaluation retains the function table across every outcome. -/
-theorem source_code_preserved {width : Nat} [NeZero width] {σ : Type}
-    (p : ProgHOL width) (s t : PanSemStateFiniteExact width σ) (r : Option (PanSemResultExact width))
-    (run : s.evaluateHOLFiniteState p = (r,t)) : t.code = s.code := by
-  have h := evaluateInvariantsHOLFinite p (PanPropsEvalStateFiniteExact.ofPanSemFinite s) r
-    (PanPropsEvalStateFiniteExact.ofPanSemFinite t) (by
-      simp [PanPropsEvalStateFiniteExact.evaluateHOLFinitePair,run])
-  exact h.2.2.2.2.2.2.1
 
 open Flapjack.PanSemStateFiniteExact in
 /-- A successful declaration call exposes exact source and Crep visits and
