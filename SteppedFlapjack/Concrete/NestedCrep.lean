@@ -81,14 +81,5 @@ theorem nestedCall_crep_steps :
   have size2 : 7 + sizeOf (ofString "middle") < 1 + (7 + sizeOf (ofString "middle") + 1) + 4 := by omega
   simp [Prod.lex_def,size1,size2]
 
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-/-- Loop compilation assigns distinct labels to all four generated functions. -/
-theorem nestedCall_loop_labels :
-    (compileProgHOLExact Flapjack.Compiler.Encoders.RiscV.Target.riscvConfig.isa
-      (compileProgDeclsHOLW (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")))).map
-      (fun (n,params,_) => (n,params)) = [(64,[]),(65,[]),(66,[]),(67,[])] := by
-  rw [nestedCall_crep_code]
-  decide
 
 end SteppedFlapjack.Concrete

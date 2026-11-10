@@ -78,4 +78,29 @@ theorem nestedCall_structuralLive_eq :
     exact nestedCall_crep_fixed row.1 row.2.1 row.2.2 member
   · exact nestedCall_raw_loop_shape
 
+def nestedLoopLive1 : NumSet := sptInsert 1 () .ln
+
+def nestedLoopCode64 : HolLoopProg 64 :=
+ .mark (.seq (.mark .skip) (.mark (.seq (.mark (.call none (some 65) [] none)) (.mark .skip))))
+
+def nestedLoopCode65 : HolLoopProg 64 :=
+ .mark <| .seq (.mark .skip) <| .mark <| .seq (.mark .skip) <| .mark <| .seq
+   (.mark <| .seq (.mark <| .call (some ([1],.ln)) (some 66) [] (some (2,.mark (.raise 2),.mark .skip,nestedLoopLive1))) (.mark .skip))
+   (.mark <| .seq (.mark (.assign 2 (.var 1))) (.mark <| .seq (.mark (.return [2])) (.mark .skip)))
+
+def nestedLoopCode66 : HolLoopProg 64 :=
+ .mark (.seq (.mark (.call none (some 67) [] none)) (.mark .skip))
+
+def nestedLoopCode67 : HolLoopProg 64 :=
+ .mark (.seq (.mark (.assign 1 (.const 7))) (.mark (.seq (.mark (.return [1])) (.mark .skip))))
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 3000000 in
+/-- The real Loop compiler produces the four concrete optimized functions. -/
+theorem nestedCall_loop_code : compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms =
+ [(64,[],nestedLoopCode64),(65,[],nestedLoopCode65),(66,[],nestedLoopCode66),(67,[],nestedLoopCode67)] := by
+  rw [← nestedCall_structuralLive_eq]
+  rw [nestedCallCrepPrograms,nestedCall_crep_code]
+  with_unfolding_all rfl
+
 end SteppedFlapjack.Concrete
