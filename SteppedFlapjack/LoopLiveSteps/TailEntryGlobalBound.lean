@@ -451,6 +451,159 @@ theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFin
         omega
   exact key _ p s rfl shape code weight
 
+set_option maxHeartbeats 5000000 in
+/-- Supported executions consume at most two clock units per visit, including nested calls. -/
+theorem simpleSequence_global_consumed (p : HolLoopProg width) (s : LoopSemStateFiniteExact width F)
+    (shape : SimpleLoopSequenceSource p) (code : LoopTableSupported s.code) :
+    s.clock-(evaluate p s).2.clock ≤ 2 * steps p s := by
+  have key : ∀ (x : Nat × Nat) (p : HolLoopProg width) (s : LoopSemStateFiniteExact width F),
+      (s.clock,sizeOf p) = x → SimpleLoopSequenceSource p → LoopTableSupported s.code →
+      s.clock-(evaluate p s).2.clock ≤ 2 * steps p s := by
+    intro x
+    induction x using (Prod.lex Nat.lt_wfRel Nat.lt_wfRel).wf.induction with
+    | h x ih0 =>
+      intro p s hx shape code
+      have ih : ∀ (q : HolLoopProg width) (t : LoopSemStateFiniteExact width F),
+          Prod.Lex (· < ·) (· < ·) (t.clock,sizeOf q) (s.clock,sizeOf p) →
+          SimpleLoopSequenceSource q → t.code = s.code →
+          t.clock-(evaluate q t).2.clock ≤ 2 * steps q t := by
+        intro q t smaller hshape hcode
+        have supported : LoopTableSupported t.code := by rw [hcode]; exact code
+        exact ih0 _ (hx ▸ smaller) q t rfl hshape supported
+      clear ih0 hx
+      cases shape with
+      | branch h =>
+        rcases run : evaluate _ s with ⟨result,post⟩
+        have bound := branchedProgram_clock_consumed (branch_branched h) s post result run
+        simp only
+        omega
+      | @loop live exits body h =>
+        rcases run : evaluate (.loop live body exits) s with ⟨out,post⟩
+        exact scalarLoop_consumed (.loop live exits (.branch h)) s post out run
+      | tail loc args =>
+        cases hg : getVars args s with
+        | none => simp [evaluate,hg]
+        | some vals =>
+          cases hf : findCode (some loc) vals s.code with
+          | none => simp [evaluate,hg,hf]
+          | some pair =>
+            obtain ⟨env,body⟩ := pair
+            by_cases clock : s.clock = 0
+            · simp [clock]
+            · obtain ⟨params,lookup⟩ := findCode_direct_body s.code loc vals env body hf
+              have bodyShape := code loc params body lookup
+              rcases bodyRun : evaluate body {decClock s with locals := env} with ⟨out,post⟩
+              have smaller : (decClock s).clock < s.clock := by simp [decClock]; omega
+              have bodyBound := ih body {decClock s with locals := env} (lexLtClock smaller) bodyShape rfl
+              rw [bodyRun] at bodyBound
+              have bound := tail_clock_consumed_from_body (some loc) args s post vals env body out hg hf clock bodyRun bodyBound
+              have after : (evaluate (.call none (some loc) args none) s).2.clock = post.clock := by
+                rw [evaluate]
+                simp only [hg,hf,Option.isSome_none,Bool.false_eq_true,if_false,clock,dite_false,bodyRun]
+                cases out with
+                | none => rfl
+                | some r => cases r <;> rfl
+              rw [after]
+              exact bound
+      | returning names callLive loc exception args liveOut =>
+        cases hg : getVars args s with
+        | none => simp [evaluate,hg]
+        | some vals =>
+          cases hf : findCode (some loc) vals s.code with
+          | none => simp [evaluate,hg,hf]
+          | some pair =>
+            obtain ⟨env,body⟩ := pair
+            by_cases distinct : names.Nodup
+            · rcases hcut : cutRes callLive (none,s) with ⟨cutResult,cut⟩
+              cases cutResult with
+              | some r =>
+                have hc := cutRes_clock_consumed callLive none s
+                rw [hcut] at hc
+                have hp := steps_pos (.call (some (names,callLive)) (some loc) args (some (exception, .raise exception, .skip, liveOut))) s
+                simp [evaluate,hg,hf,distinct,hcut]
+                simp only at hc
+                omega
+              | none =>
+                obtain ⟨params,lookup⟩ := findCode_direct_body s.code loc vals env body hf
+                have bodyShape := code loc params body lookup
+                rcases bodyRun : evaluate body {cut with locals := env} with ⟨out,post⟩
+                have cutCode : cut.code = s.code := by have h := cutRes_code callLive none s; rw [hcut] at h; exact h
+                have smaller := cutRes_none_clock hcut
+                have bodyBound := ih body {cut with locals := env} (lexLtClock smaller) bodyShape cutCode
+                rw [bodyRun] at bodyBound
+                exact returningCall_consumed_step (some loc) args names callLive liveOut exception false false s cut post vals env body out hg hf distinct hcut bodyRun bodyBound
+            · simp [evaluate,hg,hf,distinct]
+      | returningMarked names callLive loc exception args liveOut =>
+        cases hg : getVars args s with
+        | none => simp [evaluate,hg]
+        | some vals =>
+          cases hf : findCode (some loc) vals s.code with
+          | none => simp [evaluate,hg,hf]
+          | some pair =>
+            obtain ⟨env,body⟩ := pair
+            by_cases distinct : names.Nodup
+            · rcases hcut : cutRes callLive (none,s) with ⟨cutResult,cut⟩
+              cases cutResult with
+              | some r =>
+                have hc := cutRes_clock_consumed callLive none s
+                rw [hcut] at hc
+                have hp := steps_pos (.call (some (names,callLive)) (some loc) args (some (exception, .mark (.raise exception), .mark .skip, liveOut))) s
+                simp [evaluate,hg,hf,distinct,hcut]
+                simp only at hc
+                omega
+              | none =>
+                obtain ⟨params,lookup⟩ := findCode_direct_body s.code loc vals env body hf
+                have bodyShape := code loc params body lookup
+                rcases bodyRun : evaluate body {cut with locals := env} with ⟨out,post⟩
+                have cutCode : cut.code = s.code := by have h := cutRes_code callLive none s; rw [hcut] at h; exact h
+                have smaller := cutRes_none_clock hcut
+                have bodyBound := ih body {cut with locals := env} (lexLtClock smaller) bodyShape cutCode
+                rw [bodyRun] at bodyBound
+                exact returningCall_consumed_step (some loc) args names callLive liveOut exception true true s cut post vals env body out hg hf distinct hcut bodyRun bodyBound
+            · simp [evaluate,hg,hf,distinct]
+      | @seq a b ha hb =>
+        have firstBound := ih a s (lexLt (Nat.le_refl _) (by simp_wf; omega)) ha rfl
+        rw [steps_seq,evaluate_seq]
+        rcases first : evaluate a s with ⟨out,middle⟩
+        rw [first] at firstBound
+        have firstClock := evaluate_clock a s out middle first
+        cases out with
+        | none =>
+          simp only
+          have codeEq := evaluate_code a s middle none first
+          have secondBound := ih b middle (lexLt firstClock (by simp_wf)) hb codeEq
+          rcases second : evaluate b middle with ⟨result,post⟩
+          rw [second] at secondBound
+          have secondClock := evaluate_clock b middle result post second
+          simp only at firstBound secondBound ⊢
+          omega
+        | some result => simp only at firstBound ⊢; omega
+      | @mark q h =>
+        have bound := ih q s (lexLt (Nat.le_refl _) (by simp_wf)) h rfl
+        simp only [steps_mark,evaluate]
+        omega
+  exact key _ p s rfl shape code
+
+/-- A completed supported execution bounds the optimized execution using the
+unoptimized visit count and the weight of the actual function table. -/
+theorem optimise_simpleSequence_source_bound {p : HolLoopProg 64}
+    (shape : SimpleLoopSequenceSource p) (optShape : SimpleLoopSequenceSource (optimiseHOL p))
+    (s post : LoopSemStateFiniteExact 64 F) (result : Option (LoopResultExact 64))
+    (code : LoopTableSupported s.code)
+    (weight : loopVisitWeight (optimiseHOL p) ≤ loopCodeWeight s.code + 2)
+    (run : evaluate p s = (result,post)) (complete : CompleteLoopResult result) :
+    evaluate (optimiseHOL p) s = (result,post) ∧
+    steps (optimiseHOL p) s ≤ loopVisitWeight (optimiseHOL p) +
+      (loopCodeWeight s.code + 2) * (2 * steps p s) := by
+  have optRun : evaluate (optimiseHOL p) s = (result,post) := by
+    apply optimise_correct p s result post
+    refine ⟨run,?_,?_,?_,?_⟩ <;> cases complete <;> simp_all
+  have optBound := simpleSequence_global_bound (optimiseHOL p) s optShape code weight
+  have consumed := simpleSequence_global_consumed p s shape code
+  rw [optRun] at optBound
+  rw [run] at consumed
+  exact ⟨optRun, optBound.trans (Nat.add_le_add_left (Nat.mul_le_mul_left _ consumed) _)⟩
+
 /-- Every table entry has the global control-node bound. -/
 theorem loopTable_entry_bound (code : Spt (List Nat × HolLoopProg width))
     (loc : Nat) (params : List Nat) (body : HolLoopProg width)
