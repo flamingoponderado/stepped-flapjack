@@ -159,7 +159,7 @@ loops with branch bodies, and direct calls with the compiler-generated handler. 
 inductive SimpleLoopSequenceSource {width : Nat} [NeZero width] : HolLoopProg width → Prop
   | branch {p} : LoopBranch p → SimpleLoopSequenceSource p
   | loop (live exits) {body} : LoopBranch body → SimpleLoopSequenceSource (.loop live body exits)
-  | tail (loc : Nat) : SimpleLoopSequenceSource (.call none (some loc) [] none)
+  | tail (loc : Nat) (args : List Nat) : SimpleLoopSequenceSource (.call none (some loc) args none)
   | returning (names : List Nat) (callLive : NumSet) (loc exception : Nat) (args : List Nat) (liveOut : NumSet) :
       SimpleLoopSequenceSource (.call (some (names,callLive)) (some loc) args
         (some (exception,.raise exception,.skip,liveOut)))
@@ -172,7 +172,7 @@ theorem loopCall_simpleSequence {p : HolLoopProg width} (shape : SimpleLoopSeque
   induction shape with
   | branch h => exact loopCall_branch h
   | loop live exits h => exact loopCall_sequence (.loop live exits h)
-  | tail loc => intro env; simp [loopCallCompHOL]
+  | tail loc args => intro env; simp [loopCallCompHOL]
   | returning names callLive loc exception args liveOut => intro env; simp [loopCallCompHOL]
   | @seq a b ha hb iha ihb =>
     intro env
@@ -194,7 +194,7 @@ theorem shrinkSequence_eq {p : HolLoopProg width} (shape : SimpleLoopSequenceSou
   | @loop liveIn liveOut body h =>
       intro lt live
       simp only [shrinkSequence,shrinkHOL,fixedpointBranch_complete h,shrinkBranch_eq h]; rfl
-  | tail loc => intro lt live; simp only [shrinkSequence,shrinkHOL]
+  | tail loc args => intro lt live; simp only [shrinkSequence,shrinkHOL]
   | returning names callLive loc exception args liveOut =>
       intro lt live
       exact shrinkSequence_returningCall lt names callLive (some loc) args exception liveOut live
@@ -214,7 +214,7 @@ theorem optimiseSequence_eq {p : HolLoopProg width} (shape : SimpleLoopSequenceS
 theorem tailEntry_to_simple {p : HolLoopProg width} (shape : TailEntryShape p) : SimpleLoopSequenceSource p := by
   induction shape with
   | branch h => exact .branch h
-  | call loc => exact .tail loc
+  | call loc => exact .tail loc []
   | seq ha hb iha ihb => exact .seq iha ihb
   | mark h ih => exact .mark ih
 
