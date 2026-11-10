@@ -421,6 +421,37 @@ theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFin
             · rw [steps.eq_def]
               simp [hg,hf,distinct,loopVisitWeight]
 
+      | @conditional cmp reg ri live a b ha hb =>
+        have wa : loopVisitWeight a ≤ loopCodeWeight s.code+2 := by simp only [loopVisitWeight] at weight; omega
+        have wb : loopVisitWeight b ≤ loopCodeWeight s.code+2 := by simp only [loopVisitWeight] at weight; omega
+        have ba := ih a s (lexLt (Nat.le_refl _) (by simp_wf; omega)) ha rfl wa
+        have bb := ih b s (lexLt (Nat.le_refl _) (by simp_wf; omega)) hb rfl wb
+        rw [steps_ite,evaluate]
+        rcases hx : sptLookup reg s.locals with _ | (x | ⟨_,_⟩) <;>
+          rcases hy : getVarImm ri s with _ | (y | ⟨_,_⟩) <;> simp only <;>
+          try (simp [loopVisitWeight]; omega)
+        by_cases hc : Flapjack.Compiler.Encoders.Asm.wordCmpHOL cmp x y = true
+        · simp only [hc,if_true]
+          rcases arun : evaluate a s with ⟨r,t⟩
+          rw [arun] at ba
+          have cut := cutRes_clock_le live (r,t)
+          have clk := evaluate_clock a s r t arun
+          simp only at ba cut
+          have delta : s.clock-t.clock ≤ s.clock-(cutRes live (r,t)).2.clock := by omega
+          have scaled := Nat.mul_le_mul_left (loopCodeWeight s.code+2) delta
+          simp only [loopVisitWeight]
+          nlinarith
+        · simp only [hc,Bool.false_eq_true,if_false]
+          rcases brun : evaluate b s with ⟨r,t⟩
+          rw [brun] at bb
+          have cut := cutRes_clock_le live (r,t)
+          have clk := evaluate_clock b s r t brun
+          simp only at bb cut
+          have delta : s.clock-t.clock ≤ s.clock-(cutRes live (r,t)).2.clock := by omega
+          have scaled := Nat.mul_le_mul_left (loopCodeWeight s.code+2) delta
+          simp only [loopVisitWeight]
+          nlinarith
+
       | @seq a b ha hb =>
         have wa : loopVisitWeight a ≤ loopCodeWeight s.code+2 := by simp only [loopVisitWeight] at weight; omega
         have wb : loopVisitWeight b ≤ loopCodeWeight s.code+2 := by simp only [loopVisitWeight] at weight; omega
@@ -561,6 +592,29 @@ theorem simpleSequence_global_consumed (p : HolLoopProg width) (s : LoopSemState
                 rw [bodyRun] at bodyBound
                 exact returningCall_consumed_step (some loc) args names callLive liveOut exception true true s cut post vals env body out hg hf distinct hcut bodyRun bodyBound
             · simp [evaluate,hg,hf,distinct]
+      | @conditional cmp reg ri live a b ha hb =>
+        have ba := ih a s (lexLt (Nat.le_refl _) (by simp_wf; omega)) ha rfl
+        have bb := ih b s (lexLt (Nat.le_refl _) (by simp_wf; omega)) hb rfl
+        rw [steps_ite,evaluate]
+        rcases hx : sptLookup reg s.locals with _ | (x | ⟨_,_⟩) <;>
+          rcases hy : getVarImm ri s with _ | (y | ⟨_,_⟩) <;> simp only <;>
+          try (simp; done)
+        by_cases hc : Flapjack.Compiler.Encoders.Asm.wordCmpHOL cmp x y = true
+        · simp only [hc,if_true]
+          rcases arun : evaluate a s with ⟨r,t⟩
+          rw [arun] at ba
+          have cut := cutRes_clock_consumed live r t
+          have clk := evaluate_clock a s r t arun
+          simp only at ba cut
+          omega
+        · simp only [hc,Bool.false_eq_true,if_false]
+          rcases brun : evaluate b s with ⟨r,t⟩
+          rw [brun] at bb
+          have cut := cutRes_clock_consumed live r t
+          have clk := evaluate_clock b s r t brun
+          simp only at bb cut
+          omega
+
       | @seq a b ha hb =>
         have firstBound := ih a s (lexLt (Nat.le_refl _) (by simp_wf; omega)) ha rfl
         rw [steps_seq,evaluate_seq]

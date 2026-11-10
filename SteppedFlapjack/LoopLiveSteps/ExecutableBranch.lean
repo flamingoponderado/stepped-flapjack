@@ -98,6 +98,12 @@ def shrinkSequence (lt : List (NumSet × NumSet)) :
       let (q,live) := shrinkSequence lt q live
       let (p,live) := shrinkSequence lt p live
       (.seq p q,live)
+  | .ite cmp r ri p q ls, live =>
+      let live := sptInter live ls
+      let (p,lp) := shrinkSequence lt p live
+      let (q,lq) := shrinkSequence lt q live
+      let lr := match ri with | .reg r => sptInsert r () .ln | _ => .ln
+      (.ite cmp r ri p q live, sptInsert r () (sptUnion lr (sptUnion lp lq)))
   | .loop liveIn body liveOut, live =>
       let l2 := sptInter liveOut live
       let bex := sptUnion liveIn l2
@@ -146,12 +152,15 @@ theorem shrinkSequence_returningCall (lt : List (NumSet × NumSet))
 theorem shrinkSequence_branch {p : HolLoopProg width} (shape : LoopBranch p) :
     ∀ lt live, shrinkSequence lt p live = shrinkBranch lt p live := by
   induction shape with
-  | skip | tick | assign _ _ | store _ _ | setGlobal _ _ | ret _ | «break» _ | «continue» _ | ite _ _ _ _ _ _ _ _ =>
+  | skip | tick | assign _ _ | store _ _ | setGlobal _ _ | ret _ | «break» _ | «continue» _ =>
       intro lt live
       rfl
   | @seq a b ha hb iha ihb =>
       intro lt live
       simp only [shrinkSequence,shrinkBranch,iha,ihb]
+  | @ite cmp r ri ls a b ha hb iha ihb =>
+    intro lt live
+    cases ri <;> simp only [shrinkSequence,shrinkBranch,iha,ihb]
   | mark h ih => intro lt live; simp only [shrinkSequence,shrinkBranch,ih]
 
 /-- Inputs handled by the structural liveness computation: branch code,
@@ -166,6 +175,8 @@ inductive SimpleLoopSequenceSource {width : Nat} [NeZero width] : HolLoopProg wi
   | returningMarked (names : List Nat) (callLive : NumSet) (loc exception : Nat) (args : List Nat) (liveOut : NumSet) :
       SimpleLoopSequenceSource (.call (some (names,callLive)) (some loc) args
         (some (exception,.mark (.raise exception),.mark .skip,liveOut)))
+  | conditional (cmp r ri live) {a b} : SimpleLoopSequenceSource a → SimpleLoopSequenceSource b →
+      SimpleLoopSequenceSource (.ite cmp r ri a b live)
   | seq {a b} : SimpleLoopSequenceSource a → SimpleLoopSequenceSource b → SimpleLoopSequenceSource (.seq a b)
   | mark {p} : SimpleLoopSequenceSource p → SimpleLoopSequenceSource (.mark p)
 
@@ -178,6 +189,7 @@ theorem loopCall_simpleSequence {p : HolLoopProg width} (shape : SimpleLoopSeque
   | tail loc args => intro env; simp [loopCallCompHOL]
   | returning names callLive loc exception args liveOut => intro env; simp [loopCallCompHOL]
   | returningMarked names callLive loc exception args liveOut => intro env; simp [loopCallCompHOL]
+  | conditional cmp r ri live ha hb iha ihb => intro env; simp only [loopCallCompHOL,iha env,ihb env]
   | @seq a b ha hb iha ihb =>
     intro env
     simp only [loopCallCompHOL]
@@ -192,6 +204,9 @@ theorem shrinkSequence_eq {p : HolLoopProg width} (shape : SimpleLoopSequenceSou
   | branch h =>
       intro lt live
       rw [shrinkSequence_branch h,shrinkBranch_eq h]
+  | conditional cmp r ri live ha hb iha ihb =>
+    intro lt current
+    cases ri <;> simp only [shrinkSequence,shrinkHOL,iha,ihb]
   | @seq a b ha hb iha ihb =>
       intro lt live
       simp only [shrinkSequence,shrinkHOL,iha,ihb]
@@ -238,6 +253,10 @@ theorem shrink_simpleSequence {p : HolLoopProg width} (shape : SimpleLoopSequenc
     intro lt live
     simp only [shrinkHOL]
     exact .returning names _ loc exception args _
+  | conditional cmp r ri ls ha hb iha ihb =>
+    intro lt live
+    cases ri <;> simp only [shrinkHOL] <;>
+      exact .conditional _ _ _ _ (iha lt (sptInter live ls)) (ihb lt (sptInter live ls))
   | @seq a b ha hb iha ihb =>
     intro lt live
     simp only [shrinkHOL]
@@ -252,6 +271,14 @@ theorem markAll_simpleSequence {p : HolLoopProg width} (shape : SimpleLoopSequen
   | tail loc args => simp only [markAllHOL]; exact .mark (.tail loc args)
   | returning names callLive loc exception args liveOut => simp only [markAllHOL,Bool.true_and,if_true]; exact .mark (.returningMarked names callLive loc exception args liveOut)
   | returningMarked names callLive loc exception args liveOut => simp only [markAllHOL,Bool.true_and,if_true]; exact .mark (.returningMarked names callLive loc exception args liveOut)
+  | @conditional cmp r ri live a b ha hb iha ihb =>
+    simp only [markAllHOL]
+    cases (markAllHOL a).2 <;> cases (markAllHOL b).2 <;>
+      simp only [Bool.false_and,Bool.true_and,if_true]
+    · exact .conditional _ _ _ _ iha ihb
+    · exact .conditional _ _ _ _ iha ihb
+    · exact .conditional _ _ _ _ iha ihb
+    · exact .mark (.conditional _ _ _ _ iha ihb)
   | @seq a b ha hb iha ihb =>
     simp only [markAllHOL]
     cases (markAllHOL a).2 <;> cases (markAllHOL b).2 <;>
