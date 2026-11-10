@@ -128,12 +128,12 @@ theorem supported_counted_full_frontend_exit {σ : Type}
   | normal l g m f final finalRel finalRanged finalWords =>
     have span := supported_entry_crep_exit_from simplified shape simplifiedSource sourceLocals sourceGlobals sourceStructs sourceExceptions
       lowerFinal none (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) lowerRun control
-    obtain ⟨targetFinal,targetRun,bound⟩ := span
+    obtain ⟨targetFinal,targetRun,bound,_⟩ := span
     exact ⟨none,targetFinal,.normal l g m f,targetRun,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
   | returned l g m f word final finalRel finalRanged finalWords =>
     have span := supported_entry_crep_exit_from simplified shape simplifiedSource sourceLocals sourceGlobals sourceStructs sourceExceptions
       lowerFinal (some word) (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) lowerRun control
-    obtain ⟨targetFinal,targetRun,bound⟩ := span
+    obtain ⟨targetFinal,targetRun,bound,_⟩ := span
     exact ⟨some word,targetFinal,.returned l g m f word,targetRun,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
   | error l g m f final finalRel finalRanged finalWords =>
     have span := supported_entry_crep_error_from simplified shape simplifiedSource sourceLocals sourceGlobals sourceStructs sourceExceptions
@@ -215,12 +215,30 @@ theorem supported_counted_full_frontend {σ : Type}
         (some (.return [.word word]),targetFinal) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program source) body) ≤
         3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) *
-          (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) := by
-  obtain ⟨exit,targetFinal,outcome,targetRun,bound⟩ := supported_counted_full_frontend_exit program supported production source
-    rel ranged words locals globals structs exceptions context primitive handler functions fuel count n
+          (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) ∧
+      FfiStateRel postFfi targetFinal.ffi := by
+  let simplified := panSimpProg program
+  let body := progToHOL simplified
+  let caller := frontendContext body
+  let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
+  let simplifiedSource := panSimpSourceState program source
+  let lower := loweredStateFrom simplifiedSource body
+  obtain ⟨holResult,sourceFinal,outcome,lowerRun,control⟩ := supported_counted_frontend_prefix program supported
+    production source rel ranged words locals context primitive handler functions fuel count n
     (.returned postLocals postGlobals postMemory postFfi [.word word]) run countBound clock
+  let lowerFinal := {{sourceFinal with code := simplifiedSource.code} with code := lower.code}
+  have shape := (supported_panSimp program supported).1
+  have sourceLocals : simplifiedSource.locals = HolFiniteMapExact.empty := by simpa [simplifiedSource,panSimpSourceState] using locals
+  have sourceGlobals : simplifiedSource.globals = HolFiniteMapExact.empty := by simpa [simplifiedSource,panSimpSourceState] using globals
+  have sourceStructs : simplifiedSource.structs = [] := by simpa [simplifiedSource,panSimpSourceState] using structs
+  have sourceExceptions : simplifiedSource.eshapes = HolFiniteMapExact.empty := by simpa [simplifiedSource,panSimpSourceState] using exceptions
   cases outcome with
-  | returned l g m f value =>
-    exact ⟨targetFinal,targetRun,by simpa [countedFrontendFactor,countedErrorBonus] using bound⟩
+  | returned l g m f value final finalRel finalRanged finalWords =>
+    obtain ⟨targetFinal,targetRun,bound,ffi⟩ := supported_entry_crep_exit_from simplified shape simplifiedSource
+      sourceLocals sourceGlobals sourceStructs sourceExceptions lowerFinal (some word)
+      (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) lowerRun control
+    have ffiRel : FfiStateRel postFfi sourceFinal.ffi := finalRel.2.2.2.2.2.2.2.2.2.2.1
+    refine ⟨targetFinal,targetRun,bound,?_⟩
+    simpa [lowerFinal] using ffi ▸ ffiRel
 
 end SteppedFlapjack.Concrete

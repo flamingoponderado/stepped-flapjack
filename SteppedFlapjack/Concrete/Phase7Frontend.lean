@@ -135,11 +135,11 @@ theorem supported_counted_loop (arch : AsmArchitecture)
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       crepToLoopMemRelHOLExact final.memory post.memory final.memaddrs ∧
       crepToLoopGlobalsRelHOLExact final.globals post.globals ∧
-      crepToLoopCodeRelExact ctxt final.code post.code := by
+      crepToLoopCodeRelExact ctxt final.code post.code ∧ FfiStateRel postFfi final.ffi := by
   let simple := panSimpProg program
   let body := progToHOL simple
   let source := panSimpSourceState program (clockedFixtureSource program (n+1))
-  obtain ⟨final,crepRun,crepBound⟩ := fixture_counted_span program supported context primitive handler fuel count (n+1)
+  obtain ⟨final,crepRun,crepBound,crepFfi⟩ := fixture_counted_span program supported context primitive handler fuel count (n+1)
     postLocals postGlobals postMemory postFfi word run (by omega)
   have scalar := (supported_panSimp program supported).1
   have nonzero : (crepStateFrom source body).clock ≠ 0 := by
@@ -151,6 +151,6 @@ theorem supported_counted_loop (arch : AsmArchitecture)
   obtain ⟨post,entry,loopRun,visits,state,mem,globals,codeRel⟩ :=
     supported_entry_loop arch simple scalar source final [.word word] (supportedCrepBudget program n)
       memory memoryRel nonzero crepRun bound
-  exact ⟨final,post,crepRun,entry,by simpa [wlabWlocExact] using loopRun,visits,state,mem,globals,codeRel⟩
+  exact ⟨final,post,crepRun,entry,by simpa [wlabWlocExact] using loopRun,visits,state,mem,globals,codeRel,crepFfi⟩
 
 end SteppedFlapjack.Concrete

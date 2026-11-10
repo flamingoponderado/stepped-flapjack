@@ -61,7 +61,8 @@ theorem supported_counted_word {C : Type}
       evalCrepSemHOLProgExact crep (.seq .skip (.call none (entryName body) [])) = (some (.return [.word word]),final) ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       target.1 = some (.result (.loc 1 0) [.word word]) ∧ target.2.ffi = post.ffi ∧
-      WordSteps.steps (.call none (some 64) [0] none) state ≤ supportedWordBound program n := by
+      WordSteps.steps (.call none (some 64) [0] none) state ≤ supportedWordBound program n ∧
+      FfiStateRel postFfi final.ffi := by
   let simple := panSimpProg program
   let body := progToHOL simple
   let pan := panSimpSourceState program (clockedFixtureSource program (n+1))
@@ -71,7 +72,7 @@ theorem supported_counted_word {C : Type}
   have shape := supportedCallee_scalar simple (supported_panSimp program supported).1
   have codeEq : code = twoPrograms (ofString "main") (entryName body) (supportedCallee body) :=
     supported_crepPrograms simple (supported_panSimp program supported).1
-  obtain ⟨final,post,crepRun,_,loopRun,loopBound,stateRel,_,_,_⟩ :=
+  obtain ⟨final,post,crepRun,_,loopRun,loopBound,stateRel,_,_,_,crepFfi⟩ :=
     supported_counted_loop riscvConfig.isa program supported context primitive handler fuel count n
       postLocals postGlobals postMemory postFfi word run countBound memory memoryRel
   have heap : timed.topAddr = timed.baseAddr + 2*fixtureHeapLength := by
@@ -95,7 +96,7 @@ theorem supported_counted_word {C : Type}
     (by rw [← codeEq]; exact sourceRun) (by rw [← codeEq]; exact sourceBound)
   obtain ⟨_,wordPost,wordResult,relation,result,ffi,bound⟩ := span
   simp only [LoopToWord.CompileCorrect.resultCase] at relation
-  refine ⟨final,post,crepRun,stateRel,?_,?_,?_⟩
+  refine ⟨final,post,crepRun,stateRel,?_,?_,?_,crepFfi⟩
   · simpa only [← codeEq,relation.2.1] using result
   · simpa only [← codeEq] using ffi
   · simpa only [supportedWordBound,phase3WordConfig_eq,← codeEq] using bound

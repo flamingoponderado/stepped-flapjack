@@ -49,7 +49,8 @@ theorem supported_counted_initializedWord
         (some (.return [.word word]),final) ∧
       crepToLoopStateRelExact final {post with clock := final.clock} ∧
       target.1 = some (.result (.loc 1 0) [.word word]) ∧ target.2.ffi = post.ffi ∧
-      WordSteps.steps (.call none (some 64) [0] none) state ≤ supportedWordBound program n := by
+      WordSteps.steps (.call none (some 64) [0] none) state ≤ supportedWordBound program n ∧
+      FfiStateRel postFfi final.ffi := by
   let body := progToHOL (panSimpProg program)
   let creps := crepPrograms body
   let words := (supportedAllocated program).2
@@ -63,7 +64,7 @@ theorem supported_counted_initializedWord
       exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
     rw [Flapjack.Compiler.Backend.WordToWord.compileWith_eq_compile _ allocator]
   have memoryRel := fixtureCrep_memory program (n+1) body code cfg good
-  obtain ⟨final,post,crepRun,stateRel,result,ffi,bound⟩ := supported_counted_word program supported
+  obtain ⟨final,post,crepRun,stateRel,result,ffi,bound,crepFfi⟩ := supported_counted_word program supported
     context primitive handler fuel count n postLocals postGlobals postMemory postFfi word run countBound
     (fixtureStack code cfg).memory memoryRel starter frame
   have startEq := fixtureStarter program (n+1) (supportedLoopBudget program n) body creps code words cfg good frame
@@ -83,5 +84,5 @@ theorem supported_counted_initializedWord
   change (WordSemStateFiniteExact.evaluate (.call none (some 64) [0] none) wordState).2.ffi = _ at ffi
   change WordSteps.steps (.call none (some 64) [0] none) wordState ≤ _ at bound
   rw [startEq'] at result ffi bound
-  exact ⟨final,post,crepRun,stateRel,result,ffi,bound⟩
+  exact ⟨final,post,crepRun,stateRel,result,ffi,bound,crepFfi⟩
 end SteppedFlapjack.Concrete

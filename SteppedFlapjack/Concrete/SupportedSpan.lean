@@ -78,7 +78,8 @@ theorem supported_entry_crep_exit_from {σ : Type}
     let entry : CrepProgHOL 64 := .seq .skip (.call none (entryName body) [])
     ∃ targetFinal,
       evalCrepSemHOLProgExact (crepStateFrom source body) entry = (bodyExitEntry exit,targetFinal) ∧
-      CrepSteps.steps entry (crepStateFrom source body) ≤ 3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) * sourceLimit := by
+      CrepSteps.steps entry (crepStateFrom source body) ≤ 3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) * sourceLimit ∧
+      targetFinal.ffi = sourceFinal.ffi := by
   let body := progToHOL program
   let caller := frontendContext body
   let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []
@@ -90,7 +91,7 @@ theorem supported_entry_crep_exit_from {σ : Type}
   have span := frontend_correct_with_steps callee body (supported_frontend_shape supported callee)
     pan sourceFinal (bodyExitSource exit) target sourceLimit run (by cases exit <;> simp [bodyExitSource]) sourceBound
     stateRel codeRel excpRel localsRel
-  obtain ⟨targetResult,targetFinal,targetRun,_,_,_,resultRel,bound⟩ := span
+  obtain ⟨targetResult,targetFinal,targetRun,finalRel,_,_,resultRel,bound⟩ := span
   have nonzero : crep.clock ≠ 0 := by
     simp [crep,crepStateFrom,concreteDeclCrepState,loweredStateFrom,noGlobalsLoweredPreCall]
   cases exit with
@@ -102,14 +103,14 @@ theorem supported_entry_crep_exit_from {σ : Type}
     subst targetResult
     have wrapper := CrepSteps.tail_entry crep (entryName body) (compileProgExactHOLW callee body)
       none targetFinal _ lookup nonzero (by simpa [target,flattenHOL] using targetRun) bound
-    exact ⟨targetFinal,by simpa [CrepSteps.tailExit,bodyExitEntry] using wrapper.1,wrapper.2⟩
+    exact ⟨targetFinal,by simpa [CrepSteps.tailExit,bodyExitEntry] using wrapper.1,wrapper.2,finalRel.2.2.2.2.2.2.2.1.symm⟩
   | some word =>
     have result : targetResult = some (.return [.word word]) := by
       simpa [bodyExitSource,pcCompileCorrectResultRel,flattenHOL] using resultRel
     subst targetResult
     have wrapper := CrepSteps.tail_entry crep (entryName body) (compileProgExactHOLW callee body)
       (some (.return [.word word])) targetFinal _ lookup nonzero (by simpa [target,flattenHOL] using targetRun) bound
-    exact ⟨targetFinal.emptyLocals,by simpa [CrepSteps.tailExit,bodyExitEntry] using wrapper.1,wrapper.2⟩
+    exact ⟨targetFinal.emptyLocals,by simpa [CrepSteps.tailExit,bodyExitEntry] using wrapper.1,wrapper.2,by simpa [CrepSemHOLState.emptyLocals] using finalRel.2.2.2.2.2.2.2.1.symm⟩
 theorem supported_entry_crep_error_from {σ : Type}
     (program : Prog (RiscV.Word 64)) (supported : Supported program)
     (source : PanSemStateFiniteExact 64 σ)

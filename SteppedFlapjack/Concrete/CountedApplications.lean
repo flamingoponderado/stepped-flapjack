@@ -46,7 +46,8 @@ theorem fixture_counted_span (program : Prog (RiscV.Word 64)) (supported : Suppo
     ∃ final, evalCrepSemHOLProgExact (crepStateFrom (panSimpSourceState program (clockedFixtureSource program n)) body) entry =
       (some (.return [.word word]),final) ∧
       CrepSteps.steps entry (crepStateFrom (panSimpSourceState program (clockedFixtureSource program n)) body) ≤
-        3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) := by
+        3 + CrepSteps.statementWeight (compileProgExactHOLW callee body) * (n + 1 + CrepSteps.statementWeight (compileProgExactHOLW callee body)) ∧
+      FfiStateRel postFfi final.ffi := by
   let source := clockedFixtureSource program n
   let production := clockedFixtureProduction program n
   let _ : DecidablePred source.memaddrs := by
@@ -101,6 +102,7 @@ theorem countdown_counted_fixture (n : Nat) (range : n < 2^64)
     (restorePanValueLocal (fun _ => none) "x" ((executableState (progToHOL (countdown n))).locals "x"))
     (executableState (progToHOL (countdown n))).globals (executableState (progToHOL (countdown n))).memory
     (executableState (progToHOL (countdown n))).ffi 0 run' (by omega)
+  have span := span.imp fun _ h => And.intro h.1 h.2.1
   simp only [countdown_simp_program] at span
   have size := natural_compiled_size n
   change ∃ final, evalCrepSemHOLProgExact
@@ -146,6 +148,7 @@ theorem natural_countdown_counted_fixture (n : Nat) (range : n < 2^64)
     (executableState (progToHOL (naturalCountdown n))).ffi 0 run' (by omega)
   have simpEq : panSimpProg (naturalCountdown n) = naturalCountdown n := by
     simp [panSimpProg,retToTail,seqAssoc,smartSeq,seqCallRet,naturalCountdown,countdownBody]
+  have span := span.imp fun _ h => And.intro h.1 h.2.1
   simp only [simpEq] at span
   have size := natural_compiled_size n
   change ∃ final, evalCrepSemHOLProgExact
@@ -181,6 +184,7 @@ theorem branching_counted_fixture
   have span := fixture_counted_span branching branching_supported context primitive handler 2 6 6
     (executableState (progToHOL branching)).locals (executableState (progToHOL branching)).globals
     (executableState (progToHOL branching)).memory (executableState (progToHOL branching)).ffi 7 run' (by omega)
+  have span := span.imp fun _ h => And.intro h.1 h.2.1
   simp only [branching_simp_program,← branching_hol_eq] at span
   have relations := supported_callee_relations branching branching_supported
   simp only [← branching_hol_eq] at relations
@@ -213,6 +217,7 @@ theorem branching_loop_counted_fixture
   have span := fixture_counted_span branchingLoop branchingLoop_supported context primitive handler 7 23 23
     (executableState (progToHOL branchingLoop)).locals (executableState (progToHOL branchingLoop)).globals
     (executableState (progToHOL branchingLoop)).memory (executableState (progToHOL branchingLoop)).ffi 7 run (by omega)
+  have span := span.imp fun _ h => And.intro h.1 h.2.1
   simp only [branchingLoop_simp_program] at span
   have lookup := (supported_callee_relations branchingLoop branchingLoop_supported).1
   have codeEq : compileProgExactHOLW branchingLoopCalleeContext (progToHOL branchingLoop) = branchingLoopCrepBody := by
