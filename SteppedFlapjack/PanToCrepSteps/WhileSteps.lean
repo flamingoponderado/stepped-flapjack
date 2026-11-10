@@ -687,6 +687,26 @@ theorem decCall_entries {width : Nat} [NeZero width] {σ : Type}
   simpa [decClockCrepSemHOL] using count
 
 
+private theorem nestedDecs_weight {width : Nat} [NeZero width]
+    (names : List Nat) (body : CrepProgHOL width) :
+    CrepSteps.statementWeight (nestedDecsHOL names (List.replicate names.length (.const (0 : BitVec width))) body) =
+      names.length + CrepSteps.statementWeight body := by
+  induction names with
+  | nil => simp [nestedDecsHOL]
+  | cons name rest ih =>
+    simp only [List.length_cons,List.replicate_succ,nestedDecsHOL,CrepSteps.statementWeight,ih]
+    omega
+
+/-- The actual generated statement weight includes every return slot, the call,
+and the continuation. -/
+theorem decCall_statementWeight {width : Nat} [NeZero width]
+    (ctxt : PanToCrepContextExact width) (name fname : MlS) (shape : ShapeHOL)
+    (args : List (ExpHOL width)) (cont : ProgHOL width) :
+    CrepSteps.statementWeight (compileProgExactHOLW ctxt (.decCall name shape fname args cont)) =
+      sizeOfShapeHOL shape + 2 + CrepSteps.statementWeight (compileProgExactHOLW (decCallCtxt ctxt name shape) cont) := by
+  rw [compileDecCallShape,nestedDecs_weight]
+  simp [decCallSlots,CrepSteps.statementWeight,Nat.add_assoc]
+
 /-- Slot initialization preserves the call arguments and callee execution. -/
 theorem initializedCall_afterBody {width : Nat} [NeZero width] {σ : Type}
     (target : CrepSemHOLState width σ) (fname : MlS) (args : List (CrepExpHOL width))
