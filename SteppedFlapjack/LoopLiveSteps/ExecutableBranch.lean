@@ -163,6 +163,9 @@ inductive SimpleLoopSequenceSource {width : Nat} [NeZero width] : HolLoopProg wi
   | returning (names : List Nat) (callLive : NumSet) (loc exception : Nat) (args : List Nat) (liveOut : NumSet) :
       SimpleLoopSequenceSource (.call (some (names,callLive)) (some loc) args
         (some (exception,.raise exception,.skip,liveOut)))
+  | returningMarked (names : List Nat) (callLive : NumSet) (loc exception : Nat) (args : List Nat) (liveOut : NumSet) :
+      SimpleLoopSequenceSource (.call (some (names,callLive)) (some loc) args
+        (some (exception,.mark (.raise exception),.mark .skip,liveOut)))
   | seq {a b} : SimpleLoopSequenceSource a → SimpleLoopSequenceSource b → SimpleLoopSequenceSource (.seq a b)
   | mark {p} : SimpleLoopSequenceSource p → SimpleLoopSequenceSource (.mark p)
 
@@ -174,6 +177,7 @@ theorem loopCall_simpleSequence {p : HolLoopProg width} (shape : SimpleLoopSeque
   | loop live exits h => exact loopCall_sequence (.loop live exits h)
   | tail loc args => intro env; simp [loopCallCompHOL]
   | returning names callLive loc exception args liveOut => intro env; simp [loopCallCompHOL]
+  | returningMarked names callLive loc exception args liveOut => intro env; simp [loopCallCompHOL]
   | @seq a b ha hb iha ihb =>
     intro env
     simp only [loopCallCompHOL]
@@ -198,6 +202,9 @@ theorem shrinkSequence_eq {p : HolLoopProg width} (shape : SimpleLoopSequenceSou
   | returning names callLive loc exception args liveOut =>
       intro lt live
       exact shrinkSequence_returningCall lt names callLive (some loc) args exception liveOut live
+  | returningMarked names callLive loc exception args liveOut =>
+      intro lt live
+      simp [shrinkSequence,shrinkBranch,shrinkHOL]
   | mark h ih => intro lt live; simp only [shrinkSequence,shrinkHOL,ih]
 
 /-- The whole optimizer can be evaluated structurally on supported programs,
