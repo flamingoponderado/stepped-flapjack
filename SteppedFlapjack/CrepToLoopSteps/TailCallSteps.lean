@@ -11,13 +11,55 @@ namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.LoopSemStateFiniteExact Flapjack.Basis.Pure.MlString
 open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 
+/-- Direct argument expressions compile without auxiliary Loop code. -/
+theorem directExpressions_noCode {width : Nat} [NeZero width]
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, DirectExpression e)
+    (ctxt : CrepToLoopContextExact) (tmp : Nat) (live : NumSet) :
+    ∃ values, compileExpsHOLExact ctxt tmp live args = ([],values,tmp,live) ∧ values.length = args.length := by
+  induction args with
+  | nil => exact ⟨[],by simp [compileExpsHOLExact],rfl⟩
+  | cons e es ih =>
+    obtain ⟨value,head⟩ := directExpression_noCode (shape e (by simp)) ctxt tmp live
+    obtain ⟨values,tail,len⟩ := ih (fun x hx => shape x (by simp [hx]))
+    refine ⟨value :: values,?_,by simp [len]⟩
+    simp [compileExpsHOLExact,head,tail]
+
+/-- Direct arguments are assigned to temporaries before a tail call. -/
+theorem compile_tailCall_direct {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : Flapjack.Basis.Pure.MlString.MlString)
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, DirectExpression e) :
+    ∃ values, values.length = args.length ∧
+      compileHOLExact ctxt live (.call none name args) =
+        loopNestedSeqHOL ((genTemps (ctxt.vmax+1) args.length).zipWith HolLoopProg.assign values ++
+          [.call none (some (findLabExact ctxt name)) (genTemps (ctxt.vmax+1) args.length) none]) := by
+  obtain ⟨values,compiled,len⟩ := directExpressions_noCode args shape ctxt (ctxt.vmax+1) live
+  refine ⟨values,len,?_⟩
+  simp [compileHOLExact,compiled,len]
+
+/-- Direct arguments are assigned to temporaries before a returning call. -/
+theorem compile_returningCall_direct {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : Flapjack.Basis.Pure.MlString.MlString)
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, DirectExpression e)
+    (names returnNames : List Nat) (mapped : names.mapM ctxt.vars.lookup = some returnNames) :
+    ∃ values, values.length = args.length ∧
+      compileHOLExact ctxt live (.call (some (names,none)) name args) =
+        loopNestedSeqHOL ((genTemps (ctxt.vmax+1) args.length).zipWith HolLoopProg.assign values ++
+          [.call (some (returnNames,live)) (some (findLabExact ctxt name)) (genTemps (ctxt.vmax+1) args.length)
+            (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))]) := by
+  obtain ⟨values,compiled,len⟩ := directExpressions_noCode args shape ctxt (ctxt.vmax+1) live
+  refine ⟨values,len,?_⟩
+  simp [compileHOLExact,compiled,len,mapped]
+
 /-- The exact Crep compiler emits one Loop call, in its nested-sequence
 wrapper, for a zero-argument tail call. -/
 theorem compile_tailCall_nil {width : Nat} [NeZero width]
     (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString) :
     compileHOLExact ctxt live (.call none name [] : CrepProgHOL width) =
       .seq (.call none (some (findLabExact ctxt name)) [] none) .skip := by
-  simp [compileHOLExact,compileExpsHOLExact,genTemps,loopNestedSeqHOL]
+  obtain ⟨values,len,compiled⟩ := compile_tailCall_direct (width := width) ctxt live name [] (by simp)
+  have empty : values = [] := by simpa using len
+  subst values
+  simpa [genTemps,loopNestedSeqHOL] using compiled
 
 /-- The compiler code relation determines the actual callee and its argument
 registers for every function arity. -/
@@ -122,7 +164,10 @@ theorem compile_returningCall_nil {width : Nat} [NeZero width]
     compileHOLExact ctxt live (.call (some (names,none)) name [] : CrepProgHOL width) =
       .seq (.call (some (returnNames,live)) (some (findLabExact ctxt name)) []
         (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) .skip := by
-  simp [compileHOLExact,compileExpsHOLExact,genTemps,loopNestedSeqHOL,mapped]
+  obtain ⟨values,len,compiled⟩ := compile_returningCall_direct (width := width) ctxt live name [] (by simp) names returnNames mapped
+  have empty : values = [] := by simpa using len
+  subst values
+  simpa [genTemps,loopNestedSeqHOL] using compiled
 
 /-- A successful compiled returning call counts its reached callee and at most
 four call and continuation nodes. The code relation selects the actual callee. -/
