@@ -1173,6 +1173,9 @@ theorem decCall_return_bound_from_induction {width : Nat} [NeZero width] {σ : T
       panToCrepExcpRelFiniteExact next.eids (callEntryStateHOLFinite source locals).eshapes →
       panToCrepLocalsRelFiniteExact next (callEntryStateHOLFinite source locals).locals
         ({decClockCrepSemHOL target with locals := tlcHOL ns args}).locals →
+      ∀ (calleeResult : Option (PanSemResultExact width)) (calleePost : PanSemStateFiniteExact width σ),
+      (callEntryStateHOLFinite source locals).evaluateHOLFiniteState body = (calleeResult,calleePost) →
+      calleeResult ≠ some .error →
       CrepSteps.steps (compileProgExactHOLW next body) {decClockCrepSemHOL target with locals := tlcHOL ns args} ≤
         K * controlSteps body (callEntryStateHOLFinite source locals))
     (contIH : ∀ targetPost : CrepSemHOLState width σ,
@@ -1198,7 +1201,7 @@ theorem decCall_return_bound_from_induction {width : Nat} [NeZero width] {σ : T
   have smaller : (callEntryStateHOLFinite source locals).clock < source.clock := by
     simp only [callEntryStateHOLFinite]
     omega
-  have b := bodyIH shapes hsrc htgt smaller hlocal bs bc be bl
+  have b := bodyIH shapes hsrc htgt smaller hlocal bs bc be bl (some (.returned value)) sourcePost bodyRun (by simp)
   rcases contRun : (setVarHOLFinite name value {sourcePost with locals := source.locals}).evaluateHOLFiniteState continuation with ⟨contResult,contPost⟩
   have resultEq : contResult = result := by
     rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at run
@@ -1248,6 +1251,9 @@ theorem decCall_terminal_bound_from_induction {width : Nat} [NeZero width] {σ :
       panToCrepExcpRelFiniteExact next.eids (callEntryStateHOLFinite source locals).eshapes →
       panToCrepLocalsRelFiniteExact next (callEntryStateHOLFinite source locals).locals
         ({decClockCrepSemHOL target with locals := tlcHOL ns args}).locals →
+      ∀ (calleeResult : Option (PanSemResultExact width)) (calleePost : PanSemStateFiniteExact width σ),
+      (callEntryStateHOLFinite source locals).evaluateHOLFiniteState body = (calleeResult,calleePost) →
+      calleeResult ≠ some .error →
       CrepSteps.steps (compileProgExactHOLW next body) {decClockCrepSemHOL target with locals := tlcHOL ns args} ≤
         K * controlSteps body (callEntryStateHOLFinite source locals))
  :
@@ -1259,7 +1265,7 @@ theorem decCall_terminal_bound_from_induction {width : Nat} [NeZero width] {σ :
   have smaller : (callEntryStateHOLFinite source locals).clock < source.clock := by
     simp only [callEntryStateHOLFinite]
     omega
-  have b := bodyIH shapes hsrc htgt smaller hlocal bs bc be bl
+  have b := bodyIH shapes hsrc htgt smaller hlocal bs bc be bl result sourcePost bodyRun nonerror
   have overhead : (decCallSlots ctxt shape).length + 2 ≤ K := by
     rw [decCall_statementWeight] at weight
     simp [decCallSlots]
