@@ -133,4 +133,57 @@ theorem countdownFixture_initialized_loop (n : Nat) (range : n < 2^64) (cfg : La
   · simpa only [countdown_optimized_weight] using entry
   · simpa only [countdown_optimized_weight] using steps
 
+
+/-- The initialized-memory countdown Loop run reaches the optimized Word entry
+with the same initialized memory and an explicit Word visit bound. -/
+theorem countdownFixture_initialized_word (n : Nat) (range : n < 2^64) (cfg : LabToTarget.Config)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit)
+    (template : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) Unit) (frame : Nat) :
+    let pan := panSimpSourceState (countdown n) (clockedFixtureSource (countdown n) (6*n+9))
+    let crep := crepStateFrom pan (naturalCountdownHOL n)
+    let starter := {(countdownWordStarter n template frame) with memory := (countdownFixtureStack n cfg).memory}
+    let target := WordSemStateFiniteExact.evaluate (.call none (some 64) [0] none)
+      {starter with clock := 6*countdownLoopVisits n+1, code := sptFromAList (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n)).2}
+    ∃ (final : CrepSemHOLState 64 Unit) (post : Flapjack.LoopSemStateFiniteExact 64 Unit),
+      evalCrepSemHOLProgExact crep (naturalCrepEntry n) = (some (.return [.word 0]),final) ∧
+      crepToLoopStateRelExact final {post with clock := final.clock} ∧
+      target.1 = some (.result (.loc 1 0) [.word 0]) ∧ target.2.ffi = post.ffi ∧
+      WordSteps.steps (.call none (some 64) [0] none)
+        {starter with clock := 6*countdownLoopVisits n+1, code := sptFromAList (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n)).2} ≤
+        countdownWordBound n := by
+  let pan := panSimpSourceState (countdown n) (clockedFixtureSource (countdown n) (6*n+9))
+  let crep := crepStateFrom pan (naturalCountdownHOL n)
+  let timed := {crep with clock := crep.clock + countdownLoopBudget n}
+  let memory := (countdownFixtureStack n cfg).memory
+  have code : crepPrograms (naturalCountdownHOL n) = countdownCrepCode n := by
+    simpa [countdownCrepCode,phase3CountdownCrepBody,twoPrograms] using natural_countdown_crep_code n
+  obtain ⟨final,post,crepRun,_,loopRun,loopBound,stateRel,_,_,_⟩ :=
+    countdownFixture_initialized_loop n range cfg context primitive handler
+  have heap : timed.topAddr = timed.baseAddr + 2*fixtureHeapLength := by
+    simpa [timed,crep,pan] using fixture_heap (countdown n) (6*n+9) (naturalCountdownHOL n)
+  have loopEq : {(concreteDeclLoopState riscvConfig.isa timed (countdownCrepCode n)) with memory := memory} =
+      {(loopStateFrom riscvConfig.isa pan (naturalCountdownHOL n)) with memory := memory, clock := (loopStateFrom riscvConfig.isa pan (naturalCountdownHOL n)).clock + countdownLoopBudget n} := by
+    simp [timed,crep,pan,loopStateFrom,concreteDeclLoopState,code]
+  have sourceRun : Flapjack.LoopSemStateFiniteExact.evaluate branchingLoopEntry
+      {(concreteDeclLoopState riscvConfig.isa timed (countdownCrepCode n)) with memory := memory} =
+      (some (.result [.word 0]),post) := by
+    rw [loopEq]
+    simpa [pan,memory,countdownLoopBudget] using loopRun
+  have sourceBound : LoopSteps.steps branchingLoopEntry
+      {(concreteDeclLoopState riscvConfig.isa timed (countdownCrepCode n)) with memory := memory} ≤ countdownLoopVisits n := by
+    rw [loopEq]
+    simpa [pan,memory,countdownLoopBudget,countdownLoopVisits] using loopBound
+  have span := twoProgram_wholeWord_span riscvConfig.isa (ofString "main") (entryName (naturalCountdownHOL n))
+    (phase3CountdownCrepBody n) (Ne.symm (entryName_fresh (naturalCountdownHOL n))) (naturalCountdown_scalar n)
+    timed post [.word 0] (countdownLoopVisits n) template fixtureHeapLength frame
+    countdownRiscVBackend.wordToWordConf riscvConfig memory heap sourceRun sourceBound
+  obtain ⟨_,wordPost,wordResult,relation,result,ffi,bound⟩ := span
+  simp only [LoopToWord.CompileCorrect.resultCase] at relation
+  refine ⟨final,post,?_,stateRel,?_,?_,?_⟩
+  · simpa [crep,pan] using crepRun
+  · simpa [countdownWordStarter,countdownCrepCode,phase3CountdownCrepBody,countdownWordPrograms,crep,timed,pan,memory,relation.2.1] using result
+  · simpa [countdownWordStarter,countdownCrepCode,phase3CountdownCrepBody,countdownWordPrograms,crep,timed,pan,memory] using ffi
+  · simpa [countdownWordBound,phase3WordConfig_eq,countdownWordStarter,countdownCrepCode,phase3CountdownCrepBody,countdownWordPrograms,crep,timed,pan,memory] using bound
+
 end SteppedFlapjack.Concrete

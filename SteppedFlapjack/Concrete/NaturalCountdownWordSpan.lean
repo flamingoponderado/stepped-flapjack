@@ -59,7 +59,7 @@ theorem naturalCountdown_wholeWord (n : Nat) (range : n < 2^64)
   have span := twoProgram_wholeWord_span riscvConfig.isa (ofString "main") (entryName (naturalCountdownHOL n))
     (phase3CountdownCrepBody n) (Ne.symm (entryName_fresh (naturalCountdownHOL n))) (naturalCountdown_scalar n)
     timed post [.word 0] (naturalCountdownLoopVisits n) template fixtureHeapLength frame
-    countdownRiscVBackend.wordToWordConf riscvConfig heap sourceRun sourceBound
+    countdownRiscVBackend.wordToWordConf riscvConfig (phase3Starter riscvConfig.isa timed (countdownCrepCode n) template fixtureHeapLength 64 frame).memory heap sourceRun sourceBound
   obtain ⟨_,wordPost,wordResult,relation,result,ffi,bound⟩ := span
   simp only [LoopToWord.CompileCorrect.resultCase] at relation
   refine ⟨final,post,?_,stateRel,?_,?_,?_⟩

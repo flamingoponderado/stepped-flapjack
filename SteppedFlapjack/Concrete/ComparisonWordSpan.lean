@@ -62,7 +62,7 @@ theorem branching_wholeWord (context : PanValueFfiContext (RiscV.Word 64)) (prim
   have span := twoProgram_wholeWord_span riscvConfig.isa (ofString "main") (entryName branchingHOL)
     branchCrepBody (Ne.symm (entryName_fresh (branchingHOL))) branching_scalar
     timed post [.word 7] comparisonLoopVisits template fixtureHeapLength frame
-    countdownRiscVBackend.wordToWordConf riscvConfig heap sourceRun sourceBound
+    countdownRiscVBackend.wordToWordConf riscvConfig (phase3Starter riscvConfig.isa timed (comparisonCrepCode) template fixtureHeapLength 64 frame).memory heap sourceRun sourceBound
   obtain ⟨_,wordPost,wordResult,relation,result,ffi,bound⟩ := span
   simp only [LoopToWord.CompileCorrect.resultCase] at relation
   refine ⟨final,post,?_,stateRel,?_,?_,?_⟩

@@ -49,15 +49,15 @@ theorem twoProgram_wholeWord_span (arch : AsmArchitecture) (name callee : MlStri
     (fresh : name ≠ callee) (shape : ScalarProgram body) (source : CrepSemHOLState 64 F)
     (post : LoopSemStateFiniteExact 64 F) (values : List (WordLocW 64)) (limit : Nat)
     (template : WordSemStateFiniteExact 64 C F) (heapLength : BitVec 64) (frame : Nat)
-    (wc : Config) (ac : AsmConfigExact 64)
+    (wc : Config) (ac : AsmConfigExact 64) (memory : BitVec 64 → WordLocW 64)
     (heap : source.topAddr = source.baseAddr + 2 * heapLength)
-    (run : evaluate branchingLoopEntry (concreteDeclLoopState arch source (twoPrograms name callee body)) =
+    (run : evaluate branchingLoopEntry ({(concreteDeclLoopState arch source (twoPrograms name callee body)) with memory := memory}) =
       (some (.result values),post))
-    (sourceBound : LoopSteps.steps branchingLoopEntry (concreteDeclLoopState arch source (twoPrograms name callee body)) ≤ limit) :
+    (sourceBound : LoopSteps.steps branchingLoopEntry {(concreteDeclLoopState arch source (twoPrograms name callee body)) with memory := memory} ≤ limit) :
     let crep := twoPrograms name callee body
     let loops := compileProgHOLExact arch crep
     let words := loopToWordCompileHOL loops
-    let starter := phase3Starter arch source crep template heapLength 64 frame
+    let starter := {(phase3Starter arch source crep template heapLength 64 frame) with memory := memory}
     let target := WordSemStateFiniteExact.evaluate (.call none (some 64) [0] none)
       {starter with clock := 6*limit+1, code := sptFromAList (compile wc ac words).2}
     let ctxt := makeCtxtHOL 2 (LoopToWord.fromNumSetHOL
@@ -75,8 +75,8 @@ theorem twoProgram_wholeWord_span (arch : AsmArchitecture) (name callee : MlStri
   let crep := twoPrograms name callee body
   let loops := compileProgHOLExact arch crep
   let words := loopToWordCompileHOL loops
-  let starter := phase3Starter arch source crep template heapLength 64 frame
-  let loop := concreteDeclLoopState arch source crep
+  let starter := {(phase3Starter arch source crep template heapLength 64 frame) with memory := memory}
+  let loop := {(concreteDeclLoopState arch source crep) with memory := memory}
   let ctxt := makeCtxtHOL 2 (LoopToWord.fromNumSetHOL
     (sptDifference (accVarsHOL branchingLoopEntry .ln) (LoopToWord.toNumSetHOL []))) .ln
   let word := WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)]
@@ -84,8 +84,8 @@ theorem twoProgram_wholeWord_span (arch : AsmArchitecture) (name callee : MlStri
   have loopEq : loops = twoLoopPrograms arch name callee body := by
     exact (twoLoopPrograms_eq arch name callee body shape).symm
   have facts := twoWordTables_facts arch name callee body fresh shape
-  have starterFacts := phase3Starter_relations arch source crep template heapLength 64 frame heap
-  have localFacts := phase3Starter_locals arch source crep template heapLength 64 frame branchingLoopEntry
+  have starterFacts := phase3Starter_relations arch source crep template heapLength 64 frame memory heap
+  have localFacts := phase3Starter_locals arch source crep template heapLength 64 frame branchingLoopEntry memory
   have codeEq : starter.code = sptFromAList words := rfl
   have entryMember : (64,1,(LoopToWord.compHOL ctxt branchingLoopEntry (64,2)).1) ∈ words := by
     change (64,1,loopToWordCompFuncHOL 64 [] branchingLoopEntry) ∈ words

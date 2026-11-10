@@ -25,15 +25,15 @@ register, empty-stack and native garbage-collector requirements. -/
 theorem phase3Starter_relations (arch : AsmArchitecture) (source : CrepSemHOLState 64 F)
     (programs : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × CrepProgHOL 64))
     (template : WordSemStateFiniteExact 64 C F) (heapLength : BitVec 64) (start frame : Nat)
-    (heap : source.topAddr = source.baseAddr + 2 * heapLength) :
-    let loop := concreteDeclLoopState arch source programs
-    let starter := phase3Starter arch source programs template heapLength start frame
+    (memory : BitVec 64 → WordLocW 64) (heap : source.topAddr = source.baseAddr + 2 * heapLength) :
+    let loop := {(concreteDeclLoopState arch source programs) with memory := memory}
+    let starter := {(phase3Starter arch source programs template heapLength start frame) with memory := memory}
     let word := callEnv [(.loc 1 0 : WordLocW 64)] (sptLookup start starter.stackSize) (decClock starter)
     loopToWordStateRelHOLExact loop word ∧
     getVar 0 starter = some (.loc 1 0) ∧ starter.stack = [] ∧
     Flapjack.Compiler.Backend.WordSimp.gcFunConstOk starter.gcFun := by
-  let loop := concreteDeclLoopState arch source programs
-  let starter := phase3Starter arch source programs template heapLength start frame
+  let loop := {(concreteDeclLoopState arch source programs) with memory := memory}
+  let starter := {(phase3Starter arch source programs template heapLength start frame) with memory := memory}
   let word := callEnv [(.loc 1 0 : WordLocW 64)] (sptLookup start starter.stackSize) (decClock starter)
   have data := (concreteDecl_word_data arch source programs template heapLength heap).1
   have rel := wholeCrepLoopWord_codeRel arch programs
@@ -49,16 +49,16 @@ theorem phase3Starter_relations (arch : AsmArchitecture) (source : CrepSemHOLSta
 theorem phase3Starter_locals (arch : AsmArchitecture) (source : CrepSemHOLState 64 F)
     (programs : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × CrepProgHOL 64))
     (template : WordSemStateFiniteExact 64 C F) (heapLength : BitVec 64) (start frame : Nat)
-    (p : HolLoopProg 64) :
-    let loop := concreteDeclLoopState arch source programs
-    let starter := phase3Starter arch source programs template heapLength start frame
+    (p : HolLoopProg 64) (memory : BitVec 64 → WordLocW 64) :
+    let loop := {(concreteDeclLoopState arch source programs) with memory := memory}
+    let starter := {(phase3Starter arch source programs template heapLength start frame) with memory := memory}
     let word := callEnv [(.loc 1 0 : WordLocW 64)] (sptLookup start starter.stackSize) (decClock starter)
     let ctxt := makeCtxtHOL 2 (LoopToWord.fromNumSetHOL
       (sptDifference (accVarsHOL p .ln) (LoopToWord.toNumSetHOL []))) .ln
     LoopToWord.localsRelHOL ctxt loop.locals word.locals ∧
     sptLookup 0 word.locals = some (.loc 1 0) ∧
     (∀ k, sptMem k (accVarsHOL p .ln) → sptMem k ctxt) := by
-  let starter := phase3Starter arch source programs template heapLength start frame
+  let starter := {(phase3Starter arch source programs template heapLength start frame) with memory := memory}
   have frameLookup : sptLookup start starter.stackSize = some frame := by
     exact sptLookup_sptInsert_same start frame template.stackSize
   have localFacts := SteppedFlapjack.WordToStackSteps.nativeTailEntry_loopLocals p (decClock starter) frame
