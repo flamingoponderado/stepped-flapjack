@@ -50,6 +50,100 @@ theorem compile_returningCall_direct {width : Nat} [NeZero width]
   refine ⟨values,len,?_⟩
   simp [compileHOLExact,compiled,len,mapped]
 
+/-- Generated argument assignments cost at most two visits each, plus the
+reached call and its final wrapper. -/
+theorem assignmentPrefix_steps {width : Nat} [NeZero width] {F : Type}
+    (registers : List Nat) (values : List (HolLoopExp width)) (call : HolLoopProg width)
+    (s : LoopSemStateFiniteExact width F) :
+    LoopSteps.steps (loopNestedSeqHOL (registers.zipWith HolLoopProg.assign values ++ [call])) s ≤
+      2 * (registers.zip values).length + 2 +
+        match evaluate (loopNestedSeqHOL (registers.zipWith HolLoopProg.assign values)) s with
+        | (none,t) => LoopSteps.steps call t
+        | _ => 0 := by
+  induction registers generalizing values s with
+  | nil =>
+    simp only [List.zipWith_nil_left,List.zip_nil_left,List.length_nil,List.nil_append,loopNestedSeqHOL,LoopSteps.steps_seq,evaluate]
+    rcases run : evaluate call s with ⟨out,post⟩
+    cases out with
+    | none =>
+      simp only
+      have h := LoopSteps.steps_leaf (.skip : HolLoopProg width) post rfl
+      omega
+    | some r => simp only; omega
+  | cons reg rest ih =>
+    cases values with
+    | nil =>
+      simp only [List.zipWith_nil_right,List.zip_nil_right,List.length_nil,List.nil_append,loopNestedSeqHOL,LoopSteps.steps_seq,evaluate]
+      rcases run : evaluate call s with ⟨out,post⟩
+      cases out with
+      | none =>
+        simp only
+        have h := LoopSteps.steps_leaf (.skip : HolLoopProg width) post rfl
+        omega
+      | some r => simp only; omega
+    | cons exp es =>
+      simp only [List.zipWith_cons_cons,List.zip_cons_cons,List.length_cons,List.cons_append,loopNestedSeqHOL,LoopSteps.steps_seq,evaluate_seq]
+      have leaf := LoopSteps.steps_leaf (.assign reg exp : HolLoopProg width) s rfl
+      rcases run : evaluate (.assign reg exp : HolLoopProg width) s with ⟨out,post⟩
+      cases out with
+      | none =>
+        simp only
+        have bound := ih es post
+        omega
+      | some r => simp only; omega
+
+/-- The direct-argument tail-call wrapper has linear cost in its arity. -/
+theorem compile_tailCall_direct_steps {width : Nat} [NeZero width] {F : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : Flapjack.Basis.Pure.MlString.MlString)
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, DirectExpression e)
+    (s : LoopSemStateFiniteExact width F) :
+    let values := (compileExpsHOLExact ctxt (ctxt.vmax+1) live args).2.1
+    let regs := genTemps (ctxt.vmax+1) args.length
+      let call : HolLoopProg width := .call none (some (findLabExact ctxt name)) regs none
+      LoopSteps.steps (compileHOLExact ctxt live (.call none name args)) s ≤
+        2 * args.length + 2 +
+          match evaluate (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign values)) s with
+          | (none,t) => LoopSteps.steps call t
+          | _ => 0 := by
+  obtain ⟨values,compiled,len⟩ := directExpressions_noCode args shape ctxt (ctxt.vmax+1) live
+  have callShape : compileHOLExact ctxt live (.call none name args) =
+      loopNestedSeqHOL ((genTemps (ctxt.vmax+1) args.length).zipWith HolLoopProg.assign values ++
+        [.call none (some (findLabExact ctxt name)) (genTemps (ctxt.vmax+1) args.length) none]) := by
+    simp [compileHOLExact,compiled,len]
+  dsimp only
+  rw [compiled,callShape]
+  have bound := assignmentPrefix_steps (genTemps (ctxt.vmax+1) args.length) values
+    (.call none (some (findLabExact ctxt name)) (genTemps (ctxt.vmax+1) args.length) none) s
+  simpa [List.length_zip,genTemps,len] using bound
+
+/-- The direct-argument returning-call wrapper has linear cost in its arity. -/
+theorem compile_returningCall_direct_steps {width : Nat} [NeZero width] {F : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : Flapjack.Basis.Pure.MlString.MlString)
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, DirectExpression e)
+    (names returnNames : List Nat) (mapped : names.mapM ctxt.vars.lookup = some returnNames)
+    (s : LoopSemStateFiniteExact width F) :
+    let values := (compileExpsHOLExact ctxt (ctxt.vmax+1) live args).2.1
+    let regs := genTemps (ctxt.vmax+1) args.length
+      let call : HolLoopProg width := .call (some (returnNames,live)) (some (findLabExact ctxt name)) regs
+        (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))
+      LoopSteps.steps (compileHOLExact ctxt live (.call (some (names,none)) name args)) s ≤
+        2 * args.length + 2 +
+          match evaluate (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign values)) s with
+          | (none,t) => LoopSteps.steps call t
+          | _ => 0 := by
+  obtain ⟨values,compiled,len⟩ := directExpressions_noCode args shape ctxt (ctxt.vmax+1) live
+  have callShape : compileHOLExact ctxt live (.call (some (names,none)) name args) =
+      loopNestedSeqHOL ((genTemps (ctxt.vmax+1) args.length).zipWith HolLoopProg.assign values ++
+        [.call (some (returnNames,live)) (some (findLabExact ctxt name)) (genTemps (ctxt.vmax+1) args.length)
+          (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))]) := by
+    simp [compileHOLExact,compiled,len,mapped]
+  dsimp only
+  rw [compiled,callShape]
+  have bound := assignmentPrefix_steps (genTemps (ctxt.vmax+1) args.length) values
+    (.call (some (returnNames,live)) (some (findLabExact ctxt name)) (genTemps (ctxt.vmax+1) args.length)
+      (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) s
+  simpa [List.length_zip,genTemps,len] using bound
+
 /-- The exact Crep compiler emits one Loop call, in its nested-sequence
 wrapper, for a zero-argument tail call. -/
 theorem compile_tailCall_nil {width : Nat} [NeZero width]
@@ -145,16 +239,13 @@ theorem compile_tailCall_nil_steps {width : Nat} [NeZero width] {F : Type}
     LoopSteps.steps (compileHOLExact ctxt live (.call none name [])) target ≤
       3 + LoopSteps.steps (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln body)
         {decClock target with locals := .ln} := by
+  have bound := compile_tailCall_direct_steps (width := width) ctxt live name [] (by simp) target
   have call := call_tail_steps ctxt source target name [] [] body [] codeRel found rfl (by rfl) clock
   simp only [List.length_nil,List.range_zero,List.zip_nil_left,sptFromAList,listToNumSetHOLExact] at call
-  rw [compile_tailCall_nil,LoopSteps.steps_seq,call]
-  rcases run : evaluate (.call none (some (findLabExact ctxt name)) [] none) target with ⟨out,post⟩
-  cases out with
-  | none =>
-    simp only
-    have leaf : LoopSteps.steps (.skip : HolLoopProg width) post = 1 := LoopSteps.steps_leaf _ _ rfl
-    omega
-  | some result => simp only; omega
+  simp only [compileExpsHOLExact,genTemps,List.length_nil,List.range_zero,List.map_nil,List.zipWith_nil_left,loopNestedSeqHOL,evaluate] at bound
+  rw [call] at bound
+  simp only [decClock] at bound ⊢
+  omega
 
 /-- A zero-argument returning call without an exception handler compiles to a
 Loop call with the compiler-generated normal and exceptional continuations. -/
@@ -185,23 +276,15 @@ theorem compile_returningCall_nil_steps {width : Nat} [NeZero width] {F : Type}
     LoopSteps.steps (compileHOLExact ctxt live (.call (some (names,none)) name [])) target ≤
       4 + LoopSteps.steps (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs [] []) .ln body)
         {cut with locals := .ln} := by
+  have bound := compile_returningCall_direct_steps (width := width) ctxt live name [] (by simp) names returnNames mapped target
   have call := call_returning_steps ctxt source target cut post name [] [] returnNames live live
     (ctxt.vmax+1) (.raise (ctxt.vmax+1)) .skip body [] values codeRel found rfl (by rfl)
     distinct cutRun (by simpa [sptFromAList,listToNumSetHOLExact] using run) arity
   simp only [List.length_nil,List.range_zero,List.zip_nil_left,sptFromAList,listToNumSetHOLExact] at call
-  rw [compile_returningCall_nil ctxt live name names returnNames mapped,LoopSteps.steps_seq,call]
-  rcases outcome : evaluate (.call (some (returnNames,live)) (some (findLabExact ctxt name)) []
-    (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) target with ⟨result,final⟩
-  cases result with
-  | none =>
-    simp only
-    have first := LoopSteps.steps_leaf (.skip : HolLoopProg width) (setVars returnNames values {post with locals := cut.locals}) rfl
-    have second := LoopSteps.steps_leaf (.skip : HolLoopProg width) final rfl
-    omega
-  | some result =>
-    simp only
-    have first := LoopSteps.steps_leaf (.skip : HolLoopProg width) (setVars returnNames values {post with locals := cut.locals}) rfl
-    omega
+  simp only [compileExpsHOLExact,genTemps,List.length_nil,List.range_zero,List.map_nil,List.zipWith_nil_left,loopNestedSeqHOL,evaluate] at bound
+  rw [call] at bound
+  have skip := LoopSteps.steps_leaf (.skip : HolLoopProg width) (setVars returnNames values {post with locals := cut.locals}) rfl
+  omega
 
 /-- A completed supported callee execution gives a source-visit bound for its
 actual optimized Loop tail call, with a constant call-wrapper overhead. -/
