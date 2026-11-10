@@ -22,4 +22,27 @@ theorem nestedCall_loop_code_relation : crepToLoopCodeRelExact
   · rw [nestedCallCrepPrograms,nestedCall_crep_code]; rfl
   · exact nestedCall_crep_fixed
 
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 3000000 in
+/-- The lowered source and generated Crep tables satisfy the compiler code relation. -/
+theorem nestedCall_panCrep_code_relation : codeRelExactHOLW
+      (mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL
+        (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")))) 0
+        (getEidsFromDeclsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))))
+      (HolFiniteMapExact.empty.updateList (functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))).reverse)
+      (alistToFmapCodeExact nestedCallCrepPrograms) := by
+  let decls := compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")
+  have unique : ((functionsHOL decls).map Prod.fst).Nodup := by
+    dsimp only [decls]; rw [nestedCall_lowered_declarations]; decide
+  have localised : ∀ entry ∈ functionsHOL decls, localisedProgHOL entry.2.2.1 = true := by
+    dsimp only [decls]; rw [nestedCall_lowered_declarations]
+    simp [functionsHOL,localisedProgHOL,localisedExpHOL,everyExpListHOL,everyExpHOL]
+  have inlineNil : (functionsHOL (decls.filter inlinableHOL)).map Prod.fst = [] := by
+    dsimp only [decls]; rw [nestedCall_lowered_declarations]; rfl
+  have relation := mkCtxtCodeImpCodeRelExactHOLW decls unique localised
+  change codeRelExactHOLW _ _ (HolFiniteMapExact.empty.updateList
+    (compileProgDeclsHOLW decls).reverse)
+  rw [compileProgDeclsHOLW,inlineNil,CrepInlineRoute.compileInlTopHOLExact_nil]
+  exact relation
+
 end SteppedFlapjack.Concrete
