@@ -9,6 +9,11 @@ open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.LoopToWordSteps
 
 def nestedCallCrepPrograms : List (MlString × List Nat × CrepProgHOL 64) := compileProgDeclsHOLW (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))
 
+/-- The generated four-function Crep table has maximum statement weight four. -/
+theorem nestedCall_crep_codeWeight : SteppedFlapjack.CrepSteps.codeWeight nestedCallCrepPrograms = 4 := by
+  rw [nestedCallCrepPrograms,nestedCall_crep_code]
+  rfl
+
 private theorem nestedCall_crep_fixed (name : MlString) (params : List Nat) (body : CrepProgHOL 64)
     (h : (name,params,body) ∈ nestedCallCrepPrograms) : crepSimpProgHOL body = body := by
   rw [nestedCallCrepPrograms,nestedCall_crep_code] at h

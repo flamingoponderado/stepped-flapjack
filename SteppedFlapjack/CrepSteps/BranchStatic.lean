@@ -2,7 +2,7 @@ import SteppedFlapjack.CrepSteps.BranchClock
 
 /-! Static evaluator visit bounds for loop-free Crep branches. -/
 namespace SteppedFlapjack.CrepSteps
-open Flapjack SteppedFlapjack.CrepToLoopSteps
+open Flapjack Flapjack.Basis.Pure.MlString SteppedFlapjack.CrepToLoopSteps
 
 /-- A Crep program without calls or loops. Expressions are unrestricted:
 the Crep visit measure treats their evaluation as atomic. -/
@@ -25,6 +25,27 @@ def statementWeight {width : Nat} [NeZero width] : CrepProgHOL width → Nat
 theorem statementWeight_pos {width : Nat} [NeZero width] (p : CrepProgHOL width) :
     1 ≤ statementWeight p := by
   cases p <;> simp [statementWeight] <;> omega
+
+/-- A computable bound on statement weights for every function in a Crep table. -/
+def codeWeight {width : Nat} [NeZero width] (programs : List (MlString × List Nat × CrepProgHOL width)) : Nat :=
+  programs.foldr (fun row weight => max (statementWeight row.2.2) weight) 1
+
+theorem statementWeight_le_codeWeight {width : Nat} [NeZero width]
+    (programs : List (MlString × List Nat × CrepProgHOL width))
+    (name : MlString) (params : List Nat) (body : CrepProgHOL width)
+    (member : (name,params,body) ∈ programs) : statementWeight body ≤ codeWeight programs := by
+  induction programs with
+  | nil => simp at member
+  | cons row rest ih =>
+    simp only [List.mem_cons] at member
+    cases member with
+    | inl same =>
+      subst row
+      simp [codeWeight]
+    | inr inRest =>
+      have bound := ih inRest
+      simp only [codeWeight,List.foldr_cons]
+      exact bound.trans (Nat.le_max_right _ _)
 
 /-- A loop-free program visits at most its structural statement weight. -/
 theorem staticProgram_statementWeight {width : Nat} [NeZero width] {σ : Type}

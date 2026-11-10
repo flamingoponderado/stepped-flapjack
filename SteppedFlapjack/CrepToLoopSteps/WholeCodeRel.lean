@@ -1,9 +1,20 @@
 import Flapjack.Pancake.CrepToLoop.Proofs.CodeRel2
 import SteppedFlapjack.CrepToLoopSteps.SimpFixed
+import SteppedFlapjack.CrepSteps.BranchStatic
 
 /-! Recover the ordinary Crep/Loop code relation for simplifier-fixed programs. -/
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.Basis.Pure.MlString Flapjack.Compiler.Encoders.Asm
+
+/-- The program-wide Crep weight bounds every body reached by code lookup. -/
+theorem lookup_statementWeight_le_codeWeight {width : Nat} [NeZero width]
+    (programs : List (MlString × List Nat × CrepProgHOL width))
+    (name : MlString) (params : List Nat) (body : CrepProgHOL width)
+    (found : (alistToFmapCodeExact programs).lookup name = some (params,body)) :
+    CrepSteps.statementWeight body ≤ CrepSteps.codeWeight programs := by
+  apply CrepSteps.statementWeight_le_codeWeight programs name params body
+  rw [alistToFmapCodeExact,HolFiniteMapExact.lookup_updateList] at found
+  exact flookup_fupdateList_reverse_mem' programs name (params,body) found
 
 /-- If every function in the actual list is fixed by Crep simplification, the
 original code table has the compiler-proved relation to the actual Loop output. -/
