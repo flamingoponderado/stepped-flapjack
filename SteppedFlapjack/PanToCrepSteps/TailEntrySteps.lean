@@ -5,43 +5,11 @@ import Flapjack.Pancake.Semantics.PanSem.EvaluateClock
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.PanSemStateFiniteExact
 
-open Classical in
-/-- Count a tail-call node and, when reached, the call-free callee's control
-visits. This counter is intended for a callee in the supported call-free
-fragment; `controlSteps` does not recursively count calls or declarations. -/
-noncomputable def tailEntrySteps {width : Nat} [NeZero width] {σ : Type}
-    (name : MlString) (args : List (ExpHOL width)) (s : PanSemStateFiniteExact width σ) : Nat :=
-  1 + match @evalListHOLFinite width σ _ s (fun a => Classical.propDecidable (s.memaddrs a)) args with
-  | none => 0
-  | some values =>
-    match lookupCodeHOLFinite s.code.lookup name values with
-    | none => 0
-    | some (body,locals,_) => if s.clock = 0 then 0 else
-        controlSteps body (callEntryStateHOLFinite s locals)
-
-/-- Successful calls include exactly the root visit and the actual reached body. -/
-theorem tailEntrySteps_reached {width : Nat} [NeZero width] {σ : Type}
-    (name : MlString) (args : List (ExpHOL width)) (s : PanSemStateFiniteExact width σ)
-    (values : List (ValueHOL width)) (body : ProgHOL width)
-    (locals : HolFiniteMapExact MlString (ValueHOL width)) (shape : ShapeHOL)
-    (arguments : @evalListHOLFinite width σ _ s (fun a => Classical.propDecidable (s.memaddrs a)) args = some values)
-    (lookup : lookupCodeHOLFinite s.code.lookup name values = some (body,locals,shape))
-    (clock : s.clock ≠ 0) :
-    tailEntrySteps name args s = 1 + controlSteps body (callEntryStateHOLFinite s locals) := by
-  unfold tailEntrySteps
-  rw [arguments]
-  simp only
-  rw [lookup]
-  simp only [if_neg clock]
-
-/-- The sequence generated for global initialization includes its own visit,
-the reached initializer and, when it succeeds, the reached tail call. -/
+/-- The global entry uses the same visit counter as every other source program. -/
 noncomputable def globalEntrySteps {width : Nat} [NeZero width] {σ : Type}
     (init : ProgHOL width) (name : MlString) (args : List (ExpHOL width))
     (s : PanSemStateFiniteExact width σ) : Nat :=
-  1 + controlSteps init s + match s.evaluateHOLFiniteState init with
-    | (none,post) => tailEntrySteps name args post
-    | _ => 0
+  controlSteps (.seq init (.call none name args)) s
 
 /-- Once initialization and lookup succeed, a source-program bound on the
 callee yields a bound for the actual global-entry control-flow shape. -/
@@ -56,8 +24,9 @@ theorem globalEntrySteps_bound {width : Nat} [NeZero width] {σ : Type}
     (clock : post.clock ≠ 0)
     (bodyBound : controlSteps body (callEntryStateHOLFinite post locals) ≤ limit) :
     globalEntrySteps init name args s ≤ controlSteps init s + limit + 2 := by
-  simp only [globalEntrySteps,initRun]
-  rw [tailEntrySteps_reached name args post values body locals shape arguments lookup clock]
+  rw [globalEntrySteps,controlSteps_seq,initRun]
+  dsimp only
+  rw [controlSteps_tailCall name args post values body locals shape arguments lookup clock]
   omega
 
 /-- A successfully initialized tail entry evaluates its actual callee and
