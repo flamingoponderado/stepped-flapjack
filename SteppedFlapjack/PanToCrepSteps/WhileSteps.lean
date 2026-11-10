@@ -724,4 +724,38 @@ theorem initializedCall_return {width : Nat} [NeZero width] {σ : Type}
   rw [updateListEq_overwrite target.locals _ _ _ hzlen arity.symm] at call
   exact call
 
+/-- A well-shaped returned value restores the compiler relations for the
+declaration-call continuation. -/
+theorem decCall_continuation_relations {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (name : MlS) (shape : ShapeHOL)
+    (source sourcePost : PanSemStateFiniteExact width σ) (target targetPost : CrepSemHOLState width σ)
+    (value : ValueHOL width)
+    (stateRel : panToCrepStateRelFiniteExact sourcePost targetPost)
+    (codeRel : codeRelExactHOLW ctxt sourcePost.code targetPost.code)
+    (excpRel : panToCrepExcpRelFiniteExact ctxt.eids sourcePost.eshapes)
+    (localsRel : panToCrepLocalsRelFiniteExact ctxt source.locals target.locals)
+    (valid : shapeOfHOLExact value = shape)
+    (wf : isWfShapeExactHOL ([] : StructContextExact) (shapeOfHOLExact value) = true) :
+    let sourceCont := PanSemStateFiniteExact.setVarHOLFinite name value {sourcePost with locals := source.locals}
+    let targetCont := {targetPost with locals := target.locals.updateListEq ((decCallSlots ctxt shape).zip (flattenHOL value))}
+    panToCrepStateRelFiniteExact sourceCont targetCont ∧
+    codeRelExactHOLW (decCallCtxt ctxt name shape) sourceCont.code targetCont.code ∧
+    panToCrepExcpRelFiniteExact (decCallCtxt ctxt name shape).eids sourceCont.eshapes ∧
+    panToCrepLocalsRelFiniteExact (decCallCtxt ctxt name shape) sourceCont.locals targetCont.locals := by
+  have length := flattenHOL_length_eq_sizeOfShapeHOL value wf
+  have hlen : (flattenHOL value).length = (decCallSlots ctxt shape).length := by
+    simp [decCallSlots,length,valid]
+  have loc := localsRelExtendNewVarHOL ctxt source.locals target.locals value name
+    (decCallSlots ctxt shape)
+    ⟨localsRel, wf, decCallSlots_nodup ctxt shape, fun y hy => by
+      have := decCallSlots_gt ctxt shape y hy
+      rw [valid]
+      exact this, by rw [← hlen,length]⟩
+  rw [valid] at loc
+  refine ⟨?_,?_,?_,?_⟩
+  · simpa [panToCrepStateRelFiniteExact,PanSemStateFiniteExact.setVarHOLFinite] using stateRel
+  · simpa [decCallCtxt,PanSemStateFiniteExact.setVarHOLFinite,codeRelExactHOLW] using codeRel
+  · simpa [decCallCtxt,PanSemStateFiniteExact.setVarHOLFinite] using excpRel
+  · exact loc
+
 end SteppedFlapjack.PanToCrepSteps
