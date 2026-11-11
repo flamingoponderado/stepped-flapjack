@@ -1,5 +1,7 @@
 import SteppedFlapjack.LoopToWordSteps.WholeCallProgram
 import SteppedFlapjack.Concrete.NestedCrepLoop
+import SteppedFlapjack.WordSimpSteps.LoopSequenceClock
+import Flapjack.Pancake.LoopToWord.Proofs.NoInstallCode
 /-! Bottom-up execution of the actual optimized Loop witness. -/
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang SteppedFlapjack.PanToCrepSteps
@@ -17,6 +19,29 @@ set_option maxHeartbeats 3000000 in
 /-- The optimized Loop code table has control weight 26. -/
 theorem nestedCall_loop_codeWeight : SteppedFlapjack.LoopLiveSteps.loopCodeWeight nestedLoopTable = 26 := by
   with_unfolding_all rfl
+
+open SteppedFlapjack.WordSimpSteps SteppedFlapjack.WordSteps
+
+/-- The actual Loop-to-Word table for the four-function nested-call witness. -/
+def nestedWordTable := sptFromAList (loopToWordCompileHOL [(64,[],nestedLoopCode64),(65,[],nestedLoopCode65),(66,[],nestedLoopCode66),(67,[],nestedLoopCode67)])
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 3000000 in
+/-- The nested-call Word table has concrete control weight 17. -/
+theorem nestedCall_word_codeWeight : wordCodeWeight nestedWordTable = 17 := by
+  with_unfolding_all rfl
+
+/-- Starting any function in the witness table takes at most 17 visits per clock tick, plus the call. -/
+theorem nestedCall_word_start_bound {C F : Type} (s : WordSemStateFiniteExact 64 C F)
+    (code : s.code = nestedWordTable) (start : Nat) :
+    steps (.call none (some start) [0] none) s ≤ 1 + 17 * s.clock := by
+  have mt : WordProps.noMtCode s.code := by
+    rw [code]
+    exact LoopToWord.loop_compile_no_mt_code _
+  have ni : WordProps.noInstallCode s.code := by
+    rw [code]
+    exact LoopToWord.loop_compile_no_install_code _
+  have bound := wordTable_clock_bound (.call none (some start) [0] none) s rfl rfl mt ni
+  simpa [wordControlWeight,code,nestedCall_word_codeWeight] using bound
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
