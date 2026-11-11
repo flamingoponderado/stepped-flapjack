@@ -20,6 +20,35 @@ theorem wordLocals_update {locals : VarName → Option (PanValue (RiscV.Word 64)
   · apply words key value
     simpa [updatePanValueMap,same] using found
 
+/-- Binding word arguments gives a callee environment containing only words. -/
+theorem wordLocals_bind (parameters : List VarName) (values : List (PanValue (RiscV.Word 64)))
+    (locals : VarName → Option (PanValue (RiscV.Word 64)))
+    (words : ∀ value ∈ values, ∃ word, value = .word word)
+    (bind : bindPanValueParameters parameters values = some locals) : WordLocals locals := by
+  have fold : ∀ (ps : List VarName) (vs : List (PanValue (RiscV.Word 64)))
+      (acc : VarName → Option (PanValue (RiscV.Word 64))),
+      WordLocals acc → (∀ v ∈ vs, ∃ word, v = .word word) →
+      WordLocals ((ps.zip vs).foldl (fun acc (name,value) => updatePanValueMap acc name value) acc) := by
+    intro ps
+    induction ps with
+    | nil => intro vs acc ha hv; simpa using ha
+    | cons p ps ih =>
+      intro vs acc ha hv
+      cases vs with
+      | nil => simpa using ha
+      | cons v vs =>
+        obtain ⟨word,rfl⟩ := hv v (by simp)
+        simp only [List.zip_cons_cons,List.foldl_cons]
+        apply ih vs (updatePanValueMap acc p (.word word)) (wordLocals_update ha p word)
+        intro v member
+        exact hv v (by simp [member])
+  unfold bindPanValueParameters at bind
+  split at bind
+  · simp at bind
+  · simp only [Option.some.injEq] at bind
+    subst locals
+    exact fold parameters values _ wordLocals_empty words
+
 theorem wordLocals_restore {current original : VarName → Option (PanValue (RiscV.Word 64))}
     (currentWords : WordLocals current) (originalWords : WordLocals original) (name : VarName) :
     WordLocals (restorePanValueLocal current name (original name)) := by

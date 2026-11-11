@@ -1,7 +1,212 @@
 import SteppedFlapjack.Concrete.CountedShape
 import Flapjack.Pancake.Semantics.PanSem.TotalEvalRanged
+import Flapjack.Pancake.Semantics.PanSem.TotalEvalCallBridge
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact SteppedFlapjack.PanToCrepSteps Flapjack.Basis.Pure.MlString
+
+/-- The counted evaluator table projected from the source code table. -/
+def countedFunctionsOfCode (code : PanSemCodeMap (RiscV.Word 64)) :
+    List (FunName × List VarName × Prog (RiscV.Word 64)) :=
+  code.map (fun (name,params,body,_) => (name,params.map Prod.fst,body))
+
+/-- Call contracts projected from the same source code table. -/
+def countedContractsOfCode (code : PanSemCodeMap (RiscV.Word 64))
+    (exceptions : InfoMap Shape) : PanValueCallContracts :=
+  {parameterShapes := code.map (fun (name,params,_,_) => (name,params)),
+   returnShapes := code.map (fun (name,_,_,ret) => (name,ret)), exceptionShapes := exceptions}
+
+/-- Projecting the code table preserves function lookup. -/
+theorem countedFunctionLookup (code : PanSemCodeMap (RiscV.Word 64)) (name : FunName) :
+    lookupPanFunction name (countedFunctionsOfCode code) =
+      (panSemCodeLookup code name).map (fun (params,body,_) => (params.map Prod.fst,body)) := by
+  induction code with
+  | nil => rfl
+  | cons entry tail ih =>
+    obtain ⟨n,params,body,ret⟩ := entry
+    simp only [countedFunctionsOfCode,List.map_cons,lookupPanFunction,panSemCodeLookup,lookupInfo]
+    by_cases h : name = n
+    · subst n; simp
+    · have h' : n ≠ name := Ne.symm h
+      simp only [h,h',beq_iff_eq,if_false]
+      simpa [countedFunctionsOfCode,panSemCodeLookup] using ih
+
+/-- Both call evaluators perform the same argument-shape checks. -/
+theorem codeArgumentShapes (structs : StructContext) (params : List (VarName × Shape))
+    (values : List (PanValue (RiscV.Word 64))) :
+    panSemCodeArgumentsMatch structs params values =
+      panValueValuesMatchShapes structs (params.map Prod.snd) values := by
+  induction params generalizing values with
+  | nil => cases values <;> rfl
+  | cons p ps ih => cases values with
+    | nil => rfl
+    | cons v vs => simp [panSemCodeArgumentsMatch,panValueValuesMatchShapes,ih]
+
+/-- The generated call contract resolves the selected parameter shapes. -/
+theorem countedParameterLookup (code : PanSemCodeMap (RiscV.Word 64))
+    (exceptions : InfoMap Shape) (name : FunName) :
+    lookupInfo name (countedContractsOfCode code exceptions).parameterShapes =
+      (panSemCodeLookup code name).map (fun (params,_,_) => params) := by
+  induction code with
+  | nil => rfl
+  | cons entry tail ih =>
+    obtain ⟨n,params,body,ret⟩ := entry
+    simp only [countedContractsOfCode,List.map_cons,lookupInfo,panSemCodeLookup]
+    split <;> simp_all [countedContractsOfCode,panSemCodeLookup]
+
+/-- The generated call contract resolves the selected return shape. -/
+theorem countedReturnLookup (code : PanSemCodeMap (RiscV.Word 64))
+    (exceptions : InfoMap Shape) (name : FunName) :
+    lookupInfo name (countedContractsOfCode code exceptions).returnShapes =
+      (panSemCodeLookup code name).map (fun (_,_,ret) => ret) := by
+  induction code with
+  | nil => rfl
+  | cons entry tail ih =>
+    obtain ⟨n,params,body,ret⟩ := entry
+    simp only [countedContractsOfCode,List.map_cons,lookupInfo,panSemCodeLookup]
+    split <;> simp_all [countedContractsOfCode,panSemCodeLookup]
+
+/-- Counted and source call targets agree under generated contracts. -/
+theorem countedCallTarget_eq (structs : StructContext) (code : PanSemCodeMap (RiscV.Word 64))
+    (exceptions : InfoMap Shape) (name : FunName) (values : List (PanValue (RiscV.Word 64))) :
+    panValueCallTarget structs (some (countedContractsOfCode code exceptions)) name
+      (countedFunctionsOfCode code) values =
+    (lookupPanSemCodeCall structs code name values).map (fun (body,_,locals) => (body,locals)) := by
+  rw [panValueCallTarget,countedFunctionLookup]
+  unfold lookupPanSemCodeCall
+  cases hl : panSemCodeLookup code name with
+  | none => simp
+  | some entry =>
+    obtain ⟨params,body,ret⟩ := entry
+    simp only [Option.map_some]
+    unfold panValueParametersValid
+    simp only
+    simp only [countedParameterLookup,hl,Option.map_some,codeArgumentShapes]
+    split <;> simp_all
+    split <;> simp_all
+
+/-- The counted target is the source total evaluator target without its return shape. -/
+theorem countedCallTarget_total {σ : Type}
+    (state : PanSemState (RiscV.Word 64) (FfiState σ)) (exceptions : InfoMap Shape)
+    (name : FunName) (values : List (PanValue (RiscV.Word 64))) :
+    panValueCallTarget state.structs (some (countedContractsOfCode state.code exceptions)) name
+      (countedFunctionsOfCode state.code) values =
+      (panSemTotalCodeLookup state name values).map (fun (body,locals,_) => (body,locals)) := by
+  rw [countedCallTarget_eq]
+  unfold panSemTotalCodeLookup
+  cases h : lookupPanSemCodeCall state.structs state.code name values with
+  | none => rfl
+  | some entry => cases entry with | mk body rest => cases rest; rfl
+
+open Flapjack.Basis.Pure.MlString Flapjack.PanSemStateFiniteExact in
+/-- A declaration-driven counted call resolves the same callee and locals as
+HOL, including missing and invalid calls. -/
+theorem countedCallTarget_hol {σ : Type}
+    (state : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
+    (rel : PanSemStateRelExec state source.toExact) (exceptions : InfoMap Shape)
+    (name : FunName) (nameRanged : NameRanged name) (values : List (PanValue (RiscV.Word 64)))
+    (valuesRanged : ∀ value ∈ values, PanValueByteRanged value)
+    (codeRanged : ∀ entry, panSemCodeLookup state.code name = some entry → PanLangEntryByteRanged entry) :
+    match panValueCallTarget state.structs (some (countedContractsOfCode state.code exceptions)) name
+        (countedFunctionsOfCode state.code) values,
+      lookupCodeHOLFinite source.code.lookup (ofString name) (values.map panValueToHOL) with
+    | none, none => True
+    | some (callee, calleeLocals), some (body, exactLocals, exactShape) =>
+        ∃ returnShape, lookupInfo name (countedContractsOfCode state.code exceptions).returnShapes = some returnShape ∧
+        exactShape = shapeToHOL returnShape ∧ body = progToHOL callee ∧ ProgByteRanged callee ∧
+        (∀ name, NameRanged name → Option.map panValueToHOL (calleeLocals name) = exactLocals.lookup (ofString name)) ∧
+        (∀ name value, calleeLocals name = some value → PanValueByteRanged value)
+    | _, _ => False := by
+  have agree := panSemTotalCodeLookup_agree state source rel (ofString name) values valuesRanged (by
+    simpa only [toStringOfBytes_ofString_of_bytes name nameRanged] using codeRanged)
+  rw [toStringOfBytes_ofString_of_bytes name nameRanged] at agree
+  rw [countedCallTarget_total]
+  cases prod : panSemTotalCodeLookup state name values with
+  | none => cases h : lookupCodeHOLFinite source.code.lookup (ofString name) (values.map panValueToHOL) <;> simp_all
+  | some entry =>
+    obtain ⟨callee,locals,shape⟩ := entry
+    cases h : lookupCodeHOLFinite source.code.lookup (ofString name) (values.map panValueToHOL) with
+    | none => simp_all
+    | some exactEntry =>
+      obtain ⟨body,exactLocals,exactShape⟩ := exactEntry
+      simp only [prod,h] at agree
+      refine ⟨shape,?_,agree.2.1,agree.1,agree.2.2.1,agree.2.2.2.2⟩
+      simp only [countedReturnLookup,panSemTotalCodeLookup] at prod ⊢
+      cases lookup : lookupPanSemCodeCall state.structs state.code name values with
+      | none => simp [lookup] at prod
+      | some entry =>
+        obtain ⟨body',ret,locals'⟩ := entry
+        simp only [lookup,Option.some.injEq,Prod.mk.injEq] at prod
+        rw [← prod.2.2]
+        unfold lookupPanSemCodeCall at lookup
+        cases codeFound : panSemCodeLookup state.code name with
+        | none => simp [codeFound] at lookup
+        | some entry =>
+          obtain ⟨params,body'',ret'⟩ := entry
+          simp only [codeFound] at lookup
+          change (if decide (params.map Prod.fst).Nodup && panSemCodeArgumentsMatch state.structs params values then
+            (do let loc ← bindPanValueParameters (params.map Prod.fst) values; pure (body'',ret',loc))
+            else none) = some (body',ret,locals') at lookup
+          split at lookup
+          · cases hbind : bindPanValueParameters (params.map Prod.fst) values <;> simp_all
+          · simp at lookup
+
+
+/-- Word-valued arguments produce word-valued callee locals. -/
+theorem countedCallTarget_wordLocals (structs : StructContext) (contracts : Option PanValueCallContracts)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (name : FunName)
+    (values : List (PanValue (RiscV.Word 64)))
+    (valueWords : ∀ v ∈ values, ∃ word, v = .word word)
+    (callee : Prog (RiscV.Word 64)) (locals : VarName → Option (PanValue (RiscV.Word 64)))
+    (found : panValueCallTarget structs contracts name functions values = some (callee,locals)) :
+    WordLocals locals := by
+  unfold panValueCallTarget at found
+  cases lookup : lookupPanFunction name functions with
+  | none => simp [lookup] at found
+  | some entry =>
+    obtain ⟨params,body⟩ := entry
+    simp only [lookup] at found
+    split at found
+    · cases bind : bindPanValueParameters params values with
+      | none => simp [bind] at found
+      | some bound =>
+        simp only [bind,Option.some.injEq,Prod.mk.injEq] at found
+        rw [← found.2]
+        exact wordLocals_bind params values bound valueWords bind
+    · simp at found
+
+/-- Matching counted and HOL call targets produce related callee entry states. -/
+theorem countedCallEntry_rel {σ : Type}
+    (state : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
+    (rel : PanSemStateRelExec state source.toExact) (ranged : PanSemStateRelExecRanged state)
+    (exceptions : InfoMap Shape) (name : FunName) (nameRanged : NameRanged name)
+    (values : List (PanValue (RiscV.Word 64))) (valuesRanged : ∀ value ∈ values, PanValueByteRanged value)
+    (valueWords : ∀ value ∈ values, ∃ word, value = .word word)
+    (codeRanged : ∀ entry, panSemCodeLookup state.code name = some entry → PanLangEntryByteRanged entry)
+    (callee : Prog (RiscV.Word 64)) (calleeLocals : VarName → Option (PanValue (RiscV.Word 64)))
+    (found : panValueCallTarget state.structs (some (countedContractsOfCode state.code exceptions)) name
+      (countedFunctionsOfCode state.code) values = some (callee,calleeLocals)) :
+    ∃ holBody exactLocals returnShape,
+      lookupCodeHOLFinite source.code.lookup (ofString name) (values.map panValueToHOL) =
+        some (holBody,exactLocals,shapeToHOL returnShape) ∧
+      lookupInfo name (countedContractsOfCode state.code exceptions).returnShapes = some returnShape ∧
+      holBody = progToHOL callee ∧ ProgByteRanged callee ∧
+      PanSemStateRelExec {state with clock := state.clock-1, locals := calleeLocals}
+        (callEntryStateHOLFinite source exactLocals).toExact ∧
+      PanSemStateRelExecRanged {state with clock := state.clock-1, locals := calleeLocals} ∧
+      WordLocals calleeLocals := by
+  have correspondence := countedCallTarget_hol state source rel exceptions name nameRanged values valuesRanged codeRanged
+  rw [found] at correspondence
+  cases h : lookupCodeHOLFinite source.code.lookup (ofString name) (values.map panValueToHOL) with
+  | none => simp [h] at correspondence
+  | some entry =>
+    obtain ⟨body,exactLocals,exactShape⟩ := entry
+    simp only [h] at correspondence
+    obtain ⟨returnShape,retLookup,retEq,bodyEq,bodyRanged,localsRel,localsRanged⟩ := correspondence
+    refine ⟨body,exactLocals,returnShape,?_,retLookup,bodyEq,bodyRanged,?_,?_,?_⟩
+    · rw [← retEq]
+    · exact rel.callEntry calleeLocals exactLocals localsRel
+    · exact ⟨localsRanged,ranged.2.1,ranged.2.2⟩
+    · exact countedCallTarget_wordLocals _ _ _ _ _ valueWords callee calleeLocals found
 
 /-- Result relation for the call-free scalar source fragment. -/
 inductive CountedOutcome {σ : Type} (initial : PanSemState (RiscV.Word 64) (FfiState σ)) :
