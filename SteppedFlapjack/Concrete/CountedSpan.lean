@@ -3,10 +3,14 @@ import SteppedFlapjack.Concrete.SimpVisits
 import SteppedFlapjack.Concrete.CountedSource
 import SteppedFlapjack.Concrete.SupportedSpan
 import SteppedFlapjack.CrepToLoopSteps.CallFrontendShape
+import SteppedFlapjack.LoopToWordSteps.WholeWordSpan
 
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact SteppedFlapjack.PanToCrepSteps
-open SteppedFlapjack.CrepToLoopSteps
+open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps SteppedFlapjack.WordAllocSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.LoopLiveSteps
+open Flapjack.LoopSemStateFiniteExact Flapjack.WordSemStateFiniteExact
+open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.WordToWord
+open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 
 /-- A call-aware counted source return composes with the actual declaration
 frontend, carrying the source count into the Crep visit bound. -/
@@ -68,6 +72,107 @@ theorem callFrontend_counted_declaration_steps {scope : List VarName} {program :
     subst targetResult
     rcases finalState with ⟨_,_,_,_,_,_,_,ffi,_,_⟩
     exact ⟨sourceFinal,targetFinal,sourceRun,by simpa [flattenHOL] using targetRun,bound,ffi.symm,finalRel.2.2.2.2.2.2.2.2.2.2.1⟩
+
+/-- Counted source execution reaches the optimized Word start call at an explicit bound. -/
+theorem callFrontend_counted_optimizedStart {C σ : Type} {scope : List VarName}
+    (declarations : List (DeclHOL 64))
+    (unique : ((functionsHOL declarations).map Prod.fst).Nodup)
+    (noInline : (functionsHOL (declarations.filter inlinableHOL)).map Prod.fst = [])
+    (shapes : ∀ entry ∈ functionsHOL declarations,
+      CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
+        (makeFuncsExactHOL (functionsHOL declarations))
+        (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
+        (getEidsFromDeclsHOL declarations)) entry.2.2.1)
+    (program : Prog (RiscV.Word 64)) (supported : CallSupportedIn scope program)
+    (shape : CallFrontend (mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+      (getEidsFromDeclsHOL declarations)) (progToHOL program))
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (source : PanSemStateFiniteExact 64 σ) [DecidablePred source.memaddrs] (value : BitVec 64)
+    (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
+    (words : WordLocals production.locals) (byteRanged : ProgByteRanged program)
+    (codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry)
+    (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
+      ∃ scope, CallSupportedIn scope body)
+    (code : source.code = HolFiniteMapExact.empty.updateList (functionsHOL declarations).reverse)
+    (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
+    (structs : source.structs = []) (exceptions : source.eshapes = HolFiniteMapExact.empty)
+    (noExceptions : getEidsFromDeclsHOL declarations = HolFiniteMapExact.empty)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ) (exnContracts : InfoMap Shape) (fuel sourceLimit : Nat)
+    (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))
+    (postMemory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (postFfi : FfiState σ)
+    (run : evalPanValueFfiProgSteps context primitive handler production.structs (countedFunctionsOfCode production.code)
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+      production.locals production.globals production.memory production.ffi program
+      (memoryAccess := some (panSemBitVec64MemoryAccess production))
+      (contracts := some (countedContractsOfCode production.code exnContracts)) =
+        some (.returned postLocals postGlobals postMemory postFfi [.word value],sourceLimit))
+    (budget : sourceLimit ≤ source.clock)
+    (arch : AsmArchitecture) (start : Flapjack.Basis.Pure.MlString.MlString) (entry : CrepProgHOL 64)
+    (found : holAlookup (compileProgDeclsHOLW declarations) start = some ([],entry))
+    (ref : CrepToLoopContextExact) (live : NumSet) (loop : LoopSemStateFiniteExact 64 σ)
+    (loopCode : loop.code = sptFromAList (compileProgHOLExact arch (compileProgDeclsHOLW declarations)))
+    (stateRel : crepToLoopStateRelExact (concreteDeclCrepState source (compileProgDeclsHOLW declarations)) loop)
+    (memRel : crepToLoopMemRelHOLExact (concreteDeclCrepState source (compileProgDeclsHOLW declarations)).memory
+      loop.memory (concreteDeclCrepState source (compileProgDeclsHOLW declarations)).memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact (concreteDeclCrepState source (compileProgDeclsHOLW declarations)).globals loop.globals)
+    (localsRel : crepToLoopLocalsRelExact
+      (mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (compileProgDeclsHOLW declarations)) 0)
+      live (concreteDeclCrepState source (compileProgDeclsHOLW declarations)).locals loop.locals)
+    (starter : WordSemStateFiniteExact 64 C σ) (entryLoc : Nat) (wordCtxt : Spt Nat) (label : Nat × Nat)
+    (wc : Config) (ac : AsmConfigExact 64)
+    (starterCode : starter.code = sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch (compileProgDeclsHOLW declarations))))
+    (arg : getVar 0 starter = some (.loc 1 0)) (stack : starter.stack = [])
+    (gc : Flapjack.Compiler.Backend.WordSimp.gcFunConstOk starter.gcFun)
+    (entryMember : let panCtxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0 (getEidsFromDeclsHOL declarations)
+      let programs := compileProgDeclsHOLW declarations
+      let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
+      let body := (LoopToWord.compHOL wordCtxt (compileHOLExact ctxt live (compileProgExactHOLW panCtxt (progToHOL program))) label).1
+      (entryLoc,1,body) ∈ loopToWordCompileHOL (compileProgHOLExact arch programs))
+    (wordRel : let panCtxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0 (getEidsFromDeclsHOL declarations)
+      let programs := compileProgDeclsHOLW declarations
+      let crep := compileProgExactHOLW panCtxt (progToHOL program)
+      let limit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) * sourceLimit
+      let rows := programs.map (fun row => (row.2.1,row.2.2))
+      let budget := callClockFactor ref rows source.clock crep * (limit+1)
+      let word := callEnv [(.loc 1 0 : WordLocW 64)] (sptLookup entryLoc starter.stackSize) (decClock starter)
+      loopToWordStateRelHOLExact {loop with clock := loop.clock+budget} word)
+    (wordLocals : LoopToWord.localsRelHOL wordCtxt loop.locals
+      (callEnv [(.loc 1 0 : WordLocW 64)] (sptLookup entryLoc starter.stackSize) (decClock starter)).locals)
+    (acc : ∀ k, sptMem k (accVarsHOL (compileHOLExact
+      (mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (compileProgDeclsHOLW declarations)) 0) live
+      (compileProgExactHOLW (mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+        (getEidsFromDeclsHOL declarations)) (progToHOL program))) .ln) → sptMem k wordCtxt) :
+    let panCtxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+      (getEidsFromDeclsHOL declarations)
+    let programs := compileProgDeclsHOLW declarations
+    let crep := compileProgExactHOLW panCtxt (progToHOL program)
+    let limit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) * sourceLimit
+    let rows := programs.map (fun row => (row.2.1,row.2.2))
+    let budget := callClockFactor ref rows source.clock crep * (limit+1)
+    let factor := max (callSyntaxCost ref crep) (loopCodeWeight loop.code+2)
+    let ticks := 6 * (callSyntaxCost ref crep + factor * (source.clock+budget))
+    let rawWords := loopToWordCompileHOL (compileProgHOLExact arch programs)
+    ∃ sourceFinal final, source.evaluateHOLFiniteState (progToHOL program) =
+        (some (.returned (.val (.word value))),sourceFinal) ∧
+      FfiStateRel postFfi sourceFinal.ffi ∧ evaluate (.call none (some entryLoc) [0] none)
+        {starter with clock := ticks+1, code := sptFromAList (compile wc ac rawWords).2} =
+          (some (.result (.loc 1 0) [.word value]),final) ∧
+      final.ffi = sourceFinal.ffi ∧
+      WordSteps.steps (.call none (some entryLoc) [0] none)
+        {starter with clock := ticks+1, code := sptFromAList (compile wc ac rawWords).2} ≤
+        1 + max 1 (wordCodeWeight (sptFromAList (compileWith Flapjack.RegAlloc.regAllocExecutable wc ac rawWords).2)) * (ticks+1) := by
+  obtain ⟨holResult,sourceFinal,sourceRun,outcome,sourceBound,_⟩ := supportedCalls_counted_source supported production source
+    rel ranged words byteRanged codeRanged codeShape context primitive handler exnContracts fuel sourceLimit
+    (.returned postLocals postGlobals postMemory postFfi [.word value]) run budget
+  cases outcome with
+  | returned _ _ _ _ _ _ finalRel _ _ =>
+    obtain ⟨final,wordRun,ffi,bound⟩ := callFrontend_declaration_optimizedStart declarations unique noInline shapes
+      (progToHOL program) shape source sourceFinal value code locals globals structs exceptions noExceptions sourceRun
+      sourceLimit (by simpa [countedErrorBonus] using sourceBound) arch start entry found ref live loop loopCode
+      stateRel memRel globalsRel localsRel starter entryLoc wordCtxt label wc ac starterCode arg stack gc entryMember
+      wordRel wordLocals acc
+    exact ⟨sourceFinal,final,sourceRun,finalRel.2.2.2.2.2.2.2.2.2.2.1,wordRun,ffi,bound⟩
 
 /-- Every counted supported run, including errors, reaches the actual
 simplified and global-lowered callee with the same source result. -/
