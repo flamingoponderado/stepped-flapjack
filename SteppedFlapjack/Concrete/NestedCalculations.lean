@@ -96,17 +96,64 @@ theorem nested_nativeSafe : fixtureStackSafe nestedCode = true := by
   rw [nested_optimizedTable]
   with_unfolding_all rfl
 
+private theorem row0_exact : coloredRow row0 cols0 =
+    .seq (.move 1 [(0,0)]) (.call none (some 65) [0] none) := by with_unfolding_all rfl
+private theorem row1_exact : coloredRow row1 cols1 =
+    .seq (.move 1 [(44,0)])
+      (.seq (.call (some ([2], ((Spt.ln.bn (((Spt.ln.bn (Spt.ls PUnit.unit)).bn Spt.ln).bn Spt.ln)).bn Spt.ln, Spt.ln),
+        .move 1 [(4,2),(0,44)],65,2)) (some 66) []
+        (some (2,.seq (.move 1 [(2,2),(0,44)]) (.raise 2),65,3)))
+        (.seq .tick (.seq (.move 0 [(2,4)]) (.return 0 [2])))) := by with_unfolding_all rfl
+private theorem row2_exact : coloredRow row2 cols2 =
+    .seq (.move 1 [(0,0)]) (.call none (some 67) [0] none) := by with_unfolding_all rfl
+private theorem row3_exact : coloredRow row3 cols3 =
+    .seq (.move 1 [(0,0)]) (.seq (.inst (.const 2 (7 : BitVec 64)))
+      (.seq (.move 0 [(2,2)]) (.return 0 [2]))) := by with_unfolding_all rfl
+
+set_option maxHeartbeats 3000000 in
+theorem nested_callDepth : Flapjack.Compiler.Backend.WordDepth.Executable.fullCallGraphDepth
+    nestedFrameSizes 64 (sptFromAList nestedOptimizedWords) = some 5 := by
+  rw [nested_frames, nested_optimizedTable, row0_exact, row1_exact, row2_exact, row3_exact]
+  simp [Flapjack.Compiler.Backend.WordDepth.Executable.fullCallGraphDepth,
+    Flapjack.Compiler.Backend.WordDepth.Executable.callGraphDepth,
+    sptLookup_sptFromAList, sptAListLookup]
+  split <;> simp_all [sptLookup_sptFromAList, sptAListLookup]
+  all_goals obtain ⟨rfl,rfl⟩ := ‹_ ∧ _›
+  all_goals simp [Flapjack.Compiler.Backend.WordDepth.Executable.callGraphDepth,
+    sptSize, sptFromAList, sptInsert]
+  all_goals split <;> simp_all [sptLookup]
+  all_goals try (obtain ⟨rfl,rfl⟩ := ‹_ ∧ _›)
+  all_goals simp [Flapjack.Compiler.Backend.WordDepth.Executable.callGraphDepth, sptDelete]
+  all_goals split <;> simp_all [sptLookup, sptMkBN]
+  all_goals try (obtain ⟨rfl,rfl⟩ := ‹_ ∧ _›)
+  all_goals try simp [Flapjack.Compiler.Backend.WordDepth.Executable.callGraphDepth]
+  all_goals with_unfolding_all rfl
+
+theorem nested_capacity : optionLe
+    (optionMap₂ max (some (max 1 (1+nestedEntryFrame)))
+      (optionMap₂ (· + ·) (some 1) (fullCallGraphDepth nestedFrameSizes 64 (sptFromAList nestedOptimizedWords))))
+    (some 2097172) := by
+  rw [nested_entryFrame, nested_callDepth]
+  decide
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+theorem nested_compilerFacts : (fixtureRemoveLabels nestedCode).isSome = true ∧
+    (fixtureCodeBytes nestedCode).length ≤ 0xecc ∧ (fixtureCodeBytes nestedCode).length % 4 = 0 := by
+  constructor
+  · unfold fixtureRemoveLabels nestedCode nestedNative
+    rw [nested_optimizedTable, row0_exact, row1_exact, row2_exact, row3_exact]
+    with_unfolding_all decide
+  · unfold fixtureCodeBytes nestedCode nestedNative
+    rw [nested_optimizedTable, row0_exact, row1_exact, row2_exact, row3_exact]
+    simp_rw [LabToTarget.progToBytesMap]
+    with_unfolding_all decide
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
 /-- The concrete nested-call machine run follows from compiler and layout checks;
 the Lab-to-machine relation is constructed from the initialized machine. -/
-theorem nested_initialized_machine
-    (capacity : optionLe
-      (optionMap₂ max (some (max 1 (1+nestedEntryFrame)))
-        (optionMap₂ (· + ·) (some 1) (fullCallGraphDepth nestedFrameSizes 64 (sptFromAList nestedOptimizedWords))))
-      (some 2097172))
-    (facts : (fixtureRemoveLabels nestedCode).isSome = true ∧
-      (fixtureCodeBytes nestedCode).length ≤ 0xecc ∧ (fixtureCodeBytes nestedCode).length % 4 = 0) :
+theorem nested_initialized_machine :
     let rawWords := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms)
     let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig rawWords).2
     let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*122+2)
@@ -120,6 +167,7 @@ theorem nested_initialized_machine
       PanSemStateFiniteExact.semanticsDecls {sourceTemplateFor nestedBitmaps.length with clock := 0} (ofString "main")
         (nestedCallDeclarations.map declToHOL) = .terminate .success finalFfi.ioEvents := by
   let cfg := fixtureCompilerConfig nestedCode
+  have facts := nested_compilerFacts
   have bitmapFits := nested_bitmapFits
   have safe := nested_nativeSafe
   have fits : 0xa0020018 + nestedBitmaps.length * 8 ≤ sourceBase := by simp only [sourceBase]; omega
@@ -129,7 +177,7 @@ theorem nested_initialized_machine
   have guards := configuredMachine_allGuards nestedCode nestedBitmaps bitmapFits (nested_labGoodCode _) safe facts
   obtain ⟨filtered,link,tie,rel,buffer⟩ := configuredMachine_relations nestedCode cfg nestedBitmaps bitmapFits
     (fixtureCompiled nestedCode).1 (fixtureCompiled nestedCode).2 nested_nativeGoodCode removed guards
-  have result := nested_configured_machine cfg fits capacity filtered (fixtureCodeStart nestedCode)
+  have result := nested_configured_machine cfg fits nested_capacity filtered (fixtureCodeStart nestedCode)
     (fixtureMachineConfig (fixtureCodeStart nestedCode)) (fixtureCompiled nestedCode).1 (fixtureCompiled nestedCode).2
     (configuredMachineAsm nestedCode nestedBitmaps) (configuredMachineState nestedCode nestedBitmaps) rfl link tie rel
   simp only [buffer, fixtureLabMachineFactor nestedCode facts.2.1] at result
