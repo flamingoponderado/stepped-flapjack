@@ -701,6 +701,127 @@ theorem callSupported_panSimp_controlSteps_compiled {scope : List VarName} {σ :
   have w := callFrontend_hw shape
   exact h.trans (Nat.add_le_add_left ((over_le _ _).trans w) _)
 
+private theorem tailTableStep {scope : List VarName} {σ : Type} {p : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope p) (s : PanSemStateFiniteExact 64 σ)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (rel : PanSimp.CodeRel s.code code) (function : MlS) (args : List (ExpHOL 64))
+    (values : List (ValueHOL 64)) (locals : HolFiniteMapExact MlS (ValueHOL 64)) (shape : ShapeHOL)
+    (argsEval : @evalListHOLFinite 64 σ _ s (fun a => Classical.propDecidable (s.memaddrs a)) args = some values)
+    (found : lookupCodeHOLFinite s.code.lookup function values = some (progToHOL p,locals,shape))
+    (clock : s.clock ≠ 0) (factor : Nat)
+    (weight : hw (progToHOL (panSimpProg p)) + 1 ≤ factor)
+    (calleeBound : controlSteps (progToHOL p) (callEntryStateHOLFinite {s with code := code} locals) ≤
+      factor * controlSteps (progToHOL p) (callEntryStateHOLFinite s locals)) :
+    controlSteps (.call none function args) {s with code := code} ≤
+      factor * controlSteps (.call none function args) s := by
+  have targetArgs : @evalListHOLFinite 64 σ _ {s with code := code}
+      (fun a => Classical.propDecidable (s.memaddrs a)) args = some values := by
+    rw [PanSimp.evalListCodeUpd, argsEval]
+  have targetFound : lookupCodeHOLFinite code.lookup function values =
+      some (progToHOL (panSimpProg p),locals,shape) := by
+    rw [PanSimp.lookupCodeRel s.code code rel,found]
+    simp [callSupported_panSimp_hol supported]
+  rw [controlSteps_tailCall function args s values (progToHOL p) locals shape argsEval found clock]
+  rw [controlSteps_tailCall function args {s with code := code} values (progToHOL (panSimpProg p)) locals shape
+    targetArgs targetFound clock]
+  have reassoc := callSupported_panSimp_controlSteps supported (callEntryStateHOLFinite {s with code := code} locals)
+  have extra : exitOver ((callEntryStateHOLFinite {s with code := code} locals).evaluateHOLFiniteState (progToHOL p)).1
+      (hw (progToHOL (panSimpProg p))) ≤ hw (progToHOL (panSimpProg p)) := by
+    cases ((callEntryStateHOLFinite {s with code := code} locals).evaluateHOLFiniteState (progToHOL p)).1 <;> simp [exitOver]
+  simp only [Nat.mul_add,Nat.mul_one]
+  omega
+
+private theorem decCallTableReturnStep {scope : List VarName} {σ : Type} {p : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope p) (s : PanSemStateFiniteExact 64 σ)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (rel : PanSimp.CodeRel s.code code) (dest function : MlS) (destShape : ShapeHOL)
+    (args : List (ExpHOL 64)) (cont : ProgHOL 64) (values : List (ValueHOL 64))
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (returnShape : ShapeHOL) (value : ValueHOL 64)
+    (post : PanSemStateFiniteExact 64 σ)
+    (argsEval : @evalListHOLFinite 64 σ _ s (fun a => Classical.propDecidable (s.memaddrs a)) args = some values)
+    (found : lookupCodeHOLFinite s.code.lookup function values = some (progToHOL p,locals,returnShape))
+    (clock : s.clock ≠ 0)
+    (run : (callEntryStateHOLFinite s locals).evaluateHOLFiniteState (progToHOL p) = (some (.returned value),post))
+    (valid : shapeEqHOL (shapeOfHOLExact value) destShape = true)
+    (returnValid : shapeEqHOL (shapeOfHOLExact value) returnShape = true)
+    (factor : Nat) (weight : hw (progToHOL (panSimpProg p)) + 1 ≤ factor)
+    (calleeBound : controlSteps (progToHOL p) (callEntryStateHOLFinite {s with code := code} locals) ≤
+      factor * controlSteps (progToHOL p) (callEntryStateHOLFinite s locals))
+    (contBound : controlSteps cont {setVarHOLFinite dest value {post with locals := s.locals} with code := code} ≤
+      factor * controlSteps cont (setVarHOLFinite dest value {post with locals := s.locals})) :
+    controlSteps (.decCall dest destShape function args cont) {s with code := code} ≤
+      factor * controlSteps (.decCall dest destShape function args cont) s := by
+  have targetArgs : @evalListHOLFinite 64 σ _ {s with code := code}
+      (fun a => Classical.propDecidable (s.memaddrs a)) args = some values := by
+    rw [PanSimp.evalListCodeUpd, argsEval]
+  have targetFound : lookupCodeHOLFinite code.lookup function values =
+      some (progToHOL (panSimpProg p),locals,returnShape) := by
+    rw [PanSimp.lookupCodeRel s.code code rel,found]
+    simp [callSupported_panSimp_hol supported]
+  obtain ⟨targetRun,_⟩ := PanSimp.codeSim_body s locals (progToHOL p) code rel
+    (PanSimp.codeSimAll (progToHOL p) {s.decClockHOLFinite with locals := locals})
+    (some (.returned value)) post run (by simp)
+  rw [callSupported_panSimp_hol supported] at targetRun
+  rw [controlSteps_decCall_return dest function destShape args cont s values (progToHOL p) locals returnShape
+    value post argsEval found clock run valid returnValid]
+  rw [controlSteps_decCall_return dest function destShape args cont {s with code := code} values
+    (progToHOL (panSimpProg p)) locals returnShape value {post with code := code} targetArgs targetFound clock
+    targetRun valid returnValid]
+  have fixed : fixClockHOLFinite (callEntryStateHOLFinite s locals) (some (PanSemResultExact.returned value),post) =
+      (some (PanSemResultExact.returned value),post) := by rw [← run,fixClockHOLFinite_evaluateState]
+  have fixedTarget : fixClockHOLFinite (callEntryStateHOLFinite {s with code := code} locals)
+      (some (PanSemResultExact.returned value),{post with code := code}) = (some (PanSemResultExact.returned value),{post with code := code}) := by
+    rw [← targetRun,fixClockHOLFinite_evaluateState]
+  simp only [fixed,fixedTarget]
+  have reassoc := callSupported_panSimp_controlSteps supported (callEntryStateHOLFinite {s with code := code} locals)
+  have extra : exitOver ((callEntryStateHOLFinite {s with code := code} locals).evaluateHOLFiniteState (progToHOL p)).1
+      (hw (progToHOL (panSimpProg p))) ≤ hw (progToHOL (panSimpProg p)) := by
+    cases ((callEntryStateHOLFinite {s with code := code} locals).evaluateHOLFiniteState (progToHOL p)).1 <;> simp [exitOver]
+  simp only [Nat.mul_add,Nat.mul_one]
+  have contBound' : controlSteps cont (setVarHOLFinite dest value {post with locals := s.locals, code := code}) ≤
+      factor * controlSteps cont (setVarHOLFinite dest value {post with locals := s.locals}) := by
+    simpa [setVarHOLFinite] using contBound
+  omega
+
+private theorem decCallTableTerminalStep {scope : List VarName} {σ : Type} {p : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope p) (s : PanSemStateFiniteExact 64 σ)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (rel : PanSimp.CodeRel s.code code) (dest function : MlS) (destShape : ShapeHOL)
+    (args : List (ExpHOL 64)) (cont : ProgHOL 64) (values : List (ValueHOL 64))
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (returnShape : ShapeHOL)
+    (result : Option (PanSemResultExact 64)) (post : PanSemStateFiniteExact 64 σ)
+    (argsEval : @evalListHOLFinite 64 σ _ s (fun a => Classical.propDecidable (s.memaddrs a)) args = some values)
+    (found : lookupCodeHOLFinite s.code.lookup function values = some (progToHOL p,locals,returnShape))
+    (clock : s.clock ≠ 0)
+    (run : (callEntryStateHOLFinite s locals).evaluateHOLFiniteState (progToHOL p) = (result,post))
+    (nonerror : result ≠ some .error) (terminal : ∀ value, result ≠ some (.returned value))
+    (factor : Nat) (weight : hw (progToHOL (panSimpProg p)) + 1 ≤ factor)
+    (calleeBound : controlSteps (progToHOL p) (callEntryStateHOLFinite {s with code := code} locals) ≤
+      factor * controlSteps (progToHOL p) (callEntryStateHOLFinite s locals)) :
+    controlSteps (.decCall dest destShape function args cont) {s with code := code} ≤
+      factor * controlSteps (.decCall dest destShape function args cont) s := by
+  have targetArgs : @evalListHOLFinite 64 σ _ {s with code := code}
+      (fun a => Classical.propDecidable (s.memaddrs a)) args = some values := by
+    rw [PanSimp.evalListCodeUpd, argsEval]
+  have targetFound : lookupCodeHOLFinite code.lookup function values =
+      some (progToHOL (panSimpProg p),locals,returnShape) := by
+    rw [PanSimp.lookupCodeRel s.code code rel,found]
+    simp [callSupported_panSimp_hol supported]
+  obtain ⟨targetRun,_⟩ := PanSimp.codeSim_body s locals (progToHOL p) code rel
+    (PanSimp.codeSimAll (progToHOL p) {s.decClockHOLFinite with locals := locals}) result post run nonerror
+  rw [callSupported_panSimp_hol supported] at targetRun
+  rw [controlSteps_decCall_terminal dest function destShape args cont s values (progToHOL p) locals returnShape
+    result post argsEval found clock run terminal]
+  rw [controlSteps_decCall_terminal dest function destShape args cont {s with code := code} values
+    (progToHOL (panSimpProg p)) locals returnShape result {post with code := code} targetArgs targetFound clock
+    targetRun terminal]
+  have reassoc := callSupported_panSimp_controlSteps supported (callEntryStateHOLFinite {s with code := code} locals)
+  have extra : exitOver ((callEntryStateHOLFinite {s with code := code} locals).evaluateHOLFiniteState (progToHOL p)).1
+      (hw (progToHOL (panSimpProg p))) ≤ hw (progToHOL (panSimpProg p)) := by
+    cases ((callEntryStateHOLFinite {s with code := code} locals).evaluateHOLFiniteState (progToHOL p)).1 <;> simp [exitOver]
+  simp only [Nat.mul_add,Nat.mul_one]
+  omega
+
 /-- pan_simp's extra control visits are bounded by the weight of the simplified
 body, charged only on an abnormal exit. -/
 theorem supported_panSimp_controlSteps_simplified {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
