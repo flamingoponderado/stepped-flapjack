@@ -1,5 +1,6 @@
 import SteppedFlapjack.Concrete.Phase7Compiler
 import Flapjack.Pancake.Semantics.PanSem.ClockTimeout
+import Flapjack.Pancake.PanLang
 
 /-! Finite source clock monotonicity for observational semantics. -/
 namespace SteppedFlapjack.Concrete
@@ -150,6 +151,61 @@ theorem source_function_declarations_init {width : Nat} {σ : Type} [NeZero widt
     simp only [List.map_cons,evaluateDeclsHOLFinite,wellFormed.1,List.foldl_cons]
     exact ih _ wellFormed.2
 
+private theorem lookup_mem {α β : Type} [BEq α] [LawfulBEq α]
+    (l : List (α × β)) (k : α) (v : β) (h : List.lookup k l = some v) : (k,v) ∈ l := by
+  induction l with
+  | nil => simp at h
+  | cons e l ih =>
+    obtain ⟨a,b⟩ := e
+    by_cases hk : k = a
+    · subst hk; simp at h; subst h; simp
+    · have he : (k == a) = false := by simp [hk]
+      simp only [List.lookup_cons,he] at h
+      exact List.mem_cons_of_mem _ (ih h)
+private theorem lookup_reverse_nodup {α β : Type} [BEq α] [LawfulBEq α]
+    (l : List (α × β)) (k : α) (hnd : (l.map Prod.fst).Nodup) :
+    List.lookup k l.reverse = List.lookup k l := by
+  have hnd' : (l.reverse.map Prod.fst).Nodup := by
+    rw [List.map_reverse, List.Nodup, List.pairwise_reverse]
+    exact hnd.imp (fun h => Ne.symm h)
+  cases h : List.lookup k l with
+  | none =>
+    cases h' : List.lookup k l.reverse with
+    | none => rfl
+    | some v =>
+      have hm := lookup_mem _ _ _ h'
+      have eq := Flapjack.list_lookup_of_mem_of_nodup hnd (List.mem_reverse.mp hm)
+      rw [h] at eq; cases eq
+  | some v =>
+    exact Flapjack.list_lookup_of_mem_of_nodup hnd' (List.mem_reverse.mpr (lookup_mem _ _ _ h))
+theorem updateList_reverse_nodup {α β : Type} [BEq α] [LawfulBEq α]
+    (l : List (α × β)) (hnd : (l.map Prod.fst).Nodup) :
+    (HolFiniteMapExact.empty.updateList l) = (HolFiniteMapExact.empty.updateList l.reverse) := by
+  apply HolFiniteMapExact.ext
+  funext k
+  simp only [HolFiniteMapExact.lookup_updateList]
+  change FUPDATE_LIST FEMPTY l k = FUPDATE_LIST FEMPTY l.reverse k
+  have h₁ := FLOOKUP_FUPDATE_LIST_reverse_eq_lookup l.reverse k
+  have h₂ := FLOOKUP_FUPDATE_LIST_reverse_eq_lookup l k
+  simp only [List.reverse_reverse,FLOOKUP] at h₁ h₂
+  rw [h₁,h₂,lookup_reverse_nodup l k hnd]
+
+theorem function_fold_code {width : Nat} [NeZero width] (functions : List (FunDeclHOL width))
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL)) :
+    functions.foldl (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) code =
+      code.updateList (functionsHOL (functions.map DeclHOL.function)) := by
+  induction functions generalizing code with
+  | nil =>
+    apply HolFiniteMapExact.ext
+    funext key
+    rfl
+  | cons f fs ih =>
+    simp only [List.foldl_cons,List.map_cons,functionsHOL,ih]
+    apply HolFiniteMapExact.ext
+    funext key
+    simp only [HolFiniteMapExact.lookup_updateList,FUPDATE_LIST_cons]
+    rfl
+
 open Classical in
 /-- Function-only declarations have the semantics of their initialized code
 table, with the shape check calculated directly from the declarations. -/
@@ -159,14 +215,31 @@ theorem source_function_declarations_semantics {width : Nat} {σ : Type} [NeZero
       f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
         isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true) :
     semanticsDecls state start (functions.map DeclHOL.function) =
-      semantics {state with structs := [], code := functions.foldl (fun code f =>
-        code.update (f.name,(f.params,f.body,f.returnShape))) state.code} start := by
+      semantics {state with structs := [], code :=
+        state.code.updateList (functionsHOL (functions.map DeclHOL.function))} start := by
   have names : decsStcnamesHOLExact [] (functions.map DeclHOL.function) = some [] := by
     clear wellFormed
     induction functions with
     | nil => rfl
     | cons f fs ih => simpa [decsStcnamesHOLExact] using ih
   have init := source_function_declarations_init {state with structs := []} functions wellFormed
-  exact source_declarations_semantics state _ start _ [] names init
+  simpa only [function_fold_code] using source_declarations_semantics state _ start _ [] names init
+
+open Classical in
+/-- With distinct function names, the initialized source code is exactly the
+reversed association-list table used by the call-aware frontend. -/
+theorem source_function_declarations_compiler_code {width : Nat} {σ : Type} [NeZero width]
+    (state : PanSemStateFiniteExact width σ) (functions : List (FunDeclHOL width))
+    (emptyCode : state.code = HolFiniteMapExact.empty)
+    (wellFormed : functions.all (fun f =>
+      f.params.all (fun p => isWfShapeExactHOL state.structs p.2) &&
+        isWfShapeExactHOL state.structs f.returnShape) = true)
+    (unique : ((functionsHOL (functions.map DeclHOL.function)).map Prod.fst).Nodup) :
+    evaluateDeclsHOLFinite state (functions.map DeclHOL.function) = some
+      {state with code := (HolFiniteMapExact.empty.updateList
+        (functionsHOL (functions.map DeclHOL.function)).reverse)} := by
+  have init := source_function_declarations_init state functions wellFormed
+  rw [function_fold_code,emptyCode,updateList_reverse_nodup _ unique] at init
+  exact init
 
 end SteppedFlapjack.Concrete

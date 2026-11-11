@@ -34,6 +34,7 @@ theorem nestedCall_declared_semantics (bitmapWords : Nat) :
     simp [fs,isWfShapeExactHOL]
   have sem := source_function_declarations_semantics
     {sourceTemplateFor bitmapWords with clock := 0} (ofString "main") fs wellFormed
+  rw [← function_fold_code] at sem
   have sem' : semanticsDecls {sourceTemplateFor bitmapWords with clock := 0} (ofString "main")
       (nestedCallDeclarations.map declToHOL) =
       semantics {nestedSourceState bitmapWords with clock := 0} (ofString "main") := by
