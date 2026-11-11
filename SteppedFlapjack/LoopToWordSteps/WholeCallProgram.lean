@@ -163,6 +163,7 @@ theorem callFrontend_word_explicit {width : Nat} [NeZero width] {C σ : Type}
     (target : LoopSemStateFiniteExact width σ) (sourceCode : source.code = alistToFmapCodeExact programs)
     (run : evalCrepSemHOLProgExact source (compileProgExactHOLW panCtxt p) = (result,sourceFinal))
     (nonerror : result ≠ some .error) (nonTimeout : result ≠ some .timeOut)
+    (sourceLimit : Nat) (sourceBound : CrepSteps.steps (compileProgExactHOLW panCtxt p) source ≤ sourceLimit)
     (stateRel : crepToLoopStateRelExact source target)
     (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
     (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
@@ -173,7 +174,7 @@ theorem callFrontend_word_explicit {width : Nat} [NeZero width] {C σ : Type}
     (wordCode : word.code = sptFromAList (loopToWordCompileHOL wordTable))
     (wordRel : let rows := programs.map (fun row => (row.2.1,row.2.2))
       let crep := compileProgExactHOLW panCtxt p
-      let budget := callClockFactor ref rows source.clock crep * (CrepSteps.steps crep source+1)
+      let budget := callClockFactor ref rows source.clock crep * (sourceLimit+1)
       loopToWordStateRelHOLExact {target with clock := target.clock+budget} word)
     (wordLocals : LoopToWord.localsRelHOL wordCtxt target.locals word.locals)
     (retvLookup : sptLookup 0 word.locals = some retv) (dim : goodDimindex width)
@@ -182,7 +183,7 @@ theorem callFrontend_word_explicit {width : Nat} [NeZero width] {C σ : Type}
     let rows := programs.map (fun row => (row.2.1,row.2.2))
     let crep := compileProgExactHOLW panCtxt p
     let loop := compileHOLExact ctxt live crep
-    let budget := callClockFactor ref rows source.clock crep * (CrepSteps.steps crep source+1)
+    let budget := callClockFactor ref rows source.clock crep * (sourceLimit+1)
     let factor := max (callSyntaxCost ref crep) (loopCodeWeight target.code+2)
     ∃ loopPost wordPost wordResult,
       evaluate loop {target with clock := target.clock+budget} = (resultToLoop result,loopPost) ∧
@@ -201,12 +202,12 @@ theorem callFrontend_word_explicit {width : Nat} [NeZero width] {C σ : Type}
   let rows := programs.map (fun row => (row.2.1,row.2.2))
   let crep := compileProgExactHOLW panCtxt p
   let loop := compileHOLExact ctxt live crep
-  let budget := callClockFactor ref rows source.clock crep * (CrepSteps.steps crep source+1)
+  let budget := callClockFactor ref rows source.clock crep * (sourceLimit+1)
   let factor := max (callSyntaxCost ref crep) (loopCodeWeight target.code+2)
   let start := {target with clock := target.clock+budget}
   obtain ⟨loopPost,ev,visitBound,st,mem,gl,code,locals⟩ :=
     callFrontend_wholeVisits_explicit panCtxt p shape programs sources ref ctxt live source sourceFinal result target
-      sourceCode run nonerror nonTimeout stateRel memRel globalsRel codeRel targetTable localsRel
+      sourceCode run nonerror nonTimeout sourceLimit sourceBound stateRel memRel globalsRel codeRel targetTable localsRel
   have mappedNonerror : resultToLoop result ≠ some .error := by
     cases result with
     | none => simp [resultToLoop]
