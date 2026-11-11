@@ -30,7 +30,8 @@ def BudgetSimulation {width : Nat} [NeZero width] {C F : Type}
       StackSemEvaluate.evaluate (compiled, {target with clock := target.clock + cost + reserve}) =
         (targetResult, targetPost) ∧
       reserve ≤ targetPost.clock ∧
-      (targetResult = some (.halt (.word 2)) ∨ sourcePost.clock + reserve ≤ targetPost.clock) ∧
+      (targetResult = some (.halt (.word 2)) ∨
+        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + cost + reserve)) ∧
       compCorrectResult ac k f frame source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens
 
 theorem zeroBudget {width : Nat} [NeZero width] {C F : Type}
@@ -44,7 +45,7 @@ theorem zeroBudget {width : Nat} [NeZero width] {C F : Type}
   refine ⟨targetPost,out,by simpa using targetRun,enough,?_,?_⟩
   · rcases accounting with limit | clock
     · exact Or.inl limit
-    · right; omega
+    · right; constructor <;> omega
   · simpa using compCorrectResult_setClocks ac k f frame source post
       {targetPost with clock := targetPost.clock-reserve} res out lens post.clock conclusion
 
@@ -58,7 +59,7 @@ theorem raiseBudget {width : Nat} [NeZero width] {C F : Type}
   refine ⟨targetPost,out,targetRun,enough,?_,?_⟩
   · rcases accounting with limit | clock
     · exact Or.inl limit
-    · right; omega
+    · right; constructor <;> omega
   · simpa using compCorrectResult_setClocks ac k f frame source post
       {targetPost with clock := targetPost.clock-reserve} res out lens post.clock conclusion
 
@@ -250,7 +251,7 @@ private theorem budgetSeqFirstNone {width : Nat} [NeZero width] {C F : Type}
       have enough : middle.clock + (secondCost + reserve) ≤ targetMiddle.clock := by
         rcases firstAccounting with impossible | enough
         · simp at impossible
-        · exact enough
+        · exact enough.1
       let remaining := targetMiddle.clock - middle.clock - secondCost
       have remainingBound : reserve ≤ remaining := by dsimp [remaining]; omega
       have remainingEq : middle.clock + secondCost + remaining = targetMiddle.clock := by dsimp [remaining]; omega
@@ -277,7 +278,10 @@ private theorem budgetSeqFirstNone {width : Nat} [NeZero width] {C F : Type}
         simpa only [remainingEq] using secondRun
       · rcases secondAccounting with limit | enough
         · exact Or.inl limit
-        · right; omega
+        · rcases enough with ⟨lower, upper⟩
+          rcases firstAccounting with limit | firstBounds
+          · simp at limit
+          · right; constructor <;> omega
 
 
 /-- A larger concrete budget preserves a bounded simulation. -/

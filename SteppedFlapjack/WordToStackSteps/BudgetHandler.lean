@@ -59,7 +59,8 @@ theorem budgetHandlerNormalContinuation {width : Nat} [NeZero width] {C F : Type
           (popHandlerNative false (k,frame,payload) compiled),
           {target with clock := target.clock + cost + reserve}) = (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
-      (targetResult = some (.halt (.word 2)) ∨ sourcePost.clock + reserve ≤ targetPost.clock) ∧
+      (targetResult = some (.halt (.word 2)) ∨
+        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + cost + reserve)) ∧
       compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
   have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
   obtain ⟨gc,rest,popped,sourceFrame,keys,tailKeys,handlerEq,poppedEq,popRun,domain,
@@ -181,7 +182,8 @@ theorem budgetHandlerExceptionContinuation {width : Nat} [NeZero width] {C F : T
         (compiled,
           {target with clock := target.clock + cost + reserve}) = (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
-      (targetResult = some (.halt (.word 2)) ∨ sourcePost.clock + reserve ≤ targetPost.clock) ∧
+      (targetResult = some (.halt (.word 2)) ∨
+        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + cost + reserve)) ∧
       compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
   have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
   obtain ⟨valid,domain,sourceContinuation,continuationIH⟩ := sourceHandlerExceptionContinuation
@@ -289,7 +291,8 @@ theorem budgetHandlerCalleeBody {width : Nat} [NeZero width] {C F : Type}
           clock := (StackSemStateOps.decClock moved).clock + cost + reserve}) =
         (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
-      (targetResult = some (.halt (.word 2)) ∨ bodyPost.clock + reserve ≤ targetPost.clock) ∧
+      (targetResult = some (.halt (.word 2)) ∨
+        (bodyPost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ bodyPost.clock + cost + reserve)) ∧
       compCorrectResult ac k calleeSize calleeFrame
         (WordSemStateFiniteExact.callEnv args1 ss
           (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
@@ -453,7 +456,8 @@ theorem budgetNormalHandlerCallFromCallee {width : Nat} [NeZero width] {C F : Ty
           {moved with clock := moved.clock+bodyExtra+(cost+reserve)}) =
         (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
-      (targetResult = some (.halt (.word 2)) ∨ sourcePost.clock + reserve ≤ targetPost.clock) ∧
+      (targetResult = some (.halt (.word 2)) ∨
+        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + cost + reserve)) ∧
       compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
   have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
   obtain ⟨gc,rest,popped,sourceFrame,keys,tailKeys,handlerEq,poppedEq,popRun,domain,
@@ -549,7 +553,8 @@ theorem budgetExceptionHandlerCallFromCallee {width : Nat} [NeZero width] {C F :
         (.call (some (continuationTarget,0,l1,l2)) destination (some (compiled,h1,h2)),
           {moved with clock := moved.clock+bodyExtra+(cost+reserve)}) = (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
-      (targetResult = some (.halt (.word 2)) ∨ sourcePost.clock + reserve ≤ targetPost.clock) ∧
+      (targetResult = some (.halt (.word 2)) ∨
+        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + cost + reserve)) ∧
       compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
   have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
   obtain ⟨valid,domain,sourceContinuation,continuationIH⟩ := sourceHandlerExceptionContinuation
@@ -573,6 +578,220 @@ theorem budgetExceptionHandlerCallFromCallee {width : Nat} [NeZero width] {C F :
   simpa [Nat.add_assoc] using returningHandlerCallExceptionRun moved target targetPost l1 l2 h1 h2 bodyExtra (cost+reserve)
       destination calleeCode continuationTarget compiled targetResult found movedNonzero exceptionRun
       (by simpa only [Nat.add_assoc] using handlerRun)
+
+
+
+
+
+/-- The caller continuation consumes allowance left by the callee. -/
+theorem budgetNormalHandlerCallWithReserve {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (k frame payload : Nat)
+    (source sourcePost bodyPost : WordSemStateFiniteExact width (Nat × C) F)
+    (originalTarget target : StackSemStateFiniteExact width C F) (lens : List Nat)
+    (prior : stateRel ac k frame payload source originalTarget lens 0)
+    (values : List Nat) (names : WordLangCutsetsHOL)
+    (retCode handlerCode : WordLangProgHOL (BitVec width))
+    (l1 l2 h1 h2 handlerVar : Nat) (dest : Option Nat) (args : List Nat)
+    (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
+    (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
+    (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
+    (cost reserve : Nat)
+    (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
+      t.clock < source.clock → (safeWordCode source → safeWordCode t) → BudgetSimulation ac retCode t cost)
+    (conventions : postAllocConventionsHOL k
+      (.call (some (values,names,retCode,l1,l2)) dest args
+        (some (handlerVar,handlerCode,h1,h2))) = true)
+    (flat : flatExpConventions
+      (.call (some (values,names,retCode,l1,l2)) dest args
+        (some (handlerVar,handlerCode,h1,h2))) = true)
+    (maximum : maxVarHOL
+      (.call (some (values,names,retCode,l1,l2)) dest args
+        (some (handlerVar,handlerCode,h1,h2))) < 2*payload+2*k)
+    (nonzero : source.clock ≠ 0) (result : Option (WordSemResult width))
+    (wholeRun : WordSemStateFiniteExact.evaluate
+      (.call (some (values,names,retCode,l1,l2)) dest args
+        (some (handlerVar,handlerCode,h1,h2))) source = (result,sourcePost))
+    (notError : result ≠ some .error) (notTimeout : result ≠ some .timeOut)
+    (location : WordLocW width) (returnedValues : List (WordLocW width))
+    (bodyRun : WordSemStateFiniteExact.evaluate prog
+      (WordSemStateFiniteExact.callEnv args1 ss
+        (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
+          (WordSemStateFiniteExact.decClock source))) =
+      (some (.result location returnedValues),bodyPost))
+    (calleeSize calleeFrame : Nat)
+    (bodyConclusion : compCorrectResult ac k calleeSize calleeFrame
+      (WordSemStateFiniteExact.callEnv args1 ss
+        (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
+          (WordSemStateFiniteExact.decClock source))) bodyPost {target with clock := bodyPost.clock}
+      (some (.result location returnedValues)) (some (.result location)) (payload::lens))
+    (moved : StackSemStateFiniteExact width C F) (destination : Sum Nat Nat)
+    (calleeCode handlerTarget : HolProg width) (bodyExtra : Nat)
+    (enough : bodyPost.clock + cost + reserve ≤ target.clock)
+    (bounded : target.clock ≤ bodyPost.clock + bodyExtra)
+    (found : StackSemControl.findCode destination (moved.regs.eraseEq 0) moved.code = some calleeCode)
+    (movedNonzero : moved.clock ≠ 0)
+    (calleeRun : StackSemEvaluate.evaluate
+      (calleeCode,{StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved) with
+        clock := (StackSemStateOps.decClock moved).clock+bodyExtra}) =
+      (some (.result location),target))
+    (bs bsPost : AppList (BitVec width)) (n nPost : Nat) (compiled : HolProg width)
+    (compilation : compNative ac false retCode (bs,n) (k,frame,payload) = (compiled,(bsPost,nPost)))
+    (lengthBound : (appListAppend bs).length ≤ n)
+    (bitmapBound : n-(appListAppend bs).length ≤ target.bitmaps.length)
+    (bitmapPrefix : (appListAppend bsPost).IsPrefix (target.bitmaps.drop (n-(appListAppend bs).length)))
+    (labels : ∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact target.code loc) :
+    ∃ targetPost targetResult,
+      StackSemEvaluate.evaluate
+        (.call (some (.seq .skip (copyRetNative false true (k,frame,payload) values
+          (popHandlerNative false (k,frame,payload) compiled)),0,l1,l2))
+          destination (some (handlerTarget,h1,h2)),
+          {moved with clock := moved.clock+bodyExtra}) =
+        (targetResult,targetPost) ∧
+      reserve ≤ targetPost.clock ∧
+      (targetResult = some (.halt (.word 2)) ∨
+        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + bodyExtra)) ∧
+      compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
+  have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
+  obtain ⟨gc,rest,popped,sourceFrame,keys,tailKeys,handlerEq,poppedEq,popRun,domain,
+    valid,sourceContinuation,continuationIH⟩ := sourceHandlerReturningContinuation
+    ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source sourcePost bodyPost
+    result xs args1 prog ss envs location returnedValues guards ih nonzero wholeRun notError bodyRun
+  have locationEq : location = .loc l1 l2 := by
+    by_contra different
+    exact valid (Or.inl different)
+  let remaining := target.clock - bodyPost.clock - cost
+  have remainingLower : reserve ≤ remaining := by dsimp [remaining]; omega
+  have remainingUpper : cost + remaining ≤ bodyExtra := by dsimp [remaining]; omega
+  have clockEq : bodyPost.clock + cost + remaining = target.clock := by dsimp [remaining]; omega
+  obtain ⟨targetPost,targetResult,continuationRun,postEnough,accounting,conclusion⟩ :=
+    budgetHandlerNormalContinuation ac k frame payload source sourcePost bodyPost originalTarget
+      {target with clock := bodyPost.clock}
+      lens prior values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1 prog ss envs
+      guards cost remaining retBudget conventions flat maximum nonzero result wholeRun notError notTimeout location returnedValues
+      bodyRun calleeSize calleeFrame bodyConclusion bs bsPost n nPost compiled compilation lengthBound
+      bitmapBound bitmapPrefix labels
+  have normalRun : StackSemEvaluate.evaluate
+      (calleeCode,{StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved) with
+        clock := (StackSemStateOps.decClock moved).clock+bodyExtra}) =
+      (some (.result (.loc l1 l2)),target) := by
+    simpa only [locationEq] using calleeRun
+  have skipped : StackSemEvaluate.evaluate
+      (.seq .skip (copyRetNative false true (k,frame,payload) values
+        (popHandlerNative false (k,frame,payload) compiled)),
+        {target with clock := target.clock+0}) = (targetResult,targetPost) := by
+    rw [CallReturnEval.seq_skip_left]
+    simpa only [clockEq, Nat.add_zero] using continuationRun
+  refine ⟨targetPost,targetResult, ?_, by omega, ?_, conclusion⟩
+  · simpa using returningHandlerCallNormalRun moved target targetPost l1 l2 h1 h2 bodyExtra 0
+      destination calleeCode (.seq .skip (copyRetNative false true (k,frame,payload) values
+        (popHandlerNative false (k,frame,payload) compiled))) handlerTarget targetResult
+      found movedNonzero normalRun skipped
+  · rcases accounting with limit | ⟨lower,upper⟩
+    · exact Or.inl limit
+    · right; constructor <;> omega
+
+
+
+
+
+
+/-- The exception handler consumes allowance left by the callee. -/
+theorem budgetExceptionHandlerCallWithReserve {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (k frame payload : Nat)
+    (source sourcePost bodyPost : WordSemStateFiniteExact width (Nat × C) F)
+    (originalTarget target : StackSemStateFiniteExact width C F) (lens : List Nat)
+    (prior : stateRel ac k frame payload source originalTarget lens 0)
+    (values : List Nat) (names : WordLangCutsetsHOL)
+    (retCode handlerCode : WordLangProgHOL (BitVec width))
+    (l1 l2 h1 h2 handlerVar : Nat) (dest : Option Nat) (args : List Nat)
+    (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
+    (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
+    (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
+    (cost reserve : Nat)
+    (handlerBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
+      t.clock < source.clock → (safeWordCode source → safeWordCode t) → BudgetSimulation ac handlerCode t cost)
+    (conventions : postAllocConventionsHOL k
+      (.call (some (values,names,retCode,l1,l2)) dest args
+        (some (handlerVar,handlerCode,h1,h2))) = true)
+    (flat : flatExpConventions
+      (.call (some (values,names,retCode,l1,l2)) dest args
+        (some (handlerVar,handlerCode,h1,h2))) = true)
+    (maximum : maxVarHOL
+      (.call (some (values,names,retCode,l1,l2)) dest args
+        (some (handlerVar,handlerCode,h1,h2))) < 2*payload+2*k)
+    (nonzero : source.clock ≠ 0) (result : Option (WordSemResult width))
+    (wholeRun : WordSemStateFiniteExact.evaluate
+      (.call (some (values,names,retCode,l1,l2)) dest args
+        (some (handlerVar,handlerCode,h1,h2))) source = (result,sourcePost))
+    (notError : result ≠ some .error) (notTimeout : result ≠ some .timeOut)
+    (location value : WordLocW width)
+    (bodyRun : WordSemStateFiniteExact.evaluate prog
+      (WordSemStateFiniteExact.callEnv args1 ss
+        (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
+          (WordSemStateFiniteExact.decClock source))) =
+      (some (.exception location value),bodyPost))
+    (calleeSize calleeFrame : Nat)
+    (bodyConclusion : compCorrectResult ac k calleeSize calleeFrame
+      (WordSemStateFiniteExact.callEnv args1 ss
+        (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
+          (WordSemStateFiniteExact.decClock source))) bodyPost {target with clock := bodyPost.clock}
+      (some (.exception location value)) (some (.exception location)) (payload::lens))
+    (moved : StackSemStateFiniteExact width C F) (destination : Sum Nat Nat)
+    (calleeCode continuationTarget : HolProg width) (bodyExtra : Nat)
+    (enough : bodyPost.clock + cost + reserve ≤ target.clock)
+    (bounded : target.clock ≤ bodyPost.clock + bodyExtra)
+    (found : StackSemControl.findCode destination (moved.regs.eraseEq 0) moved.code = some calleeCode)
+    (movedNonzero : moved.clock ≠ 0)
+    (calleeRun : StackSemEvaluate.evaluate
+      (calleeCode,{StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved) with
+        clock := (StackSemStateOps.decClock moved).clock+bodyExtra}) =
+      (some (.exception location),target))
+    (bs bsPost : AppList (BitVec width)) (n nPost : Nat) (compiled : HolProg width)
+    (compilation : compNative ac false handlerCode (bs,n) (k,frame,payload) = (compiled,(bsPost,nPost)))
+    (lengthBound : (appListAppend bs).length ≤ n)
+    (bitmapBound : n-(appListAppend bs).length ≤ target.bitmaps.length)
+    (bitmapPrefix : (appListAppend bsPost).IsPrefix (target.bitmaps.drop (n-(appListAppend bs).length)))
+    (labels : ∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact target.code loc) :
+    ∃ targetPost targetResult,
+      StackSemEvaluate.evaluate
+        (.call (some (continuationTarget,0,l1,l2)) destination (some (compiled,h1,h2)),
+          {moved with clock := moved.clock+bodyExtra}) = (targetResult,targetPost) ∧
+      reserve ≤ targetPost.clock ∧
+      (targetResult = some (.halt (.word 2)) ∨
+        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + bodyExtra)) ∧
+      compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
+  have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
+  obtain ⟨valid,domain,sourceContinuation,continuationIH⟩ := sourceHandlerExceptionContinuation
+    ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source sourcePost bodyPost
+    result xs args1 prog ss envs location value guards ih nonzero wholeRun notError bodyRun
+  have locationEq : location = .loc h1 h2 := by
+    by_contra different
+    exact valid different
+  let remaining := target.clock - bodyPost.clock - cost
+  have remainingLower : reserve ≤ remaining := by dsimp [remaining]; omega
+  have remainingUpper : cost + remaining ≤ bodyExtra := by dsimp [remaining]; omega
+  have clockEq : bodyPost.clock + cost + remaining = target.clock := by dsimp [remaining]; omega
+  obtain ⟨targetPost,targetResult,handlerRun,postEnough,accounting,conclusion⟩ :=
+    budgetHandlerExceptionContinuation ac k frame payload source sourcePost bodyPost originalTarget
+      {target with clock := bodyPost.clock}
+      lens prior values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1 prog ss envs
+      guards cost remaining handlerBudget conventions flat maximum nonzero result wholeRun notError notTimeout location value
+      bodyRun calleeSize calleeFrame bodyConclusion bs bsPost n nPost compiled compilation lengthBound
+      bitmapBound bitmapPrefix labels
+  have exceptionRun : StackSemEvaluate.evaluate
+      (calleeCode,{StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved) with
+        clock := (StackSemStateOps.decClock moved).clock+bodyExtra}) =
+      (some (.exception (.loc h1 h2)),target) := by
+    simpa only [locationEq] using calleeRun
+  refine ⟨targetPost,targetResult, ?_, by omega, ?_, conclusion⟩
+  · simpa using returningHandlerCallExceptionRun moved target targetPost l1 l2 h1 h2 bodyExtra 0
+      destination calleeCode continuationTarget compiled targetResult found movedNonzero exceptionRun
+      (by simpa only [clockEq, Nat.add_zero] using handlerRun)
+  · rcases accounting with limit | ⟨lower,upper⟩
+    · exact Or.inl limit
+    · right; constructor <;> omega
+
+
 
 
 

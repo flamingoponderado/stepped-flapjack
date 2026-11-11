@@ -107,7 +107,8 @@ theorem budgetCalleeBodyAt {width : Nat} [NeZero width] {C F : Type}
                 clock := (StackSemStateOps.decClock moved).clock + cost + reserve}) =
             (targetResult, targetPost) ∧
           reserve ≤ targetPost.clock ∧
-          (targetResult = some (.halt (.word 2)) ∨ bodyPost.clock + reserve ≤ targetPost.clock) ∧
+          (targetResult = some (.halt (.word 2)) ∨
+        (bodyPost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ bodyPost.clock + cost + reserve)) ∧
           compCorrectResult ac k calleeSize calleeFrame
             (WordSemStateFiniteExact.callEnv args1 ss
               (WordSemStateFiniteExact.pushEnv envs none
@@ -189,7 +190,8 @@ theorem budgetReturningContinuation {width : Nat} [NeZero width] {C F : Type}
       StackSemEvaluate.evaluate (copyRetNative false false (k, f, frame) values compiled,
         {target with clock := target.clock + cost + reserve}) = (targetResult, targetPost) ∧
       reserve ≤ targetPost.clock ∧
-      (targetResult = some (.halt (.word 2)) ∨ sourcePost.clock + reserve ≤ targetPost.clock) ∧
+      (targetResult = some (.halt (.word 2)) ∨
+        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + cost + reserve)) ∧
       compCorrectResult ac k f frame source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
   obtain ⟨post, out, continuationRun, enough, accounting, conclusion⟩ :=
     retBudget k f frame sourcePost restored result bs bsPost n nPost compiled lens
