@@ -109,7 +109,10 @@ theorem returningHandler_bounded {width : Nat} [NeZero width] {C F : Type}
     source sourcePost result limit premises.1 notTimeout (used.trans stepBound)
   have related := stateRel_setClocks ac k f frame source target lens 0 limit premises.2.2.1
   have normalizedCode : ∀ loc arity p, sptLookup loc ({source with clock := limit}).code = some (arity, p) → LoopBlock p := code
-  have sim := zeroReturningHandlerCase ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode {source with clock := limit} retBlock handlerBlock normalizedCode
+  have sim := zeroReturningHandlerCase ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode {source with clock := limit}
+    (fun t _ _ => loopBlock_zero ac retCode t retBlock)
+    (fun t _ _ => loopBlock_zero ac handlerCode t handlerBlock)
+    (fun loc arity p lookup t _ _ => loopBlock_zero ac p t (normalizedCode loc arity p lookup))
   obtain ⟨targetPost, targetResult, targetRun, conclusion⟩ := sim k f frame
     {sourcePost with clock := limit - (source.clock - sourcePost.clock)} {target with clock := limit} result
     bs bsPost n nPost compiled lens ⟨normalized, premises.2.1, related, premises.2.2.2⟩
