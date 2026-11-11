@@ -200,36 +200,24 @@ theorem nestedCounted_crepToLoop : ∃ final, evaluate (compileHOLExact nestedLo
       {nestedLoopState with clock := nestedLoopState.clock+nestedLoopBudget} = (some (.result [.word 7]),final) ∧ final.ffi = sourceFfi ∧
     LoopSteps.steps (compileHOLExact nestedLoopContext .ln nestedCrepBody)
       {nestedLoopState with clock := nestedLoopState.clock+nestedLoopBudget} ≤ nestedLoopBound := by
-  let decls := compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")
-  let p : ProgHOL 64 := .seq .skip (.call none (ofString "main'") [])
-  have shape : CallFrontend nestedPanContext p := .seq (.base .skip) (.tail (by simp))
-  have sources := callFrontend_declaration_sources decls nestedCall_declaration_shapes
-  obtain ⟨crepFinal,run,ffi,bound⟩ := nestedCall_sourceToCrep_bound
-  have compileEq : nestedCrepBody = .seq .skip (.call none (ofString "main'") []) := by
-    simp [nestedCrepBody,nestedPanContext,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList]
-  have sourceCode : nestedCrepState.code = alistToFmapCodeExact nestedCallCrepPrograms := rfl
-  have relations := concreteDecl_crepLoop_relations riscvConfig.isa nestedCrepState nestedCallCrepPrograms rfl
-  have locals : crepToLoopLocalsRelExact nestedLoopContext .ln nestedCrepState.locals nestedLoopState.locals := by
-    apply empty_crepLoop_locals
-    rfl
-  have code : crepToLoopCodeRelExact nestedLoopContext nestedCrepState.code nestedLoopState.code := by
-    rw [sourceCode]
-    simpa [nestedLoopContext,nestedLoopState,concreteDeclLoopState] using nestedCall_loop_code_relation
-  have table : LoopTableSupported nestedLoopState.code := by
-    simpa only [nestedLoopState,concreteDeclLoopState,nestedCallCrepPrograms] using nestedCall_generated_table_supported
-  have span := callFrontend_wholeVisits_explicit nestedPanContext p shape nestedCallCrepPrograms
-    (by
-      rw [nestedCallCrepPrograms,compileProgDeclsHOLW,nestedCall_inline_selection_empty,CrepInlineRoute.compileInlTopHOLExact_nil]
-      exact sources) nestedLoopContext nestedLoopContext .ln
-    nestedCrepState crepFinal (some (.return [.word 7])) nestedLoopState sourceCode
-    (by change evalCrepSemHOLProgExact nestedCrepState nestedCrepBody = _; rw [compileEq]; exact run) (by simp) (by simp) nestedCrepLimit
-    (by change CrepSteps.steps nestedCrepBody nestedCrepState ≤ 4 * nestedSourceEntryLimit; rw [compileEq]; exact bound)
-    relations.1 relations.2.1 relations.2.2 code table locals
-  obtain ⟨final,ev,visits,stateRel,_,_,_,_⟩ := span
-  refine ⟨final,?_,?_,?_⟩
-  · simpa [p,wlabWlocExact,Pancake.CrepToLoop.Proofs.NCompileCorrect.resultToLoop,nestedLoopBudget,nestedCrepLimit,nestedCrepBody,nestedLoopState,concreteDeclLoopState,nestedCrepState,concreteDeclCrepState,sourceTemplate] using ev
-  · exact stateRel.2.2.2.2.1.symm.trans ffi
-  · simpa [p,nestedLoopBound,nestedLoopBudget,nestedCrepLimit,nestedCrepBody,nestedLoopState,concreteDeclLoopState,nestedCrepState,concreteDeclCrepState,sourceTemplate] using visits
+  obtain ⟨lowerFinal,post,entry,loopRun,bound,ffi⟩ := nestedCounted_compilerLoop
+    (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none)
+  have entry' : nestedLoweredSource.evaluateHOLFiniteState (.seq .skip (.call none (ofString "main'") [])) =
+      (some (.returned (.val (.word 7))),emptyLocalsHOLFinite lowerFinal) := by
+    simpa [nestedLoweredSource,nestedLoweredCode,nestedRenamedState,nestedClockedSource,nestedSourceState,
+      sourceTemplateFor_one,noGlobalsLoweredPreCall] using entry
+  obtain ⟨sourceFinal,sourceRun,sourceFfiEq⟩ := nestedLoweredSource_run
+  have finalEq : sourceFinal = emptyLocalsHOLFinite lowerFinal := by
+    rw [entry'] at sourceRun
+    exact (Prod.mk.inj sourceRun).2.symm
+  have lowerFfi : lowerFinal.ffi = sourceFfi := by
+    rw [finalEq] at sourceFfiEq
+    simpa [emptyLocalsHOLFinite] using sourceFfiEq
+  refine ⟨post,?_,ffi.trans lowerFfi,?_⟩
+  · simpa [nestedLoopContext,nestedLoopState,nestedCrepBody,nestedPanContext,nestedLoopBudget,nestedCrepLimit,
+      nestedSourceEntryLimit,nestedCallCrepPrograms,nestedCrepState,concreteDeclCrepState,concreteDeclLoopState,sourceTemplate,Nat.add_assoc] using loopRun
+  · simpa [nestedLoopContext,nestedLoopState,nestedCrepBody,nestedPanContext,nestedLoopBudget,nestedLoopBound,
+      nestedCrepLimit,nestedSourceEntryLimit,nestedCallCrepPrograms,nestedCrepState,concreteDeclCrepState,concreteDeclLoopState,sourceTemplate,Nat.add_assoc] using bound
 
 def nestedOptimizedLoopBody := optimiseHOL (compileHOLExact nestedLoopContext .ln nestedCrepBody)
 def nestedOptimizedLoopBound :=

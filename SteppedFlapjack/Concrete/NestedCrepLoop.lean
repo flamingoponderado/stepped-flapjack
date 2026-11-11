@@ -11,35 +11,6 @@ open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.LoopToWordSteps
 
 def nestedCallCrepPrograms : List (MlString × List Nat × CrepProgHOL 64) := compileProgDeclsHOLW (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))
 
-/-- The generated four-function Crep table has maximum statement weight four. -/
-theorem nestedCall_crep_codeWeight : SteppedFlapjack.CrepSteps.codeWeight nestedCallCrepPrograms = 4 := by
-  rw [nestedCallCrepPrograms,nestedCall_crep_code]
-  rfl
-
-/-- The generated Loop table has the compiler code relation for every Crep function. -/
-theorem nestedCall_loop_code_relation : crepToLoopCodeRelExact
-      (mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable nestedCallCrepPrograms) 0)
-      (alistToFmapCodeExact nestedCallCrepPrograms) (sptFromAList (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms)) := by
-  apply callFrontend_declaration_crepLoop_codeRel _ _ nestedCall_inline_selection_empty nestedCall_declaration_shapes
-    (ofString "main") (.seq .skip (.call none (ofString "main'") []))
-  · rw [nestedCall_lowered_declarations]; decide
-  · rw [nestedCall_crep_code]; rfl
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-/-- The lowered source and generated Crep tables satisfy the compiler code relation. -/
-theorem nestedCall_panCrep_code_relation : codeRelExactHOLW
-      (mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL
-        (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")))) 0
-        (getEidsFromDeclsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))))
-      (HolFiniteMapExact.empty.updateList (functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))).reverse)
-      (alistToFmapCodeExact nestedCallCrepPrograms) := by
-  apply callFrontend_declaration_codeRel
-  · rw [nestedCall_lowered_declarations]
-    decide
-  · exact nestedCall_inline_selection_empty
-  · exact nestedCall_declaration_shapes
-
 /-- The source configuration immediately before the generated entry call. -/
 def nestedLoweredSource : PanSemStateFiniteExact 64 Unit :=
   noGlobalsLoweredPreCall {sourceTemplate with clock := 6}
@@ -67,28 +38,6 @@ theorem nestedLoweredSource_run : ∃ final,
 def nestedSourceEntryLimit : Nat :=
   1 + SimpVisits.simpTableFactor (functionsHOL (nestedCallDeclarations.map declToHOL)) * 6 +
     SimpVisits.hw (progToHOL (panSimpProg nestedCallEntry)) + 2
-
-/-- The general source-to-Crep bound applies to the actual nested-call entry. -/
-theorem nestedCall_sourceToCrep_bound : ∃ final,
-    evalCrepSemHOLProgExact nestedCrepState (.seq .skip (.call none (ofString "main'") [])) =
-      (some (.return [.word 7]),final) ∧ final.ffi = sourceFfi ∧
-    SteppedFlapjack.CrepSteps.steps (.seq .skip (.call none (ofString "main'") [])) nestedCrepState ≤
-      4 * nestedSourceEntryLimit := by
-  obtain ⟨lowerFinal,targetFinal,entry,crep,bound,ffi⟩ :=
-    nestedCounted_compilerCrep (riscv64PanValueFfiContext (fun _ => false))
-      (fun _ _ => none) (fun _ _ _ _ _ _ _ => none)
-  have entry' : nestedLoweredSource.evaluateHOLFiniteState (.seq .skip (.call none (ofString "main'") [])) =
-      (some (.returned (.val (.word 7))),emptyLocalsHOLFinite lowerFinal) := by
-    simpa [nestedLoweredSource,nestedLoweredCode,nestedRenamedState,nestedClockedSource,nestedSourceState,
-      sourceTemplateFor_one,noGlobalsLoweredPreCall] using entry
-  obtain ⟨sourceFinal,sourceRun,sourceFfiEq⟩ := nestedLoweredSource_run
-  have finalEq : sourceFinal = emptyLocalsHOLFinite lowerFinal := by
-    rw [entry'] at sourceRun
-    exact (Prod.mk.inj sourceRun).2.symm
-  have lowerFfi : lowerFinal.ffi = sourceFfi := by
-    rw [finalEq] at sourceFfiEq
-    simpa [emptyLocalsHOLFinite] using sourceFfiEq
-  exact ⟨targetFinal,crep,ffi.trans lowerFfi,by simpa [nestedSourceEntryLimit,Nat.add_assoc] using bound⟩
 
 /-- The shared structural optimizer computes the original Loop compiler output
 for every function of the nested-call witness. -/

@@ -495,6 +495,166 @@ theorem countedCalls_functionOnlyCrep {scope : List VarName} {program : Prog (Ri
   exact ⟨sourceFinal,lowerFinal,targetFinal,sourceRun,lowerRun,by simpa [flattenHOL] using targetRun,visitBound,
     by simpa [emptyLocalsHOLFinite] using targetFfi.symm,lowerFfi,ffiRel⟩
 
+theorem functionOnly_wrapper_lookup (fs : List (FunDeclHOL 64)) (start : MlS) (body : ProgHOL 64)
+    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],body,.one))
+    (noInline : (functionsHOL ((compileTopExactHOL (fs.map DeclHOL.function) start).filter inlinableHOL)).map Prod.fst = []) :
+    holAlookup (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)) start =
+      some ([],compileProgExactHOLW (mkCtxtExactHOL HolFiniteMapExact.empty
+        (makeFuncsExactHOL (functionsHOL (compileTopExactHOL (fs.map DeclHOL.function) start))) 0
+        (getEidsFromDeclsHOL (compileTopExactHOL (fs.map DeclHOL.function) start)))
+        (.seq .skip (.call none (newMainNameHOL (fs.map DeclHOL.function)) []))) := by
+  simp only [compileProgDeclsHOLW,noInline,CrepInlineRoute.compileInlTopHOLExact_nil,compileToCrepExactHOLW]
+  rw [functionOnly_compileTop_functions fs start body .one found]
+  have emptyUpdate : (HolFiniteMapExact.empty : HolFiniteMapExact MlS (ShapeHOL × List Nat)).updateList [] = HolFiniteMapExact.empty := by
+    apply HolFiniteMapExact.ext_lookup
+    intro k
+    simp [HolFiniteMapExact.lookup_updateList,FUPDATE_LIST]
+  simp [holAlookup,crepVarsHOL,compFuncExactHOLW,panToCrepMakeVmapHOLExact,sizeOfShapeHOL,emptyUpdate]
+
+set_option maxHeartbeats 3000000 in
+set_option maxRecDepth 100000 in
+/-- Concrete function declarations derive the whole-table Crep-to-Loop entry relations. -/
+theorem functionOnlyCrep_toLoop {σ : Type} (fs : List (FunDeclHOL 64)) (start : MlS)
+    (body : ProgHOL 64) (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],body,.one))
+    (unique : ((functionsHOL (fs.map DeclHOL.function)).map Prod.fst).Nodup)
+    (shapes : ∀ entry ∈ functionsHOL (fs.map DeclHOL.function),
+      ∃ names, ∃ program : Prog (RiscV.Word 64),
+        entry.2.1 = names.map (fun n => (Flapjack.Basis.Pure.MlString.ofString n,ShapeHOL.one)) ∧
+        entry.2.2.1 = progToHOL program ∧ CallSupportedIn names program ∧ ProgByteRanged program)
+    (noInline : (functionsHOL ((compileTopExactHOL (fs.map DeclHOL.function) start).filter inlinableHOL)).map Prod.fst = [])
+    (source : CrepSemHOLState 64 σ) (final : CrepSemHOLState 64 σ) (value : BitVec 64) (limit : Nat)
+    (sourceLocals : source.locals = HolFiniteMapExact.empty)
+    (sourceGlobals : source.globals = HolFiniteMapExact.empty)
+    (arch : AsmArchitecture)
+    (code : source.code = alistToFmapCodeExact (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+    (run : evalCrepSemHOLProgExact source (compileProgExactHOLW (mkCtxtExactHOL HolFiniteMapExact.empty
+        (makeFuncsExactHOL (functionsHOL (compileTopExactHOL (fs.map DeclHOL.function) start))) 0
+        (getEidsFromDeclsHOL (compileTopExactHOL (fs.map DeclHOL.function) start)))
+        (.seq .skip (.call none (newMainNameHOL (fs.map DeclHOL.function)) []))) = (some (.return [.word value]),final))
+    (bound : CrepSteps.steps (compileProgExactHOLW (mkCtxtExactHOL HolFiniteMapExact.empty
+        (makeFuncsExactHOL (functionsHOL (compileTopExactHOL (fs.map DeclHOL.function) start))) 0
+        (getEidsFromDeclsHOL (compileTopExactHOL (fs.map DeclHOL.function) start)))
+        (.seq .skip (.call none (newMainNameHOL (fs.map DeclHOL.function)) []))) source ≤ limit) :
+    let decls := compileTopExactHOL (fs.map DeclHOL.function) start
+    let programs := compileProgDeclsHOLW decls
+    let pan := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL decls)) 0 (getEidsFromDeclsHOL decls)
+    let p : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL (fs.map DeclHOL.function)) [])
+    let crep := compileProgExactHOLW pan p
+    let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
+    let loop := concreteDeclLoopState arch source programs
+    let rows := programs.map (fun row => (row.2.1,row.2.2))
+    let budget := callClockFactor ctxt rows source.clock crep * (limit+1)
+    let factor := max (callSyntaxCost ctxt crep) (loopCodeWeight loop.code+2)
+    ∃ post, evaluate (compileHOLExact ctxt .ln crep) {loop with clock := loop.clock+budget} =
+        (some (.result [.word value]),post) ∧ post.ffi = final.ffi ∧
+      LoopSteps.steps (compileHOLExact ctxt .ln crep) {loop with clock := loop.clock+budget} ≤
+        callSyntaxCost ctxt crep + factor * (source.clock+budget) := by
+  let decls := compileTopExactHOL (fs.map DeclHOL.function) start
+  let programs := compileProgDeclsHOLW decls
+  let pan := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL decls)) 0 (getEidsFromDeclsHOL decls)
+  let p : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL (fs.map DeclHOL.function)) [])
+  let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
+  let loop := concreteDeclLoopState arch source programs
+  have shape : CallFrontend pan p := .seq (.base .skip) (.tail (by simp))
+  have shapes' := functionOnly_callFrontend_shapes fs start body .one found shapes
+  have sources := callFrontend_declaration_sources decls shapes'
+  have sources' : ∀ row ∈ programs, ∃ (ctx : PanToCrepContextExact 64) (q : ProgHOL 64),
+      row.2.2 = compileProgExactHOLW ctx q ∧ CallFrontend ctx q := by
+    dsimp only [programs]
+    rw [compileProgDeclsHOLW,noInline,CrepInlineRoute.compileInlTopHOLExact_nil]
+    exact sources
+  have unique' : ((functionsHOL decls).map Prod.fst).Nodup := allDistinctCompileTopHOL start (fs.map DeclHOL.function) unique
+  have wrapperFound := functionOnly_wrapper_lookup fs start body found noInline
+  have codeRel : crepToLoopCodeRelExact ctxt source.code loop.code := by
+    rw [code]
+    exact callFrontend_declaration_crepLoop_codeRel arch decls noInline shapes' start _ unique' wrapperFound
+  have table : LoopTableSupported loop.code := callFrontend_declaration_loopTableSupported arch decls noInline shapes'
+  have relations := concreteDecl_crepLoop_relations arch source programs sourceGlobals
+  have locals : crepToLoopLocalsRelExact ctxt .ln source.locals loop.locals := by
+    rw [sourceLocals]
+    apply empty_crepLoop_locals
+    rfl
+  obtain ⟨post,ev,visits,stateRel,_,_,_,_⟩ := callFrontend_wholeVisits_explicit pan p shape programs sources' ctxt ctxt .ln
+    source final (some (.return [.word value])) loop code run (by simp) (by simp) limit bound
+    relations.1 relations.2.1 relations.2.2 codeRel table locals
+  exact ⟨post,by simpa [p,resultToLoop,wlabWlocExact] using ev,stateRel.2.2.2.2.1.symm,visits⟩
+
+set_option maxHeartbeats 3000000 in
+set_option maxRecDepth 100000 in
+/-- Counted source execution reaches the generated Loop entry with an explicit bound. -/
+theorem countedCalls_functionOnlyLoop {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
+    [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
+    (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
+    (byteRanged : ProgByteRanged program)
+    (codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry)
+    (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
+      ∃ scope, CallSupportedIn scope body)
+    (targetCode : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (codeRel : PanSimp.CodeRel source.code targetCode)
+    (entries : List SimpVisits.SimpEntry)
+    (sourceCode : source.code = HolFiniteMapExact.empty.updateList entries.reverse)
+    (entryShapes : ∀ entry ∈ entries, ∃ scope, ∃ program : Prog (RiscV.Word 64),
+      entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program)
+    (fs : List (FunDeclHOL 64)) (start : MlS)
+    (targetTable : targetCode = HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)
+    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],progToHOL (panSimpProg program),.one))
+    (mainFound : source.code.lookup start = some ([],progToHOL program,.one))
+    (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
+    (structs : source.structs = []) (exceptions : source.eshapes = HolFiniteMapExact.empty)
+    (unique : ((functionsHOL (fs.map DeclHOL.function)).map Prod.fst).Nodup)
+    (shapes : ∀ entry ∈ functionsHOL (fs.map DeclHOL.function),
+      ∃ names, ∃ body : Prog (RiscV.Word 64),
+        entry.2.1 = names.map (fun n => (Flapjack.Basis.Pure.MlString.ofString n,ShapeHOL.one)) ∧
+        entry.2.2.1 = progToHOL body ∧ CallSupportedIn names body ∧ ProgByteRanged body)
+    (noInline : (functionsHOL ((compileTopExactHOL (fs.map DeclHOL.function) start).filter inlinableHOL)).map Prod.fst = [])
+    (topOutside : ¬ source.memaddrs source.topAddr)
+    (aligned : panGlobalsByteAlignedHOL source.topAddr)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ) (exnContracts : InfoMap Shape) (fuel count : Nat)
+    (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))
+    (postMemory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (postFfi : FfiState σ) (value : BitVec 64)
+    (run : evalPanValueFfiProgSteps context primitive handler production.structs (countedFunctionsOfCode production.code)
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+      production.locals production.globals production.memory production.ffi program
+      (memoryAccess := some (panSemBitVec64MemoryAccess production))
+      (contracts := some (countedContractsOfCode production.code exnContracts)) =
+        some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
+    (budget : count ≤ source.clock) (arch : AsmArchitecture) :
+    let decls := fs.map DeclHOL.function
+    let lowered := compileTopExactHOL decls start
+    let renamed := {source with code := fpermCodeHOL start (newMainNameHOL decls) targetCode}
+    let before := noGlobalsLoweredPreCall renamed (HolFiniteMapExact.empty.updateList (functionsHOL lowered).reverse)
+    let p : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL decls) [])
+    let pan := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL lowered)) 0 (getEidsFromDeclsHOL lowered)
+    let programs := compileProgDeclsHOLW lowered
+    let crep := compileProgExactHOLW pan p
+    let initial := concreteDeclCrepState before programs
+    let loop := concreteDeclLoopState arch initial programs
+    let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
+    let limit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) *
+      (1 + (SimpVisits.simpTableFactor entries * count + SimpVisits.hw (progToHOL (panSimpProg program))) + 2)
+    let rows := programs.map (fun row => (row.2.1,row.2.2))
+    let budget := callClockFactor ctxt rows initial.clock crep * (limit+1)
+    let factor := max (callSyntaxCost ctxt crep) (loopCodeWeight loop.code+2)
+    ∃ (sourceFinal lowerFinal : PanSemStateFiniteExact 64 σ) (post : LoopSemStateFiniteExact 64 σ),
+      source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word value))),sourceFinal) ∧
+      before.evaluateHOLFiniteState p = (some (.returned (.val (.word value))),emptyLocalsHOLFinite lowerFinal) ∧
+      evaluate (compileHOLExact ctxt .ln crep) {loop with clock := loop.clock+budget} = (some (.result [.word value]),post) ∧
+      LoopSteps.steps (compileHOLExact ctxt .ln crep) {loop with clock := loop.clock+budget} ≤
+        callSyntaxCost ctxt crep + factor * (initial.clock+budget) ∧
+      post.ffi = lowerFinal.ffi ∧ lowerFinal.ffi = sourceFinal.ffi ∧ FfiStateRel postFfi sourceFinal.ffi := by
+  obtain ⟨sourceFinal,lowerFinal,crepFinal,sourceRun,lowerRun,crepRun,crepBound,crepFfi,lowerFfi,ffiRel⟩ :=
+    countedCalls_functionOnlyCrep supported production source rel ranged words byteRanged codeRanged codeShape
+      targetCode codeRel entries sourceCode entryShapes fs start targetTable found mainFound locals globals structs
+      exceptions unique shapes noInline topOutside aligned context primitive handler exnContracts fuel count
+      postLocals postGlobals postMemory postFfi value run budget
+  have span := functionOnlyCrep_toLoop fs start (progToHOL (panSimpProg program)) found unique shapes noInline
+    _ crepFinal value _ rfl rfl arch rfl crepRun crepBound
+  obtain ⟨post,loopRun,loopFfi,loopBound⟩ := span
+  exact ⟨sourceFinal,lowerFinal,post,sourceRun,lowerRun,loopRun,loopBound,loopFfi.trans crepFfi,lowerFfi,ffiRel⟩
+
 /-- Counted source execution reaches the optimized Word start call at an explicit bound. -/
 theorem callFrontend_counted_optimizedStart {C σ : Type} {scope : List VarName}
     (declarations : List (DeclHOL 64))
