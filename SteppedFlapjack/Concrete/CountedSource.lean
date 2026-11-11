@@ -483,8 +483,8 @@ private theorem iteBridge {scope : List VarName} {condition : Exp (RiscV.Word 64
             simp only [if_pos zero]
             omega
 
-private theorem seqBridge {scope : List VarName} {a b : Prog (RiscV.Word 64)}
-    (aShape : SupportedIn scope a) (aBound : Bridge a) (bBound : Bridge b) : Bridge (.seq a b) := by
+private theorem seqBridge {a b : Prog (RiscV.Word 64)}
+    (aBound : Bridge a) (bBound : Bridge b) : Bridge (.seq a b) := by
   intro σ production source dec rel ranged words byteRanged context primitive handler functions fuel count result run budget
   have aRanged : ProgByteRanged a := by simpa [ProgByteRanged] using byteRanged.1
   have bRanged : ProgByteRanged b := by simpa [ProgByteRanged] using byteRanged.2
@@ -499,9 +499,6 @@ private theorem seqBridge {scope : List VarName} {a b : Prog (RiscV.Word 64)}
     | none => simp [firstRun] at run
     | some first =>
       rcases first with ⟨firstResult,firstCost⟩
-      have basic := supported_counted_basic context primitive handler production.structs functions
-        production.baseAddress production.topAddress (some (panSemBitVec64MemoryAccess production)) fuel aShape
-        _ _ _ _ firstResult firstCost firstRun
       cases firstResult with
       | normal nextLocals nextGlobals nextMemory nextFfi =>
         cases secondRun : evalPanValueFfiProgSteps context primitive handler production.structs functions
@@ -568,10 +565,30 @@ private theorem seqBridge {scope : List VarName} {a b : Prog (RiscV.Word 64)}
         · simp only [progToHOL]
           rw [controlSteps_seq,holFirst]
           cases outcome; simp only [countedErrorBonus]; omega
-      | raised l g m f e v => exact False.elim basic
-      | broke l g m f => exact False.elim basic
-      | continued l g m f => exact False.elim basic
-      | finalFfi l g m f e => exact False.elim basic
+      | raised l g m f e v =>
+        simp [firstRun] at run
+        obtain ⟨rfl,rfl⟩ := run
+        obtain ⟨_,_,_,outcome,_,_⟩ := aBound production source rel ranged words aRanged
+          context primitive handler functions fuel firstCost (.raised l g m f e v) firstRun (by omega)
+        cases outcome
+      | broke l g m f =>
+        simp [firstRun] at run
+        obtain ⟨rfl,rfl⟩ := run
+        obtain ⟨_,_,_,outcome,_,_⟩ := aBound production source rel ranged words aRanged
+          context primitive handler functions fuel firstCost (.broke l g m f) firstRun (by omega)
+        cases outcome
+      | continued l g m f =>
+        simp [firstRun] at run
+        obtain ⟨rfl,rfl⟩ := run
+        obtain ⟨_,_,_,outcome,_,_⟩ := aBound production source rel ranged words aRanged
+          context primitive handler functions fuel firstCost (.continued l g m f) firstRun (by omega)
+        cases outcome
+      | finalFfi l g m f e =>
+        simp [firstRun] at run
+        obtain ⟨rfl,rfl⟩ := run
+        obtain ⟨_,_,_,outcome,_,_⟩ := aBound production source rel ranged words aRanged
+          context primitive handler functions fuel firstCost (.finalFfi l g m f e) firstRun (by omega)
+        cases outcome
 
 private theorem restoreOutcome {σ : Type}
     (initial : PanSemState (RiscV.Word 64) (FfiState σ))
@@ -687,7 +704,7 @@ private theorem declBridge {scope : List VarName} (name : VarName) {initializer 
           omega
 
 private theorem whileBridge {scope : List VarName} {condition : Exp (RiscV.Word 64)} {body : Prog (RiscV.Word 64)}
-    (scalar : Scalar scope condition) (bodyShape : SupportedIn scope body) (bodyBound : Bridge body) : Bridge (.while condition body) := by
+    (scalar : Scalar scope condition) (bodyBound : Bridge body) : Bridge (.while condition body) := by
   have loopAt : ∀ fuel {σ : Type} (production : PanSemState (RiscV.Word 64) (FfiState σ))
       (source : PanSemStateFiniteExact 64 σ) [DecidablePred source.memaddrs],
       PanSemStateRelExec production source.toExact → PanSemStateRelExecRanged production → WordLocals production.locals →
@@ -758,8 +775,6 @@ private theorem whileBridge {scope : List VarName} {condition : Exp (RiscV.Word 
           | none => simp [condRun,zeroBits,bodyRun] at run
           | some pair =>
             rcases pair with ⟨bodyResult,bodyCost⟩
-            have basic := supported_counted_basic context primitive handler production.structs functions production.baseAddress production.topAddress
-              (some (panSemBitVec64MemoryAccess production)) fuel bodyShape _ _ _ _ bodyResult bodyCost bodyRun
             cases bodyResult with
             | normal l g m f =>
               cases restRun : evalPanValueFfiProgSteps context primitive handler production.structs functions
@@ -867,10 +882,36 @@ private theorem whileBridge {scope : List VarName} {condition : Exp (RiscV.Word 
                 omega
               · simp [decClockHOLFinite] at bodyClock
                 omega
-            | raised l g m f e v => exact False.elim basic
-            | broke l g m f => exact False.elim basic
-            | continued l g m f => exact False.elim basic
-            | finalFfi l g m f e => exact False.elim basic
+            | raised l g m f e v =>
+              simp [condRun,zeroBits,bodyRun] at run
+              obtain ⟨rfl,rfl⟩ := run
+              obtain ⟨_,_,_,outcome,_,_⟩ := bodyBound production source rel ranged words bodyRanged
+                context primitive handler functions fuel bodyCost (.raised l g m f e v) bodyRun (by omega)
+              cases outcome
+            | broke l g m f =>
+              simp [condRun,zeroBits,bodyRun] at run
+              obtain ⟨rfl,rfl⟩ := run
+              obtain ⟨_,_,_,outcome,_,_⟩ := bodyBound production source rel ranged words bodyRanged
+                context primitive handler functions fuel bodyCost (.broke l g m f) bodyRun (by omega)
+              cases outcome
+            | finalFfi l g m f e =>
+              simp [condRun,zeroBits,bodyRun] at run
+              obtain ⟨rfl,rfl⟩ := run
+              obtain ⟨_,_,_,outcome,_,_⟩ := bodyBound production source rel ranged words bodyRanged
+                context primitive handler functions fuel bodyCost (.finalFfi l g m f e) bodyRun (by omega)
+              cases outcome
+            | continued l g m f =>
+              cases restRun : evalPanValueFfiProgSteps context primitive handler production.structs functions
+                  production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel l g m f (.while condition body)
+                  (memoryAccess := some (panSemBitVec64MemoryAccess production)) with
+              | none => simp [condRun,zeroBits,bodyRun,restRun] at run
+              | some pair =>
+                rcases pair with ⟨restResult,restCost⟩
+                simp [condRun,zeroBits,bodyRun,restRun] at run
+                obtain ⟨rfl,rfl⟩ := run
+                obtain ⟨_,_,_,outcome,_,_⟩ := bodyBound production source rel ranged words bodyRanged
+                  context primitive handler functions fuel bodyCost (.continued l g m f) bodyRun (by omega)
+                cases outcome
   intro σ production source dec rel ranged words byteRanged context primitive handler functions fuel count result run budget
   exact loopAt fuel production source rel ranged words byteRanged context primitive handler functions count result run budget
 
@@ -880,9 +921,9 @@ private theorem supportedBridge {scope : List VarName} {program : Prog (RiscV.Wo
   | skip => exact skipBridge
   | assign name member scalar => exact assignBridge name scalar
   | decl name scalar shape ih => exact declBridge name scalar ih
-  | seq a b iha ihb => exact seqBridge a iha ihb
+  | seq a b iha ihb => exact seqBridge iha ihb
   | ite scalar a b iha ihb => exact iteBridge scalar iha ihb
-  | «while» scalar body ih => exact whileBridge scalar body ih
+  | «while» scalar body ih => exact whileBridge scalar ih
   | ret scalar => exact returnBridge scalar
 
 /-- A counted run of a supported body is a corresponding HOL run when the
