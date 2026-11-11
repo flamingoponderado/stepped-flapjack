@@ -1,3 +1,5 @@
+import SteppedFlapjack.CrepToLoopSteps.ScalarClockCompositional
+import Flapjack.Pancake.Proofs.LoopLive.Optimise
 import SteppedFlapjack.CrepToLoopSteps.InlineEntry
 import SteppedFlapjack.CrepToLoopSteps.DirectExpressionEval
 import SteppedFlapjack.LoopSteps.Defs
@@ -1212,5 +1214,147 @@ theorem compiledScalarReturning_bound_from_body {width : Nat} [NeZero width] {σ
     have factorB := Nat.le_max_right (LoopSteps.structuralWeight (loopNestedSeqHOL comp.1)+2*args.length+4) B
     nlinarith
 
+
+private theorem loopTail_explicit_run {width : Nat} [NeZero width] {F : Type}
+    (s entry post : LoopSemStateFiniteExact width F) (loc : Nat) (regs : List Nat)
+    (vals : List (WordLocW width)) (env : Spt (WordLocW width)) (body : HolLoopProg width)
+    (out : LoopResultExact width) (slack budget : Nat)
+    (get : getVars regs s = some vals)
+    (found : findCode (some loc) vals s.code = some (env,body))
+    (nonzero : s.clock ≠ 0)
+    (sync : {decClock s with locals := env} = {entry with clock := entry.clock+slack})
+    (bodyRun : evaluate body {entry with clock := entry.clock+(slack+budget)} = (some out,post))
+    (notBreak : ∀ n, out ≠ .break n) (notContinue : ∀ n, out ≠ .continue n) :
+    evaluate (.call none (some loc) regs none) {s with clock := s.clock+budget} = (some out,post) := by
+  have get' : getVars regs {s with clock := s.clock+budget} = some vals := by
+    rw [getVars_upd_clock,get]
+  have align : {decClock {s with clock := s.clock+budget} with locals := env} =
+      {{decClock s with locals := env} with clock := (decClock s).clock+budget} := by
+    simp only [decClock]
+    congr 1
+    omega
+  have inner : {decClock {s with clock := s.clock+budget} with locals := env} =
+      {entry with clock := entry.clock+(slack+budget)} := by
+    have syncClock := congrArg LoopSemStateFiniteExact.clock sync
+    simp only at syncClock
+    rw [align,sync]
+    simp only
+    congr 1
+    omega
+  rw [evaluate]
+  simp only [get',found,Option.isSome_none,Bool.false_eq_true,if_false]
+  have nz : s.clock + budget ≠ 0 := by omega
+  simp only [nz,inner,bodyRun]
+  cases out <;> simp_all
+/-- The concrete prefix and callee budgets execute the actual compiled tail call. -/
+theorem compiledScalarTail_explicit_from_body {width : Nat} [NeZero width] {σ : Type}
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
+    (source sourceFinal : CrepSemHOLState width σ) (values : List (HolWordLab width))
+    (target : LoopSemStateFiniteExact width σ) (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (name : MlString) (params : List Nat) (body : CrepProgHOL width) (result : CrepResultHOLExact width)
+    (out : LoopResultExact width) (prefixBudget bodyBudget : Nat) (cost : Nat → Nat)
+    (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (evaluated : args.mapM (evalCrepSemHOLExp source) = some values)
+    (found : source.code.lookup name = some (params,body))
+    (distinct : params.Nodup) (arity : params.length = values.length) (nonzero : source.clock ≠ 0)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
+    (table : tableOk target.code)
+    (prefixBound : LoopSteps.structuralWeight (loopNestedSeqHOL
+      (compileExpsHOLExact ctxt (ctxt.vmax+1) live args).1) ≤ prefixBudget)
+    (bodySim : BodySimulationAt body (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+      (listToNumSetHOLExact (List.range params.length))
+      (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}) cost tableOk)
+    (bodyRun : evalCrepSemHOLProgExact
+      (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}) body = (some result,sourceFinal))
+    (bodyBudgetBound : cost (CrepSteps.steps body
+      (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)})) ≤ bodyBudget)
+    (resultMap : resultToLoop (some result) = some out)
+    (notError : out ≠ .error) (notTimeout : out ≠ .timeOut)
+    (notBreak : ∀ n, out ≠ .break n) (notContinue : ∀ n, out ≠ .continue n) :
+    evalCrepSemHOLProgExact source (.call none name args) = (some result,CrepSemHOLState.emptyLocals sourceFinal) ∧
+    ∃ final, evaluate (compileHOLExact ctxt live (.call none name args))
+        {target with clock := target.clock+(prefixBudget+bodyBudget)} = (some out,final) ∧
+      crepToLoopStateRelExact (CrepSemHOLState.emptyLocals sourceFinal) {final with clock := sourceFinal.clock} ∧
+      crepToLoopMemRelHOLExact sourceFinal.memory final.memory sourceFinal.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact sourceFinal.globals final.globals ∧
+      crepToLoopCodeRelExact ctxt sourceFinal.code final.code := by
+  let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
+  let regs := genTemps comp.2.2.1 comp.2.1.length
+  let vals := values.map wlabWlocExact
+  let formals := List.range params.length
+  let sourceEntry := decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}
+  let calleeCtxt := ctxtFcExact ctxt.target ctxt.funcs params formals
+  obtain ⟨post,pre,assign,get,clock,codeSame,lookup,sync,st,mem,gl,code,locals⟩ :=
+    scalarCall_calleeEntry_explicit args shape source values target ctxt live name params body prefixBudget
+      evaluated found distinct arity stateRel memRel globalsRel codeRel localsRel prefixBound
+  let middle : LoopSemStateFiniteExact width σ := {post with locals := sptAlistInsert regs vals post.locals}
+  let entry : LoopSemStateFiniteExact width σ :=
+    {decClock {post with clock := source.clock} with locals := sptFromAList (formals.zip vals)}
+  let slack := post.clock-source.clock
+  have tableEntry : tableOk entry.code := by simpa [entry,decClock,codeSame] using table
+  have bodyNonerror : some result ≠ some .error := by
+    intro h
+    have : resultToLoop (some result) = some .error := by rw [h]; rfl
+    rw [resultMap] at this
+    exact notError (Option.some.inj this)
+  have bodyNoTimeout : resultToLoop (some result) ≠ some .timeOut := by
+    rw [resultMap]
+    simpa using notTimeout
+  obtain ⟨bodyPost,bodyEval,bodySt,bodyMem,bodyGl,bodyCode,_⟩ :=
+    BodySimulationAt.explicit body calleeCtxt (listToNumSetHOLExact formals) sourceEntry sourceFinal
+      (some result) entry cost bodyBudget tableOk bodySim bodyRun bodyNonerror bodyNoTimeout
+      st mem gl code tableEntry bodyBudgetBound locals
+  rw [resultMap] at bodyEval
+  have bodyShift := evaluate_add_clock_eq _ _ _ bodyPost slack bodyEval (by simpa using notTimeout)
+  have bodyShift' : evaluate (compileHOLExact calleeCtxt (listToNumSetHOLExact formals) body)
+      {entry with clock := entry.clock+(slack+bodyBudget)} =
+      (some out,{bodyPost with clock := bodyPost.clock+slack}) := by
+    simpa [Nat.add_assoc,Nat.add_comm,Nat.add_left_comm] using bodyShift
+  have optRun : evaluate (optimiseHOL (compileHOLExact calleeCtxt (listToNumSetHOLExact formals) body))
+      {entry with clock := entry.clock+(slack+bodyBudget)} = (some out,{bodyPost with clock := bodyPost.clock+slack}) := by
+    apply optimise_correct
+    exact ⟨bodyShift',by simpa using notError,by simpa using notBreak,by simpa using notContinue,by simp⟩
+  have sync' : {decClock middle with locals := sptFromAList (formals.zip vals)} =
+      {entry with clock := entry.clock+slack} := sync nonzero
+  have middleNonzero : middle.clock ≠ 0 := by dsimp [middle]; omega
+  have tailRun := loopTail_explicit_run middle entry {bodyPost with clock := bodyPost.clock+slack}
+    (findLabExact ctxt name) regs vals (sptFromAList (formals.zip vals))
+    (ocompileHOLExact calleeCtxt (listToNumSetHOLExact formals) body) out slack bodyBudget
+    get lookup middleNonzero sync' (by simpa [ocompileHOLExact] using optRun) notBreak notContinue
+  have prefixShift := evaluate_add_clock_eq (loopNestedSeqHOL comp.1)
+    {target with clock := target.clock+prefixBudget} none post bodyBudget pre (by simp)
+  have assignShift := evaluate_add_clock_eq (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign comp.2.1))
+    post none middle bodyBudget assign (by simp)
+  have compiled : compileHOLExact ctxt live (.call none name args) =
+      loopNestedSeqHOL (comp.1 ++ (regs.zipWith HolLoopProg.assign comp.2.1) ++
+        [.call none (some (findLabExact ctxt name)) regs none]) := by
+    simp [compileHOLExact,comp,regs,List.append_assoc]
+  have sourceTail : evalCrepSemHOLProgExact source (.call none name args) = (some result,CrepSemHOLState.emptyLocals sourceFinal) := by
+    rw [evalCrepSemHOLProgExact_call_holShape]
+    simp only [evaluated,lookupCodeFiniteHOL,found,arity,distinct,true_and,if_true,
+      crepReturnInfoNodupError,nonzero,if_false]
+    simp only [decClockCrepSemHOL] at bodyRun ⊢
+    rw [bodyRun]
+    cases result with
+    | «break» n =>
+      simp only [resultToLoop,Option.some.injEq] at resultMap
+      exact False.elim (notBreak n resultMap.symm)
+    | «continue» n =>
+      simp only [resultToLoop,Option.some.injEq] at resultMap
+      exact False.elim (notContinue n resultMap.symm)
+    | «return» _ | exception _ | timeOut | finalFfi _ | error => rfl
+  refine ⟨sourceTail,{bodyPost with clock := bodyPost.clock+slack},?_,?_,?_,?_,?_⟩
+  · rw [compiled,List.append_assoc]
+    rw [evaluate_nested_seq_append_none comp.1 _ _ _ (by simpa [Nat.add_assoc] using prefixShift)]
+    rw [evaluate_nested_seq_append_none _ _ _ _ assignShift]
+    simp only [loopNestedSeqHOL,evaluate_seq,tailRun]
+  · simpa [crepToLoopStateRelExact,CrepSemHOLState.emptyLocals] using bodySt
+  · exact bodyMem
+  · exact bodyGl
+  · simpa [crepToLoopCodeRelExact,calleeCtxt,ctxtFcExact] using bodyCode
 
 end SteppedFlapjack.CrepToLoopSteps
