@@ -53,7 +53,7 @@ theorem singleTail_wholeWord_span {dest : Nat} {p callee : HolLoopProg 64}
   have wordNoInstall : WordProps.noInstallCode word.code := by
     change WordProps.noInstallCode starter.code
     rw [code]
-    exact (wholeCompile_tail_codeRelations wc ac programs shapes).1
+    exact (wholeCompile_codeRelations wc ac programs (tailProgram_safety programs shapes)).1
   have entryShape := tailEntry_word (singleTail_to_tail shape) ctxt labels
   have normalized := tailEntry_normalized_run entryShape word wordPost wordResult _ (6*limit)
     (tailEntry_noInstall entryShape) wordNoInstall codeBound wordRun notError notTimeout

@@ -226,7 +226,7 @@ theorem singleTail_wholeCompiledCode_riscvWithin {F : Type} {loc : Nat} {p calle
         ((LoopMachineOutcome result outcome ∧ finalFfi.ioEvents = sourcePost.ffi.ioEvents) ∨
           (outcome = .resourceLimitHit ∧ finalFfi.ioEvents <+: sourcePost.ffi.ioEvents ∧
             targetPost.stackMax.getD (targetPost.stackLimit+1) > targetPost.stackLimit)) := by
-  obtain ⟨noInstall,_,codeRel,codeDomain,_⟩ := wholeCompile_tail_codeRelations wc ac programs shapes
+  obtain ⟨noInstall,_,codeRel,codeDomain,_⟩ := wholeCompile_codeRelations wc ac programs (tailProgram_safety programs shapes)
   rw [← wordCode] at noInstall codeRel codeDomain
   rw [← compiledCodeEq] at codeRel codeDomain
   constructor

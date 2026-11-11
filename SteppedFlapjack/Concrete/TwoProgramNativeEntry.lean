@@ -88,7 +88,7 @@ theorem twoProgram_optimizedCallee (arch : Flapjack.Compiler.Encoders.Asm.AsmArc
   have lookup : sptLookup 65 code = some (1,out) := by
     simpa [code,out,countdownZeroLimit,RowColoring.limit] using
       (wholeCompile_entry_lookups countdownRiscVBackend.wordToWordConf riscvConfig programs 65 1 calleeWord mem nodup).2
-  have relations := wholeCompile_tail_codeRelations countdownRiscVBackend.wordToWordConf riscvConfig programs shapes
+  have relations := wholeCompile_codeRelations countdownRiscVBackend.wordToWordConf riscvConfig programs (tailProgram_safety programs shapes)
   have outShape : LoopSequence out := by
     dsimp only [out]
     rw [fullCompileSingle_eq_alloc riscvConfig riscvConfig.twoRegArith 1 65 countdownRiscVBackend.wordToWordConf.regAlg countdownZeroLimit _ wordShape]
