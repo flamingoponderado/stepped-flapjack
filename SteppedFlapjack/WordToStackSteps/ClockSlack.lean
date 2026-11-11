@@ -1,11 +1,73 @@
 import SteppedFlapjack.WordToStackSteps.SequenceZeroClock
 import SteppedFlapjack.WordToStackSteps.RaiseClock
+import SteppedFlapjack.WordToStackSteps.NormalizedClock
 import Flapjack.Compiler.Backend.StackProps.EvaluateAddClock
 /-! Preserve proved Word-to-Stack simulations with explicit clock slack. -/
 namespace SteppedFlapjack.WordToStackSteps
 open Flapjack Flapjack.WordToStackProofs Flapjack.WordToStackProofs.CompCorrect
 open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Backend.WordToStack.Native
+
+/-- The full compiler result relation is stable when both post-state clocks
+are reset together, including exception frames and resource-limit outcomes. -/
+theorem compCorrectResult_setClocks {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (k f frame : Nat)
+    (source sourcePost : WordSemStateFiniteExact width (Nat × C) F)
+    (target : StackSemStateFiniteExact width C F) (result : Option (WordSemResult width))
+    (out : Option (StackSemResult width)) (lens : List Nat) (clock : Nat)
+    (h : compCorrectResult ac k f frame source sourcePost target result out lens) :
+    compCorrectResult ac k f frame source {sourcePost with clock := clock}
+      {target with clock := clock} result out lens := by
+  unfold compCorrectResult at h ⊢
+  by_cases heq : result.map compileResult ≠ out
+  · simp only [if_pos heq] at h ⊢
+    exact h
+  · simp only [if_neg heq] at h ⊢
+    cases result with
+    | none => exact stateRel_setClocks ac k f frame sourcePost target lens 0 clock h
+    | some r =>
+      cases r with
+      | result v vs =>
+        exact ⟨stateRel_setClocks ac k 0 0 sourcePost target lens _ clock h.1, h.2⟩
+      | exception v payload =>
+        obtain ⟨ng,g,rel,loc,reg⟩ := h
+        refine ⟨ng,g,?_,loc,reg⟩
+        simpa only [pushLocals] using stateRel_setClocks ac k 0 0 (pushLocals ng g sourcePost) target _ 0 clock rel
+      | «break» l => exact stateRel_setClocks ac k f frame sourcePost target lens 0 clock h
+      | «continue» l => exact stateRel_setClocks ac k f frame sourcePost target lens 0 clock h
+      | timeOut => exact ⟨h.1, trivial⟩
+      | notEnoughSpace => exact ⟨h.1, trivial⟩
+      | finalFfi ev => exact ⟨h.1, trivial⟩
+      | error => exact ⟨h.1, trivial⟩
+
+/-- Except for the resource-limit halt, the result relation accounts for
+the source and target clocks exactly. -/
+theorem compCorrectResult_clocks {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (k f frame : Nat)
+    (source sourcePost : WordSemStateFiniteExact width (Nat × C) F)
+    (target : StackSemStateFiniteExact width C F) (result : Option (WordSemResult width))
+    (out : Option (StackSemResult width)) (lens : List Nat)
+    (h : compCorrectResult ac k f frame source sourcePost target result out lens)
+    (notLimit : out ≠ some (.halt (.word 2))) : sourcePost.clock = target.clock := by
+  unfold compCorrectResult at h
+  by_cases heq : result.map compileResult ≠ out
+  · simp only [if_pos heq] at h
+    exact (notLimit h.1).elim
+  · simp only [if_neg heq] at h
+    cases result with
+    | none => exact h.1
+    | some r =>
+      cases r with
+      | result v vs => exact h.1.1
+      | exception v payload =>
+        obtain ⟨ng,g,rel,loc,reg⟩ := h
+        exact rel.1
+      | «break» l => exact h.1
+      | «continue» l => exact h.1
+      | timeOut => exact h.2
+      | notEnoughSpace => exact h.2
+      | finalFfi ev => exact h.2
+      | error => exact h.2
 
 private theorem targetNoTimeout {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (k f frame : Nat)
