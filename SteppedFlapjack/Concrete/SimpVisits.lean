@@ -892,6 +892,38 @@ private theorem tableDeclStep {σ : Type} (name : MlS) (shape : ShapeHOL) (e : E
       simp only [evaluated,h,valid,Bool.false_eq_true,if_false]
       omega
 
+private theorem tableWhileStep {σ : Type} (condition : ExpHOL 64) (body : ProgHOL 64) (s : PanSemStateFiniteExact 64 σ)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (rel : PanSimp.CodeRel s.code code) (word : BitVec 64)
+    (test : @evalHOLExact 64 σ _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) condition = some (.val (.word word)))
+    (nonzero : word ≠ 0) (clock : s.clock ≠ 0)
+    (result : Option (PanSemResultExact 64)) (post : PanSemStateFiniteExact 64 σ)
+    (run : s.decClockHOLFinite.evaluateHOLFiniteState body = (result,post)) (nonerror : result ≠ some .error)
+    (factor : Nat) (factorPositive : 1 ≤ factor)
+    (bodyBound : controlSteps body {s.decClockHOLFinite with code := code} ≤ factor * controlSteps body s.decClockHOLFinite)
+    (loopBound : result = none ∨ result = some .continue →
+      controlSteps (.while condition body) {post with code := code} ≤ factor * controlSteps (.while condition body) post) :
+    controlSteps (.while condition body) {s with code := code} ≤ factor * controlSteps (.while condition body) s := by
+  have evaluated := @evalHOLFinite_upd_code_eq 64 σ _ s
+    (fun address => Classical.propDecidable (s.memaddrs address)) code condition
+  change @evalHOLExact 64 σ _ ({s with code := code} : PanSemStateFiniteExact 64 σ).toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) condition =
+    @evalHOLExact 64 σ _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) condition at evaluated
+  have entryRel : PanSimp.CodeRel s.decClockHOLFinite.code code := rel
+  obtain ⟨targetRun,_⟩ := PanSimp.codeSimAll body s.decClockHOLFinite result post code run nonerror entryRel
+  have targetRun' : ({s with code := code} : PanSemStateFiniteExact 64 σ).decClockHOLFinite.evaluateHOLFiniteState body =
+      (result,{post with code := code}) := by simpa [decClockHOLFinite] using targetRun
+  have bodyBound' : controlSteps body ({s with code := code} : PanSemStateFiniteExact 64 σ).decClockHOLFinite ≤
+      factor * controlSteps body s.decClockHOLFinite := by simpa [decClockHOLFinite] using bodyBound
+  rw [controlSteps_while,controlSteps_while,evaluated,test]
+  simp only [if_pos (And.intro nonzero clock),targetRun',run,Nat.mul_add,Nat.mul_one]
+  cases result with
+  | none => have bound := loopBound (Or.inl rfl); simp only; omega
+  | some r =>
+    cases r with
+    | «continue» => have bound := loopBound (Or.inr rfl); simp only; omega
+    | «break» | error | timeOut | returned _ | finalFfi _ | exception _ _ => simp only; omega
+
 /-- pan_simp's extra control visits are bounded by the weight of the simplified
 body, charged only on an abnormal exit. -/
 theorem supported_panSimp_controlSteps_simplified {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
