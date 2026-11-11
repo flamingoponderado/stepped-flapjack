@@ -148,7 +148,7 @@ theorem nestedCall_crep_clock_consumed :
       (.seq .skip (.call none (ofString "main'") []))).2.clock ≤
       SteppedFlapjack.CrepSteps.steps (.seq .skip (.call none (ofString "main'") [])) nestedCrepState := by
   apply SteppedFlapjack.CrepSteps.callScalarProgram_clock_consumed
-  · exact .seq (.base .skip) (.call none _ [])
+  · exact .seq (.base .skip) (.call none _ [] (by simp))
   · change SteppedFlapjack.CrepSteps.CallScalarTable (alistToFmapCodeExact
       (compileProgDeclsHOLW (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))))
     rw [compileProgDeclsHOLW,nestedCall_inline_selection_empty,CrepInlineRoute.compileInlTopHOLExact_nil]
