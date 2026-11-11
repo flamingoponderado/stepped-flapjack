@@ -40,8 +40,11 @@ theorem zeroSuccessfulReturningCall {width : Nat} [NeZero width] {C F : Type}
       (target.bitmaps.drop (n - (appListAppend bs).length)))
     (sourcePost bodyPost : WordSemStateFiniteExact width (Nat × C) F)
     (result bodyResult : Option (WordSemResult width))
-    (retBlock : LoopBlock retCode)
-    (code : ∀ loc arity p, sptLookup loc source.code = some (arity, p) → LoopBlock p)
+    (retZero : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
+      t.clock < source.clock → (safeWordCode source → safeWordCode t) → ZeroSimulation ac retCode t)
+    (codeZero : ∀ loc arity p, sptLookup loc source.code = some (arity,p) →
+      ∀ t : WordSemStateFiniteExact width (Nat × C) F,
+        t.clock < source.clock → (safeWordCode source → safeWordCode t) → ZeroSimulation ac p t)
     (nonzero : source.clock ≠ 0)
     (execution : WordSemStateFiniteExact.evaluate
       (.call (some (values, names, retCode, l1, l2)) dest args none) source =
@@ -58,7 +61,7 @@ theorem zeroSuccessfulReturningCall {width : Nat} [NeZero width] {C F : Type}
       StackSemEvaluate.evaluate (compiled, target) =
         (targetResult, targetFinal) ∧
       compCorrectResult ac k f frame source sourcePost targetFinal result targetResult lens := by
-  have ih := returningOriginalIH_of_blocks ac values names retCode l1 l2 dest args source retBlock code
+  have ih := returningOriginalIH ac values names retCode l1 l2 dest args source
   let expectedFrame := max (maxVarHOL prog / 2 + 1 - k) (args1.length - k)
   have countEq := stackArgumentCount values names retCode l1 l2 dest args source xs args1
     prog ss envs k f frame destinationCode destination guards destinationCompile
@@ -89,11 +92,20 @@ theorem zeroSuccessfulReturningCall {width : Nat} [NeZero width] {C F : Type}
   have savedGrowth := (Compiler.Backend.StackProps.EvaluateMono.evaluateMono
     savedCode destinationTarget saved none savedRun).1
   have bitmapGrowth : target.bitmaps.IsPrefix saved.bitmaps := destinationGrowth.trans savedGrowth
+  have calleeSmaller : (WordSemStateFiniteExact.callEnv args1 ss
+      (WordSemStateFiniteExact.pushEnv envs none (WordSemStateFiniteExact.decClock source))).clock < source.clock := by
+    simp only [WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.pushEnv_clock,WordSemStateFiniteExact.decClock]
+    omega
+  have calleeSafe : safeWordCode source → safeWordCode (WordSemStateFiniteExact.callEnv args1 ss
+      (WordSemStateFiniteExact.pushEnv envs none (WordSemStateFiniteExact.decClock source))) := by
+    intro safe
+    simpa [safeWordCode,WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.code_pushEnv,
+      WordSemStateFiniteExact.decClock] using safe
   obtain ⟨movedAgain, entry, calleeTarget, targetResult, moveAgain, allocationRun, bodyTargetRun,
     calleeRun0, bodyConclusion⟩ :=
     zeroCalleeBodyAt ac k f frame values names retCode l1 l2 dest args source sourcePost
       bodyPost result bodyResult saved lens xs args1 prog ss envs destinationCode destination
-      guards savedRelation pushedRelation conventions maximum destinationCompile (code location args1.length prog sourceCode)
+      guards savedRelation pushedRelation conventions maximum destinationCompile (codeZero location args1.length prog sourceCode _ calleeSmaller calleeSafe)
       nonzero execution notError bodyRun location calleeSize calleeFrame body calleeBs calleeBsPost
       calleeIndex calleeIndexPost savedLookup bodyCompile bodyConventions bodyFlat
       calleeBitmapLength (calleeBitmapBound.trans bitmapGrowth.length_le)
@@ -159,7 +171,7 @@ theorem zeroSuccessfulReturningCall {width : Nat} [NeZero width] {C F : Type}
       subst targetResult
       exact zeroCompiledNormalFromHistory ac k f frame calleeSize calleeFrame values names retCode
         l1 l2 dest args source sourcePost bodyPost result returnLocation returned saved calleeTarget lens
-        xs args1 prog ss envs guards savedRelation conventions maximum retBlock code nonzero execution notError
+        xs args1 prog ss envs guards savedRelation conventions maximum retZero nonzero execution notError
         bodyRun bodyConclusion target moved bs savedBitmaps finalBitmaps n savedIndex finalIndex
         destinationCode savedCode returnCode compiled callee destination flat destinationCompile
         savedCompile returnCompile compilation bitmapLength bitmapBound bitmapPrefix labels savedPrelude
@@ -192,8 +204,11 @@ theorem zeroReturningNone {width : Nat} [NeZero width] {C F : Type}
     (retCode : WordLangProgHOL (BitVec width)) (l1 l2 : Nat)
     (dest : Option Nat) (args : List Nat)
     (source : WordSemStateFiniteExact width (Nat × C) F)
-    (retBlock : LoopBlock retCode)
-    (code : ∀ loc arity p, sptLookup loc source.code = some (arity, p) → LoopBlock p) :
+    (retZero : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
+      t.clock < source.clock → (safeWordCode source → safeWordCode t) → ZeroSimulation ac retCode t)
+    (codeZero : ∀ loc arity p, sptLookup loc source.code = some (arity,p) →
+      ∀ t : WordSemStateFiniteExact width (Nat × C) F,
+        t.clock < source.clock → (safeWordCode source → safeWordCode t) → ZeroSimulation ac p t) :
     ZeroSimulation ac (.call (some (values, names, retCode, l1, l2)) dest args none) source := by
   intro k f frame sourcePost target result bs finalBitmaps n finalIndex compiled lens premises
   obtain ⟨execution, notError, related, conventions, flat, compilation, bitmapLength,
@@ -230,7 +245,7 @@ theorem zeroReturningNone {width : Nat} [NeZero width] {C F : Type}
           lens xs args1 prog ss envs bs savedBitmaps returnBitmaps n savedIndex returnIndex
           destinationCode savedCode returnCode compiled destination guards related conventions maximum
           destinationCompile savedCompile returnCompile compilation flat labels bitmapLength bitmapBound
-          bitmapPrefix sourcePost bodyPost result bodyResult retBlock code zero execution notError bodyRun calleeSpace
+          bitmapPrefix sourcePost bodyPost result bodyResult retZero codeZero zero execution notError bodyRun calleeSpace
       · obtain ⟨calleeSize, _, sizeEq, failure⟩ := compiledCalleeFrameFailure ac k f frame values names
           retCode l1 l2 dest args source sourcePost result target lens xs args1 prog ss envs bs savedBitmaps
           returnBitmaps n savedIndex returnIndex destinationCode savedCode returnCode destination guards
@@ -293,7 +308,9 @@ theorem normalReturningNone_bounded {width : Nat} [NeZero width] {C F : Type}
     premises.1 notTimeout stepBound
   have related := stateRel_setClocks ac k f frame source target lens 0 limit premises.2.2.1
   have normalizedCode : ∀ loc arity p, sptLookup loc ({source with clock := limit}).code = some (arity, p) → LoopBlock p := code
-  have sim := zeroReturningNone ac names cuts continuation l1 l2 dest args {source with clock := limit} retBlock normalizedCode
+  have sim := zeroReturningNone ac names cuts continuation l1 l2 dest args {source with clock := limit}
+    (fun t _ _ => loopBlock_zero ac continuation t retBlock)
+    (fun loc arity p lookup t _ _ => loopBlock_zero ac p t (normalizedCode loc arity p lookup))
   obtain ⟨targetPost, targetResult, targetRun, conclusion⟩ := sim k f frame
     {post with clock := limit - (source.clock - post.clock)} {target with clock := limit} result
     bs bsPost n nPost compiled lens ⟨normalized, premises.2.1, related, premises.2.2.2⟩
