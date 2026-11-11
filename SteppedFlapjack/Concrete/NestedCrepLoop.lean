@@ -15,23 +15,14 @@ theorem nestedCall_crep_codeWeight : SteppedFlapjack.CrepSteps.codeWeight nested
   rw [nestedCallCrepPrograms,nestedCall_crep_code]
   rfl
 
-private theorem nestedCall_crep_fixed (name : MlString) (params : List Nat) (body : CrepProgHOL 64)
-    (h : (name,params,body) ∈ nestedCallCrepPrograms) : crepSimpProgHOL body = body := by
-  rw [nestedCallCrepPrograms,compileProgDeclsHOLW,nestedCall_inline_selection_empty,
-    CrepInlineRoute.compileInlTopHOLExact_nil] at h
-  obtain ⟨ctxt,p,eq,shape⟩ := callFrontend_declaration_sources _ nestedCall_declaration_shapes (name,params,body) h
-  simp only at eq
-  rw [eq]
-  exact callFrontend_simp_fixed shape
-
 /-- The generated Loop table has the compiler code relation for every Crep function. -/
 theorem nestedCall_loop_code_relation : crepToLoopCodeRelExact
       (mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable nestedCallCrepPrograms) 0)
       (alistToFmapCodeExact nestedCallCrepPrograms) (sptFromAList (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms)) := by
-  apply wholeCrep_fixed_executable_codeRel _ nestedCallCrepPrograms (ofString "main") (.seq .skip (.call none (ofString "main'") []))
-  · rw [nestedCallCrepPrograms,nestedCall_crep_code]; decide
-  · rw [nestedCallCrepPrograms,nestedCall_crep_code]; rfl
-  · exact nestedCall_crep_fixed
+  apply callFrontend_declaration_crepLoop_codeRel _ _ nestedCall_inline_selection_empty nestedCall_declaration_shapes
+    (ofString "main") (.seq .skip (.call none (ofString "main'") []))
+  · rw [nestedCall_lowered_declarations]; decide
+  · rw [nestedCall_crep_code]; rfl
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
@@ -42,19 +33,11 @@ theorem nestedCall_panCrep_code_relation : codeRelExactHOLW
         (getEidsFromDeclsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))))
       (HolFiniteMapExact.empty.updateList (functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))).reverse)
       (alistToFmapCodeExact nestedCallCrepPrograms) := by
-  let decls := compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")
-  have unique : ((functionsHOL decls).map Prod.fst).Nodup := by
-    dsimp only [decls]; rw [nestedCall_lowered_declarations]; decide
-  have localised : ∀ entry ∈ functionsHOL decls, localisedProgHOL entry.2.2.1 = true := by
-    dsimp only [decls]; rw [nestedCall_lowered_declarations]
-    simp [functionsHOL,localisedProgHOL,localisedExpHOL,everyExpListHOL,everyExpHOL]
-  have inlineNil : (functionsHOL (decls.filter inlinableHOL)).map Prod.fst = [] := by
-    dsimp only [decls]; rw [nestedCall_lowered_declarations]; rfl
-  have relation := mkCtxtCodeImpCodeRelExactHOLW decls unique localised
-  change codeRelExactHOLW _ _ (HolFiniteMapExact.empty.updateList
-    (compileProgDeclsHOLW decls).reverse)
-  rw [compileProgDeclsHOLW,inlineNil,CrepInlineRoute.compileInlTopHOLExact_nil]
-  exact relation
+  apply callFrontend_declaration_codeRel
+  · rw [nestedCall_lowered_declarations]
+    decide
+  · exact nestedCall_inline_selection_empty
+  · exact nestedCall_declaration_shapes
 
 /-- The shared structural optimizer computes the original Loop compiler output
 for every function of the nested-call witness. -/

@@ -1,4 +1,5 @@
 import SteppedFlapjack.PanToCrepSteps.WhileSteps
+import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
 import SteppedFlapjack.CrepToLoopSteps.ExecutableFrontend
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
 import SteppedFlapjack.CrepSteps.CallClock
@@ -214,6 +215,117 @@ theorem callFrontend_declaration_sources {width : Nat} [NeZero width]
   obtain ⟨entry,mem,rfl⟩ := member
   exact ⟨_,_,rfl,shapes entry mem⟩
 
+/-- Every lookup in a call-aware declaration table has the callee context
+used by the source-to-Crep clock induction. -/
+theorem callFrontend_declaration_table {width : Nat} [NeZero width]
+    (declarations : List (DeclHOL width))
+    (shapes : ∀ entry ∈ functionsHOL declarations,
+      CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
+        (makeFuncsExactHOL (functionsHOL declarations))
+        (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
+        (getEidsFromDeclsHOL declarations)) entry.2.2.1) :
+    CallFrontendCode
+      (mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+        (getEidsFromDeclsHOL declarations))
+      (HolFiniteMapExact.empty.updateList (functionsHOL declarations).reverse) := by
+  intro name params body rsh found
+  change Flapjack.FLOOKUP (Flapjack.FUPDATE_LIST Flapjack.FEMPTY
+    (functionsHOL declarations).reverse) name = some (params,body,rsh) at found
+  rw [Flapjack.FLOOKUP_FUPDATE_LIST_reverse_eq_lookup] at found
+  have member : (name,params,body,rsh) ∈ functionsHOL declarations := by
+    obtain ⟨before,after,split,_⟩ := List.lookup_eq_some_iff.mp found
+    rw [split]
+    simp
+  have shape := shapes (name,params,body,rsh) member
+  have contextEq : mkCtxtExactHOL (panToCrepMakeVmapHOLExact params)
+      (makeFuncsExactHOL (functionsHOL declarations))
+      (sizeOfShapeHOL (.comb (params.map Prod.snd)) - 1) (getEidsFromDeclsHOL declarations) =
+      ctxtFcExactHOL (makeFuncsExactHOL (functionsHOL declarations)) (getEidsFromDeclsHOL declarations)
+        (params.map Prod.fst) (params.map Prod.snd) (List.range (sizeOfShapeHOL (.comb (params.map Prod.snd)))) := by
+    simp [mkCtxtExactHOL,ctxtFcExactHOL,panToCrepMakeVmapHOLExact,maxList_range,List.zip]
+  rw [contextEq] at shape
+  exact shape
+
+/-- A call-aware declaration table supplies the original Pancake-to-Crep code
+relation for the actual compiler output when inlining is disabled. -/
+theorem callFrontend_declaration_codeRel {width : Nat} [NeZero width]
+    (declarations : List (DeclHOL width))
+    (unique : ((functionsHOL declarations).map Prod.fst).Nodup)
+    (noInline : (functionsHOL (declarations.filter inlinableHOL)).map Prod.fst = [])
+    (shapes : ∀ entry ∈ functionsHOL declarations,
+      CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
+        (makeFuncsExactHOL (functionsHOL declarations))
+        (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
+        (getEidsFromDeclsHOL declarations)) entry.2.2.1) :
+    codeRelExactHOLW
+      (mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+        (getEidsFromDeclsHOL declarations))
+      (HolFiniteMapExact.empty.updateList (functionsHOL declarations).reverse)
+      (HolFiniteMapExact.empty.updateList (compileProgDeclsHOLW declarations).reverse) := by
+  have localised : ∀ entry ∈ functionsHOL declarations, localisedProgHOL entry.2.2.1 = true := by
+    intro entry member
+    exact callFrontend_localised (shapes entry member)
+  have relation := mkCtxtCodeImpCodeRelExactHOLW declarations unique localised
+  rw [compileProgDeclsHOLW, noInline, CrepInlineRoute.compileInlTopHOLExact_nil]
+  exact relation
+
+/-- The source visit bound transfers to the actual Crep table for any
+call-aware declaration list in a concrete empty-local source configuration. -/
+theorem callFrontend_declaration_steps {σ : Type}
+    (declarations : List (DeclHOL 64))
+    (unique : ((functionsHOL declarations).map Prod.fst).Nodup)
+    (noInline : (functionsHOL (declarations.filter inlinableHOL)).map Prod.fst = [])
+    (shapes : ∀ entry ∈ functionsHOL declarations,
+      CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
+        (makeFuncsExactHOL (functionsHOL declarations))
+        (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
+        (getEidsFromDeclsHOL declarations)) entry.2.2.1)
+    (program : ProgHOL 64)
+    (shape : CallFrontend (mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+      (getEidsFromDeclsHOL declarations)) program)
+    (source sourceFinal : Flapjack.PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
+    (code : source.code = HolFiniteMapExact.empty.updateList (functionsHOL declarations).reverse)
+    (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
+    (structs : source.structs = []) (exceptions : source.eshapes = HolFiniteMapExact.empty)
+    (noExceptions : getEidsFromDeclsHOL declarations = HolFiniteMapExact.empty)
+    (run : source.evaluateHOLFiniteState program = (result,sourceFinal)) (nonerror : result ≠ some .error) :
+    let ctxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+      (getEidsFromDeclsHOL declarations)
+    let programs := compileProgDeclsHOLW declarations
+    ∃ targetResult targetFinal,
+      evalCrepSemHOLProgExact (concreteDeclCrepState source programs) (compileProgExactHOLW ctxt program) =
+        (targetResult,targetFinal) ∧
+      panToCrepStateRelFiniteExact sourceFinal targetFinal ∧
+      codeRelExactHOLW ctxt sourceFinal.code targetFinal.code ∧
+      panToCrepExcpRelFiniteExact ctxt.eids sourceFinal.eshapes ∧
+      pcCompileCorrectResultRel ctxt sourceFinal targetFinal result targetResult ∧
+      CrepSteps.steps (compileProgExactHOLW ctxt program) (concreteDeclCrepState source programs) ≤
+        max (CrepSteps.statementWeight (compileProgExactHOLW ctxt program)) (CrepSteps.codeWeight programs) *
+          controlSteps program source := by
+  let ctxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+    (getEidsFromDeclsHOL declarations)
+  let programs := compileProgDeclsHOLW declarations
+  have table : CallFrontendCode ctxt source.code := by
+    rw [code]
+    exact callFrontend_declaration_table declarations shapes
+  have related : codeRelExactHOLW ctxt source.code (concreteDeclCrepState source programs).code := by
+    rw [code]
+    exact callFrontend_declaration_codeRel declarations unique noInline shapes
+  have stateRel := concreteDecl_panCrep_stateRel source programs structs globals
+  have excpRel : panToCrepExcpRelFiniteExact ctxt.eids source.eshapes := by
+    simpa [ctxt,mkCtxtExactHOL,noExceptions,exceptions] using (empty_panCrep_exceptions (width := 64))
+  have localsRel : panToCrepLocalsRelFiniteExact ctxt source.locals (concreteDeclCrepState source programs).locals := by
+    rw [locals]
+    apply empty_panCrep_locals
+    rfl
+  have bound := callFrontend_compiled_steps ctxt program shape source sourceFinal result (concreteDeclCrepState source programs)
+    programs rfl table run nonerror stateRel related excpRel localsRel
+  have correct : pcCompileCorrectAt program source := (pcCompileCorrectAt_iff_HOL _ _).mpr (pcCompileCorrect_all _ _)
+  obtain ⟨targetResult,targetFinal,targetRun,finalState,finalCode,finalExcp,resultRel⟩ :=
+    correct result sourceFinal (concreteDeclCrepState source programs) ctxt run nonerror stateRel related excpRel localsRel
+      (callFrontend_localised shape)
+  exact ⟨targetResult,targetFinal,targetRun,finalState,finalCode,finalExcp,resultRel,bound⟩
+
 /-- The actual post-inline compiler table has the call-aware Loop shape when
 no declarations request inlining. The condition is decidable from the source. -/
 theorem callFrontend_declaration_loopTableSupported {width : Nat} [NeZero width]
@@ -227,6 +339,34 @@ theorem callFrontend_declaration_loopTableSupported {width : Nat} [NeZero width]
     LoopTableSupported (sptFromAList (compileProgHOLExact arch (compileProgDeclsHOLW declarations))) := by
   rw [compileProgDeclsHOLW,noInline,CrepInlineRoute.compileInlTopHOLExact_nil]
   exact callFrontend_compiled_loopTableSupported arch _ (callFrontend_declaration_sources declarations shapes)
+
+/-- The actual compiled call-aware declaration table has the original
+Crep-to-Loop code relation, without a separate simplifier fixed-point premise. -/
+theorem callFrontend_declaration_crepLoop_codeRel {width : Nat} [NeZero width]
+    (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture) (declarations : List (DeclHOL width))
+    (noInline : (functionsHOL (declarations.filter inlinableHOL)).map Prod.fst = [])
+    (shapes : ∀ entry ∈ functionsHOL declarations,
+      CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
+        (makeFuncsExactHOL (functionsHOL declarations))
+        (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
+        (getEidsFromDeclsHOL declarations)) entry.2.2.1)
+    (start : Flapjack.Basis.Pure.MlString.MlString) (entry : CrepProgHOL width)
+    (unique : ((functionsHOL declarations).map Prod.fst).Nodup)
+    (found : holAlookup (compileProgDeclsHOLW declarations) start = some ([],entry)) :
+    let programs := compileProgDeclsHOLW declarations
+    crepToLoopCodeRelExact
+      (mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0)
+      (alistToFmapCodeExact programs) (sptFromAList (compileProgHOLExact arch programs)) := by
+  have compiledUnique : ((compileProgDeclsHOLW declarations).map Prod.fst).Nodup := by
+    rw [compileProgDeclsHOLW,noInline,CrepInlineRoute.compileInlTopHOLExact_nil]
+    simpa [compileToCrepExactHOLW,List.map_map,Function.comp_def] using unique
+  apply wholeCrep_fixed_executable_codeRel _ _ start entry compiledUnique found
+  intro name params body member
+  rw [compileProgDeclsHOLW,noInline,CrepInlineRoute.compileInlTopHOLExact_nil] at member
+  obtain ⟨ctxt,p,eq,shape⟩ := callFrontend_declaration_sources declarations shapes (name,params,body) member
+  simp only at eq
+  rw [eq]
+  exact callFrontend_simp_fixed shape
 
 private theorem nested_zero_callScalar {width : Nat} [NeZero width] (names : List Nat)
     (body : CrepProgHOL width) (shape : SteppedFlapjack.CrepSteps.CallScalarProgram body) :
