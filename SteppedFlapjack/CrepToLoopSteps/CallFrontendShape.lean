@@ -5,7 +5,8 @@ import SteppedFlapjack.CrepSteps.CallClock
 import SteppedFlapjack.LoopLiveSteps.TailEntryGlobalBound
 import Flapjack.Pancake.CrepInline.InlineRouteBridge
 namespace SteppedFlapjack.CrepToLoopSteps
-open Flapjack Flapjack.Pancake.PanLang
+open Flapjack Flapjack.Pancake.PanLang Flapjack.LoopSemStateFiniteExact
+open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.LoopLiveSteps
 
 private theorem frontend_arguments_scalar {width : Nat} [NeZero width]
@@ -291,5 +292,18 @@ theorem callFrontend_crep_clock_consumed {width : Nat} [NeZero width] {σ : Type
   rw [code]
   exact callFrontend_crepTable programs sources
 
+
+/-- Compose source statements whose first part may call functions in the actual supported table. -/
+theorem boundedCallSeq {width : Nat} [NeZero width] {σ : Type}
+    (a b : CrepProgHOL width) (source : CrepSemHOLState width σ) (factor : Nat) (positive : 1 ≤ factor)
+    (shapeA : ∀ ctxt live, SimpleLoopSequenceSource (compileHOLExact ctxt live a))
+    (first : BoundPropertyAt a source factor LoopTableSupported)
+    (second : ∀ middle : CrepSemHOLState width σ,
+      evalCrepSemHOLProgExact source a = (none,middle) → BoundPropertyAt b middle factor LoopTableSupported) :
+    BoundPropertyAt (.seq a b) source factor LoopTableSupported := by
+  apply boundedSeq a b source factor positive LoopTableSupported ?_ first second
+  intro ctxt live target middle extra table run
+  exact loopTable_steps_add_clock (compileHOLExact ctxt live a) target middle none
+    (shapeA ctxt live) table run (by simp) extra
 
 end SteppedFlapjack.CrepToLoopSteps
