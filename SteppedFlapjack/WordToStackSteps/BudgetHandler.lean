@@ -1315,25 +1315,6 @@ theorem budgetSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
 
 
 
-private theorem resourceWithReserve {width : Nat} [NeZero width] {C F : Type}
-    (ac : AsmConfigExact width) (k f frame : Nat)
-    (source post : WordSemStateFiniteExact width (Nat × C) F)
-    (target targetPost : StackSemStateFiniteExact width C F)
-    (result : Option (WordSemResult width)) (compiled : HolProg width) (lens : List Nat)
-    (cost reserve : Nat)
-    (run : StackSemEvaluate.evaluate (compiled,target) = (some (.halt (.word 2)), targetPost))
-    (relation : compCorrectResult ac k f frame source post targetPost result (some (.halt (.word 2))) lens) :
-    ∃ final,
-      StackSemEvaluate.evaluate (compiled,{target with clock := target.clock + cost + reserve}) =
-        (some (.halt (.word 2)),final) ∧ reserve ≤ final.clock ∧
-      compCorrectResult ac k f frame source post {final with clock := post.clock} result (some (.halt (.word 2))) lens := by
-  have boosted := Compiler.Backend.StackProps.evaluateAddClock (cost+reserve) compiled target
-    (some (.halt (.word 2))) targetPost ⟨run,by simp⟩
-  refine ⟨{targetPost with clock := targetPost.clock + (cost+reserve)}, ?_, by simp; omega, ?_⟩
-  · simpa only [Nat.add_assoc] using boosted
-  · simpa using compCorrectResult_setClocks ac k f frame source post targetPost result
-      (some (.halt (.word 2))) lens post.clock relation
-
 /-- Guarded handler calls preserve explicit budgets in every resource case. -/
 theorem budgetHandlerCallWithGuards {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (k frame payload : Nat)
