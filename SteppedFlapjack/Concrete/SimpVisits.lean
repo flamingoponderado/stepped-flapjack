@@ -822,6 +822,76 @@ private theorem decCallTableTerminalStep {scope : List VarName} {σ : Type} {p :
   simp only [Nat.mul_add,Nat.mul_one]
   omega
 
+private theorem tableSeqStep {σ : Type} (a b : ProgHOL 64) (s : PanSemStateFiniteExact 64 σ)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (rel : PanSimp.CodeRel s.code code) (result : Option (PanSemResultExact 64))
+    (post : PanSemStateFiniteExact 64 σ) (run : s.evaluateHOLFiniteState a = (result,post))
+    (nonerror : result ≠ some .error) (factor : Nat) (factorPositive : 1 ≤ factor)
+    (firstBound : controlSteps a {s with code := code} ≤ factor * controlSteps a s)
+    (secondBound : result = none → controlSteps b {post with code := code} ≤ factor * controlSteps b post) :
+    controlSteps (.seq a b) {s with code := code} ≤ factor * controlSteps (.seq a b) s := by
+  obtain ⟨targetRun,_⟩ := PanSimp.codeSimAll a s result post code run nonerror rel
+  rw [controlSteps_seq,controlSteps_seq,run,targetRun]
+  cases result with
+  | none =>
+    have hb := secondBound rfl
+    simp only [Nat.mul_add,Nat.mul_one]
+    omega
+  | some r =>
+    simp only [Nat.mul_add,Nat.mul_one]
+    omega
+
+private theorem tableIteStep {σ : Type} (condition : ExpHOL 64) (a b : ProgHOL 64) (s : PanSemStateFiniteExact 64 σ)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (factor : Nat) (factorPositive : 1 ≤ factor)
+    (reachedBound : ∀ w, @evalHOLExact 64 σ _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) condition =
+      some (.val (.word w)) →
+      if w ≠ 0 then controlSteps a {s with code := code} ≤ factor * controlSteps a s
+      else controlSteps b {s with code := code} ≤ factor * controlSteps b s) :
+    controlSteps (.ite condition a b) {s with code := code} ≤ factor * controlSteps (.ite condition a b) s := by
+  have evaluated := @evalHOLFinite_upd_code_eq 64 σ _ s
+    (fun address => Classical.propDecidable (s.memaddrs address)) code condition
+  change @evalHOLExact 64 σ _ ({s with code := code} : PanSemStateFiniteExact 64 σ).toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) condition =
+    @evalHOLExact 64 σ _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) condition at evaluated
+  rw [controlSteps_ite,controlSteps_ite,evaluated]
+  split
+  next w h =>
+    have reached := reachedBound w h
+    split_ifs at * <;> simp_all only [Nat.mul_add,Nat.mul_one] <;> omega
+  next => simp; omega
+
+private theorem tableDeclStep {σ : Type} (name : MlS) (shape : ShapeHOL) (e : ExpHOL 64) (body : ProgHOL 64)
+    (s : PanSemStateFiniteExact 64 σ)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (factor : Nat) (factorPositive : 1 ≤ factor)
+    (bodyBound : ∀ v, @evalHOLExact 64 σ _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e = some v →
+      shapeEqHOL shape (shapeOfHOLExact v) = true →
+      controlSteps body (setVarHOLFinite name v {s with code := code}) ≤
+        factor * controlSteps body (setVarHOLFinite name v s)) :
+    controlSteps (.dec name shape e body) {s with code := code} ≤ factor * controlSteps (.dec name shape e body) s := by
+  have evaluated := @evalHOLFinite_upd_code_eq 64 σ _ s
+    (fun address => Classical.propDecidable (s.memaddrs address)) code e
+  change @evalHOLExact 64 σ _ ({s with code := code} : PanSemStateFiniteExact 64 σ).toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) e =
+    @evalHOLExact 64 σ _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e at evaluated
+  cases h : @evalHOLExact 64 σ _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e with
+  | none =>
+    rw [controlSteps.eq_def,controlSteps.eq_def (.dec name shape e body)]
+    simp only [evaluated,h]
+    omega
+  | some value =>
+    by_cases valid : shapeEqHOL shape (shapeOfHOLExact value) = true
+    · have targetEval : @evalHOLExact 64 σ _ ({s with code := code} : PanSemStateFiniteExact 64 σ).toExact
+        (fun a => Classical.propDecidable (s.memaddrs a)) e = some value := evaluated.trans h
+      rw [controlSteps_dec name shape e body _ value targetEval valid,controlSteps_dec name shape e body s value h valid]
+      have bound := bodyBound value h valid
+      simp only [Nat.mul_add,Nat.mul_one]
+      omega
+    · rw [controlSteps.eq_def,controlSteps.eq_def (.dec name shape e body)]
+      simp only [evaluated,h,valid,Bool.false_eq_true,if_false]
+      omega
+
 /-- pan_simp's extra control visits are bounded by the weight of the simplified
 body, charged only on an abnormal exit. -/
 theorem supported_panSimp_controlSteps_simplified {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
