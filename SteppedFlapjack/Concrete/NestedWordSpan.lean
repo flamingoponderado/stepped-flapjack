@@ -15,10 +15,7 @@ set_option linter.unusedSimpArgs false in
 theorem nested_configured_optimized_start (code : List (Nat × StackLang.HolProg 64))
     (cfg : LabToTarget.Config) (bs : List (BitVec 64))
     (fits : 0xa0020018 + bs.length*8 ≤ sourceBase)
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) (frame : Nat)
-    (frameLookup : let loops := compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms
-      let words := (compile phase3WordConfig riscvConfig (loopToWordCompileHOL loops)).2
-      sptLookup 64 (configuredWord code words cfg bs).stackSize = some frame) :
+    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
     let loops := compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms
     let rawWords := loopToWordCompileHOL loops
     let words := (compile phase3WordConfig riscvConfig rawWords).2
@@ -72,8 +69,7 @@ theorem nested_configured_optimized_start (code : List (Nat × StackLang.HolProg
     (by simpa only [nestedHOLDeclarations] using nestedCall_inline_selection_empty)
     outside aligned (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 8 6
     _ _ _ _ 7 (by simpa [production,panSemBitVec64MemoryAccess] using sourceRun) (by rfl)
-    code cfg bs frame fits good rfl rfl rfl rfl rfl rfl (by intro a ha; rfl)
-    (by simpa only [nestedHOLDeclarations,nestedCallCrepPrograms] using frameLookup)
+    phase3WordConfig code cfg bs fits good rfl rfl rfl rfl rfl rfl (by intro a ha; rfl)
   obtain ⟨sourceFinal,post,sourceResult,wordRun,wordBound,wordFfi,ffiRel⟩ := span
   have leafMiddle : (ofString "leaf" == ofString "middle") = false := by decide
   have leafMain : (ofString "leaf" == ofString "main") = false := by decide

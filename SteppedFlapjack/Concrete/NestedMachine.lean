@@ -3,13 +3,39 @@ import SteppedFlapjack.Concrete.FixtureMachineGuards
 import SteppedFlapjack.WordToStackSteps.StartRiscV
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
-open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.WordToWord
+open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.WordToWord
 open Flapjack.WordToStackProofs Flapjack.Compiler.Backend.WordToStack.Native
 open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInit
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.WordAllocSteps SteppedFlapjack.WordToStackSteps
 open SteppedFlapjack.StackSteps SteppedFlapjack.WordSimpSteps Flapjack.WordSemStateFiniteExact
 open Flapjack.Compiler.Backend.WordDepth Flapjack.Compiler.Backend.WordDepth.Executable
 open Flapjack.Compiler.Backend.BackendProps
+
+/-- All generated Loop function locations follow the reserved runtime stubs. -/
+theorem compiledLoop_locations_ge (arch : AsmArchitecture) (programs : List (MlS × List Nat × CrepProgHOL 64))
+    (location : Nat) (member : location ∈ (compileProgHOLExact arch programs).map Prod.fst) : firstLoopName ≤ location := by
+  obtain ⟨entry,member,heq⟩ := List.mem_map.mp member
+  subst location
+  obtain ⟨i,hi,entryEq⟩ := List.mem_iff_getElem.mp member
+  simp only [compileProgHOLExact,List.length_zipWith,List.length_map,List.length_range,Nat.min_self] at hi
+  simp only [compileProgHOLExact,List.getElem_zipWith,List.getElem_map,List.getElem_range] at entryEq
+  rw [← entryEq]
+  omega
+/-- Generated Word function locations cannot collide with the native runtime stubs. -/
+theorem compiledWord_noStubs (arch : AsmArchitecture) (programs : List (MlS × List Nat × CrepProgHOL 64)) :
+    let words := loopToWordCompileHOL (compileProgHOLExact arch programs)
+    raiseStubLocation ∉ words.map Prod.fst ∧ storeConstsStubLocation ∉ words.map Prod.fst := by
+  have names : (loopToWordCompileHOL (compileProgHOLExact arch programs)).map Prod.fst =
+      (compileProgHOLExact arch programs).map Prod.fst := by
+    simp [loopToWordCompileHOL,loopToWordCompileProgHOL,List.map_map,Function.comp_def]
+  change raiseStubLocation ∉ (loopToWordCompileHOL (compileProgHOLExact arch programs)).map Prod.fst ∧
+    storeConstsStubLocation ∉ (loopToWordCompileHOL (compileProgHOLExact arch programs)).map Prod.fst
+  rw [names]
+  constructor <;> intro member
+  · have h := compiledLoop_locations_ge arch programs raiseStubLocation member
+    simp [raiseStubLocation,firstLoopName,wordNumStubs,stackNumStubs] at h
+  · have h := compiledLoop_locations_ge arch programs storeConstsStubLocation member
+    simp [storeConstsStubLocation,firstLoopName,wordNumStubs,stackNumStubs] at h
 
 /-- Executable Word table and entry frame for the nested-call witness. -/
 def nestedRawWords := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms)
@@ -139,33 +165,21 @@ theorem nested_configured_machine (cfg : LabToTarget.Config)
     have eq : (compileNative riscvConfig false words).1 = bs := by
       simpa [nestedBitmaps,nestedNative,optEq] using bsEq.symm
     rw [eq]
-  have member : (64,1,loopToWordCompFuncHOL 64 [] nestedLoopCode64) ∈ rawWords := by
-    simp [rawWords,nestedCall_loop_code,loopToWordCompileHOL,loopToWordCompileProgHOL]
-  have nodup : (rawWords.map Prod.fst).Nodup := by
-    simp [rawWords,nestedCall_loop_code,loopToWordCompileHOL,loopToWordCompileProgHOL]
-  have outputLookup := (wholeCompile_entry_lookups phase3WordConfig riscvConfig rawWords 64 1 _ member nodup).2
-  have executableLookup : sptLookup 64 (sptFromAList nestedOptimizedWords) =
-      some (1,(fullCompileSingle riscvConfig.twoRegArith (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length))
-        phase3WordConfig.regAlg riscvConfig ((64,1,loopToWordCompFuncHOL 64 [] nestedLoopCode64),
-          entryColour phase3WordConfig rawWords 64)).2.2) := by
-    simpa [nestedOptimizedWords,nestedRawWords,rawWords,compileWith_eq_compile _ allocator] using outputLookup
-  have entryValue : entry = (fullCompileSingle riscvConfig.twoRegArith
-      (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) phase3WordConfig.regAlg riscvConfig
-      ((64,1,loopToWordCompFuncHOL 64 [] nestedLoopCode64),entryColour phase3WordConfig rawWords 64)).2.2 := by
-    simp [entry,nestedEntry,executableLookup]
-  have optLookup : sptLookup 64 (sptFromAList words) = some (1,entry) := by
-    rw [entryValue]
-    simpa [words,rawWords,nestedOptimizedWords,nestedRawWords,compileWith_eq_compile _ allocator] using executableLookup
+  have found : (functionsHOL (nestedHOLFunctions.map DeclHOL.function)).lookup (ofString "main") =
+      some ([],progToHOL nestedCallEntry,.one) := by
+    rw [nestedHOLDeclarations]
+    simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,shapeToHOL]
+  have entries := functionOnly_initializedEntry nestedHOLFunctions (ofString "main") (progToHOL nestedCallEntry)
+    found (by simpa only [nestedHOLDeclarations] using nestedCall_inline_selection_empty)
+    phase3WordConfig code cfg bs
   have entryLookup : sptLookup 64 (configuredWord code words cfg bs).code = some (1,entry) := by
-    simpa [configuredWord,Compiler.Backend.WordToStack.Native.Initialization.makeInit] using optLookup
+    simpa [nestedHOLDeclarations,nestedCallCrepPrograms,entry,nestedEntry,optEq,words,rawWords] using entries.1
   have frameLookup : sptLookup 64 (configuredWord code words cfg bs).stackSize = some frame := by
-    simp [configuredWord,Compiler.Backend.WordToStack.Native.Initialization.makeInit,sptLookupMapi,optLookup,
-      frame,nestedEntryFrame,entry]
-  obtain ⟨post,run,ffi,_⟩ := nested_configured_optimized_start code cfg bs fits' good frame frameLookup
-  have noRaise : raiseStubLocation ∉ rawWords.map Prod.fst := by
-    simp [rawWords,nestedCall_loop_code,loopToWordCompileHOL,loopToWordCompileProgHOL,raiseStubLocation,wordNumStubs,stackNumStubs]
-  have noStore : storeConstsStubLocation ∉ rawWords.map Prod.fst := by
-    simp [rawWords,nestedCall_loop_code,loopToWordCompileHOL,loopToWordCompileProgHOL,storeConstsStubLocation,wordNumStubs,stackNumStubs]
+    simpa [nestedHOLDeclarations,nestedCallCrepPrograms,entry,nestedEntry,frame,nestedEntryFrame,optEq,words,rawWords] using entries.2
+  obtain ⟨post,run,ffi,_⟩ := nested_configured_optimized_start code cfg bs fits' good
+  have noStubs := compiledWord_noStubs riscvConfig.isa nestedCallCrepPrograms
+  have noRaise : raiseStubLocation ∉ rawWords.map Prod.fst := noStubs.1
+  have noStore : storeConstsStubLocation ∉ rawWords.map Prod.fst := noStubs.2
   have fields := configuredStack_code_and_bitmaps code cfg bs fits' good
   have initOk := configuredStack_nativeInitOk code cfg tail fits' good
   have related := wholeWordStack_initStateRel phase3WordConfig riscvConfig rawWords

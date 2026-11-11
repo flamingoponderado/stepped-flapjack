@@ -160,6 +160,44 @@ theorem fixtureStarter (program : Prog (RiscV.Word 64)) (fuel extra : Nat) (body
   exact h
 
 
+/-- The generated optimized entry and its native frame are present in initialized Word state. -/
+theorem functionOnly_initializedEntry (fs : List (FunDeclHOL 64)) (start : MlS) (body : ProgHOL 64)
+    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],body,.one))
+    (noInline : (functionsHOL ((compileTopExactHOL (fs.map DeclHOL.function) start).filter inlinableHOL)).map Prod.fst = [])
+    (wc : Flapjack.Compiler.Backend.WordToWord.Config) (code : List (Nat × StackLang.HolProg 64)) (cfg : LabToTarget.Config) (bs : List (BitVec 64)) :
+    let programs := compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)
+    let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa programs)
+    let optimized := (compile wc riscvConfig raw).2
+    let entry := ((sptLookup 64 (sptFromAList optimized)).getD (1,.skip)).2
+    let frame := (Flapjack.Compiler.Backend.WordToStack.Native.compileProgNative riscvConfig false entry 1 (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1
+    sptLookup 64 (configuredWord code optimized cfg bs).code = some (1,entry) ∧
+      sptLookup 64 (configuredWord code optimized cfg bs).stackSize = some frame := by
+  let decls := compileTopExactHOL (fs.map DeclHOL.function) start
+  let programs := compileProgDeclsHOLW decls
+  let pan := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL decls)) 0 (getEidsFromDeclsHOL decls)
+  let p : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL (fs.map DeclHOL.function)) [])
+  let crep := compileProgExactHOLW pan p
+  let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
+  let loop := optimiseHOL (compileHOLExact ctxt .ln crep)
+  let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa programs)
+  let optimized := (compile wc riscvConfig raw).2
+  let entry := ((sptLookup 64 (sptFromAList optimized)).getD (1,.skip)).2
+  let frame := (Flapjack.Compiler.Backend.WordToStack.Native.compileProgNative riscvConfig false entry 1 (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1
+  have member : (64,1,loopToWordCompFuncHOL 64 [] loop) ∈ raw := by
+    simpa [raw,loop,ctxt,crep,p,pan,programs,decls,firstLoopName] using functionOnly_wordEntry fs start body found noInline riscvConfig.isa
+  have nodup : (raw.map Prod.fst).Nodup := by
+    simpa [raw,loopToWordCompileHOL,loopToWordCompileProgHOL,List.map_map,Function.comp_def] using
+      firstCompileProgAllDistinctExact riscvConfig.isa programs
+  have out := (wholeCompile_entry_lookups wc riscvConfig raw 64 1 _ member nodup).2
+  have lookup : sptLookup 64 (sptFromAList optimized) = some (1,entry) := by
+    dsimp only [entry]
+    rw [show sptLookup 64 (sptFromAList optimized) = _ from out]
+    rfl
+  constructor
+  · simpa [configuredWord,Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit] using lookup
+  · change sptLookup 64 (configuredWord code optimized cfg bs).stackSize = some frame
+    simp [configuredWord,Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit,sptLookupMapi,lookup,frame]
+
 set_option maxHeartbeats 3000000 in
 set_option maxRecDepth 100000 in
 /-- A counted source return reaches the native initialized Word start at an explicit bound. -/
@@ -201,18 +239,15 @@ theorem countedCalls_initializedWord {scope : List VarName} {program : Prog (Ris
       (memoryAccess := some (panSemBitVec64MemoryAccess production))
       (contracts := some (countedContractsOfCode production.code exnContracts)) =
         some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
-    (budget : count ≤ source.clock) (nativeCode : List (Nat × StackLang.HolProg 64))
-    (cfg : LabToTarget.Config) (bitmaps : List (BitVec 64)) (frame : Nat)
+    (budget : count ≤ source.clock) (wc : Flapjack.Compiler.Backend.WordToWord.Config) (nativeCode : List (Nat × StackLang.HolProg 64))
+    (cfg : LabToTarget.Config) (bitmaps : List (BitVec 64))
     (fits : 0xa0020018 + bitmaps.length*8 ≤ sourceBase)
     (good : StackToLab.Proofs.GoodCode.goodCode 24 nativeCode)
     (memDomain : source.memaddrs = ordinaryAddress) (sharedDomain : source.shMemaddrs = sharedAddress)
     (base : source.baseAddr = heapBase) (top : source.topAddr = heapTop)
     (byteOrder : source.be = false) (ffi : source.ffi = sourceFfi)
     (sourceMemory : ∀ a, source.memaddrs a → source.memory a = (sourceTemplateFor bitmaps.length).memory a)
-    (frameLookup : let programs := compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)
-      let words := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa programs)
-      let optimized := (compile phase3WordConfig riscvConfig words).2
-      sptLookup 64 (configuredWord nativeCode optimized cfg bitmaps).stackSize = some frame) :
+:
     let decls := fs.map DeclHOL.function
     let lowered := compileTopExactHOL decls start
     let renamed := {source with code := fpermCodeHOL start (newMainNameHOL decls) targetCode}
@@ -234,14 +269,14 @@ theorem countedCalls_initializedWord {scope : List VarName} {program : Prog (Ris
     let optFactor := max (loopVisitWeight opt) (loopCodeWeight loop.code+2)
     let optLimit := loopVisitWeight opt + optFactor * (2 * loopLimit)
     let words := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa programs)
-    let optimized := (compile phase3WordConfig riscvConfig words).2
+    let optimized := (compile wc riscvConfig words).2
     let word := {(configuredWord nativeCode optimized cfg bitmaps) with clock := 6*optLimit+1}
     ∃ (sourceFinal : PanSemStateFiniteExact 64 Unit) (post : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) Unit),
       source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word value))),sourceFinal) ∧
       WordSemStateFiniteExact.evaluate (.call none (some firstLoopName) [0] none) word =
         (some (.result (.loc 1 0) [.word value]),post) ∧
       WordSteps.steps (.call none (some firstLoopName) [0] none) word ≤
-        1 + max 1 (wordCodeWeight (sptFromAList (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig words).2)) * (6*optLimit+1) ∧
+        1 + max 1 (wordCodeWeight (sptFromAList (compileWith Flapjack.RegAlloc.regAllocExecutable wc riscvConfig words).2)) * (6*optLimit+1) ∧
       post.ffi = sourceFinal.ffi ∧ FfiStateRel postFfi sourceFinal.ffi := by
   let decls := fs.map DeclHOL.function
   let lowered := compileTopExactHOL decls start
@@ -265,8 +300,14 @@ theorem countedCalls_initializedWord {scope : List VarName} {program : Prog (Ris
   let optLimit := loopVisitWeight opt + optFactor * (2*loopLimit)
   let replay := {initial with clock := loop.clock+extra}
   let words := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa programs)
-  let optimized := (compile phase3WordConfig riscvConfig words).2
+  let optimized := (compile wc riscvConfig words).2
+  let entry := ((sptLookup 64 (sptFromAList optimized)).getD (1,.skip)).2
+  let frame := (Flapjack.Compiler.Backend.WordToStack.Native.compileProgNative riscvConfig false entry 1
+    (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1
   let template := configuredWord nativeCode optimized cfg bitmaps
+  have frameLookup : sptLookup 64 template.stackSize = some frame :=
+    (functionOnly_initializedEntry fs start (progToHOL (panSimpProg program)) found noInline
+      wc nativeCode cfg bitmaps).2
   have memoryRel : crepToLoopMemRelHOLExact source.memory (configuredStack nativeCode cfg bitmaps).memory source.memaddrs := by
     intro a ha
     rw [sourceMemory a ha]
@@ -279,7 +320,7 @@ theorem countedCalls_initializedWord {scope : List VarName} {program : Prog (Ris
       targetCode codeRel entries sourceCode entryShapes fs start targetTable found mainFound locals globals structs
       exceptions unique shapes noInline topOutside aligned context primitive handler exnContracts fuel count
       postLocals postGlobals postMemory postFfi value run budget riscvConfig.isa
-      (configuredStack nativeCode cfg bitmaps).memory memoryRel template fixtureHeapLength frame phase3WordConfig riscvConfig heap
+      (configuredStack nativeCode cfg bitmaps).memory memoryRel template fixtureHeapLength frame wc riscvConfig heap
   have codeEq : template.code = sptFromAList optimized := by
     simp [template,configuredWord,Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit]
   have starter := configuredStarter_general replay
@@ -288,7 +329,7 @@ theorem countedCalls_initializedWord {scope : List VarName} {program : Prog (Ris
     (by simpa [replay,initial,concreteDeclCrepState,before,noGlobalsLoweredPreCall,renamed] using base)
     (by simpa [replay,initial,concreteDeclCrepState,before,noGlobalsLoweredPreCall,renamed] using byteOrder)
     (by simpa [replay,initial,concreteDeclCrepState,before,noGlobalsLoweredPreCall,renamed] using ffi)
-    programs nativeCode optimized cfg bitmaps fits good frame (6*optLimit+1) (by simpa [template,optimized,words,programs,decls,firstLoopName] using frameLookup)
+    programs nativeCode optimized cfg bitmaps fits good frame (6*optLimit+1) frameLookup
   have eq : {(phase3Starter riscvConfig.isa replay programs template fixtureHeapLength firstLoopName frame) with
       memory := (configuredStack nativeCode cfg bitmaps).memory, clock := 6*optLimit+1, code := sptFromAList optimized} =
       {template with clock := 6*optLimit+1} := by
