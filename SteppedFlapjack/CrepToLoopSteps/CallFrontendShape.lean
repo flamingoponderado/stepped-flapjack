@@ -2,6 +2,7 @@ import SteppedFlapjack.PanToCrepSteps.WhileSteps
 import SteppedFlapjack.CrepToLoopSteps.ExecutableFrontend
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
 import SteppedFlapjack.CrepSteps.CallClock
+import SteppedFlapjack.CrepToLoopSteps.CallCost
 import SteppedFlapjack.LoopLiveSteps.TailEntryGlobalBound
 import Flapjack.Pancake.CrepInline.InlineRouteBridge
 namespace SteppedFlapjack.CrepToLoopSteps
@@ -292,6 +293,29 @@ theorem callFrontend_crep_clock_consumed {width : Nat} [NeZero width] {σ : Type
   rw [code]
   exact callFrontend_crepTable programs sources
 
+
+/-- The concrete frontend program list computes a uniform cost for every
+compiled function body, independently of its compiler context. -/
+theorem callFrontend_tableCost {width : Nat} [NeZero width]
+    (programs : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × CrepProgHOL width))
+    (sources : ∀ row ∈ programs, ∃ (ctx : PanToCrepContextExact width) (q : ProgHOL width),
+      row.2.2 = compileProgExactHOLW ctx q ∧ CallFrontend ctx q)
+    (name : Flapjack.Basis.Pure.MlString.MlString) (params : List Nat) (body : CrepProgHOL width)
+    (found : (alistToFmapCodeExact programs).lookup name = some (params,body))
+    (ref ctxt : CrepToLoopContextExact) (live : NumSet) :
+    loopVisitWeight (compileHOLExact ctxt live body) ≤
+      callTableCost ref (programs.map (fun row => (row.2.1,row.2.2))) := by
+  have member : (name,params,body) ∈ programs := by
+    rw [alistToFmapCodeExact,HolFiniteMapExact.lookup_updateList] at found
+    exact flookup_fupdateList_reverse_mem' programs name (params,body) found
+  obtain ⟨ctx,q,compiled,shape⟩ := sources (name,params,body) member
+  have bodyShape : SteppedFlapjack.CrepSteps.CallScalarProgram body := by
+    change body = compileProgExactHOLW ctx q at compiled
+    rw [compiled]
+    exact callFrontend_crepShape shape
+  have rowMember : (params,body) ∈ programs.map (fun row => (row.2.1,row.2.2)) := by
+    exact List.mem_map.mpr ⟨(name,params,body),member,rfl⟩
+  exact callScalar_tableCost ref ctxt live _ params body rowMember bodyShape
 
 /-- Compose source statements whose first part may call functions in the actual supported table. -/
 theorem boundedCallSeq {width : Nat} [NeZero width] {σ : Type}
