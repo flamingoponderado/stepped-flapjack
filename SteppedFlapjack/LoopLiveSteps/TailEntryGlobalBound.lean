@@ -59,13 +59,14 @@ theorem findCode_direct_weight {width : Nat} [NeZero width]
 theorem directTail_weighted_step {width : Nat} [NeZero width] {F : Type}
     (loc : Nat) (args : List Nat) (s post : LoopSemStateFiniteExact width F)
     (values : List (WordLocW width)) (env : Spt (WordLocW width)) (body : HolLoopProg width)
-    (out : Option (LoopResultExact width)) (extra : Nat)
+    (out : Option (LoopResultExact width)) (K : Nat)
+    (tableWeight : loopCodeWeight s.code ≤ K)
     (get : getVars args s = some values) (found : findCode (some loc) values s.code = some (env,body))
     (clock : s.clock ≠ 0)
     (run : evaluate body {decClock s with locals := env} = (out,post))
     (bodyBound : steps body {decClock s with locals := env} ≤
-      SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body + (loopCodeWeight s.code+extra) * ((decClock s).clock-post.clock)) :
-    steps (.call none (some loc) args none) s ≤ 1 + (loopCodeWeight s.code+extra) * (s.clock-post.clock) := by
+      SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body + K * ((decClock s).clock-post.clock)) :
+    steps (.call none (some loc) args none) s ≤ 1 + K * (s.clock-post.clock) := by
   have weight := findCode_direct_weight s.code loc values env body found
   have count := steps_call_tail (some loc) args s values env body get found clock
   have bodyClock := evaluate_clock body {decClock s with locals := env} out post run
@@ -123,19 +124,20 @@ theorem returningCall_post_clock {width : Nat} [NeZero width] {F : Type}
 
 /-- A compiled returning call lifts its callee bound using the code-table weight. -/
 private theorem returningCall_weighted_step_aux {width : Nat} [NeZero width] {F : Type}
-    (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exception : Nat) (handler normal : HolLoopProg width) (continuationCost : Nat)
+    (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exception : Nat) (handler normal : HolLoopProg width) (continuationCost K : Nat)
     (s cut post : LoopSemStateFiniteExact width F) (values : List (WordLocW width))
     (env : Spt (WordLocW width)) (body : HolLoopProg width) (out : Option (LoopResultExact width))
     (get : getVars args s = some values) (found : findCode (some loc) values s.code = some (env,body))
     (distinct : names.Nodup) (cutRun : cutRes live (none,s) = (none,cut))
     (bodyRun : evaluate body {cut with locals := env} = (out,post))
+    (tableWeight : loopCodeWeight s.code+continuationCost ≤ K)
     (handlerBound : ∀ t : LoopSemStateFiniteExact width F, steps handler t ≤ continuationCost)
     (normalBound : ∀ t : LoopSemStateFiniteExact width F, steps normal t ≤ continuationCost)
     (bodyBound : steps body {cut with locals := env} ≤ SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body +
-      (loopCodeWeight s.code+continuationCost) * (cut.clock-post.clock)) :
+      K * (cut.clock-post.clock)) :
     let call : HolLoopProg width := .call (some (names,live)) (some loc) args
       (some (exception,handler,normal,liveOut))
-    steps call s ≤ 1 + (loopCodeWeight s.code+continuationCost) * (s.clock-(evaluate call s).2.clock) := by
+    steps call s ≤ 1 + K * (s.clock-(evaluate call s).2.clock) := by
   have weight := findCode_direct_weight s.code loc values env body found
   have count := steps_call_returning (some loc) args names live
     (some (exception,handler,normal,liveOut)) s cut post values env body out get found distinct cutRun bodyRun
@@ -163,7 +165,7 @@ private theorem returningCall_weighted_step_aux {width : Nat} [NeZero width] {F 
   have budget : cut.clock-post.clock + 1 ≤
       s.clock-(evaluate (.call (some (names,live)) (some loc) args
         (some (exception,handler,normal,liveOut))) s).2.clock := by omega
-  have scaled := Nat.mul_le_mul_left (loopCodeWeight s.code+continuationCost) budget
+  have scaled := Nat.mul_le_mul_left K budget
   dsimp only
   nlinarith
 
@@ -171,20 +173,21 @@ private theorem returningCall_weighted_step_aux {width : Nat} [NeZero width] {F 
 are bounded by the code-table factor plus two visits. -/
 theorem returningCall_weighted_step {width : Nat} [NeZero width] {F : Type}
     (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exception : Nat)
-    (markHandler markNormal : Bool)
+    (markHandler markNormal : Bool) (K : Nat)
     (s cut post : LoopSemStateFiniteExact width F) (values : List (WordLocW width))
     (env : Spt (WordLocW width)) (body : HolLoopProg width) (out : Option (LoopResultExact width))
     (get : getVars args s = some values) (found : findCode (some loc) values s.code = some (env,body))
     (distinct : names.Nodup) (cutRun : cutRes live (none,s) = (none,cut))
     (bodyRun : evaluate body {cut with locals := env} = (out,post))
+    (tableWeight : loopCodeWeight s.code+2 ≤ K)
     (bodyBound : steps body {cut with locals := env} ≤ SteppedFlapjack.CrepToLoopSteps.loopVisitWeight body +
-      (loopCodeWeight s.code+2) * (cut.clock-post.clock)) :
+      K * (cut.clock-post.clock)) :
     let handler : HolLoopProg width := if markHandler then .mark (.raise exception) else .raise exception
     let normal : HolLoopProg width := if markNormal then .mark .skip else .skip
     let call : HolLoopProg width := .call (some (names,live)) (some loc) args (some (exception,handler,normal,liveOut))
-    steps call s ≤ 1 + (loopCodeWeight s.code+2) * (s.clock-(evaluate call s).2.clock) := by
-  apply returningCall_weighted_step_aux loc args names live liveOut exception _ _ 2 s cut post values env body out
-    get found distinct cutRun bodyRun
+    steps call s ≤ 1 + K * (s.clock-(evaluate call s).2.clock) := by
+  apply returningCall_weighted_step_aux loc args names live liveOut exception _ _ 2 K s cut post values env body out
+    get found distinct cutRun bodyRun tableWeight
   · intro t
     cases markHandler <;> simp [steps_mark,steps_leaf]
   · intro t
@@ -374,25 +377,25 @@ private theorem loop_weighted_step (live exits : NumSet) (body : HolLoopProg wid
 set_option maxHeartbeats 5000000 in
 /-- A call-aware Loop execution is bounded by its control weight and actual
 clock consumption, using a factor computed from the complete code table. -/
-theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFiniteExact width F)
+theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFiniteExact width F) (K : Nat)
     (shape : SimpleLoopSequenceSource p) (code : LoopTableSupported s.code)
-    (weight : loopVisitWeight p ≤ loopCodeWeight s.code + 2) :
-    steps p s ≤ loopVisitWeight p + (loopCodeWeight s.code+2) * (s.clock-(evaluate p s).2.clock) := by
+    (tableWeight : loopCodeWeight s.code + 2 ≤ K) (weight : loopVisitWeight p ≤ K) :
+    steps p s ≤ loopVisitWeight p + (K) * (s.clock-(evaluate p s).2.clock) := by
   have key : ∀ (x : Nat × Nat) (p : HolLoopProg width) (s : LoopSemStateFiniteExact width F),
       (s.clock,sizeOf p) = x → SimpleLoopSequenceSource p → LoopTableSupported s.code →
-      loopVisitWeight p ≤ loopCodeWeight s.code+2 →
-      steps p s ≤ loopVisitWeight p + (loopCodeWeight s.code+2) * (s.clock-(evaluate p s).2.clock) := by
+      loopCodeWeight s.code+2 ≤ K → loopVisitWeight p ≤ K →
+      steps p s ≤ loopVisitWeight p + (K) * (s.clock-(evaluate p s).2.clock) := by
     intro x
     induction x using (Prod.lex Nat.lt_wfRel Nat.lt_wfRel).wf.induction with
     | h x ih0 =>
-      intro p s hx shape code weight
+      intro p s hx shape code tableWeight weight
       have ih : ∀ (q : HolLoopProg width) (t : LoopSemStateFiniteExact width F),
           Prod.Lex (· < ·) (· < ·) (t.clock,sizeOf q) (s.clock,sizeOf p) →
-          SimpleLoopSequenceSource q → t.code = s.code → loopVisitWeight q ≤ loopCodeWeight s.code+2 →
-          steps q t ≤ loopVisitWeight q + (loopCodeWeight s.code+2) * (t.clock-(evaluate q t).2.clock) := by
+          SimpleLoopSequenceSource q → t.code = s.code → loopVisitWeight q ≤ K →
+          steps q t ≤ loopVisitWeight q + (K) * (t.clock-(evaluate q t).2.clock) := by
         intro q t smaller hshape hcode hweight
         have supported : LoopTableSupported t.code := by rw [hcode]; exact code
-        have bound := ih0 _ (hx ▸ smaller) q t rfl hshape supported (by simpa only [hcode] using hweight)
+        have bound := ih0 _ (hx ▸ smaller) q t rfl hshape supported (by simpa only [hcode] using tableWeight) hweight
         simpa only [hcode] using bound
       clear ih0 hx
       cases shape with
@@ -402,12 +405,12 @@ theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFin
         omega
       | @loop live exits body h =>
         rcases run : evaluate (.loop live body exits) s with ⟨out,post⟩
-        have w : 1 + loopVisitWeight body ≤ loopCodeWeight s.code+2 := by
+        have w : 1 + loopVisitWeight body ≤ K := by
           simpa only [loopVisitWeight] using weight
-        have bound := loop_weighted_step live exits body (loopVisitWeight body) (loopCodeWeight s.code+2)
+        have bound := loop_weighted_step live exits body (loopVisitWeight body) (K)
           w s post out run (by
             intro t u r smaller same bodyRun
-            have bodyWeight : loopVisitWeight body ≤ loopCodeWeight s.code+2 := by omega
+            have bodyWeight : loopVisitWeight body ≤ K := by omega
             have hbody := ih body t (lexLtClock smaller) h same bodyWeight
             rw [bodyRun] at hbody
             exact hbody) (by
@@ -438,7 +441,7 @@ theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFin
               have smaller : (decClock s).clock < s.clock := by simp [decClock]; omega
               have bodyBound := ih body {decClock s with locals := env} (lexLtClock smaller) bodyShape rfl (by omega)
               rw [bodyRun] at bodyBound
-              have bound := directTail_weighted_step loc args s post vals env body out 2 hg hf clock bodyRun bodyBound
+              have bound := directTail_weighted_step loc args s post vals env body out K (by omega) hg hf clock bodyRun bodyBound
               have after : (evaluate (.call none (some loc) args none) s).2.clock = post.clock := by
                 rw [evaluate]
                 simp only [hg,hf,Option.isSome_none,Bool.false_eq_true,if_false,clock,dite_false,bodyRun]
@@ -475,8 +478,8 @@ theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFin
                 have smaller := cutRes_none_clock hcut
                 have bodyBound := ih body {cut with locals := env} (lexLtClock smaller) bodyShape cutCode (by omega)
                 rw [bodyRun] at bodyBound
-                have bound := returningCall_weighted_step loc args names callLive liveOut exception false false s cut post vals env body out
-                  hg hf distinct hcut bodyRun bodyBound
+                have bound := returningCall_weighted_step loc args names callLive liveOut exception false false K s cut post vals env body out
+                  hg hf distinct hcut bodyRun tableWeight bodyBound
                 simpa [loopVisitWeight] using bound
             · rw [steps.eq_def]
               simp [hg,hf,distinct,loopVisitWeight]
@@ -508,15 +511,15 @@ theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFin
                 have smaller := cutRes_none_clock hcut
                 have bodyBound := ih body {cut with locals := env} (lexLtClock smaller) bodyShape cutCode (by omega)
                 rw [bodyRun] at bodyBound
-                have bound := returningCall_weighted_step loc args names callLive liveOut exception true true s cut post vals env body out
-                  hg hf distinct hcut bodyRun bodyBound
+                have bound := returningCall_weighted_step loc args names callLive liveOut exception true true K s cut post vals env body out
+                  hg hf distinct hcut bodyRun tableWeight bodyBound
                 simpa [loopVisitWeight] using bound
             · rw [steps.eq_def]
               simp [hg,hf,distinct,loopVisitWeight]
 
       | @conditional cmp reg ri live a b ha hb =>
-        have wa : loopVisitWeight a ≤ loopCodeWeight s.code+2 := by simp only [loopVisitWeight] at weight; omega
-        have wb : loopVisitWeight b ≤ loopCodeWeight s.code+2 := by simp only [loopVisitWeight] at weight; omega
+        have wa : loopVisitWeight a ≤ K := by simp only [loopVisitWeight] at weight; omega
+        have wb : loopVisitWeight b ≤ K := by simp only [loopVisitWeight] at weight; omega
         have ba := ih a s (lexLt (Nat.le_refl _) (by simp_wf; omega)) ha rfl wa
         have bb := ih b s (lexLt (Nat.le_refl _) (by simp_wf; omega)) hb rfl wb
         rw [steps_ite,evaluate]
@@ -531,7 +534,7 @@ theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFin
           have clk := evaluate_clock a s r t arun
           simp only at ba cut
           have delta : s.clock-t.clock ≤ s.clock-(cutRes live (r,t)).2.clock := by omega
-          have scaled := Nat.mul_le_mul_left (loopCodeWeight s.code+2) delta
+          have scaled := Nat.mul_le_mul_left (K) delta
           simp only [loopVisitWeight]
           nlinarith
         · simp only [hc,Bool.false_eq_true,if_false]
@@ -541,13 +544,13 @@ theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFin
           have clk := evaluate_clock b s r t brun
           simp only at bb cut
           have delta : s.clock-t.clock ≤ s.clock-(cutRes live (r,t)).2.clock := by omega
-          have scaled := Nat.mul_le_mul_left (loopCodeWeight s.code+2) delta
+          have scaled := Nat.mul_le_mul_left (K) delta
           simp only [loopVisitWeight]
           nlinarith
 
       | @seq a b ha hb =>
-        have wa : loopVisitWeight a ≤ loopCodeWeight s.code+2 := by simp only [loopVisitWeight] at weight; omega
-        have wb : loopVisitWeight b ≤ loopCodeWeight s.code+2 := by simp only [loopVisitWeight] at weight; omega
+        have wa : loopVisitWeight a ≤ K := by simp only [loopVisitWeight] at weight; omega
+        have wb : loopVisitWeight b ≤ K := by simp only [loopVisitWeight] at weight; omega
         have firstBound := ih a s (lexLt (Nat.le_refl _) (by simp_wf; omega)) ha rfl wa
         rw [steps_seq,evaluate_seq]
         rcases first : evaluate a s with ⟨out,middle⟩
@@ -569,11 +572,11 @@ theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFin
           nlinarith
 
       | @mark q h =>
-        have wq : loopVisitWeight q ≤ loopCodeWeight s.code+2 := by simp only [loopVisitWeight] at weight; omega
+        have wq : loopVisitWeight q ≤ K := by simp only [loopVisitWeight] at weight; omega
         have bound := ih q s (lexLt (Nat.le_refl _) (by simp_wf)) h rfl wq
         simp only [steps_mark,evaluate,loopVisitWeight]
         omega
-  exact key _ p s rfl shape code weight
+  exact key _ p s rfl shape code tableWeight weight
 
 set_option maxHeartbeats 5000000 in
 /-- Supported executions consume at most two clock units per visit, including nested calls. -/
@@ -799,7 +802,7 @@ theorem optimise_simpleSequence_source_bound {p : HolLoopProg 64}
   have optRun : evaluate (optimiseHOL p) s = (result,post) := by
     apply optimise_correct p s result post
     refine ⟨run,?_,?_,?_,?_⟩ <;> cases complete <;> simp_all
-  have optBound := simpleSequence_global_bound (optimiseHOL p) s (optimise_simpleSequence shape) code weight
+  have optBound := simpleSequence_global_bound (optimiseHOL p) s (loopCodeWeight s.code+2) (optimise_simpleSequence shape) code (by rfl) weight
   have consumed := simpleSequence_global_consumed p s shape code
   rw [optRun] at optBound
   rw [run] at consumed
@@ -1036,7 +1039,7 @@ theorem loopTable_entry_bound (code : Spt (List Nat × HolLoopProg width))
     (s : LoopSemStateFiniteExact width F) (codeEq : s.code = code)
     (supported : LoopTableSupported code) (found : sptLookup loc code = some (params,body)) :
     steps body s ≤ loopVisitWeight body + (loopCodeWeight code+2) * (s.clock-(evaluate body s).2.clock) := by
-  have h := simpleSequence_global_bound body s (supported loc params body found) (by simpa [codeEq] using supported)
+  have h := simpleSequence_global_bound body s (loopCodeWeight code+2) (supported loc params body found) (by simpa [codeEq] using supported) (by simp [codeEq])
     (by have w := loopCodeWeight_lookup code loc params body found; simpa [codeEq] using Nat.le_add_right_of_le w)
   simpa only [codeEq] using h
 

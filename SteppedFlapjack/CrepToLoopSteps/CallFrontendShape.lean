@@ -318,8 +318,8 @@ theorem callFrontend_tableCost {width : Nat} [NeZero width]
     exact List.mem_map.mpr ⟨(name,params,body),member,rfl⟩
   exact callScalar_tableCost ref ctxt live _ params body rowMember bodyShape
 
-/-- Actual frontend output runs at a concrete whole-table Crep-to-Loop clock bound. -/
-theorem callFrontend_wholeClock_explicit {width : Nat} [NeZero width] {σ : Type}
+/-- Actual frontend output has explicit whole-table clock and Loop visit bounds. -/
+theorem callFrontend_wholeVisits_explicit {width : Nat} [NeZero width] {σ : Type}
     (panCtxt : PanToCrepContextExact width) (p : ProgHOL width) (shape : CallFrontend panCtxt p)
     (programs : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × CrepProgHOL width))
     (sources : ∀ row ∈ programs, ∃ (ctx : PanToCrepContextExact width) (q : ProgHOL width),
@@ -332,18 +332,23 @@ theorem callFrontend_wholeClock_explicit {width : Nat} [NeZero width] {σ : Type
     (stateRel : crepToLoopStateRelExact source target)
     (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
     (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
-    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code) (targetTable : LoopTableSupported target.code)
     (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
     let rows := programs.map (fun row => (row.2.1,row.2.2))
     let crep := compileProgExactHOLW panCtxt p
-    ∃ post, evaluate (compileHOLExact ctxt live crep)
-      {target with clock := target.clock + callClockFactor ref rows source.clock crep * (CrepSteps.steps crep source+1)} =
-        (resultToLoop result,post) ∧
+    let budget := callClockFactor ref rows source.clock crep * (CrepSteps.steps crep source+1)
+    let factor := max (callSyntaxCost ref crep) (loopCodeWeight target.code+2)
+    ∃ post, evaluate (compileHOLExact ctxt live crep) {target with clock := target.clock+budget} = (resultToLoop result,post) ∧
+      LoopSteps.steps (compileHOLExact ctxt live crep) {target with clock := target.clock+budget} ≤
+        callSyntaxCost ref crep + factor * (source.clock+budget) ∧
       crepToLoopStateRelExact sourceFinal {post with clock := sourceFinal.clock} ∧
       crepToLoopMemRelHOLExact sourceFinal.memory post.memory sourceFinal.memaddrs ∧
       crepToLoopGlobalsRelHOLExact sourceFinal.globals post.globals ∧
-      crepToLoopCodeRelExact ctxt sourceFinal.code post.code ∧
-      localsResultRel ctxt live result sourceFinal post := by
+      crepToLoopCodeRelExact ctxt sourceFinal.code post.code ∧ localsResultRel ctxt live result sourceFinal post := by
+  let rows := programs.map (fun row => (row.2.1,row.2.2))
+  let crep := compileProgExactHOLW panCtxt p
+  let budget := callClockFactor ref rows source.clock crep * (CrepSteps.steps crep source+1)
+  let factor := max (callSyntaxCost ref crep) (loopCodeWeight target.code+2)
   have table : CrepSteps.CallScalarTable source.code := by
     rw [sourceCode]
     exact callFrontend_crepTable programs sources
@@ -353,8 +358,22 @@ theorem callFrontend_wholeClock_explicit {width : Nat} [NeZero width] {σ : Type
     rw [sourceCode,alistToFmapCodeExact,HolFiniteMapExact.lookup_updateList] at found
     have member : (name,params,body) ∈ programs := flookup_fupdateList_reverse_mem' programs name (params,body) found
     exact List.mem_map.mpr ⟨(name,params,body),member,rfl⟩
-  exact callWholeClock_explicit ref ctxt live _ (fun _ => True) _ source sourceFinal result target
+  obtain ⟨post,ev,st,mem,gl,code,locals⟩ := callWholeClock_explicit ref ctxt live _ (fun _ => True) _ source sourceFinal result target
     (callFrontend_crepShape shape) table cover run nonerror nonTimeout stateRel memRel globalsRel codeRel trivial localsRel
+  have weight := callScalar_syntaxCost (callFrontend_crepShape shape) ref ctxt live
+  have weightFactor : loopVisitWeight (compileHOLExact ctxt live crep) ≤ factor :=
+    weight.trans (Nat.le_max_left _ _)
+  have loopBound := simpleSequence_global_bound (compileHOLExact ctxt live crep)
+    {target with clock := target.clock+budget} factor (callFrontend_compiled_loopShape shape ctxt live)
+    (by simpa using targetTable) (by simp [factor]) weightFactor
+  rw [ev] at loopBound
+  have used := Nat.mul_le_mul_left factor (Nat.sub_le (target.clock+budget) post.clock)
+  have finalBound : LoopSteps.steps (compileHOLExact ctxt live crep) {target with clock := target.clock+budget} ≤
+      callSyntaxCost ref crep + factor * (source.clock+budget) := by
+    have targetClock := stateRel.2.2.1
+    simp only at loopBound
+    nlinarith
+  exact ⟨post,ev,finalBound,st,mem,gl,code,locals⟩
 
 /-- Compose source statements whose first part may call functions in the actual supported table. -/
 theorem boundedCallSeq {width : Nat} [NeZero width] {σ : Type}
