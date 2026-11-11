@@ -1,4 +1,5 @@
 import SteppedFlapjack.LoopToWordSteps.LoopSetup
+import SteppedFlapjack.LoopLiveSteps.TailEntryCode
 
 /-! Quantitative Loop-to-Word simulation for source loops. -/
 namespace SteppedFlapjack.LoopToWordSteps
@@ -7,16 +8,18 @@ open Flapjack.LoopToWord.CompileCorrect Flapjack.Compiler.Encoders.Asm
 
 /-- The real compiled loop satisfies the sixfold bound, using the already
 proved body simulation and well-founded induction on the source clock. -/
-theorem sixBoundedLoop {width : Nat} [NeZero width] {C F : Type}
-    (live liveOut : NumSet) (body : HolLoopProg width)
-    (bodyCorrect : ∀ s : LoopSemStateFiniteExact width F, SixBoundPropertyAt C body s) :
-    ∀ source : LoopSemStateFiniteExact width F, SixBoundPropertyAt C (.loop live body liveOut) source := by
+theorem sixBoundedLoopAt {width : Nat} [NeZero width] {C F : Type}
+    (live liveOut : NumSet) (body : HolLoopProg width) (initial : LoopSemStateFiniteExact width F)
+    (bodyCorrect : ∀ s : LoopSemStateFiniteExact width F,
+      s.code = initial.code → s.clock < initial.clock → SixBoundPropertyAt C body s) :
+    SixBoundPropertyAt C (.loop live body liveOut) initial := by
   have core : ∀ n, ∀ source : LoopSemStateFiniteExact width F, source.clock = n →
+      source.code = initial.code → n ≤ initial.clock →
       SixBoundPropertyAt C (.loop live body liveOut) source := by
     intro n
     induction n using Nat.strongRecOn with
     | ind n ih =>
-      intro source sourceClock result sourceFinal target ctxt retv labels premises
+      intro source sourceClock sourceCode clockBound result sourceFinal target ctxt retv labels premises
       obtain ⟨sourceRun,notError,state,locals,ret,dimension,notWord,acc⟩ := premises
       obtain ⟨finalTarget,targetResult,targetRun,ffi,resultRel⟩ :=
         compileCorrect (.loop live body liveOut) source result sourceFinal target ctxt retv labels
@@ -41,8 +44,14 @@ theorem sixBoundedLoop {width : Nat} [NeZero width] {C F : Type}
           bodyResult result cutRun bodyRun sourceRun notError
         have bodyAcc : ∀ k, sptMem k (accVarsHOL body .ln) → sptMem k ctxt := fun k hk =>
           acc k (by simpa [accVarsHOL] using hk)
+        have cutCode : sourceCut.code = initial.code := by
+          have h := SteppedFlapjack.LoopLiveSteps.cutRes_code live none source
+          rw [cutRun] at h
+          exact h.trans sourceCode
+        have cutClock := cutRes_none_clock cutRun
+        have initialCutClock : sourceCut.clock < initial.clock := by omega
         obtain ⟨targetPost,bodyTargetResult,bodyTargetRun,bodyFfi,bodyRelation,bodySteps⟩ :=
-          bodyCorrect sourceCut bodyResult sourcePost targetCut ctxt retv labels
+          bodyCorrect sourceCut cutCode initialCutClock bodyResult sourcePost targetCut ctxt retv labels
             ⟨bodyRun,bodyNotError,entryState,entryLocals,entryRet,dimension,notWord,bodyAcc⟩
         have targetCut' : WordSemStateFiniteExact.cutState (mkNewCutsetHOL ctxt live,.ln)
             (WordSemStateFiniteExact.decClock target) = some targetCut := targetCutRun
@@ -54,7 +63,8 @@ theorem sixBoundedLoop {width : Nat} [NeZero width] {C F : Type}
             rw [LoopSemStateFiniteExact.fix_clock_evaluate,bodyRun] at h
             rcases continuing with eq | eq <;> rw [eq] at h <;> exact h
           have bodyClock := LoopSemStateFiniteExact.evaluate_clock body sourceCut bodyResult sourcePost bodyRun
-          have cutClock := cutRes_none_clock cutRun
+          have postCode : sourcePost.code = initial.code :=
+            (SteppedFlapjack.LoopLiveSteps.evaluate_code body sourceCut sourcePost bodyResult bodyRun).trans cutCode
           have recursiveClock : sourcePost.clock < n := by omega
           have continueData : wordSemContLoop bodyTargetResult = true ∧
               loopToWordStateRelHOLExact sourcePost targetPost ∧
@@ -70,7 +80,7 @@ theorem sixBoundedLoop {width : Nat} [NeZero width] {C F : Type}
               obtain ⟨st,rr,rv,lc,_,_⟩ := bodyRelation
               rw [rr]
               exact ⟨rfl,st,lc,rv⟩
-          obtain ⟨_,_,_,_,_,recursiveSteps⟩ := ih sourcePost.clock recursiveClock sourcePost rfl
+          obtain ⟨_,_,_,_,_,recursiveSteps⟩ := ih sourcePost.clock recursiveClock sourcePost rfl postCode (by omega)
             result sourceFinal targetPost ctxt retv labels
               ⟨recursiveRun,notError,continueData.2.1,continueData.2.2.1,
                 continueData.2.2.2,dimension,notWord,acc⟩
@@ -90,7 +100,15 @@ theorem sixBoundedLoop {width : Nat} [NeZero width] {C F : Type}
             target targetCut targetPost bodyTargetResult cutRun bodyRun stops targetCut' bodyTargetRun
             (Or.inl targetStops) bodySteps
           simpa only [LoopToWord.compHOL] using bound
+  exact core initial.clock initial rfl rfl (Nat.le_refl _)
+
+/-- The unconditional scalar-loop theorem is the instance with no code or
+clock restriction on the body. -/
+theorem sixBoundedLoop {width : Nat} [NeZero width] {C F : Type}
+    (live liveOut : NumSet) (body : HolLoopProg width)
+    (bodyCorrect : ∀ s : LoopSemStateFiniteExact width F, SixBoundPropertyAt C body s) :
+    ∀ source : LoopSemStateFiniteExact width F, SixBoundPropertyAt C (.loop live body liveOut) source := by
   intro source
-  exact core source.clock source rfl
+  exact sixBoundedLoopAt live liveOut body source (fun s _ _ => bodyCorrect s)
 
 end SteppedFlapjack.LoopToWordSteps

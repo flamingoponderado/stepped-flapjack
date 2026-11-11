@@ -1,3 +1,4 @@
+import SteppedFlapjack.LoopToWordSteps.WholeCallProgram
 import SteppedFlapjack.Concrete.NestedCrepLoop
 /-! Bottom-up execution of the actual optimized Loop witness. -/
 namespace SteppedFlapjack.Concrete
@@ -135,5 +136,15 @@ theorem nestedCall_loop_steps_bound : steps nestedLoopCode64 nestedLoopState ≤
   have entryWeight : loopVisitWeight nestedLoopCode64 = 10 := by with_unfolding_all rfl
   rw [entryWeight] at bound
   omega
+
+/-- The actual nested-call entry has the full Loop-to-Word sixfold
+simulation, including both reached callees. -/
+theorem nestedCall_loopToWord_with_steps {C : Type} :
+    SteppedFlapjack.LoopToWordSteps.SixBoundPropertyAt C nestedLoopCode64 nestedLoopState := by
+  apply SteppedFlapjack.LoopToWordSteps.loopTable_entry_correct_with_steps nestedLoopTable 64 []
+    nestedLoopCode64 nestedLoopState
+  · simp [nestedLoopState,concreteDeclLoopState,nestedCall_loop_code,nestedLoopTable]
+  · exact nestedTable_supported
+  · simp [nestedLoopTable,sptLookup_sptFromAList,sptAListLookup]
 
 end SteppedFlapjack.Concrete
