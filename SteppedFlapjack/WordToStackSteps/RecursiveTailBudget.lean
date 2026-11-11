@@ -2,6 +2,7 @@ import SteppedFlapjack.WordToStackSteps.BudgetTailCall
 import SteppedFlapjack.WordToStackSteps.BudgetIf
 import SteppedFlapjack.WordSteps.ClockConsumption
 import SteppedFlapjack.WordSimpSteps.LoopSequenceClock
+import SteppedFlapjack.StackSteps.TableBound
 namespace SteppedFlapjack.WordToStackSteps
 open Flapjack Flapjack.WordToStackProofs Flapjack.WordToStackProofs.CompCorrect
 open Flapjack.WordSemStateFiniteExact SteppedFlapjack.WordSteps
@@ -130,5 +131,46 @@ theorem raiseTail_staticBudget {width : Nat} [NeZero width] {C F : Type}
         max (WordSimpSteps.wordControlWeight p) (WordSimpSteps.wordCodeWeight s.code) * s.clock) := by
   exact budgetMono ac p s _ _ (raiseTail_visitBudget ac p s shape noInstall tableNoInstall table)
     (WordSimpSteps.wordTable_clock_bound p s noMt noInstall tableNoMt tableNoInstall)
+
+/-- A concrete recursive-tail Word simulation and its actual Stack run have
+an explicit visit bound computed from the two programs and code tables. -/
+theorem raiseTail_stackVisitBudget {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (p : WordLangProgHOL (BitVec width))
+    (source post : WordSemStateFiniteExact width (Nat × C) F)
+    (target : StackSemStateFiniteExact width C F) (result : Option (WordSemResult width))
+    (k f frame : Nat) (bs bsPost : AppList (BitVec width)) (n nPost : Nat)
+    (compiled : HolProg width) (lens : List Nat)
+    (shape : RaiseTail p) (noMt : noMtSubprogsHOL p = true)
+    (noInstall : noInstallSubprogsHOL p = true) (tableNoMt : WordProps.noMtCode source.code)
+    (tableNoInstall : WordProps.noInstallCode source.code)
+    (table : ∀ loc arity prog, sptLookup loc source.code = some (arity,prog) → RaiseTail prog)
+    (empty : StackSteps.emptyCodeOracle target)
+    (premises : WordSemStateFiniteExact.evaluate p source = (result, post) ∧
+      result ≠ some .error ∧ result ≠ some .timeOut ∧ stateRel ac k f frame source target lens 0 ∧
+      postAllocConventionsHOL k p = true ∧ flatExpConventions p = true ∧
+      compNative ac false p (bs, n) (k,f,frame) = (compiled,(bsPost,nPost)) ∧
+      (appListAppend bs).length ≤ n ∧ n-(appListAppend bs).length ≤ target.bitmaps.length ∧
+      List.IsPrefix (appListAppend bsPost) (target.bitmaps.drop (n-(appListAppend bs).length)) ∧
+      (∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact target.code loc) ∧
+      maxVarHOL p < 2*frame+2*k) :
+    let allowance := WordSimpSteps.wordControlWeight p +
+      max (WordSimpSteps.wordControlWeight p) (WordSimpSteps.wordCodeWeight source.code) * source.clock
+    ∃ targetPost targetResult,
+      StackSemEvaluate.evaluate (compiled,{target with clock := target.clock + allowance}) =
+        (targetResult,targetPost) ∧
+      compCorrectResult ac k f frame source post {targetPost with clock := post.clock} result targetResult lens ∧
+      StackSteps.steps (compiled,{target with clock := target.clock + allowance}) ≤
+        StackSteps.stackControlWeight compiled +
+          max (StackSteps.stackControlWeight compiled) (StackSteps.stackCodeWeight target.code) *
+            (target.clock + allowance) := by
+  dsimp only
+  obtain ⟨targetPost,out,run,_,_,related⟩ :=
+    raiseTail_staticBudget ac p source shape noMt noInstall tableNoMt tableNoInstall table
+      k f frame post target result bs bsPost n nPost compiled lens premises 0
+  refine ⟨targetPost,out,by simpa using run,related,?_⟩
+  have bound := StackSteps.stackTable_clock_bound compiled
+    {target with clock := target.clock + (WordSimpSteps.wordControlWeight p +
+      max (WordSimpSteps.wordControlWeight p) (WordSimpSteps.wordCodeWeight source.code) * source.clock)} empty
+  exact bound
 
 end SteppedFlapjack.WordToStackSteps
