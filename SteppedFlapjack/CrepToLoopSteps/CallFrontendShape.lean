@@ -243,12 +243,12 @@ theorem callFrontend_crepShape {width : Nat} [NeZero width]
   | base h => exact .base (frontend_scalar_program h)
   | @tail ctxt fname args ha =>
     simpa only [compileProgExactHOLW,compileCallNoReturnExactHOLW,Option.map_none] using
-      (SteppedFlapjack.CrepSteps.CallScalarProgram.call none fname ((compileExpExactHOLWList ctxt args).flatMap Prod.fst))
+      (SteppedFlapjack.CrepSteps.CallScalarProgram.call none fname ((compileExpExactHOLWList ctxt args).flatMap Prod.fst) (frontend_arguments_scalar ctxt args ha))
   | @decCall ctxt name sh fname args cont ha hb ih =>
     simp only [compileProgExactHOLW,compileDecCallExactHOLW]
     apply nested_zero_callScalar
     apply SteppedFlapjack.CrepSteps.CallScalarProgram.seq
-    · exact .call (some _) fname _
+    · exact .call (some _) fname _ (frontend_arguments_scalar ctxt args ha)
     · exact ih
   | @decl ctxt name e body he hb ih =>
     obtain ⟨value,compiled,scalar⟩ := frontendScalar_compiled he

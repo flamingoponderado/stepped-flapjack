@@ -11,7 +11,7 @@ inductive CallScalarProgram {width : Nat} [NeZero width] : CrepProgHOL width →
   | ite {e p q} : CompiledScalar e → CallScalarProgram p → CallScalarProgram q → CallScalarProgram (.ite e p q)
   | loop {e p} : CompiledScalar e → CallScalarProgram p → CallScalarProgram (.while e p)
   | call (ret : Option (List Nat)) (name : Basis.Pure.MlString.MlString) (args : List (CrepExpHOL width)) :
-      CallScalarProgram (.call (ret.map (fun ns => (ns,none))) name args)
+      (∀ e ∈ args, CompiledScalar e) → CallScalarProgram (.call (ret.map (fun ns => (ns,none))) name args)
 
 def CallScalarTable {width : Nat} [NeZero width]
     (code : HolFiniteMapExact Basis.Pure.MlString.MlString (List Nat × CrepProgHOL width)) : Prop :=
@@ -147,7 +147,7 @@ theorem callScalarProgram_clock_consumed {width : Nat} [NeZero width] {σ : Type
             obtain ⟨_,rfl⟩ := execution
             simp only [nz,false_and,if_false]
             omega
-      | call ret name args =>
+      | call ret name args _ =>
         cases ret with
         | none =>
           cases hargs : args.mapM (evalCrepSemHOLExp s) with

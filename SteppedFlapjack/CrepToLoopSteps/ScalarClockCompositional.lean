@@ -136,14 +136,15 @@ theorem clockSimulation_mono {width : Nat} [NeZero width] {σ : Type}
 theorem scalarIte_clock {width : Nat} [NeZero width] {σ : Type}
     (condition : CrepExpHOL width) (conditionShape : CompiledScalar condition)
     (yes no : CrepProgHOL width)
-    (ctxt : CrepToLoopContextExact) (live : NumSet) (yesFactor noFactor : Nat)
-    (yesBound : @BodySimulation width _ σ yes ctxt live (fun n => yesFactor*(n+1)))
-    (noBound : @BodySimulation width _ σ no ctxt live (fun n => noFactor*(n+1))) :
-    @BodySimulation width _ σ (.ite condition yes no) ctxt live
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (source : CrepSemHOLState width σ)
+    (tableOk : Spt (List Nat × HolLoopProg width) → Prop) (yesFactor noFactor : Nat)
+    (yesBound : BodySimulationAt yes ctxt live source (fun n => yesFactor*(n+1)) tableOk)
+    (noBound : BodySimulationAt no ctxt live source (fun n => noFactor*(n+1)) tableOk) :
+    BodySimulationAt (.ite condition yes no) ctxt live source
       (fun n => (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
-        max yesFactor noFactor+1)*(n+1)) := by
+        max yesFactor noFactor+1)*(n+1)) tableOk := by
   classical
-  intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
+  intro sourceFinal result target run nonerror stateRel memRel globalsRel codeRel tableGood localsRel
   let p := CrepProgHOL.ite condition yes no
   let factor := max yesFactor noFactor
   let prefixSize := LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1)
@@ -172,15 +173,25 @@ theorem scalarIte_clock {width : Nat} [NeZero width] {σ : Type}
       have branchLocals : crepToLoopLocalsRelExact ctxt live source.locals branchTarget.locals := by
         exact condition_locals_rel_insert_of ctxt live outLive source.locals target.locals st.locals localsRel exprLocals hsub tmp (by omega) _
       let chosen := if w ≠ 0 then yes else no
-      have chosenBound : @BodySimulation width _ σ chosen ctxt live (fun n => factor*(n+1)) := by
-        dsimp [chosen,factor]
-        split
-        · exact clockSimulation_mono yes ctxt live yesFactor _ yesBound (Nat.le_max_left _ _)
-        · exact clockSimulation_mono no ctxt live noFactor _ noBound (Nat.le_max_right _ _)
+      have chosenBound : BodySimulationAt chosen ctxt live source (fun n => factor*(n+1)) tableOk := by
+        intro final out target run nonerror sr mr gr cr tg lr
+        dsimp [factor]
+        by_cases hw : w ≠ 0
+        · simp only [chosen,if_pos hw] at run ⊢
+          obtain ⟨extra,res,post,ev,hs,hm,hg,hc,hr,hl,bound⟩ := yesBound final out target run nonerror sr mr gr cr tg lr
+          exact ⟨extra,res,post,ev,hs,hm,hg,hc,hr,hl,bound.trans (Nat.mul_le_mul_right _ (Nat.le_max_left _ _))⟩
+        · simp only [chosen,if_neg hw] at run ⊢
+          obtain ⟨extra,res,post,ev,hs,hm,hg,hc,hr,hl,bound⟩ := noBound final out target run nonerror sr mr gr cr tg lr
+          exact ⟨extra,res,post,ev,hs,hm,hg,hc,hr,hl,bound.trans (Nat.mul_le_mul_right _ (Nat.le_max_right _ _))⟩
       have chosenRun : evalCrepSemHOLProgExact source chosen = (result,sourceFinal) := by
         simpa [chosen] using run
+      have codeSame : branchTarget.code = target.code := by
+        have h := SteppedFlapjack.LoopLiveSteps.evaluate_code (loopNestedSeqHOL np)
+          {target with clock := target.clock+ck} st none exprRun
+        simpa [branchTarget,setVar] using h
+      have branchTable : tableOk branchTarget.code := by rw [codeSame]; exact tableGood
       obtain ⟨ck',out,post,branchRun,hs,hm,hg,hc,outEq,hl,branchExtra⟩ :=
-        chosenBound source sourceFinal result branchTarget chosenRun nonerror exprState exprMem exprGlobals exprCode branchLocals
+        chosenBound sourceFinal result branchTarget chosenRun nonerror exprState exprMem exprGlobals exprCode branchTable branchLocals
       subst out
       simp only at branchExtra
       have hcomp : compileHOLExact ctxt live p = loopNestedSeqHOL (np ++
@@ -270,13 +281,15 @@ context and live set produced by compiling the initializer. -/
 theorem scalarDecl_clock {width : Nat} [NeZero width] {σ : Type}
     (name : Nat) (init : CrepExpHOL width) (initShape : CompiledScalar init)
     (body : CrepProgHOL width)
-    (ctxt : CrepToLoopContextExact) (live : NumSet) (bodyFactor : Nat)
-    (bodyBound : @BodySimulation width _ σ body
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (source : CrepSemHOLState width σ)
+    (tableOk : Spt (List Nat × HolLoopProg width) → Prop) (bodyFactor : Nat)
+    (bodyBound : ∀ value, evalCrepSemHOLExp source init = some value → BodySimulationAt body
       {ctxt with vars := ctxt.vars.updateEq (name,(compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1), vmax := (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1}
-      (sptInsert (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1 () live) (fun n => bodyFactor*(n+1))) :
-    @BodySimulation width _ σ (.dec name init body) ctxt live
-      (fun n => (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) + bodyFactor)*(n+1)) := by
-  intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
+      (sptInsert (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1 () live)
+      (CrepSemHOLState.setVar name value source) (fun n => bodyFactor*(n+1)) tableOk) :
+    BodySimulationAt (.dec name init body) ctxt live source
+      (fun n => (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) + bodyFactor)*(n+1)) tableOk := by
+  intro sourceFinal result target run nonerror stateRel memRel globalsRel codeRel tableGood localsRel
   let p := CrepProgHOL.dec name init body
   let code := compileHOLExact ctxt live p
   let prefixSize := LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1)
@@ -328,10 +341,16 @@ theorem scalarDecl_clock {width : Nat} [NeZero width] {σ : Type}
       simpa [sourceBody,CrepSemHOLState.setVar,bodyTarget,setVar] using exprGlobals
     have bodyCode : crepToLoopCodeRelExact bc sourceBody.code bodyTarget.code := by
       simpa [sourceBody,CrepSemHOLState.setVar,bodyTarget,bc,setVar,crepToLoopCodeRelExact] using exprCode
-    have bodyBound' : @BodySimulation width _ σ body bc bl (fun n => bodyFactor*(n+1)) := by simpa [bc,bl,compiled] using bodyBound
+    have bodyBound' : BodySimulationAt body bc bl sourceBody (fun n => bodyFactor*(n+1)) tableOk := by
+      simpa [bc,bl,compiled,sourceBody] using bodyBound value initRun
+    have codeSame : bodyTarget.code = target.code := by
+      have h := SteppedFlapjack.LoopLiveSteps.evaluate_code (loopNestedSeqHOL np)
+        {target with clock := target.clock+ck} st none exprRun
+      simpa [bodyTarget,setVar] using h
+    have bodyTable : tableOk bodyTarget.code := by rw [codeSame]; exact tableGood
     obtain ⟨extra,out,post,bodyEval,hs,hm,hg,hc,outEq,_,bodyExtra⟩ :=
-      bodyBound' sourceBody bodyPost bodyResult bodyTarget (by simpa [sourceBody,CrepSemHOLState.setVar] using bodyRun)
-        bodyNonerror bodyState bodyMem bodyGlobals bodyCode bodyLocals
+      bodyBound' bodyPost bodyResult bodyTarget (by simpa [sourceBody,CrepSemHOLState.setVar] using bodyRun)
+        bodyNonerror bodyState bodyMem bodyGlobals bodyCode bodyTable bodyLocals
     subst out
     have prefixLift := evaluate_add_clock_eq _ _ _ _ extra exprRun (by simp)
     have prefixLift' : evaluate (loopNestedSeqHOL np) {target with clock := target.clock+(ck+extra)} =
@@ -421,21 +440,29 @@ theorem scalarProgram_clock {width : Nat} [NeZero width] {σ : Type}
     simp only [compileHOLExact,loopVisitWeight]
     omega
   | @ite cond a b hc ha hb iha ihb =>
-    intro ctxt live
-    have sim := scalarIte_clock cond hc a b ctxt live _ _ (iha ctxt live) (ihb ctxt live)
-    apply clockSimulation_mono _ ctxt live _ _ sim
+    intro ctxt live source sourceFinal result target run nonerror sr mr gr cr lr
+    have sim := scalarIte_clock cond hc a b ctxt live source (fun _ => True) _ _
+      (BodySimulation.at a ctxt live _ source _ (iha ctxt live))
+      (BodySimulation.at b ctxt live _ source _ (ihb ctxt live))
+    obtain ⟨extra,out,post,ev,hs,hm,hg,hcode,hr,hl,bound⟩ :=
+      sim sourceFinal result target run nonerror sr mr gr cr trivial lr
+    refine ⟨extra,out,post,ev,hs,hm,hg,hcode,hr,hl,?_⟩
     have weights := ite_prefix_body_weight hc (a := a) (b := b) ctxt live
-    omega
+    exact bound.trans (Nat.mul_le_mul_right _ (by omega))
   | @dec name init body hi hb ih =>
     intro ctxt live
     let tmp := (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1
     let bc := {ctxt with vars := ctxt.vars.updateEq (name,tmp), vmax := tmp}
     let bl := sptInsert tmp () live
-    have sim := scalarDecl_clock name init hi body ctxt live _ (ih bc bl)
-    apply clockSimulation_mono _ ctxt live _ _ sim
+    intro source sourceFinal result target run nonerror sr mr gr cr lr
+    have sim := scalarDecl_clock name init hi body ctxt live source (fun _ => True) _
+      (fun value _ => BodySimulation.at body bc bl _ (CrepSemHOLState.setVar name value source) _ (ih bc bl))
+    obtain ⟨extra,out,post,ev,hs,hm,hg,hcode,hr,hl,bound⟩ :=
+      sim sourceFinal result target run nonerror sr mr gr cr trivial lr
+    refine ⟨extra,out,post,ev,hs,hm,hg,hcode,hr,hl,?_⟩
     have weights := decl_prefix_body_weight name hi (body := body) ctxt live
     change _ + loopVisitWeight (compileHOLExact bc bl body) ≤ _ at weights
-    omega
+    exact bound.trans (Nat.mul_le_mul_right _ (by omega))
   | @«while» cond body hc hb ih =>
     intro ctxt live
     let bf := 3*loopVisitWeight (compileHOLExact ctxt live body)
