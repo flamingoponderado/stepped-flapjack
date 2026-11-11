@@ -1,5 +1,6 @@
 import SteppedFlapjack.WordToStackSteps.StartCall
 import Flapjack.Compiler.Backend.WordDepthProof.CallGraphLemma
+import Flapjack.Compiler.Backend.WordDepth.Executable
 import Flapjack.Compiler.Backend.Semantics.WordSem.Props.EvaluateStackMax
 import SteppedFlapjack.StackToLabSteps.ExplicitSpan
 import SteppedFlapjack.WordAllocSteps.WholeTailCode
@@ -14,6 +15,19 @@ open SteppedFlapjack.StackToLabSteps SteppedFlapjack.StackSteps SteppedFlapjack.
 open Flapjack.Compiler.Backend.WordToWord
 open Flapjack.WordSemStateFiniteExact Flapjack.Compiler.Backend.WordDepth
 open Flapjack.Compiler.Backend.WordDepthProof Flapjack.Compiler.Backend.BackendProps
+open Flapjack.Compiler.Backend.WordDepth.Executable
+
+set_option maxHeartbeats 1000000 in
+private theorem fast_entry_depth {width : Nat} [NeZero width]
+    (sz : Spt Nat) (code : Spt (Nat × WordLangProgHOL (BitVec width)))
+    (loc frame : Nat) (body : WordLangProgHOL (BitVec width)) (arity : Nat)
+    (found : sptLookup loc code = some (arity,body)) (f : sptLookup loc sz = some frame) :
+    optionMap₂ max (maxDepthGraphs sz [loc] [loc] code code)
+      (maxDepth sz (callGraph code loc [loc] (sptSize code) body)) =
+      fullCallGraphDepth sz loc code := by
+  rw [fullCallGraphDepth_eq]
+  simp only [fullCallGraph,found,maxDepthGraphs,maxDepth,optionMap₂,f]
+  cases maxDepth sz (callGraph code loc [loc] (sptSize code) body) <;> simp
 
 set_option maxHeartbeats 1000000 in
 private theorem graph_stack_bound {width : Nat} [NeZero width] {C F : Type}
@@ -50,8 +64,7 @@ private theorem graph_start_bound {width : Nat} [NeZero width] {C F : Type}
       optionLe
         (optionMap₂ max t.stackMax
           (optionMap₂ (· + ·) (wordSemStackSize t.stack)
-            (optionMap₂ max (maxDepthGraphs t.stackSize [loc] [loc] t.code t.code)
-              (maxDepth t.stackSize (callGraph t.code loc [loc] (sptSize t.code) p)))))
+            (fullCallGraphDepth t.stackSize loc t.code)))
         (some t.stackLimit)) :
     post.stackMax.getD (post.stackLimit+1) ≤ post.stackLimit := by
   let t := callEnv [arg] (some frame) (decClock s)
@@ -77,7 +90,11 @@ private theorem graph_start_bound {width : Nat} [NeZero width] {C F : Type}
       simp only [List.mem_singleton] at hx
       subst x
       simp [t,WordSemStateFiniteExact.callEnv,decClock,lookup]
-    · exact fits
+    · have same := fast_entry_depth t.stackSize t.code loc frame p 1
+        (by simpa [t,WordSemStateFiniteExact.callEnv,decClock] using lookup)
+        (by simpa [t,WordSemStateFiniteExact.callEnv,decClock] using frameLookup)
+      rw [same]
+      exact fits
 
 /-- A completed Word start call reaches RISC-V at an explicit tick bound
 and preserves its FFI events when the computed call-graph capacity fits the stack. -/
@@ -105,10 +122,7 @@ theorem wordStart_riscv_explicit {F : Type}
       optionLe
         (optionMap₂ max t.stackMax
           (optionMap₂ (· + ·) (wordSemStackSize t.stack)
-            (optionMap₂ max (maxDepthGraphs t.stackSize [BvlToBvi.initGlobalsLocation]
-              [BvlToBvi.initGlobalsLocation] t.code t.code)
-              (maxDepth t.stackSize (callGraph t.code BvlToBvi.initGlobalsLocation
-                [BvlToBvi.initGlobalsLocation] (sptSize t.code) entry)))))
+            (fullCallGraphDepth t.stackSize BvlToBvi.initGlobalsLocation t.code)))
         (some t.stackLimit))
     (complete : stackEntryClass (result.map compileResult) = .CompleteResult outcome)
     (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
@@ -169,10 +183,7 @@ theorem wordOptimization_riscv_explicit {F : Type}
       optionLe
         (optionMap₂ max t.stackMax
           (optionMap₂ (· + ·) (wordSemStackSize t.stack)
-            (optionMap₂ max (maxDepthGraphs t.stackSize [BvlToBvi.initGlobalsLocation]
-              [BvlToBvi.initGlobalsLocation] t.code t.code)
-              (maxDepth t.stackSize (callGraph t.code BvlToBvi.initGlobalsLocation
-                [BvlToBvi.initGlobalsLocation] (sptSize t.code) entry)))))
+            (fullCallGraphDepth t.stackSize BvlToBvi.initGlobalsLocation t.code)))
         (some t.stackLimit))
     (complete : stackEntryClass (result.map compileResult) = .CompleteResult outcome)
     (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
