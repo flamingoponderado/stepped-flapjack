@@ -9,6 +9,40 @@ open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.WordToWord
 open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps SteppedFlapjack.LoopToWordSteps
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.WordAllocSteps SteppedFlapjack.WordSimpSteps
 variable {C F : Type}
+/-- A uniform bound for all looked-up functions bounds the table maximum. -/
+private theorem wordCodeWeight_le (code : Spt (Nat × WordLangProgHOL (BitVec 64))) (limit : Nat)
+    (positive : 1 ≤ limit)
+    (entries : ∀ loc arity body, sptLookup loc code = some (arity,body) → wordControlWeight body ≤ limit) :
+    wordCodeWeight code ≤ limit := by
+  unfold wordCodeWeight
+  have aux : ∀ rows : List (Nat × (Nat × WordLangProgHOL (BitVec 64))),
+      (∀ row ∈ rows, wordControlWeight row.2.2 ≤ limit) →
+      rows.foldr (fun row weight => max (wordControlWeight row.2.2) weight) 1 ≤ limit := by
+    intro rows bound
+    induction rows with
+    | nil => exact positive
+    | cons row rest ih =>
+      simp only [List.foldr_cons,Nat.max_le]
+      exact ⟨bound row (by simp),ih (fun r hr => bound r (by simp [hr]))⟩
+  apply aux
+  intro row member
+  exact entries row.1 row.2.1 row.2.2 ((sptToAList_mem_iff_lookup code row.1 row.2).mp member)
+
+private theorem wordWeight_positive (p : WordLangProgHOL (BitVec 64)) : 1 ≤ wordControlWeight p := by
+  cases p <;> (try simp only [wordControlWeight]) <;> try omega
+  case call ret dest args handler =>
+    cases ret <;> cases handler <;> simp [wordControlWeight]
+    all_goals omega
+
+private theorem sequence_to_simple {p : HolLoopProg 64} (shape : LoopSequenceSource p) :
+    SimpleLoopSequenceSource p := by
+  induction shape with
+  | branch h => exact .branch h
+  | loop live exits h => exact .loop live exits (.branch h)
+  | seq _ _ a b => exact .seq a b
+  | nestedLoop live exits _ ih => exact .loop live exits ih
+  | conditional cmp r ri live _ _ a b => exact .conditional cmp r ri live a b
+
 /-- The start-call bound computed from the actual optimized two-function output. -/
 noncomputable def twoProgramWordBoundSpec (arch : AsmArchitecture) (name callee : MlString)
     (body : CrepProgHOL 64) (limit : Nat) (wc : Config) (ac : AsmConfigExact 64) : Nat :=
@@ -106,10 +140,68 @@ theorem twoProgram_wholeWord_span (arch : AsmArchitecture) (name callee : MlStri
       (∀ k, sptMem k (accVarsHOL branchingLoopEntry .ln) → sptMem k ctxt) := by
     refine ⟨run,by simp,starterFacts.1,localFacts.1,localFacts.2.1,?_,by decide,localFacts.2.2⟩
     exact Or.inr rfl
-  have span := singleTail_wholeWord_span entryShape calleeShape loop post (some (.result values))
-    64 starter ctxt (64,2) limit words wc ac entryMember calleeMember nodup shapes codeEq
-    starterFacts.2.1 starterFacts.2.2.1 starterFacts.2.2.2 lookup premises (.return values) sourceBound
-  refine ⟨twoProgram_optimized_executable arch name callee body shape wc ac, ?_⟩
+  have loopTable : LoopTableSupported loop.code := by
+    change LoopTableSupported (sptFromAList loops)
+    rw [loopEq,twoLoops_exact arch name callee body fresh]
+    intro loc params prog found
+    rw [sptLookup_sptFromAList] at found
+    have member := sptAListLookup_mem loc
+      [(64,[],branchingLoopEntry),(65,[],twoCallee arch name callee body)] (params,prog) found
+    simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at member
+    rcases member with ⟨rfl,rfl,rfl⟩ | ⟨rfl,rfl,rfl⟩
+    · exact tailEntry_to_simple (singleTail_to_tail entryShape)
+    · exact sequence_to_simple calleeShape
+  have span := loopTable_wholeWord_span (tailEntry_to_simple (singleTail_to_tail entryShape))
+    loop post (some (.result values)) loopTable 64 starter ctxt (64,2) limit words wc ac entryMember nodup
+    (tailProgram_safety words shapes) codeEq starterFacts.2.1 starterFacts.2.2.1 starterFacts.2.2.2
+    premises (.return values) sourceBound
+  let entryOut := (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+    ((64,1,(LoopToWord.compHOL ctxt branchingLoopEntry (64,2)).1),entryColour wc words 64)).2.2
+  let calleeOut := (fullCompileSingle ac.twoRegArith (ac.regCount-(5+ac.avoidRegs.length)) wc.regAlg ac
+    ((65,1,loopToWordCompFuncHOL 65 [] (twoCallee arch name callee body)),entryColour wc words 65)).2.2
+  have entryLookup := (wholeCompile_entry_lookups wc ac words 64 1 _ entryMember nodup).2
+  have calleeLookup := (wholeCompile_entry_lookups wc ac words 65 1 _ calleeMember nodup).2
+  have names : ((compile wc ac words).2.map Prod.fst) = [64,65] := by
+    rw [wholeCompile_names]
+    simp [words,loopEq,twoLoops_exact arch name callee body fresh,loopToWordCompileHOL,loopToWordCompileProgHOL]
+  have entryPositive : 1 ≤ wordControlWeight entryOut := wordWeight_positive entryOut
+  have calleePositive : 1 ≤ wordControlWeight calleeOut := wordWeight_positive calleeOut
+  have entryLe : wordControlWeight entryOut ≤ wordControlWeight entryOut * (wordControlWeight calleeOut + 1) := by nlinarith
+  have calleeLe : wordControlWeight calleeOut ≤ wordControlWeight entryOut * (wordControlWeight calleeOut + 1) := by nlinarith
+  have tableBound : wordCodeWeight (sptFromAList (compile wc ac words).2) ≤
+      wordControlWeight entryOut * (wordControlWeight calleeOut+1) := by
+    apply wordCodeWeight_le _ _ (by nlinarith)
+    intro loc arity prog found
+    have member := sptAListLookup_mem loc (compile wc ac words).2 (arity,prog)
+      (by simpa [sptLookup_sptFromAList] using found)
+    have locMember : loc ∈ [64,65] := by
+      rw [← names]
+      exact List.mem_map.mpr ⟨_,member,rfl⟩
+    simp only [List.mem_cons,List.not_mem_nil,or_false] at locMember
+    rcases locMember with rfl | rfl
+    · rw [found] at entryLookup
+      have equal := Option.some.inj entryLookup
+      have : prog = entryOut := by simpa [entryOut] using congrArg Prod.snd equal
+      simpa [this] using entryLe
+    · rw [found] at calleeLookup
+      have equal := Option.some.inj calleeLookup
+      have : prog = calleeOut := by simpa [calleeOut] using congrArg Prod.snd equal
+      simpa [this] using calleeLe
+  have total : max 1 (wordCodeWeight (sptFromAList (compile wc ac words).2)) ≤
+      wordControlWeight entryOut * (wordControlWeight calleeOut+1) := by
+    exact Nat.max_le.mpr ⟨by nlinarith,tableBound⟩
+  obtain ⟨wordPost,wordResult,relation,result,ffi,bound⟩ := span
+  have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
+    funext a b c d e f g
+    exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
+  rw [compileWith_eq_compile _ allocator] at bound
+  refine ⟨twoProgram_optimized_executable arch name callee body shape wc ac,wordPost,wordResult,relation,result,ffi,?_⟩
   rw [twoProgramWordBound_eq arch name callee body shape limit wc ac]
-  simpa [twoProgramWordBoundSpec,crep,loops,words,starter,loop,ctxt,word,loopToWordCompFuncHOL] using span
+  change _ ≤ 1 + wordControlWeight entryOut * (wordControlWeight calleeOut+1) * (6*limit+2)
+  calc
+    _ ≤ 1 + max 1 (wordCodeWeight (sptFromAList (compile wc ac words).2)) * (6*limit+1) := bound
+    _ ≤ 1 + (wordControlWeight entryOut * (wordControlWeight calleeOut+1)) * (6*limit+1) :=
+      Nat.add_le_add_left (Nat.mul_le_mul_right _ total) _
+    _ ≤ 1 + (wordControlWeight entryOut * (wordControlWeight calleeOut+1)) * (6*limit+2) := by
+      exact Nat.add_le_add_left (Nat.mul_le_mul_left _ (by omega)) _
 end SteppedFlapjack.Concrete
