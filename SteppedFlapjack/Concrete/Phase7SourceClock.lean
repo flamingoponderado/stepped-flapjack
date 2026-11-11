@@ -1,6 +1,7 @@
 import SteppedFlapjack.Concrete.Phase7Compiler
 import Flapjack.Pancake.Semantics.PanSem.ClockTimeout
 import Flapjack.Pancake.PanLang
+import Flapjack.Pancake.Proofs.PanSimp.StateRelImpSemantics
 
 /-! Finite source clock monotonicity for observational semantics. -/
 namespace SteppedFlapjack.Concrete
@@ -242,4 +243,63 @@ theorem source_function_declarations_compiler_code {width : Nat} {σ : Type} [Ne
   rw [function_fold_code,emptyCode,updateList_reverse_nodup _ unique] at init
   exact init
 
+private theorem simpFunctions {width : Nat} [NeZero width] (fs : List (FunDeclHOL width)) :
+    panSimpDeclsHOL (fs.map DeclHOL.function) =
+      (fs.map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function := by
+  induction fs with
+  | nil => simp [panSimpDeclsHOL]
+  | cons f fs ih => simp [panSimpDeclsHOL,ih]
+
+/-- Initializing any well-formed function-only declaration list derives the
+whole-table relation to the initialized simplified declarations. -/
+theorem source_simp_function_table {width : Nat} {σ : Type} [NeZero width]
+    (state : PanSemStateFiniteExact width σ) (fs : List (FunDeclHOL width))
+    (empty : state.code = HolFiniteMapExact.empty)
+    (wf : fs.all (fun f => f.params.all (fun p => isWfShapeExactHOL state.structs p.2) &&
+      isWfShapeExactHOL state.structs f.returnShape) = true) :
+    let original := fs.foldl (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) state.code
+    let compiled := (fs.map (fun f => {f with body := panSimpCompileHOL f.body})).foldl
+      (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) state.code
+    PanSimp.stateRel {state with code := original} {state with code := compiled} compiled := by
+  let simplified := fs.map (fun f => {f with body := panSimpCompileHOL f.body})
+  let original := fs.foldl (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) state.code
+  let compiled := simplified.foldl (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) state.code
+  have wf' : simplified.all (fun f => f.params.all (fun p => isWfShapeExactHOL state.structs p.2) &&
+      isWfShapeExactHOL state.structs f.returnShape) = true := by
+    simpa [simplified,List.all_map] using wf
+  have sourceInit := source_function_declarations_init state fs wf
+  have targetInit := source_function_declarations_init state simplified wf'
+  let dec : DecidablePred state.memaddrs := fun a => Classical.propDecidable _
+  have codeRel : PanSimp.CodeRel state.code state.code := by
+    rw [empty]
+    constructor <;> simp [HolFiniteMapExact.lookup_empty]
+  obtain ⟨c,targetRun,rel⟩ := PanSimp.evaluateDeclsCodeRel (fs.map DeclHOL.function) state dec state.code
+    {state with code := original} codeRel sourceInit
+  change @evaluateDeclsHOLFinite width σ _ state dec (panSimpDeclsHOL (fs.map DeclHOL.function)) = some {state with code := c} at targetRun
+  rw [simpFunctions] at targetRun
+  change evaluateDeclsHOLFinite state (simplified.map DeclHOL.function) = _ at targetRun
+  rw [targetInit] at targetRun
+  have eq : {state with code := c} = {state with code := compiled} := by
+    simpa [compiled] using (Option.some.inj targetRun).symm
+  have ceq : c = compiled := congrArg (fun s : PanSemStateFiniteExact width σ => s.code) eq
+  subst c
+  exact ⟨rfl,rel⟩
+/-- A supported run is preserved by simplifying the initialized function table. -/
+theorem callSupported_initialized_simp_run {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) {σ : Type}
+    (state sourceFinal : PanSemStateFiniteExact 64 σ) (functions : List (FunDeclHOL 64))
+    (empty : state.code = HolFiniteMapExact.empty)
+    (wf : functions.all (fun f => f.params.all (fun p => isWfShapeExactHOL state.structs p.2) &&
+      isWfShapeExactHOL state.structs f.returnShape) = true)
+    (result : Option (PanSemResultExact 64))
+    (run : let code := functions.foldl (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) state.code
+      ({state with code := code} : PanSemStateFiniteExact 64 σ).evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal))
+    (nonerror : result ≠ some .error) :
+    let code := (functions.map (fun f => {f with body := panSimpCompileHOL f.body})).foldl
+      (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) state.code
+    ∃ targetFinal, ({state with code := code} : PanSemStateFiniteExact 64 σ).evaluateHOLFiniteState
+        (progToHOL (panSimpProg program)) = (result,targetFinal) ∧
+      PanSimp.stateRel sourceFinal targetFinal targetFinal.code := by
+  exact callSupported_panSimp_run supported _ sourceFinal _ result run nonerror
+    (source_simp_function_table state functions empty wf)
 end SteppedFlapjack.Concrete
