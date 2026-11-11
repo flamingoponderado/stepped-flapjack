@@ -91,6 +91,27 @@ theorem compiledFrame_le_max {β : Type} (ac : AsmConfigExact 64) (k : Nat)
   subst size
   exact nativeFrameSize_le_max k programs name count p hmem
 
+/-- Every initialized call-site frame lookup is bounded by the concrete program maximum. -/
+theorem initializedFrameLookup_le_max {C F : Type}
+    (ac : AsmConfigExact 64) (k : Nat)
+    (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (t : StackSemStateFiniteExact 64 C F)
+    (coracle : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (name size : Nat)
+    (found : sptLookup name (makeInit ac k t (sptFromAList programs) coracle).stackSize = some size) :
+    size ≤ nativeMaxFrameSize k programs := by
+  change sptLookup name (sptMapi _ (sptFromAList programs)) = _ at found
+  rw [sptLookupMapi, sptLookup_sptFromAList] at found
+  cases h : sptAListLookup name programs with
+  | none => simp [h] at found
+  | some entry =>
+    obtain ⟨arity,p⟩ := entry
+    simp only [h, Option.map_some, Option.some.injEq] at found
+    have member := sptAListLookup_mem name programs (arity,p) h
+    subst size
+    rw [nativeFrameSize_compile]
+    exact nativeFrameSize_le_max k programs name arity p member
+
 /-- The compiler-selected one-argument entry frame. -/
 def nativeEntryFrame (k : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
   nativeFrame k 1 q
