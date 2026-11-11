@@ -133,11 +133,12 @@ theorem countedCalls_renamedGlobalVisits {scope : List VarName} {program : Prog 
     (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
       ∃ scope, CallSupportedIn scope body)
     (targetCode : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
-    (codeRel : PanSimp.CodeRel source.code targetCode) (factor : Nat) (positive : 1 ≤ factor)
-    (table : SimpVisits.SimpTableSupported source.code factor)
+    (codeRel : PanSimp.CodeRel source.code targetCode)
+    (entries : List SimpVisits.SimpEntry)
+    (sourceCode : source.code = HolFiniteMapExact.empty.updateList entries.reverse)
+    (entryShapes : ∀ entry ∈ entries, ∃ scope, ∃ program : Prog (RiscV.Word 64),
+      entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program)
     (f g : MlS)
-    (rangedTable : ∀ name values body locals rsh, lookupCodeHOLFinite source.code.lookup name values = some (body,locals,rsh) →
-      ∃ scope, ∃ program : Prog (RiscV.Word 64), body = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program)
     (globals : PanGlobalsContextExact 64) (lower : PanSemStateFiniteExact 64 σ)
     (globalRel : panGlobalsStateRelHOLExact true globals {source with code := fpermCodeHOL f g targetCode} lower)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
@@ -158,15 +159,24 @@ theorem countedCalls_renamedGlobalVisits {scope : List VarName} {program : Prog 
       lower.evaluateHOLFiniteState (fpermHOL f g (progToHOL (panSimpProg program))) =
         (some (.returned (.val (.word value))),lowerFinal) ∧
       controlSteps (fpermHOL f g (progToHOL (panSimpProg program))) lower ≤
-        factor * count + SimpVisits.hw (progToHOL (panSimpProg program)) ∧
+        SimpVisits.simpTableFactor entries * count + SimpVisits.hw (progToHOL (panSimpProg program)) ∧
       lowerFinal.ffi = sourceFinal.ffi ∧ FfiStateRel postFfi sourceFinal.ffi := by
+  have positive : 1 ≤ SimpVisits.simpTableFactor entries := by simp [SimpVisits.simpTableFactor]
+  have table : SimpVisits.SimpTableSupported source.code (SimpVisits.simpTableFactor entries) := by
+    rw [sourceCode]
+    apply SimpVisits.simpTableSupported_of_entries
+    intro entry member
+    obtain ⟨scope,program,bodyEq,supported,_⟩ := entryShapes entry member
+    exact ⟨scope,program,bodyEq,supported⟩
+  have rangedTable := SimpVisits.rangedTableSupported_of_entries entries entryShapes
+  rw [← sourceCode] at rangedTable
   obtain ⟨sourceFinal,simpFinal,sourceRun,simpRun,bound,ffi,ffiRel⟩ := countedCalls_simplifiedVisits
-    supported production source rel ranged words byteRanged codeRanged codeShape targetCode codeRel factor positive table
+    supported production source rel ranged words byteRanged codeRanged codeShape targetCode codeRel (SimpVisits.simpTableFactor entries) positive table
     context primitive handler exnContracts fuel count postLocals postGlobals postMemory postFfi value run budget
   have simpShape := callSupported_panSimp supported
   have simpRanged := callSupported_panSimp_ranged supported byteRanged
   obtain ⟨renamed,renameEq,renameShape⟩ := callSupported_fperm_shape simpShape simpRanged f g
-  have simplifiedTable := simpTable_globalSupported source.code targetCode codeRel factor table
+  have simplifiedTable := simpTable_globalSupported source.code targetCode codeRel (SimpVisits.simpTableFactor entries) table
   have renamedTable := fperm_globalTableSupported targetCode f g (simpTable_rangedSupported source.code targetCode codeRel rangedTable)
   have renamedRun := evaluateFpermHOL f g (progToHOL (panSimpProg program)) {source with code := targetCode}
     (some (.returned (.val (.word value)))) simpFinal simpRun

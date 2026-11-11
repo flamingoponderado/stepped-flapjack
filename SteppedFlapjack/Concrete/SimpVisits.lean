@@ -1276,12 +1276,11 @@ private theorem lookupMem {α β : Type} [BEq α] [LawfulBEq α]
       simp only [List.lookup_cons,ne] at found
       exact List.mem_cons_of_mem _ (ih found)
 
-/-- The table factor is computed from the source function entries. -/
-theorem simpTableSupported_of_entries (entries : List SimpEntry)
-    (shapes : ∀ entry ∈ entries, ∃ scope, ∃ program : Prog (RiscV.Word 64),
-      entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program) :
-    SimpTableSupported (HolFiniteMapExact.empty.updateList entries.reverse) (simpTableFactor entries) := by
-  intro name values body locals rsh found
+private theorem entry_of_lookup (entries : List SimpEntry) (name : MlS)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (rsh : ShapeHOL)
+    (found : lookupCodeHOLFinite (HolFiniteMapExact.empty.updateList entries.reverse).lookup name values = some (body,locals,rsh)) :
+    ∃ params, (name,params,body,rsh) ∈ entries := by
   obtain ⟨params,codeFound,_,_,_⟩ := lookupCodeHOLFinite_some_inv _ name values body locals rsh found
   have lookup : entries.lookup name = some (params,body,rsh) := by
     have h := FLOOKUP_FUPDATE_LIST_reverse_eq_lookup entries name
@@ -1291,6 +1290,15 @@ theorem simpTableSupported_of_entries (entries : List SimpEntry)
     rw [h] at codeFound
     exact codeFound
   have member : (name,params,body,rsh) ∈ entries := lookupMem entries name (params,body,rsh) lookup
+  exact ⟨params,member⟩
+
+/-- The table factor is computed from the source function entries. -/
+theorem simpTableSupported_of_entries (entries : List SimpEntry)
+    (shapes : ∀ entry ∈ entries, ∃ scope, ∃ program : Prog (RiscV.Word 64),
+      entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program) :
+    SimpTableSupported (HolFiniteMapExact.empty.updateList entries.reverse) (simpTableFactor entries) := by
+  intro name values body locals rsh found
+  obtain ⟨params,member⟩ := entry_of_lookup entries name values body locals rsh found
   obtain ⟨scope,program,bodyEq,supported⟩ := shapes _ member
   refine ⟨scope,program,bodyEq,supported,?_⟩
   have w := weight_mem entries (name,params,body,rsh) member
@@ -1298,5 +1306,16 @@ theorem simpTableSupported_of_entries (entries : List SimpEntry)
   change body = progToHOL program at bodyEq
   rw [bodyEq,callSupported_panSimp_hol supported] at w
   exact w
+
+/-- Concrete function entries determine both supported and byte-ranged callees. -/
+theorem rangedTableSupported_of_entries (entries : List SimpEntry)
+    (shapes : ∀ entry ∈ entries, ∃ scope, ∃ program : Prog (RiscV.Word 64),
+      entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program) :
+    ∀ name values body locals rsh,
+      lookupCodeHOLFinite (HolFiniteMapExact.empty.updateList entries.reverse).lookup name values = some (body,locals,rsh) →
+      ∃ scope, ∃ program : Prog (RiscV.Word 64), body = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program := by
+  intro name values body locals rsh found
+  obtain ⟨params,member⟩ := entry_of_lookup entries name values body locals rsh found
+  exact shapes _ member
 
 end SteppedFlapjack.Concrete.SimpVisits
