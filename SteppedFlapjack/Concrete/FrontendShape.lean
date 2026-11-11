@@ -103,6 +103,98 @@ theorem callSupported_frontend_shape {scope : List VarName} {program : Prog (Ris
   | ite e a b iha ihb => intro ctxt relation; simpa only [progToHOL] using CallFrontend.ite (scalar_frontend_shape relation e) (iha ctxt relation) (ihb ctxt relation)
   | «while» e body ih => intro ctxt relation; simpa only [progToHOL] using CallFrontend.while (scalar_frontend_shape relation e) (ih ctxt relation)
 
+private def scalarParamEntries : List VarName → Nat → List (MlS × (ShapeHOL × List Nat))
+  | [], _ => []
+  | n :: ns, off => (ofString n,(.one,[off])) :: scalarParamEntries ns (off+1)
+private def scalarShapeSlots : List ShapeHOL → Nat → List (List Nat)
+  | [], _ => []
+  | shape :: shapes, offset =>
+      (List.range (sizeOfShapeHOL shape)).map (offset + ·) ::
+        scalarShapeSlots shapes (offset + sizeOfShapeHOL shape)
+
+private theorem scalarShapeSlots_correct (shapes : List ShapeHOL) (offset : Nat) :
+    withShapeHOL shapes ((List.range (sizeOfShapeHOL (.comb shapes))).map (offset + ·)) =
+      scalarShapeSlots shapes offset := by
+  induction shapes generalizing offset with
+  | nil => simp [withShapeHOL,scalarShapeSlots]
+  | cons shape shapes ih =>
+    simp only [withShapeHOL,scalarShapeSlots,sizeOfShapeHOL,sizeOfShapesHOL]
+    rw [List.range_add]
+    have htail := ih (offset + sizeOfShapeHOL shape)
+    simpa [sizeOfShapeHOL,sizeOfShapesHOL,Nat.add_assoc,Function.comp_def] using htail
+
+private theorem scalarEntries_exact (names : List VarName) (offset : Nat) :
+    scalarParamEntries names offset =
+      (names.map (fun n => ofString n)).zip
+        ((names.map (fun _ => ShapeHOL.one)).zip
+          (withShapeHOL (names.map (fun _ => ShapeHOL.one))
+            ((List.range (sizeOfShapeHOL (.comb (names.map (fun _ => ShapeHOL.one))))).map (offset + ·)))) := by
+  induction names generalizing offset with
+  | nil => simp [scalarParamEntries]
+  | cons name names ih =>
+    simp only [scalarParamEntries,List.map_cons]
+    rw [scalarShapeSlots_correct]
+    simp only [scalarShapeSlots,sizeOfShapeHOL,List.range_one,List.map_cons,List.map_nil,List.zip_cons_cons,Nat.add_zero]
+    have tail := ih (offset+1)
+    rw [scalarShapeSlots_correct] at tail
+    exact congrArg (List.cons _) tail
+
+private theorem scalarEntries_lookup (names : List VarName) (offset : Nat) (m : FiniteMap MlS (ShapeHOL × List Nat))
+    (key : MlS) (prior : (∃ reg, FLOOKUP m key = some (.one,[reg])) ∨ ∃ n ∈ names, ofString n = key) :
+    ∃ reg, FLOOKUP (FUPDATE_LIST m (scalarParamEntries names offset)) key = some (.one,[reg]) := by
+  induction names generalizing offset m with
+  | nil =>
+    simp only [scalarParamEntries,FUPDATE_LIST_nil] at *
+    rcases prior with h | ⟨_,h,_⟩
+    · exact h
+    · cases h
+  | cons n ns ih =>
+    simp only [scalarParamEntries,FUPDATE_LIST_cons]
+    apply ih
+    rcases prior with h | ⟨x,hx,eq⟩
+    · by_cases hk : ofString n = key
+      · left; refine ⟨offset,?_⟩; simp [FLOOKUP,FUPDATE,hk]
+      · left; obtain ⟨reg,hr⟩ := h; refine ⟨reg,?_⟩; simpa [FLOOKUP,FUPDATE,hk] using hr
+    · simp only [List.mem_cons] at hx
+      rcases hx with rfl | hx
+      · left; refine ⟨offset,?_⟩; simp [FLOOKUP,FUPDATE,eq]
+      · exact Or.inr ⟨x,hx,eq⟩
+/-- Scalar function parameters provide a register for each in-scope name. -/
+theorem scalar_parameter_scope (names : List VarName) (funcs : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ShapeHOL))
+    (eids : HolFiniteMapExact MlS (BitVec 64)) :
+    ScopeRelation names (mkCtxtExactHOL
+      (panToCrepMakeVmapHOLExact (names.map (fun n => (ofString n,ShapeHOL.one)))) funcs
+      (sizeOfShapeHOL (.comb (names.map (fun _ => ShapeHOL.one))) - 1) eids) := by
+  intro name member
+  have vals : (names.map (fun n => ofString n)).zip
+      ((names.map (fun _ => ShapeHOL.one)).zip
+        (withShapeHOL (names.map (fun _ => ShapeHOL.one))
+          (List.range (sizeOfShapeHOL (.comb (names.map (fun _ => ShapeHOL.one))))))) = scalarParamEntries names 0 := by
+    simpa using (scalarEntries_exact names 0).symm
+  have got := scalarEntries_lookup names 0 FEMPTY (ofString name) (Or.inr ⟨name,member,rfl⟩)
+  simp only [mkCtxtExactHOL,panToCrepMakeVmapHOLExact,List.map_map,Function.comp_def,vals,
+    HolFiniteMapExact.lookup_updateList]
+  exact got
+/-- A scalar-parameter function body has the frontend shape in its compiler-generated context. -/
+theorem callSupported_scalarFunction_frontend (names : List VarName) {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn names program) (funcs : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ShapeHOL))
+    (eids : HolFiniteMapExact MlS (BitVec 64)) :
+    CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact (names.map (fun n => (ofString n,ShapeHOL.one))))
+      funcs (sizeOfShapeHOL (.comb (names.map (fun _ => ShapeHOL.one))) - 1) eids) (progToHOL program) :=
+  callSupported_frontend_shape supported _ (scalar_parameter_scope names funcs eids)
+
+/-- A function may pass its scalar argument through an ordinary call and return the result. -/
+theorem scalar_argument_call_frontend (funcs : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ShapeHOL))
+    (eids : HolFiniteMapExact MlS (BitVec 64)) :
+    CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact [(ofString "x",ShapeHOL.one)])
+      funcs (sizeOfShapeHOL (.comb [ShapeHOL.one]) - 1) eids)
+      (progToHOL (.decCall "y" .one "callee" [.var .local "x"] (.return (.var .local "y")) : Prog (RiscV.Word 64))) := by
+  apply callSupported_scalarFunction_frontend ["x"]
+  exact .call "y" "callee" [.var .local "x"] (by
+    intro e h; simp only [List.mem_singleton] at h; subst e; exact .local "x" (by simp))
+    (.base (.ret (.local "y" (by simp))))
+
+
 /-- A comparison is accepted in an actual conditional and compiles to a
 single Crep comparison expression. -/
 theorem comparison_frontend_example (ctxt : PanToCrepContextExact 64) :

@@ -245,20 +245,51 @@ theorem nestedCall_frontendCode (bitmapWords : Nat) (ctxt : PanToCrepContextExac
         exact nestedCall_frontend _
       · simp at found
 
-theorem nestedCall_declaration_shapes :
-    ∀ entry ∈ functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")),
+private def nestedHOLFunctions : List (FunDeclHOL 64) :=
+  [⟨ofString "main",false,true,[],progToHOL nestedCallEntry,.one⟩,
+   ⟨ofString "middle",false,false,[],.call none (ofString "leaf") [],.one⟩,
+   ⟨ofString "leaf",false,false,[],.return (.const 7),.one⟩]
+
+private theorem nestedHOLDeclarations : nestedHOLFunctions.map DeclHOL.function = nestedCallDeclarations.map declToHOL := by
+  simp [nestedHOLFunctions,nestedCallDeclarations,nestedCallEntry,declToHOL,funDeclToHOL,progToHOL,expToHOL,shapeToHOL]
+
+private theorem nestedHOLFunctionShapes : ∀ entry ∈ functionsHOL (nestedHOLFunctions.map DeclHOL.function),
+    ∃ names, ∃ program : Prog (RiscV.Word 64),
+      entry.2.1 = names.map (fun n => (ofString n,ShapeHOL.one)) ∧
+      entry.2.2.1 = progToHOL program ∧ CallSupportedIn names program ∧ ProgByteRanged program := by
+  intro entry member
+  simp [nestedHOLFunctions,functionsHOL] at member
+  rcases member with rfl | rfl | rfl
+  · refine ⟨[],nestedCallEntry,rfl,rfl,?_,?_⟩
+    · exact .call "answer" "middle" [] (by simp) (.base (.ret (.local "answer" (by simp))))
+    · simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged]
+  · refine ⟨[],.call none "leaf" [],rfl,by simp [progToHOL],?_,?_⟩
+    · exact .tail "leaf" [] (by simp)
+    · simp [ProgByteRanged,NameRanged]
+  · refine ⟨[],.return (.const 7),rfl,by simp [progToHOL,expToHOL],?_,?_⟩
+    · exact .base (.ret (.const _))
+    · simp [ProgByteRanged,ExpByteRanged]
+
+theorem nestedCall_noExceptions :
+    getEidsFromDeclsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")) =
+      HolFiniteMapExact.empty := by
+  have found : (functionsHOL (nestedHOLFunctions.map DeclHOL.function)).lookup (ofString "main") =
+      some ([],progToHOL nestedCallEntry,.one) := by
+    rw [nestedHOLDeclarations]
+    simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,shapeToHOL]
+  have result := functionOnly_noExceptions nestedHOLFunctions (ofString "main") (progToHOL nestedCallEntry) .one found
+  simpa only [nestedHOLDeclarations] using result
+
+theorem nestedCall_declaration_shapes : ∀ entry ∈ functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")),
       CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
         (makeFuncsExactHOL (functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))))
         (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
         (getEidsFromDeclsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")))) entry.2.2.1 := by
-  intro entry member
-  rw [nestedCall_lowered_declarations] at member
-  simp only [functionsHOL,List.mem_cons,List.not_mem_nil,or_false] at member
-  rcases member with h | h | h | h <;> subst entry
-  · exact .seq (.base .skip) (.tail (by simp))
-  · simpa only [nestedCallEntry,progToHOL,expToHOL,shapeToHOL,List.map_nil] using nestedCall_frontend _
-  · exact .tail (by simp)
-  · exact .base (.ret (.const 7))
+  rw [← nestedHOLDeclarations]
+  apply functionOnly_callFrontend_shapes nestedHOLFunctions (ofString "main") (progToHOL nestedCallEntry) .one
+  · rw [nestedHOLDeclarations]; simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,shapeToHOL]
+  · exact nestedHOLFunctionShapes
+
 
 theorem nestedCall_inline_selection_empty :
     (functionsHOL ((compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")).filter inlinableHOL)).map Prod.fst = [] := by
@@ -295,18 +326,11 @@ set_option maxHeartbeats 3000000 in
 private theorem nestedEntryShapes : ∀ entry ∈ functionsHOL (nestedCallDeclarations.map declToHOL),
     ∃ scope, ∃ program : Prog (RiscV.Word 64),
       entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program := by
+  rw [← nestedHOLDeclarations]
   intro entry member
-  simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL] at member
-  rcases member with rfl | rfl | rfl
-  · refine ⟨[],nestedCallEntry,rfl,?_,?_⟩
-    · exact .call "answer" "middle" [] (by simp) (.base (.ret (.local "answer" (by simp))))
-    · simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged]
-  · refine ⟨[],.call none "leaf" [],rfl,?_,?_⟩
-    · exact .tail "leaf" [] (by simp)
-    · simp [ProgByteRanged,NameRanged]
-  · refine ⟨[],.return (.const 7),rfl,?_,?_⟩
-    · exact .base (.ret (.const _))
-    · simp [ProgByteRanged,ExpByteRanged]
+  obtain ⟨names,program,_,body,supported,ranged⟩ := nestedHOLFunctionShapes entry member
+  exact ⟨names,program,body,supported,ranged⟩
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
 private theorem nestedEntryCode : (nestedClockedSource).code = HolFiniteMapExact.empty.updateList
@@ -342,26 +366,22 @@ def nestedRenamedState : PanSemStateFiniteExact 64 Unit :=
 def nestedLoweredCode := HolFiniteMapExact.empty.updateList
   (functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))).reverse
 
-private def nestedHOLFunctions : List (FunDeclHOL 64) :=
-  [⟨ofString "main",false,true,[],progToHOL nestedCallEntry,.one⟩,
-   ⟨ofString "middle",false,false,[],.call none (ofString "leaf") [],.one⟩,
-   ⟨ofString "leaf",false,false,[],.return (.const 7),.one⟩]
-
-private theorem nestedHOLDeclarations : nestedHOLFunctions.map DeclHOL.function = nestedCallDeclarations.map declToHOL := by
-  simp [nestedHOLFunctions,nestedCallDeclarations,nestedCallEntry,declToHOL,funDeclToHOL,progToHOL,expToHOL,shapeToHOL]
-
 set_option linter.unusedSimpArgs false in
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
-/-- The original six-step nested call reaches the actual compiler wrapper with a concrete visit bound. -/
-theorem nestedCounted_compilerEntry (context : PanValueFfiContext (RiscV.Word 64))
+/-- The general counted source-to-Crep theorem applies to the nested-call example. -/
+theorem nestedCounted_compilerCrep (context : PanValueFfiContext (RiscV.Word 64))
     (primitive : PanPrimitiveHandler (RiscV.Word 64)) (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
-    ∃ final, (noGlobalsLoweredPreCall nestedRenamedState nestedLoweredCode).evaluateHOLFiniteState
-      (.seq .skip (.call none (ofString "main'") [])) =
-      (some (.returned (.val (.word 7))),final) ∧
-    globalEntrySteps .skip (ofString "main'") [] (noGlobalsLoweredPreCall nestedRenamedState nestedLoweredCode) ≤
-      sizeOf (.skip : ProgHOL 64) + SimpVisits.simpTableFactor (functionsHOL (nestedCallDeclarations.map declToHOL)) * 6 +
-        SimpVisits.hw (progToHOL (panSimpProg nestedCallEntry)) + 2 := by
+    ∃ lowerFinal targetFinal,
+      (noGlobalsLoweredPreCall nestedRenamedState nestedLoweredCode).evaluateHOLFiniteState
+        (.seq .skip (.call none (ofString "main'") [])) =
+        (some (.returned (.val (.word 7))),emptyLocalsHOLFinite lowerFinal) ∧
+      evalCrepSemHOLProgExact nestedCrepState (.seq .skip (.call none (ofString "main'") [])) =
+        (some (.return [.word 7]),targetFinal) ∧
+      SteppedFlapjack.CrepSteps.steps (.seq .skip (.call none (ofString "main'") [])) nestedCrepState ≤
+        4 * (1 + SimpVisits.simpTableFactor (functionsHOL (nestedCallDeclarations.map declToHOL)) * 6 +
+          SimpVisits.hw (progToHOL (panSimpProg nestedCallEntry)) + 2) ∧
+      targetFinal.ffi = lowerFinal.ffi := by
   let _ : DecidablePred (nestedClockedSource).memaddrs := by
     change DecidablePred ordinaryAddress
     infer_instance
@@ -381,7 +401,7 @@ theorem nestedCounted_compilerEntry (context : PanValueFfiContext (RiscV.Word 64
     change panGlobalsByteAlignedHOL heapTop
     change BitVec.ofNat 64 ((heapTop.toNat / 8) * 8) = heapTop
     decide
-  have result := countedCalls_functionOnlyGlobalEntry shape nestedClockedProduction nestedClockedSource
+  have result := countedCalls_functionOnlyCrep shape nestedClockedProduction nestedClockedSource
     (by
       obtain ⟨a,b,c,d,e,f,g,h,_,j,k,l,m⟩ := nestedCounted_related
       exact ⟨a,b,c,d,e,f,g,h,rfl,j,k,l,m⟩) ranged words (by simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged])
@@ -391,12 +411,18 @@ theorem nestedCounted_compilerEntry (context : PanValueFfiContext (RiscV.Word 64
     (by simpa only [nestedHOLDeclarations] using nestedEntryCode)
     (by rw [nestedHOLDeclarations]; simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,nestedCallEntry,panSimpProg,retToTail,seqAssoc,smartSeq,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL,progToHOL,expToHOL,shapeToHOL])
     (by simp [nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,FUPDATE,ofString,MlString.explode_implode])
-    rfl rfl rfl outside aligned context primitive handler [] 8 6 _ _ _ _ 7
+    rfl rfl rfl rfl
+    (by rw [nestedHOLDeclarations]; simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,shapeToHOL]; decide)
+    nestedHOLFunctionShapes
+    (by simpa only [nestedHOLDeclarations] using nestedCall_inline_selection_empty)
+    outside aligned context primitive handler [] 8 6 _ _ _ _ 7
     (by simpa [nestedClockedProduction,panSemBitVec64MemoryAccess] using nestedCounted_run context primitive handler) (by decide)
-  obtain ⟨sourceFinal,lowerFinal,_,entry,bound,_,_⟩ := result
-  refine ⟨emptyLocalsHOLFinite lowerFinal,?_,?_⟩
+  obtain ⟨sourceFinal,lowerFinal,targetFinal,_,entry,crep,bound,ffi,_,_⟩ := result
+  rw [nestedHOLDeclarations, nestedCall_crep_code] at bound
+  refine ⟨lowerFinal,targetFinal,?_,?_,?_,ffi⟩
   · simpa [nestedHOLDeclarations,nestedRenamedState,nestedLoweredCode,newMainNameHOL,nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,freshNameMlS,mlstrAppend,ofString,MlString.explode_implode,nestedSeqHOL] using entry
-  · simpa [nestedHOLDeclarations,nestedRenamedState,nestedLoweredCode,newMainNameHOL,nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,freshNameMlS,mlstrAppend,ofString,MlString.explode_implode,nestedSeqHOL,Nat.add_assoc] using bound
-
+  · simpa [nestedHOLDeclarations,nestedRenamedState,nestedLoweredCode,newMainNameHOL,nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,freshNameMlS,mlstrAppend,ofString,MlString.explode_implode,nestedSeqHOL,nestedCrepState,concreteDeclCrepState,noGlobalsLoweredPreCall,nestedClockedSource,nestedSourceState,sourceTemplateFor_one,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList] using crep
+  · simp only [nestedCrepState, nestedCall_crep_code]
+    simpa [nestedHOLDeclarations,nestedRenamedState,nestedLoweredCode,newMainNameHOL,nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,freshNameMlS,mlstrAppend,ofString,MlString.explode_implode,nestedSeqHOL,nestedCrepState,concreteDeclCrepState,noGlobalsLoweredPreCall,nestedClockedSource,nestedSourceState,sourceTemplateFor_one,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,nestedCall_crep_code,CrepSteps.codeWeight,CrepSteps.statementWeight,Nat.add_assoc] using bound
 
 end SteppedFlapjack.Concrete

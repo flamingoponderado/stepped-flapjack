@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.SourceInitialGlobals
 import SteppedFlapjack.Concrete.CodeIndependent
 import SteppedFlapjack.Concrete.GlobalControl
 import Flapjack.Pancake.Proofs.PanGlobals.FpermEvaluate.Prime
@@ -467,5 +468,36 @@ theorem fperm_globalTableSupported (source : HolFiniteMapExact MlS (List (MlS ×
     rw [originalEq,renameEq] at bodyEq
     exact bodyEq
 
+
+/-- Scalar call-supported functions produce a call-aware lowered declaration table. -/
+theorem functionOnly_callFrontend_shapes (fs : List (FunDeclHOL 64)) (start : MlS)
+    (body : ProgHOL 64) (rshape : ShapeHOL)
+    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],body,rshape))
+    (shapes : ∀ entry ∈ functionsHOL (fs.map DeclHOL.function),
+      ∃ names, ∃ program : Prog (RiscV.Word 64),
+        entry.2.1 = names.map (fun n => (ofString n,ShapeHOL.one)) ∧ entry.2.2.1 = progToHOL program ∧
+        CallSupportedIn names program ∧ ProgByteRanged program) :
+    ∀ entry ∈ functionsHOL (compileTopExactHOL (fs.map DeclHOL.function) start),
+      CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
+        (makeFuncsExactHOL (functionsHOL (compileTopExactHOL (fs.map DeclHOL.function) start)))
+        (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
+        (getEidsFromDeclsHOL (compileTopExactHOL (fs.map DeclHOL.function) start))) entry.2.2.1 := by
+  intro entry member
+  rw [functionOnly_compileTop_functions fs start body rshape found] at member
+  simp only [List.mem_cons] at member
+  rcases member with rfl | member
+  · exact .seq (.base .skip) (.tail (by simp))
+  · obtain ⟨renamed,renamedMember,rfl⟩ := List.mem_map.mp member
+    rw [functionsFpermDecsHOL] at renamedMember
+    obtain ⟨original,originalMember,rfl⟩ := List.mem_map.mp renamedMember
+    obtain ⟨names,program,paramEq,bodyEq,supported,ranged⟩ := shapes original originalMember
+    obtain ⟨renamedProgram,renamedEq,renamedSupported⟩ :=
+      callSupported_fperm_shape supported ranged start (newMainNameHOL (fs.map DeclHOL.function))
+    have fixed := callSupportedIn_globals_fixed renamedSupported (emptyGlobalsContext : PanGlobalsContextExact 64)
+    rw [paramEq,bodyEq,renamedEq,fixed]
+    simpa only [List.map_map,Function.comp_def] using
+      callSupported_scalarFunction_frontend names renamedSupported
+        (makeFuncsExactHOL (functionsHOL (compileTopExactHOL (fs.map DeclHOL.function) start)))
+        (getEidsFromDeclsHOL (compileTopExactHOL (fs.map DeclHOL.function) start))
 
 end SteppedFlapjack.Concrete

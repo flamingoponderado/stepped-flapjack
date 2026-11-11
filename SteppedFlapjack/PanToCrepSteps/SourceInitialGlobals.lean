@@ -188,6 +188,34 @@ theorem functionOnly_compiled_code_lookup {width : Nat} [NeZero width]
   rw [lookup_mapBodies,sourceLookup]
   rfl
 
+private theorem mappedFunctions_noExceptions {width : Nat} [NeZero width]
+    (ds : List (DeclHOL width)) (ctxt : PanGlobalsContextExact width) :
+    exceptionsHOL (ds.map (fun d => match d with
+      | .function f => .function {f with body := compileProgExactHOL ctxt f.body}
+      | _ => .name (ofString "") [])) = [] := by
+  induction ds with
+  | nil => rfl
+  | cons d ds ih => cases d <;> simp [exceptionsHOL,ih]
+/-- Function-only source declarations produce no exception identifiers. -/
+theorem functionOnly_noExceptions {width : Nat} [NeZero width]
+    (fs : List (FunDeclHOL width)) (start : MlS) (body : ProgHOL width) (shape : ShapeHOL)
+    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],body,shape)) :
+    getEidsFromDeclsHOL (compileTopExactHOL (fs.map DeclHOL.function) start) = HolFiniteMapExact.empty := by
+  obtain ⟨initializers,funs,exns,ctx,compiled,top⟩ :=
+    compileTop_entry_wrapper (fs.map DeclHOL.function) start [] body shape found
+  have known := functionOnly_compileDecs fs start (newMainNameHOL (fs.map DeclHOL.function))
+  dsimp only at known
+  rw [compiled] at known
+  simp only [Prod.mk.injEq] at known
+  obtain ⟨rfl,rfl,rfl,rfl⟩ := known
+  have none : exceptionsHOL (compileTopExactHOL (fs.map DeclHOL.function) start) = [] := by
+    rw [top]
+    simp only [List.nil_append,exceptionsHOL]
+    exact mappedFunctions_noExceptions _ _
+  apply HolFiniteMapExact.ext_lookup
+  intro key
+  simp [getEidsFromDeclsHOL,getEidsEntriesHOL_eq_lengthBased,none,alistToFmap,FEMPTY]
+
 /-- Function-only initialized programs establish the actual global-entry relation. -/
 theorem functionOnly_source_initialization {σ : Type}
     (fs : List (FunDeclHOL 64)) (start : MlS) (body : ProgHOL 64) (shape : ShapeHOL)

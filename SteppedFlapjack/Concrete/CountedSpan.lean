@@ -4,6 +4,7 @@ import SteppedFlapjack.PanToCrepSteps.GlobalEntry
 import SteppedFlapjack.Concrete.ControlCodeIndependent
 import SteppedFlapjack.Concrete.SimpVisits
 import SteppedFlapjack.Concrete.CountedSource
+import Flapjack.Pancake.Proofs.PanGlobals.CompileTopNames
 import SteppedFlapjack.Concrete.SupportedSpan
 import SteppedFlapjack.CrepToLoopSteps.CallFrontendShape
 import SteppedFlapjack.LoopToWordSteps.WholeWordSpan
@@ -406,9 +407,8 @@ theorem countedCalls_functionOnlyGlobalEntry {scope : List VarName} {program : P
       context primitive handler exnContracts fuel count postLocals postGlobals postMemory postFfi value run budget
   exact ⟨sourceFinal,lowerFinal,sourceRun,lowerRun,by simpa [nestedSeqHOL] using bound,ffi,ffiRel⟩
 
-/-- A call-aware counted source return composes with the actual declaration
-frontend, carrying the source count into the Crep visit bound. -/
-theorem callFrontend_counted_declaration_steps {scope : List VarName} {program : Prog (RiscV.Word 64)}
+/-- A counted source return reaches the compiler-generated Crep entry at an explicit bound. -/
+theorem countedCalls_functionOnlyCrep {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : CallSupportedIn scope program) {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
@@ -417,20 +417,26 @@ theorem callFrontend_counted_declaration_steps {scope : List VarName} {program :
     (codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry)
     (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
       ∃ scope, CallSupportedIn scope body)
-    (declarations : List (DeclHOL 64))
-    (unique : ((functionsHOL declarations).map Prod.fst).Nodup)
-    (noInline : (functionsHOL (declarations.filter inlinableHOL)).map Prod.fst = [])
-    (shapes : ∀ entry ∈ functionsHOL declarations,
-      CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
-        (makeFuncsExactHOL (functionsHOL declarations))
-        (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
-        (getEidsFromDeclsHOL declarations)) entry.2.2.1)
-    (frontend : CallFrontend (mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
-      (getEidsFromDeclsHOL declarations)) (progToHOL program))
-    (code : source.code = HolFiniteMapExact.empty.updateList (functionsHOL declarations).reverse)
+    (targetCode : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (codeRel : PanSimp.CodeRel source.code targetCode)
+    (entries : List SimpVisits.SimpEntry)
+    (sourceCode : source.code = HolFiniteMapExact.empty.updateList entries.reverse)
+    (entryShapes : ∀ entry ∈ entries, ∃ scope, ∃ program : Prog (RiscV.Word 64),
+      entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program)
+    (fs : List (FunDeclHOL 64)) (start : MlS)
+    (targetTable : targetCode = HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)
+    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],progToHOL (panSimpProg program),.one))
+    (mainFound : source.code.lookup start = some ([],progToHOL program,.one))
     (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
     (structs : source.structs = []) (exceptions : source.eshapes = HolFiniteMapExact.empty)
-    (noExceptions : getEidsFromDeclsHOL declarations = HolFiniteMapExact.empty)
+    (unique : ((functionsHOL (fs.map DeclHOL.function)).map Prod.fst).Nodup)
+    (shapes : ∀ entry ∈ functionsHOL (fs.map DeclHOL.function),
+      ∃ names, ∃ body : Prog (RiscV.Word 64),
+        entry.2.1 = names.map (fun n => (Flapjack.Basis.Pure.MlString.ofString n,ShapeHOL.one)) ∧
+        entry.2.2.1 = progToHOL body ∧ CallSupportedIn names body ∧ ProgByteRanged body)
+    (noInline : (functionsHOL ((compileTopExactHOL (fs.map DeclHOL.function) start).filter inlinableHOL)).map Prod.fst = [])
+    (topOutside : ¬ source.memaddrs source.topAddr)
+    (aligned : panGlobalsByteAlignedHOL source.topAddr)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ) (exnContracts : InfoMap Shape) (fuel count : Nat)
     (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))
@@ -442,30 +448,52 @@ theorem callFrontend_counted_declaration_steps {scope : List VarName} {program :
       (contracts := some (countedContractsOfCode production.code exnContracts)) =
         some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
     (budget : count ≤ source.clock) :
-    let ctxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
-      (getEidsFromDeclsHOL declarations)
-    let programs := compileProgDeclsHOLW declarations
-    ∃ sourceFinal targetFinal,
+    let decls := fs.map DeclHOL.function
+    let lowered := compileTopExactHOL decls start
+    let renamed := {source with code := fpermCodeHOL start (newMainNameHOL decls) targetCode}
+    let before := noGlobalsLoweredPreCall renamed (HolFiniteMapExact.empty.updateList (functionsHOL lowered).reverse)
+    let entry : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL decls) [])
+    let ctxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL lowered)) 0 (getEidsFromDeclsHOL lowered)
+    let programs := compileProgDeclsHOLW lowered
+    let crep := compileProgExactHOLW ctxt entry
+    let limit := 1 + (SimpVisits.simpTableFactor entries * count + SimpVisits.hw (progToHOL (panSimpProg program))) + 2
+    ∃ (sourceFinal lowerFinal : PanSemStateFiniteExact 64 σ) (targetFinal : CrepSemHOLState 64 σ),
       source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word value))),sourceFinal) ∧
-      evalCrepSemHOLProgExact (concreteDeclCrepState source programs) (compileProgExactHOLW ctxt (progToHOL program)) =
-        (some (.return [.word value]),targetFinal) ∧
-      CrepSteps.steps (compileProgExactHOLW ctxt (progToHOL program)) (concreteDeclCrepState source programs) ≤
-        max (CrepSteps.statementWeight (compileProgExactHOLW ctxt (progToHOL program))) (CrepSteps.codeWeight programs) * count ∧
-      targetFinal.ffi = sourceFinal.ffi ∧ FfiStateRel postFfi sourceFinal.ffi := by
-  obtain ⟨holResult,sourceFinal,sourceRun,outcome,sourceBound,_⟩ := supportedCalls_counted_source supported production source
-    rel ranged words byteRanged codeRanged codeShape context primitive handler exnContracts fuel count
-    (.returned postLocals postGlobals postMemory postFfi [.word value]) run budget
-  cases outcome with
-  | returned _ _ _ _ _ _ finalRel _ _ =>
-    have span := callFrontend_declaration_steps declarations unique noInline shapes (progToHOL program) frontend
-      source sourceFinal (some (.returned (.val (.word value)))) code locals globals structs exceptions noExceptions sourceRun
-      (by simp) count (by simpa [countedErrorBonus] using sourceBound)
-    obtain ⟨targetResult,targetFinal,targetRun,finalState,_,_,resultRel,bound⟩ := span
-    have resultEq : targetResult = some (.return [.word value]) := by
-      simpa [pcCompileCorrectResultRel,flattenHOL] using resultRel
-    subst targetResult
-    rcases finalState with ⟨_,_,_,_,_,_,_,ffi,_,_⟩
-    exact ⟨sourceFinal,targetFinal,sourceRun,by simpa [flattenHOL] using targetRun,bound,ffi.symm,finalRel.2.2.2.2.2.2.2.2.2.2.1⟩
+      before.evaluateHOLFiniteState entry = (some (.returned (.val (.word value))),emptyLocalsHOLFinite lowerFinal) ∧
+      evalCrepSemHOLProgExact (concreteDeclCrepState before programs) crep = (some (.return [.word value]),targetFinal) ∧
+      CrepSteps.steps crep (concreteDeclCrepState before programs) ≤
+        max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) * limit ∧
+      targetFinal.ffi = lowerFinal.ffi ∧ lowerFinal.ffi = sourceFinal.ffi ∧ FfiStateRel postFfi sourceFinal.ffi := by
+  let decls := fs.map DeclHOL.function
+  let lowered := compileTopExactHOL decls start
+  let renamed : PanSemStateFiniteExact 64 σ := {source with code := fpermCodeHOL start (newMainNameHOL decls) targetCode}
+  let before := noGlobalsLoweredPreCall renamed (HolFiniteMapExact.empty.updateList (functionsHOL lowered).reverse)
+  let entry : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL decls) [])
+  let ctxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL lowered)) 0 (getEidsFromDeclsHOL lowered)
+  let programs := compileProgDeclsHOLW lowered
+  let limit := 1 + (SimpVisits.simpTableFactor entries * count + SimpVisits.hw (progToHOL (panSimpProg program))) + 2
+  obtain ⟨sourceFinal,lowerFinal,sourceRun,lowerRun,lowerBound,lowerFfi,ffiRel⟩ :=
+    countedCalls_functionOnlyGlobalEntry supported production source rel ranged words byteRanged codeRanged codeShape
+      targetCode codeRel entries sourceCode entryShapes fs start targetTable found mainFound locals globals structs
+      topOutside aligned context primitive handler exnContracts fuel count postLocals postGlobals postMemory postFfi value run budget
+  have uniqueLowered : ((functionsHOL lowered).map Prod.fst).Nodup := allDistinctCompileTopHOL start decls unique
+  have shapeTable := functionOnly_callFrontend_shapes fs start (progToHOL (panSimpProg program)) .one found shapes
+  have shapeEntry : CallFrontend ctxt entry := .seq (.base .skip) (.tail (by simp))
+  have noEx : getEidsFromDeclsHOL lowered = HolFiniteMapExact.empty := functionOnly_noExceptions fs start _ .one found
+  have span := callFrontend_declaration_steps lowered uniqueLowered noInline shapeTable entry shapeEntry before
+    (emptyLocalsHOLFinite lowerFinal) (some (.returned (.val (.word value)))) rfl
+    (by simpa [before,noGlobalsLoweredPreCall,renamed] using locals)
+    (by simpa [before,noGlobalsLoweredPreCall,renamed] using globals)
+    (by simpa [before,noGlobalsLoweredPreCall,renamed] using structs)
+    (by simpa [before,noGlobalsLoweredPreCall,renamed] using exceptions)
+    noEx lowerRun (by simp) limit lowerBound
+  obtain ⟨targetResult,targetFinal,targetRun,finalState,_,_,resultRel,visitBound⟩ := span
+  have resultEq : targetResult = some (.return [.word value]) := by
+    simpa [pcCompileCorrectResultRel,flattenHOL] using resultRel
+  subst targetResult
+  rcases finalState with ⟨_,_,_,_,_,_,_,targetFfi,_,_⟩
+  exact ⟨sourceFinal,lowerFinal,targetFinal,sourceRun,lowerRun,by simpa [flattenHOL] using targetRun,visitBound,
+    by simpa [emptyLocalsHOLFinite] using targetFfi.symm,lowerFfi,ffiRel⟩
 
 /-- Counted source execution reaches the optimized Word start call at an explicit bound. -/
 theorem callFrontend_counted_optimizedStart {C σ : Type} {scope : List VarName}

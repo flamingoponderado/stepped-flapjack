@@ -68,53 +68,27 @@ def nestedSourceEntryLimit : Nat :=
   1 + SimpVisits.simpTableFactor (functionsHOL (nestedCallDeclarations.map declToHOL)) * 6 +
     SimpVisits.hw (progToHOL (panSimpProg nestedCallEntry)) + 2
 
-/-- The counted source run supplies the generated wrapper visit bound. -/
-theorem nestedLoweredSource_fromOriginal :
-    controlSteps (.seq .skip (.call none (ofString "main'") [])) nestedLoweredSource ≤ nestedSourceEntryLimit := by
-  obtain ⟨_,_,bound⟩ := nestedCounted_compilerEntry (riscv64PanValueFfiContext (fun _ => false))
-    (fun _ _ => none) (fun _ _ _ _ _ _ _ => none)
-  simpa [globalEntrySteps,nestedLoweredSource,nestedSourceEntryLimit,nestedLoweredCode,
-    nestedRenamedState,nestedClockedSource,nestedSourceState,sourceTemplateFor_one,noGlobalsLoweredPreCall] using bound
-
 /-- The general source-to-Crep bound applies to the actual nested-call entry. -/
 theorem nestedCall_sourceToCrep_bound : ∃ final,
     evalCrepSemHOLProgExact nestedCrepState (.seq .skip (.call none (ofString "main'") [])) =
       (some (.return [.word 7]),final) ∧ final.ffi = sourceFfi ∧
     SteppedFlapjack.CrepSteps.steps (.seq .skip (.call none (ofString "main'") [])) nestedCrepState ≤
       4 * nestedSourceEntryLimit := by
-  let decls := compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")
-  let ctxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL decls)) 0
-    (getEidsFromDeclsHOL decls)
-  let entry : ProgHOL 64 := .seq .skip (.call none (ofString "main'") [])
-  have unique : ((functionsHOL decls).map Prod.fst).Nodup := by
-    dsimp [decls]
-    rw [nestedCall_lowered_declarations]
-    decide
-  have noEx : getEidsFromDeclsHOL decls = HolFiniteMapExact.empty := by
-    dsimp [decls]
-    rw [nestedCall_lowered_declarations]
-    rfl
-  have shape : CallFrontend ctxt entry := .seq (.base .skip) (.tail (by simp))
+  obtain ⟨lowerFinal,targetFinal,entry,crep,bound,ffi⟩ :=
+    nestedCounted_compilerCrep (riscv64PanValueFfiContext (fun _ => false))
+      (fun _ _ => none) (fun _ _ _ _ _ _ _ => none)
+  have entry' : nestedLoweredSource.evaluateHOLFiniteState (.seq .skip (.call none (ofString "main'") [])) =
+      (some (.returned (.val (.word 7))),emptyLocalsHOLFinite lowerFinal) := by
+    simpa [nestedLoweredSource,nestedLoweredCode,nestedRenamedState,nestedClockedSource,nestedSourceState,
+      sourceTemplateFor_one,noGlobalsLoweredPreCall] using entry
   obtain ⟨sourceFinal,sourceRun,sourceFfiEq⟩ := nestedLoweredSource_run
-  have span := callFrontend_declaration_steps decls unique nestedCall_inline_selection_empty
-    nestedCall_declaration_shapes entry shape nestedLoweredSource sourceFinal
-    (some (.returned (.val (.word 7)))) rfl rfl rfl rfl rfl noEx sourceRun (by simp)
-    nestedSourceEntryLimit nestedLoweredSource_fromOriginal
-  obtain ⟨targetResult,targetFinal,targetRun,finalState,_,_,resultRel,bound⟩ := span
-  have compiled : compileProgExactHOLW ctxt entry = .seq .skip (.call none (ofString "main'") []) := by
-    simp [ctxt,entry,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList]
-  have start : concreteDeclCrepState nestedLoweredSource (compileProgDeclsHOLW decls) = nestedCrepState := by
-    rfl
-  have tableWeight : CrepSteps.codeWeight (compileProgDeclsHOLW decls) = 4 := nestedCall_crep_codeWeight
-  have resultEq : targetResult = some (.return [.word 7]) := by
-    simpa [pcCompileCorrectResultRel,flattenHOL] using resultRel
-  rcases finalState with ⟨_,_,_,_,_,_,_,finalFfi,_,_⟩
-  rw [compiled,start] at targetRun
-  rw [resultEq] at targetRun
-  rw [compiled,start,tableWeight] at bound
-  simp only [CrepSteps.statementWeight] at bound
-  norm_num at bound
-  exact ⟨targetFinal,targetRun,finalFfi.symm.trans sourceFfiEq,bound⟩
+  have finalEq : sourceFinal = emptyLocalsHOLFinite lowerFinal := by
+    rw [entry'] at sourceRun
+    exact (Prod.mk.inj sourceRun).2.symm
+  have lowerFfi : lowerFinal.ffi = sourceFfi := by
+    rw [finalEq] at sourceFfiEq
+    simpa [emptyLocalsHOLFinite] using sourceFfiEq
+  exact ⟨targetFinal,crep,ffi.trans lowerFfi,by simpa [nestedSourceEntryLimit,Nat.add_assoc] using bound⟩
 
 /-- The shared structural optimizer computes the original Loop compiler output
 for every function of the nested-call witness. -/
