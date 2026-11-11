@@ -1,4 +1,6 @@
 import SteppedFlapjack.LoopToWordSteps.TailCall
+import SteppedFlapjack.LoopToWordSteps.StackReady
+import SteppedFlapjack.WordToStackSteps.NormalizedClock
 import SteppedFlapjack.LoopLiveSteps.TailEntryGlobalBound
 import SteppedFlapjack.CrepToLoopSteps.CallFrontendShape
 namespace SteppedFlapjack.LoopToWordSteps
@@ -129,6 +131,23 @@ theorem loopTable_correct_with_steps {width : Nat} [NeZero width] {C F : Type}
         exact ih body {cut with locals := env} (Prod.Lex.left _ _ small) (table loc params body lookup) same
   exact key _ p s rfl shape table
 
+private theorem resultCase_noTimeout {width : Nat} [NeZero width] {C F : Type} (ctxt : Spt Nat) (retv : WordLocW width)
+    (s : WordSemStateFiniteExact width C F) (res : Option (LoopResultExact width))
+    (post : LoopSemStateFiniteExact width F) (wordResult : Option (WordSemResult width))
+    (wordPost : WordSemStateFiniteExact width C F)
+    (h : resultCase ctxt retv s res post wordResult wordPost)
+    (notTimeout : res ≠ some .timeOut) : wordResult ≠ some .timeOut := by
+  cases res with
+  | none => simp [resultCase] at h; simp [h.2.1]
+  | some r =>
+    cases r <;> simp_all [resultCase]
+    case exception v =>
+      intro ht
+      have ne : wordResult ≠ some .error := by rw [ht]; simp
+      obtain ⟨a,b,eq⟩ := h.2.1 ne
+      rw [ht] at eq
+      cases eq
+
 section FrontendBound
 open Flapjack.Pancake.PanLang Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps
@@ -150,6 +169,8 @@ theorem callFrontend_word_explicit {width : Nat} [NeZero width] {C σ : Type}
     (codeRel : crepToLoopCodeRelExact ctxt source.code target.code) (targetTable : LoopTableSupported target.code)
     (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
     (word : WordSemStateFiniteExact width C σ) (wordCtxt : Spt Nat) (retv : WordLocW width) (label : Nat × Nat)
+    (wordTable : List (Nat × List Nat × HolLoopProg width))
+    (wordCode : word.code = sptFromAList (loopToWordCompileHOL wordTable))
     (wordRel : let rows := programs.map (fun row => (row.2.1,row.2.2))
       let crep := compileProgExactHOLW panCtxt p
       let budget := callClockFactor ref rows source.clock crep * (CrepSteps.steps crep source+1)
@@ -169,6 +190,10 @@ theorem callFrontend_word_explicit {width : Nat} [NeZero width] {C σ : Type}
       wordPost.ffi = loopPost.ffi ∧ resultCase wordCtxt retv word (resultToLoop result) loopPost wordResult wordPost ∧
       WordSteps.steps (LoopToWord.compHOL wordCtxt loop label).1 word ≤
         6 * (callSyntaxCost ref crep + factor*(source.clock+budget)) ∧
+      WordSemStateFiniteExact.evaluate (LoopToWord.compHOL wordCtxt loop label).1
+        {word with clock := 6 * (callSyntaxCost ref crep + factor*(source.clock+budget))} =
+        (wordResult,{wordPost with clock := 6 * (callSyntaxCost ref crep + factor*(source.clock+budget)) -
+          (word.clock-wordPost.clock)}) ∧
       crepToLoopStateRelExact sourceFinal {loopPost with clock := sourceFinal.clock} ∧
       crepToLoopMemRelHOLExact sourceFinal.memory loopPost.memory sourceFinal.memaddrs ∧
       crepToLoopGlobalsRelHOLExact sourceFinal.globals loopPost.globals ∧
@@ -190,8 +215,18 @@ theorem callFrontend_word_explicit {width : Nat} [NeZero width] {C σ : Type}
     (callFrontend_compiled_loopShape shape ctxt live) (by simpa [start] using targetTable)
   obtain ⟨wordPost,wordResult,wordRun,ffi,resCase,wordBound⟩ := simulation (resultToLoop result) loopPost word wordCtxt retv label
     ⟨ev,mappedNonerror,wordRel,by simpa [start] using wordLocals,retvLookup,dim,notWord,acc⟩
-  refine ⟨loopPost,wordPost,wordResult,ev,wordRun,ffi,resCase,?_,st,mem,gl,code,locals⟩
-  exact wordBound.trans (Nat.mul_le_mul_left 6 visitBound)
+  have bound := wordBound.trans (Nat.mul_le_mul_left 6 visitBound)
+  have mappedNoTimeout : resultToLoop result ≠ some .timeOut := by
+    cases result with
+    | none => simp [resultToLoop]
+    | some r => cases r <;> simp_all [resultToLoop]
+  have wordNoTimeout := resultCase_noTimeout wordCtxt retv word (resultToLoop result) loopPost wordResult wordPost resCase mappedNoTimeout
+  have wordNoMt : WordProps.noMtCode word.code := by rw [wordCode]; exact LoopToWord.loop_compile_no_mt_code wordTable
+  have wordNoInstall : WordProps.noInstallCode word.code := by rw [wordCode]; exact LoopToWord.loop_compile_no_install_code wordTable
+  have normalized := WordToStackSteps.tableWord_normalized_run _ word wordPost wordResult _
+    (loopComp_noMt loop wordCtxt label) (loopComp_noInstall loop wordCtxt label)
+    wordNoMt wordNoInstall wordRun wordNoTimeout bound
+  exact ⟨loopPost,wordPost,wordResult,ev,wordRun,ffi,resCase,bound,normalized,st,mem,gl,code,locals⟩
 
 end FrontendBound
 
