@@ -1230,6 +1230,365 @@ private theorem tailCallBridge {scope : List VarName} (name : FunName)
                 (.finalFfi l g m f e) entryRun (by simp [exactEntry,callEntryStateHOLFinite]; omega) (by omega) codeOk
               cases outcome
 
+/-- Erase returned locals when converting an ordinary call to the corresponding tail call. -/
+private def clearCallReturnLocals {σ : Type} : PanValueFfiControlResult (RiscV.Word 64) σ →
+    PanValueFfiControlResult (RiscV.Word 64) σ
+  | .returned _ globals memory ffi values => .returned (fun _ => none) globals memory ffi values
+  | result => result
+
+/-- Ordinary and tail call steps differ only in the returned local environment. -/
+private theorem callSteps_clearReturnLocals {σ : Type}
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ) (structs : StructContext)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64)))
+    (base top : BitVec 64) (fuel : Nat)
+    (locals globals : VarName → Option (PanValue (RiscV.Word 64)))
+    (memory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (ffi : FfiState σ)
+    (name : FunName) (arguments : List (Exp (RiscV.Word 64)))
+    (access : Option (PanValueMemoryAccess (RiscV.Word 64))) (contracts : Option PanValueCallContracts) :
+    (evalPanValueFfiCallSteps context primitive handler structs functions base top panSemBitVec64BytesInWord
+      fuel locals globals memory ffi none name arguments (memoryAccess := access) (contracts := contracts)
+      (preserveReturnLocals := true)).map (fun (result,steps) => (clearCallReturnLocals result,steps)) =
+    evalPanValueFfiCallSteps context primitive handler structs functions base top panSemBitVec64BytesInWord
+      fuel locals globals memory ffi none name arguments (memoryAccess := access) (contracts := contracts)
+      (preserveReturnLocals := false) := by
+  cases fuel with
+  | zero => simp [evalPanValueFfiCallSteps]
+  | succ fuel =>
+    simp only [evalPanValueFfiCallSteps]
+    cases args : panValueCallArguments structs base top panSemBitVec64BytesInWord locals globals memory arguments access with
+    | none => simp [clearCallReturnLocals]
+    | some pair =>
+      obtain ⟨values,cost⟩ := pair
+      cases target : panValueCallTarget structs contracts name functions values with
+      | none => simp [target,clearCallReturnLocals]
+      | some pair =>
+        obtain ⟨body,calleeLocals⟩ := pair
+        cases bodyRun : evalPanValueFfiProgSteps context primitive handler structs functions base top
+            panSemBitVec64BytesInWord fuel calleeLocals globals memory ffi body
+            (memoryAccess := access) (contracts := contracts) with
+        | none => simp [target,bodyRun]
+        | some pair =>
+          obtain ⟨result,steps⟩ := pair
+          cases result <;> simp [target,bodyRun,clearCallReturnLocals]
+          all_goals split <;> simp
+/-- A successful tail call determines the declaration-call continuation and its visits. -/
+private theorem decCall_from_tail {σ : Type} (source tailPost : PanSemStateFiniteExact 64 σ)
+    (dest fname : MlS) (args : List (ExpHOL 64)) (cont : ProgHOL 64) (value : BitVec 64)
+    (tailRun : source.evaluateHOLFiniteState (.call none fname args) =
+      (some (.returned (.val (.word value))),tailPost)) :
+    let next := setVarHOLFinite dest (.val (.word value)) {tailPost with locals := source.locals}
+    source.evaluateHOLFiniteState (.decCall dest .one fname args cont) =
+      (let out := next.evaluateHOLFiniteState cont
+       (out.1,{out.2 with locals := HolFiniteMapExact.resVarEq out.2.locals (dest,source.locals.lookup dest)})) ∧
+    controlSteps (.decCall dest .one fname args cont) source =
+      controlSteps (.call none fname args) source + controlSteps cont next := by
+  classical
+  let _ : DecidablePred source.memaddrs := fun a => Classical.propDecidable (source.memaddrs a)
+  rw [evaluateHOLFiniteState_call] at tailRun
+  cases argsRun : source.evalListHOLFinite args with
+  | none => simp only [argsRun] at tailRun; cases tailRun
+  | some values =>
+    simp only [argsRun] at tailRun
+    cases found : lookupCodeHOLFinite source.code.lookup fname values with
+    | none => simp only [found] at tailRun; cases tailRun
+    | some entry =>
+      obtain ⟨body,locals,returnShape⟩ := entry
+      simp only [found] at tailRun
+      by_cases clock : source.clock = 0
+      · simp [clock] at tailRun
+      · simp only [clock,if_false] at tailRun
+        cases hbody : (callEntryStateHOLFinite source locals).evaluateHOLFiniteState body with
+        | mk r post =>
+          cases r with
+          | none => simp [hbody] at tailRun
+          | some r =>
+            cases r with
+            | returned v =>
+              by_cases valid : shapeEqHOL (shapeOfHOLExact v) returnShape = true
+              · simp [hbody,valid] at tailRun
+                obtain ⟨rfl,rfl⟩ := tailRun
+                have one : shapeEqHOL (shapeOfHOLExact (.val (.word value))) .one = true := by
+                  simp [shapeOfHOLExact,shapeEqHOL]
+                have fixed : fixClockHOLFinite (callEntryStateHOLFinite source locals)
+                    (some (PanSemResultExact.returned (.val (.word value))),post) = (some (PanSemResultExact.returned (.val (.word value))),post) := by
+                  rw [← hbody]
+                  exact Flapjack.fixClockHOLFinite_evaluateState _ _
+                constructor
+                · rw [evaluateHOLFiniteState_decCall_fixClockRewrite,argsRun]
+                  simp only
+                  rw [found]
+                  simp [clock,hbody,one,valid,emptyLocalsHOLFinite]
+                · rw [controlSteps_decCall_return dest fname .one args cont source values body locals returnShape
+                      (.val (.word value)) post argsRun found clock hbody one valid,
+                      controlSteps_tailCall fname args source values body locals returnShape argsRun found clock]
+                  simp [fixed,emptyLocalsHOLFinite]
+              · simp [hbody,valid] at tailRun
+            | «break» | «continue» | error | timeOut | exception | finalFfi => simp [hbody] at tailRun
+
+/-- A failed tail call has the same declaration-call error and visits. -/
+private theorem decCall_error_from_tail {σ : Type} (source tailPost : PanSemStateFiniteExact 64 σ)
+    (dest fname : MlS) (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    (tailRun : source.evaluateHOLFiniteState (.call none fname args) = (some .error,tailPost)) :
+    source.evaluateHOLFiniteState (.decCall dest .one fname args cont) = (some .error,tailPost) ∧
+    controlSteps (.decCall dest .one fname args cont) source = controlSteps (.call none fname args) source := by
+  classical
+  let _ : DecidablePred source.memaddrs := fun a => Classical.propDecidable (source.memaddrs a)
+  rw [evaluateHOLFiniteState_call] at tailRun
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite]
+  cases argsRun : source.evalListHOLFinite args with
+  | none =>
+    rw [argsRun] at tailRun
+    simp only at tailRun
+    cases tailRun
+    simp only
+    constructor
+    · trivial
+    · rw [controlSteps.eq_def,controlSteps.eq_def]
+      simp only [argsRun]
+  | some values =>
+    simp only [argsRun] at tailRun ⊢
+    cases found : lookupCodeHOLFinite source.code.lookup fname values with
+    | none =>
+      rw [found] at tailRun
+      simp only at tailRun
+      cases tailRun
+      simp only
+      constructor
+      · trivial
+      · rw [controlSteps.eq_def,controlSteps.eq_def]
+        simp only [argsRun,found]
+    | some entry =>
+      obtain ⟨body,locals,returnShape⟩ := entry
+      simp only [found] at tailRun ⊢
+      by_cases zero : source.clock = 0
+      · simp [zero] at tailRun
+      · simp only [zero,if_false] at tailRun ⊢
+        cases hbody : (callEntryStateHOLFinite source locals).evaluateHOLFiniteState body with
+        | mk r post =>
+          cases r with
+          | none =>
+            simp [hbody] at tailRun ⊢
+            subst tailPost
+            constructor
+            · rfl
+            · rw [controlSteps_decCall_terminal dest fname .one args cont source values body locals returnShape none post
+                argsRun found zero hbody (by simp),controlSteps_tailCall fname args source values body locals returnShape argsRun found zero]
+          | some r =>
+            cases r with
+            | returned v =>
+              by_cases valid : shapeEqHOL (shapeOfHOLExact v) returnShape = true
+              · simp [hbody,valid] at tailRun
+              · simp [hbody,valid] at tailRun ⊢
+                subst tailPost
+                constructor
+                · rfl
+                · have smaller (p : ProgHOL 64) : Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b)
+                      ((callEntryStateHOLFinite source locals).clock,sizeOf body) (source.clock,sizeOf p) := by
+                    apply Prod.Lex.left
+                    simp only [callEntryStateHOLFinite]
+                    omega
+                  rw [controlSteps.eq_def,controlSteps.eq_def]
+                  simp only [argsRun,found,zero,if_false,hbody,valid,Bool.and_false,if_false,
+                    dif_pos (smaller _),Bool.false_eq_true,Nat.add_zero]
+            | error =>
+              simp [hbody] at tailRun ⊢
+              subst tailPost
+              constructor
+              · rfl
+              · rw [controlSteps_decCall_terminal dest fname .one args cont source values body locals returnShape (some .error) post
+                  argsRun found zero hbody (by simp),controlSteps_tailCall fname args source values body locals returnShape argsRun found zero]
+            | «break» =>
+              simp [hbody] at tailRun ⊢
+              subst tailPost
+              constructor
+              · rfl
+              · rw [controlSteps_decCall_terminal dest fname .one args cont source values body locals returnShape (some .«break») post
+                  argsRun found zero hbody (by simp),controlSteps_tailCall fname args source values body locals returnShape argsRun found zero]
+            | «continue» =>
+              simp [hbody] at tailRun ⊢
+              subst tailPost
+              constructor
+              · rfl
+              · rw [controlSteps_decCall_terminal dest fname .one args cont source values body locals returnShape (some .«continue») post
+                  argsRun found zero hbody (by simp),controlSteps_tailCall fname args source values body locals returnShape argsRun found zero]
+            | timeOut | exception | finalFfi => simp [hbody] at tailRun
+
+
+
+/-- The declaration-call count includes the callee call cost. -/
+private theorem decCall_cost_ge {σ : Type}
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ) (structs : StructContext)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (base top : BitVec 64) (fuel : Nat)
+    (locals globals : VarName → Option (PanValue (RiscV.Word 64)))
+    (memory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (ffi : FfiState σ)
+    (dest name : FunName) (args : List (Exp (RiscV.Word 64))) (cont : Prog (RiscV.Word 64))
+    (access : Option (PanValueMemoryAccess (RiscV.Word 64))) (contracts : Option PanValueCallContracts)
+    (callResult : PanValueFfiControlResult (RiscV.Word 64) σ) (callCost : Nat)
+    (result : PanValueFfiControlResult (RiscV.Word 64) σ) (cost : Nat)
+    (callRun : evalPanValueFfiCallSteps context primitive handler structs functions base top panSemBitVec64BytesInWord
+      fuel locals globals memory ffi none name args (memoryAccess := access) (contracts := contracts)
+      (preserveReturnLocals := true) = some (callResult,callCost))
+    (run : evalPanValueFfiProgSteps context primitive handler structs functions base top panSemBitVec64BytesInWord
+      (fuel+1) locals globals memory ffi (.decCall dest .one name args cont)
+      (memoryAccess := access) (contracts := contracts) = some (result,cost)) : callCost+1 ≤ cost := by
+  simp only [evalPanValueFfiProgSteps,callRun] at run
+  cases callResult with
+  | normal l g m f | broke l g m f | continued l g m f => simp at run
+  | error l g m f | raised l g m f e v | finalFfi l g m f e => simp at run; omega
+  | returned l g m f values =>
+    cases values with
+    | nil => simp at run
+    | cons v vs =>
+      cases vs with
+      | cons w ws => simp at run
+      | nil =>
+        by_cases shape : panShapeMatches (panValueShape structs v) .one = true
+        · simp [shape] at run
+          cases next : evalPanValueFfiProgSteps context primitive handler structs functions base top panSemBitVec64BytesInWord
+              fuel (updatePanValueMap locals dest v) g m f cont (memoryAccess := access) (contracts := contracts) with
+          | none => simp [next] at run
+          | some pair => cases pair with | mk r n => simp [next] at run; omega
+        · simp [shape] at run
+          omega
+
+/-- An ordinary call composes the tail-call and continuation bridges at smaller fuel. -/
+private theorem decCallBridge {scope : List VarName} (dest name : FunName)
+    (arguments : List (Exp (RiscV.Word 64))) (continuation : Prog (RiscV.Word 64))
+    (shape : ∀ e ∈ arguments, Scalar scope e)
+    {invariant : PanSemCodeMap (RiscV.Word 64) → List (FunName × List VarName × Prog (RiscV.Word 64)) → Prop}
+    {contracts : Option PanValueCallContracts} {limit : Nat}
+    (coherent : ∀ code functions, invariant code functions →
+      ∃ exceptions, functions = countedFunctionsOfCode code ∧
+        contracts = some (countedContractsOfCode code exceptions) ∧
+        ∀ name entry, panSemCodeLookup code name = some entry → PanLangEntryByteRanged entry)
+    (calleeBound : ∀ code functions, invariant code functions → ∀ structs name values body locals,
+      panValueCallTarget structs contracts name functions values = some (body,locals) →
+      Bridge invariant contracts limit body)
+    (contBound : Bridge invariant contracts limit continuation) :
+    Bridge invariant contracts (limit+1) (.decCall dest .one name arguments continuation) := by
+  intro σ production source dec rel ranged words byteRanged context primitive handler functions fuel count result run budget fuelBound codeOk
+  cases fuel with
+  | zero => simp [evalPanValueFfiProgSteps] at run
+  | succ fuel =>
+    cases callRun : evalPanValueFfiCallSteps context primitive handler production.structs functions
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel production.locals production.globals
+        production.memory production.ffi none name arguments (memoryAccess := some (panSemBitVec64MemoryAccess production))
+        (contracts := contracts) (preserveReturnLocals := true) with
+    | none => simp [evalPanValueFfiProgSteps,callRun] at run
+    | some pair =>
+      obtain ⟨callResult,callCost⟩ := pair
+      have costBound := decCall_cost_ge context primitive handler production.structs functions production.baseAddress
+        production.topAddress fuel production.locals production.globals production.memory production.ffi dest name arguments
+        continuation (some (panSemBitVec64MemoryAccess production)) contracts callResult callCost result count callRun run
+      have cleared := callSteps_clearReturnLocals context primitive handler production.structs functions production.baseAddress
+        production.topAddress fuel production.locals production.globals production.memory production.ffi name arguments
+        (some (panSemBitVec64MemoryAccess production)) contracts
+      rw [callRun] at cleared
+      have falseRun : evalPanValueFfiCallSteps context primitive handler production.structs functions
+          production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel production.locals production.globals
+          production.memory production.ffi none name arguments (memoryAccess := some (panSemBitVec64MemoryAccess production))
+          (contracts := contracts) (preserveReturnLocals := false) = some (clearCallReturnLocals callResult,callCost) := by
+        simpa using cleared.symm
+      have tailRun : evalPanValueFfiProgSteps context primitive handler production.structs functions
+          production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+1)
+          production.locals production.globals production.memory production.ffi (.call none name arguments)
+          (memoryAccess := some (panSemBitVec64MemoryAccess production)) (contracts := contracts) =
+          some (clearCallReturnLocals callResult,callCost+1) := by
+        simp [evalPanValueFfiProgSteps,falseRun]
+      have tailRanged : ProgByteRanged (.call none name arguments) := by
+        simpa [ProgByteRanged] using And.intro byteRanged.2.2.1 byteRanged.2.2.2.1
+      obtain ⟨tailResult,tailFinal,holTail,tailOutcome,tailVisits,tailClock⟩ :=
+        tailCallBridge name arguments shape coherent calleeBound production source rel ranged words tailRanged
+          context primitive handler functions (fuel+1) (callCost+1) (clearCallReturnLocals callResult) tailRun
+          (by omega) (by omega) codeOk
+      cases callResult with
+      | normal l g m f | broke l g m f | continued l g m f =>
+        simp [evalPanValueFfiProgSteps,callRun] at run
+      | raised l g m f e v =>
+        simp only [clearCallReturnLocals] at tailOutcome
+        cases tailOutcome
+      | finalFfi l g m f e =>
+        simp only [clearCallReturnLocals] at tailOutcome
+        cases tailOutcome
+      | error l g m f =>
+        simp [evalPanValueFfiProgSteps,callRun] at run
+        obtain ⟨rfl,rfl⟩ := run
+        simp only [clearCallReturnLocals] at holTail tailOutcome tailVisits tailClock
+        cases tailOutcome with
+        | error l g m f final nextRel nextRanged nextWords =>
+          have hol := decCall_error_from_tail source tailFinal (ofString dest) (ofString name)
+            (arguments.map expToHOL) (progToHOL continuation) (by simpa [progToHOL] using holTail)
+          refine ⟨some .error,tailFinal,?_,.error l g m f tailFinal nextRel nextRanged nextWords,?_,tailClock⟩
+          · simpa [progToHOL,shapeToHOL] using hol.1
+          · simp only [progToHOL,shapeToHOL]
+            rw [hol.2]
+            simpa [progToHOL] using tailVisits
+      | returned l g m f values =>
+        simp only [clearCallReturnLocals] at holTail tailOutcome tailVisits tailClock
+        cases tailOutcome with
+        | returned _ _ _ _ word _ nextRel nextRanged nextWords =>
+          have destRanged : NameRanged dest := byteRanged.1
+          have contRanged : ProgByteRanged continuation := byteRanged.2.2.2.2
+          have memEq : tailFinal.memaddrs = source.memaddrs := by
+            funext address
+            apply propext
+            exact (nextRel.2.2.2.2.2.2.1 address).symm.trans (rel.2.2.2.2.2.2.1 address)
+          let restored := {production with globals := g, memory := m, ffi := f, clock := tailFinal.clock}
+          let restoredSource := {tailFinal with locals := source.locals}
+          have restoredRel : PanSemStateRelExec restored restoredSource.toExact := by
+            simpa [restored,restoredSource,PanSemStateFiniteExact.toExact] using nextRel.restoreLocals rel
+          have restoredRanged : PanSemStateRelExecRanged restored := ⟨ranged.1,nextRanged.2.1,nextRanged.2.2⟩
+          let next := {restored with locals := updatePanValueMap production.locals dest (.word word)}
+          let sourceNext := setVarHOLFinite (ofString dest) (.val (.word word)) restoredSource
+          let _ : DecidablePred sourceNext.memaddrs := by
+            change DecidablePred tailFinal.memaddrs
+            rw [memEq]
+            exact dec
+          have nextRel' : PanSemStateRelExec next sourceNext.toExact := by
+            simpa [next,restored,sourceNext,panValueToHOL] using restoredRel.updateLocals dest destRanged (.word word)
+          have nextRanged' : PanSemStateRelExecRanged next := by
+            exact restoredRanged.updateLocals dest (.word word) (by simp [PanValueByteRanged])
+          have nextWords' : WordLocals next.locals := wordLocals_update words dest word
+          cases bodyRun : evalPanValueFfiProgSteps context primitive handler production.structs functions
+              production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+              (updatePanValueMap production.locals dest (.word word)) g m f continuation
+              (memoryAccess := some (panSemBitVec64MemoryAccess production)) (contracts := contracts) with
+          | none => simp [evalPanValueFfiProgSteps,callRun,panValueShape,panShapeMatches,bodyRun] at run
+          | some pair =>
+            obtain ⟨bodyResult,bodyCost⟩ := pair
+            simp [evalPanValueFfiProgSteps,callRun,panValueShape,panShapeMatches,bodyRun] at run
+            obtain ⟨rfl,rfl⟩ := run
+            have nextRun : evalPanValueFfiProgSteps context primitive handler next.structs functions next.baseAddress
+                next.topAddress panSemBitVec64BytesInWord fuel next.locals next.globals next.memory next.ffi continuation
+                (memoryAccess := some (panSemBitVec64MemoryAccess next)) (contracts := contracts) =
+                  some (bodyResult,bodyCost) := by
+              simpa [next,restored,panSemBitVec64MemoryAccess] using bodyRun
+            obtain ⟨holResult,sourceFinal,holNext,outcome,visits,clock⟩ := contBound next sourceNext nextRel' nextRanged'
+              nextWords' contRanged context primitive handler functions fuel bodyCost bodyResult nextRun
+              (by simp [sourceNext,setVarHOLFinite,restoredSource] at *; omega) (by omega) codeOk
+            have hol := decCall_from_tail source tailFinal (ofString dest) (ofString name)
+              (arguments.map expToHOL) (progToHOL continuation) word (by simpa [progToHOL] using holTail)
+            refine ⟨holResult,{sourceFinal with locals := (HolFiniteMapExact.resVarEq sourceFinal.locals
+              (ofString dest,source.locals.lookup (ofString dest)))},?_,?_,?_,?_⟩
+            · simpa [progToHOL,shapeToHOL,sourceNext,restoredSource,holNext] using hol.1
+            · have restoredOutcome := restoreOutcome restored restoredSource restoredRel restoredRanged words dest destRanged word outcome
+              apply outcomeRebase production production.locals g m f tailFinal.clock
+              simpa [restored,restoredSource,next] using restoredOutcome
+            · simp only [progToHOL,shapeToHOL]
+              rw [hol.2]
+              change controlSteps (.call none (ofString name) (arguments.map expToHOL)) source +
+                controlSteps (progToHOL continuation) sourceNext ≤ _
+              simp only [progToHOL,countedErrorBonus] at tailVisits
+              have bonus : countedErrorBonus (restorePanValueFfiLocal dest (production.locals dest) bodyResult) =
+                  countedErrorBonus bodyResult := by cases bodyResult <;> rfl
+              rw [bonus]
+              omega
+            · change source.clock ≤ sourceFinal.clock + (callCost + bodyCost + 1)
+              simp [sourceNext,setVarHOLFinite,restoredSource] at clock
+              omega
+
 private theorem supportedBridge {invariant : PanSemCodeMap (RiscV.Word 64) → List (FunName × List VarName × Prog (RiscV.Word 64)) → Prop} {contracts : Option PanValueCallContracts} (limit : Nat) {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : SupportedIn scope program) : Bridge invariant contracts limit program := by
   induction limit generalizing scope program with
@@ -1247,6 +1606,94 @@ private theorem supportedBridge {invariant : PanSemCodeMap (RiscV.Word 64) → L
     | ite scalar a b => exact iteBridge scalar (ih a) (ih b)
     | «while» scalar body => exact whileBridge scalar (ih body)
     | ret scalar => exact returnBridge scalar
+
+private def CallCodeInvariant (contracts : Option PanValueCallContracts)
+    (code : PanSemCodeMap (RiscV.Word 64)) (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) : Prop :=
+  (∃ exceptions, functions = countedFunctionsOfCode code ∧ contracts = some (countedContractsOfCode code exceptions) ∧
+    ∀ name entry, panSemCodeLookup code name = some entry → PanLangEntryByteRanged entry) ∧
+  ∀ name params body, (name,params,body) ∈ functions → ∃ scope, CallSupportedIn scope body
+
+private theorem callTarget_mem (structs : StructContext) (contracts : Option PanValueCallContracts)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (name : FunName)
+    (values : List (PanValue (RiscV.Word 64))) (body : Prog (RiscV.Word 64))
+    (locals : VarName → Option (PanValue (RiscV.Word 64)))
+    (found : panValueCallTarget structs contracts name functions values = some (body,locals)) :
+    ∃ params, (name,params,body) ∈ functions := by
+  unfold panValueCallTarget at found
+  cases lookup : lookupPanFunction name functions with
+  | none => simp [lookup] at found
+  | some entry =>
+    obtain ⟨params,callee⟩ := entry
+    simp only [lookup] at found
+    split at found
+    · cases bind : bindPanValueParameters params values with
+      | none => simp [bind] at found
+      | some bound =>
+        simp only [bind,Option.some.injEq,Prod.mk.injEq] at found
+        obtain ⟨rfl,_⟩ := found
+        exact ⟨params,lookupPanFunction_mem lookup⟩
+    · simp at found
+
+private theorem supportedCallsBridge (contracts : Option PanValueCallContracts) (limit : Nat)
+    {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) : Bridge (CallCodeInvariant contracts) contracts limit program := by
+  induction limit generalizing scope program with
+  | zero =>
+    intro σ production source dec rel ranged words byteRanged context primitive handler functions fuel count result run budget fuelBound codeOk
+    have eq : fuel = 0 := by omega
+    subst fuel
+    simp [evalPanValueFfiProgSteps] at run
+  | succ limit ih =>
+    have coherent : ∀ code functions, CallCodeInvariant contracts code functions →
+        ∃ exceptions, functions = countedFunctionsOfCode code ∧
+          contracts = some (countedContractsOfCode code exceptions) ∧
+          ∀ name entry, panSemCodeLookup code name = some entry → PanLangEntryByteRanged entry := by
+      intro code functions invariant
+      exact invariant.1
+    have callee : ∀ code functions, CallCodeInvariant contracts code functions → ∀ structs name values body locals,
+        panValueCallTarget structs contracts name functions values = some (body,locals) →
+        Bridge (CallCodeInvariant contracts) contracts limit body := by
+      intro code functions invariant structs name values body locals found
+      obtain ⟨params,member⟩ := callTarget_mem structs contracts functions name values body locals found
+      obtain ⟨scope,supported⟩ := invariant.2 name params body member
+      exact ih supported
+    cases supported with
+    | base h => exact @supportedBridge (CallCodeInvariant contracts) contracts (limit+1) _ _ h
+    | tail name args h => exact @tailCallBridge _ name args h (CallCodeInvariant contracts) contracts limit coherent callee
+    | call dest name args h cont => exact @decCallBridge _ dest name args _ h (CallCodeInvariant contracts) contracts limit coherent callee (ih cont)
+    | decl name scalar body => exact @declBridge _ name _ _ scalar (CallCodeInvariant contracts) contracts limit (ih body)
+    | seq a b => exact @seqBridge _ _ (CallCodeInvariant contracts) contracts limit (ih a) (ih b)
+    | ite scalar a b => exact @iteBridge _ _ _ _ scalar (CallCodeInvariant contracts) contracts limit (ih a) (ih b)
+    | «while» scalar body => exact @whileBridge _ _ _ scalar (CallCodeInvariant contracts) contracts limit (ih body)
+
+/-- A counted run over a call-aware function table agrees with the HOL source
+execution and has an explicit control-visit bound. -/
+theorem supportedCalls_counted_source {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
+    [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
+    (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
+    (byteRanged : ProgByteRanged program)
+    (codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry)
+    (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
+      ∃ scope, CallSupportedIn scope body)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ) (exceptions : InfoMap Shape) (fuel count : Nat)
+    (result : PanValueFfiControlResult (RiscV.Word 64) σ)
+    (run : evalPanValueFfiProgSteps context primitive handler production.structs (countedFunctionsOfCode production.code)
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+      production.locals production.globals production.memory production.ffi program
+      (memoryAccess := some (panSemBitVec64MemoryAccess production))
+      (contracts := some (countedContractsOfCode production.code exceptions)) = some (result,count))
+    (budget : count ≤ source.clock) :
+    ∃ holResult sourceFinal, source.evaluateHOLFiniteState (progToHOL program) = (holResult,sourceFinal) ∧
+      CountedOutcome production result holResult sourceFinal ∧
+      controlSteps (progToHOL program) source ≤ count + countedErrorBonus result ∧ source.clock ≤ sourceFinal.clock + count := by
+  let contracts := some (countedContractsOfCode production.code exceptions)
+  have codeOk : CallCodeInvariant contracts production.code (countedFunctionsOfCode production.code) :=
+    ⟨⟨exceptions,rfl,rfl,codeRanged⟩,codeShape⟩
+  exact supportedCallsBridge contracts fuel supported production source rel ranged words byteRanged
+    context primitive handler (countedFunctionsOfCode production.code) fuel count result run budget (by rfl) codeOk
 
 /-- A counted run of a supported body is a corresponding HOL run when the
 source clock covers its explicitly given count. Clock consumption is bounded

@@ -24,6 +24,18 @@ inductive SupportedIn : List VarName → Prog (RiscV.Word 64) → Prop
   | while {scope e body} : Scalar scope e → SupportedIn scope body → SupportedIn scope (.while e body)
   | ret {scope e} : Scalar scope e → SupportedIn scope (.return e)
 
+/-- Scalar source programs with ordinary and tail calls. -/
+inductive CallSupportedIn : List VarName → Prog (RiscV.Word 64) → Prop
+  | base {scope program} : SupportedIn scope program → CallSupportedIn scope program
+  | tail {scope} (name) (args) : (∀ e ∈ args, Scalar scope e) → CallSupportedIn scope (.call none name args)
+  | call {scope} (dest name) (args) {cont} : (∀ e ∈ args, Scalar scope e) →
+      CallSupportedIn (dest :: scope) cont → CallSupportedIn scope (.decCall dest .one name args cont)
+  | decl {scope} (name) {e body} : Scalar scope e → CallSupportedIn (name :: scope) body →
+      CallSupportedIn scope (.dec name .one e body)
+  | seq {scope a b} : CallSupportedIn scope a → CallSupportedIn scope b → CallSupportedIn scope (.seq a b)
+  | ite {scope e a b} : Scalar scope e → CallSupportedIn scope a → CallSupportedIn scope b → CallSupportedIn scope (.ite e a b)
+  | while {scope e body} : Scalar scope e → CallSupportedIn scope body → CallSupportedIn scope (.while e body)
+
 /-- A parameter-free body begins with no locals and its identifiers are
 representable by HOL byte strings. -/
 def Supported (program : Prog (RiscV.Word 64)) : Prop :=

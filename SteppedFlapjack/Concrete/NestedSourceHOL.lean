@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.NestedCalls
+import SteppedFlapjack.Concrete.CountedSource
 import SteppedFlapjack.Concrete.NestedCrep
 import SteppedFlapjack.Concrete.Phase7SourceClock
 import SteppedFlapjack.PanToCrepSteps.WhileSteps
@@ -41,6 +42,123 @@ theorem nestedCall_declared_semantics (bitmapWords : Nat) :
     simpa [fs,nestedCallDeclarations,declToHOL,funDeclToHOL,progToHOL,expToHOL,shapeToHOL,nestedSourceState,
       sourceTemplateFor,sourceTemplate] using sem
   exact sem'.trans same
+
+def nestedCountedProduction : PanSemState (RiscV.Word 64) (FfiState Unit) :=
+  {sourceProduction with code := functionEntries nestedCallDeclarations}
+
+set_option linter.unusedSimpArgs false in
+set_option linter.unnecessarySimpa false in
+theorem nestedCounted_related : PanSemStateRelExec nestedCountedProduction (nestedSourceState 1).toExact := by
+  have base := source_related (progToHOL nestedCallEntry)
+  obtain ⟨hl,hg,hs,hc,he,hm,hmem,hshared,hclock,hbe,hffi,hbase,htop⟩ := base
+  refine ⟨?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_⟩
+  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
+      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hl
+  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
+      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hg
+  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
+      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hs
+  · intro name nameRanged
+    have neq (other : String) (ranged : NameRanged other) (h : name ≠ other) : ofString name ≠ ofString other := by
+      intro eq
+      exact h (ofString_injective_of_ranged nameRanged ranged eq)
+    have leafMain : ofString "leaf" ≠ ofString "main" := by decide
+    have midMain : ofString "middle" ≠ ofString "main" := by decide
+    have leafMid : ofString "leaf" ≠ ofString "middle" := by decide
+    by_cases hmain : name = "main"
+    · subst name
+      simp [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,sourceProduction,sourceTemplate,
+        PanSemStateFiniteExact.toExact,functionEntries,nestedCallDeclarations,panSemCodeLookup,lookupInfo,
+        HolFiniteMapExact.lookup_update,FUPDATE,panLangEntryToHOL,shapeToHOL,progToHOL,expToHOL,nestedCallEntry,leafMain,midMain,leafMid]
+    · by_cases hmiddle : name = "middle"
+      · subst name
+        simp [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,sourceProduction,sourceTemplate,
+          PanSemStateFiniteExact.toExact,functionEntries,nestedCallDeclarations,panSemCodeLookup,lookupInfo,
+          HolFiniteMapExact.lookup_update,FUPDATE,panLangEntryToHOL,shapeToHOL,progToHOL,expToHOL,nestedCallEntry,leafMain,midMain,leafMid]
+      · by_cases hleaf : name = "leaf"
+        · subst name
+          simp [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,sourceProduction,sourceTemplate,
+            PanSemStateFiniteExact.toExact,functionEntries,nestedCallDeclarations,panSemCodeLookup,lookupInfo,
+            HolFiniteMapExact.lookup_update,FUPDATE,panLangEntryToHOL,shapeToHOL,progToHOL,expToHOL,nestedCallEntry,leafMain,midMain,leafMid]
+        · have hm := neq "main" (by decide) hmain
+          have hmid := neq "middle" (by decide) hmiddle
+          have hl := neq "leaf" (by decide) hleaf
+          simp [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,sourceProduction,sourceTemplate,
+            PanSemStateFiniteExact.toExact,functionEntries,nestedCallDeclarations,panSemCodeLookup,lookupInfo,
+            HolFiniteMapExact.lookup_update,FUPDATE,hm,hmid,hl,hmain,hmiddle,hleaf,
+            Ne.symm hm,Ne.symm hmid,Ne.symm hl,Ne.symm hmain,Ne.symm hmiddle,Ne.symm hleaf]
+  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
+      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using he
+  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
+      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hm
+  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
+      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hmem
+  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
+      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hshared
+  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
+      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hclock
+  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
+      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hbe
+  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
+      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hffi
+  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
+      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hbase
+  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
+      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using htop
+
+theorem nestedCounted_shapes :
+    ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode nestedCountedProduction.code →
+      ∃ scope, CallSupportedIn scope body := by
+  intro name params body member
+  simp [countedFunctionsOfCode,nestedCountedProduction,functionEntries,nestedCallDeclarations] at member
+  rcases member with ⟨rfl,rfl,rfl⟩ | ⟨rfl,rfl,rfl⟩ | ⟨rfl,rfl,rfl⟩
+  · refine ⟨[],CallSupportedIn.call "answer" "middle" [] (by simp) ?_⟩
+    exact .base (.ret (.local "answer" (by simp)))
+  · exact ⟨[],.tail "leaf" [] (by simp)⟩
+  · exact ⟨[],.base (.ret (.const _))⟩
+
+theorem nestedCounted_run (context : PanValueFfiContext (RiscV.Word 64))
+    (primitive : PanPrimitiveHandler (RiscV.Word 64)) (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
+    evalPanValueFfiProgSteps context primitive handler nestedCountedProduction.structs
+      (countedFunctionsOfCode nestedCountedProduction.code)
+      nestedCountedProduction.baseAddress nestedCountedProduction.topAddress panSemBitVec64BytesInWord 8
+      nestedCountedProduction.locals nestedCountedProduction.globals nestedCountedProduction.memory nestedCountedProduction.ffi
+      nestedCallEntry (memoryAccess := some (panSemBitVec64MemoryAccess nestedCountedProduction))
+      (contracts := some (countedContractsOfCode nestedCountedProduction.code [])) =
+      some (.returned (fun _ => none) nestedCountedProduction.globals nestedCountedProduction.memory nestedCountedProduction.ffi [.word 7],6) := by
+  simp [nestedCallEntry,nestedCountedProduction,sourceProduction,countedFunctionsOfCode,countedContractsOfCode,
+    nestedCallDeclarations,functionEntries,evalPanValueFfiProgSteps,evalPanValueFfiCallSteps,panValueCallArguments,
+    evalPanValueExpsCounted,evalPanValueExps,evalPanValueExp.evalPanValueExps,panValueExpsStepCost,
+    panValueExpStepCost.panValueExpsStepCost,panValueCallTarget,lookupPanFunction,lookupInfo,panValueParametersValid,
+    panValueValuesMatchShapes,bindPanValueParameters,panValueReturnValid,panValueReturnResult,
+    evalPanValueExpCounted,evalPanValueExp,panValueExpStepCost,panShapeMatches,panValueShape,updatePanValueMap,
+    restorePanValueFfiLocal]
+  funext name
+  simp [restorePanValueLocal]
+
+theorem nestedCounted_source (context : PanValueFfiContext (RiscV.Word 64))
+    (primitive : PanPrimitiveHandler (RiscV.Word 64)) (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
+    ∃ final, (nestedSourceState 1).evaluateHOLFiniteState (progToHOL nestedCallEntry) =
+      (some (.returned (.val (.word 7))),final) ∧
+      controlSteps (progToHOL nestedCallEntry) (nestedSourceState 1) ≤ 6 := by
+  let _ : DecidablePred (nestedSourceState 1).memaddrs := by
+    change DecidablePred ordinaryAddress
+    infer_instance
+  have shape : CallSupportedIn [] nestedCallEntry := by
+    exact .call "answer" "middle" [] (by simp) (.base (.ret (.local "answer" (by simp))))
+  have ranged : PanSemStateRelExecRanged nestedCountedProduction := by
+    simp [nestedCountedProduction,sourceProduction,PanSemStateRelExecRanged,StructContextByteRanged,StructContext.toHOL]
+  have words : WordLocals nestedCountedProduction.locals := by
+    simpa [nestedCountedProduction,sourceProduction] using wordLocals_empty
+  have codeRanged : ∀ name entry, panSemCodeLookup nestedCountedProduction.code name = some entry → PanLangEntryByteRanged entry := by
+    simpa [nestedCountedProduction,PanSemCodeRanged] using
+      panSemCodeRanged_of_functionEntries sourceProduction nestedCallDeclarations nestedCall_declarations_ranged
+  have budget : 6 ≤ (nestedSourceState 1).clock := by decide
+  obtain ⟨result,final,hol,outcome,bound,_⟩ := supportedCalls_counted_source shape nestedCountedProduction
+    (nestedSourceState 1) nestedCounted_related ranged words (by simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged])
+    codeRanged nestedCounted_shapes context primitive handler [] 8 6 _ (nestedCounted_run context primitive handler) budget
+  cases outcome with
+  | returned _ _ _ _ _ _ _ _ _ => exact ⟨final,hol,by simpa [countedErrorBonus] using bound⟩
 
 /-- The original source entry returns the witness value with unchanged FFI. -/
 theorem nestedCall_hol_run (bitmapWords : Nat) :
