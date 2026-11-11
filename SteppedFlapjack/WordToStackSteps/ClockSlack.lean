@@ -109,12 +109,17 @@ theorem zeroSimulation_addSlack {width : Nat} [NeZero width] {C F : Type}
     ∃ targetPost targetResult,
       StackSemEvaluate.evaluate (compiled,{target with clock := target.clock+extra}) = (targetResult,targetPost) ∧
       extra ≤ targetPost.clock ∧
+      (targetResult = some (.halt (.word 2)) ∨ targetPost.clock = sourcePost.clock + extra) ∧
       compCorrectResult ac k f frame source sourcePost {targetPost with clock := targetPost.clock-extra} result targetResult lens := by
   obtain ⟨post,out,run,related⟩ := sim k f frame sourcePost target result bs bsPost n nPost compiled lens premises
   have nt := targetNoTimeout ac k f frame source sourcePost post result out lens related notTimeout
   have boosted := Compiler.Backend.StackProps.evaluateAddClock extra compiled target out post ⟨run,nt⟩
-  refine ⟨{post with clock := post.clock+extra},out,boosted,by simp,?_⟩
-  simpa using related
+  refine ⟨{post with clock := post.clock+extra},out,boosted,by simp,?_,?_⟩
+  · by_cases limit : out = some (.halt (.word 2))
+    · exact Or.inl limit
+    · have clocks := compCorrectResult_clocks ac k f frame source sourcePost post result out lens related limit
+      exact Or.inr (by simp only; omega)
+  · simpa using related
 /-- The one-clock exception simulation also preserves any additional slack. -/
 theorem raise_oneClock_addSlack {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (name : Nat)
@@ -133,6 +138,7 @@ theorem raise_oneClock_addSlack {width : Nat} [NeZero width] {C F : Type}
       ∀ extra : Nat, ∃ targetPost targetResult,
         StackSemEvaluate.evaluate (compiled, {target with clock := target.clock + 1 + extra}) = (targetResult,targetPost) ∧
         extra ≤ targetPost.clock ∧
+        (targetResult = some (.halt (.word 2)) ∨ targetPost.clock = sourcePost.clock + extra) ∧
         compCorrectResult ac k f frame source sourcePost {targetPost with clock := targetPost.clock - extra} result targetResult lens := by
   intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises extra
   obtain ⟨value,l1,l2,read,jump,resultEq⟩ :=
@@ -141,8 +147,12 @@ theorem raise_oneClock_addSlack {width : Nat} [NeZero width] {C F : Type}
   obtain ⟨post,out,run,related⟩ := raise_oneClock ac name source k f frame sourcePost target result bs bsPost n nPost compiled lens premises
   have outNt := targetNoTimeout ac k f frame source sourcePost post result out lens related nt
   have boosted := Compiler.Backend.StackProps.evaluateAddClock extra compiled {target with clock := target.clock+1} out post ⟨run,outNt⟩
-  refine ⟨{post with clock := post.clock+extra},out,?_,by simp,?_⟩
+  refine ⟨{post with clock := post.clock+extra},out,?_,by simp,?_,?_⟩
   · simpa using boosted
+  · by_cases limit : out = some (.halt (.word 2))
+    · exact Or.inl limit
+    · have clocks := compCorrectResult_clocks ac k f frame source sourcePost post result out lens related limit
+      exact Or.inr (by simp only; omega)
   · simpa using related
 
 end SteppedFlapjack.WordToStackSteps
