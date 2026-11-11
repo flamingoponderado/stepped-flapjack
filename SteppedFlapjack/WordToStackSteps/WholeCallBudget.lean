@@ -3,6 +3,7 @@ import SteppedFlapjack.WordToStackSteps.BudgetTailCall
 import SteppedFlapjack.WordToStackSteps.BudgetIf
 import SteppedFlapjack.WordToStackSteps.BudgetLoop
 import SteppedFlapjack.WordToStackSteps.BudgetSharedMemory
+import SteppedFlapjack.WordToStackSteps.BudgetStoreConsts
 import SteppedFlapjack.WordSimpSteps.LoopSequenceClock
 import SteppedFlapjack.StackSteps.TableBound
 namespace SteppedFlapjack.WordToStackSteps
@@ -16,10 +17,13 @@ inductive CallBudgetBlock {width : Nat} [NeZero width] : WordLangProgHOL (BitVec
   | base {p} : LoopBlock p → CallBudgetBlock p
   | raise (name) : CallBudgetBlock (.raise name)
   | shareInst (op v exp) : CallBudgetBlock (.shareInst op v exp)
+  | storeConsts (a b c d words) : CallBudgetBlock (.storeConsts a b c d words)
   | seq {a b} : CallBudgetBlock a → CallBudgetBlock b → CallBudgetBlock (.seq a b)
   | ite (cmp r ri) {a b} : CallBudgetBlock a → CallBudgetBlock b → CallBudgetBlock (.ite cmp r ri a b)
   | loop (names exitNames) {body} : CallBudgetBlock body → CallBudgetBlock (.loop names body exitNames)
   | tail (dest args) : CallBudgetBlock (.call none dest args none)
+  | invalidTail (dest args hvar h1 h2 handler) :
+      CallBudgetBlock (.call none dest args (some (hvar,handler,h1,h2)))
   | call (values names l1 l2 dest args) {body} : CallBudgetBlock body →
       CallBudgetBlock (.call (some (values,names,body,l1,l2)) dest args none)
   | handler (values names l1 l2 dest args hvar h1 h2) {body catchCode} :
@@ -66,6 +70,8 @@ private theorem callBudgetBlock_simulation_core {width : Nat} [NeZero width] {C 
     have hp : 0 < (K + 1) ^ (s.clock + 1) := Nat.pow_pos (by omega)
     simp only [fixedTableBudget,wordControlWeight,Nat.one_mul]
     omega
+  | storeConsts a b c d words =>
+    exact budgetMono ac _ s 0 _ (zeroBudget ac _ s (storeConsts_zero ac a b c d words s)) (by omega)
   | @seq a b ha hb =>
     simp only [noMtSubprogsHOL, noInstallSubprogsHOL,notCreatedSubprogsWithMemOp,Bool.and_eq_true] at noMt noInstall
     have first := callBudgetBlock_simulation_core ac K a s ha noMt.1 noInstall.1 safe table codeBound (by simp [wordControlWeight] at progBound; omega)
@@ -200,6 +206,21 @@ private theorem callBudgetBlock_simulation_core {width : Nat} [NeZero width] {C 
     apply bound.trans
     rw [Nat.mul_add,Nat.mul_one,Nat.mul_comm ((K+1)^s.clock) (K)]
     omega
+  | invalidTail dest args hvar h1 h2 handler =>
+    intro k f frame post target result bs bsPost n nPost compiled lens premises reserve
+    have error : (evaluate (.call none dest args (some (hvar,handler,h1,h2))) s).1 = some .error := by
+      rw [evaluate]
+      cases hg : getVars args s with
+      | none => simp
+      | some xs =>
+        simp only
+        by_cases bad : wordSemBadDestArgs dest args = true
+        · simp [bad]
+        · simp only [bad, Bool.false_eq_true, if_false]
+          cases hf : wordSemFindCode dest (wordSemAddRetLoc none xs) s.code s.stackSize with
+          | none => simp
+          | some found => rcases found with ⟨values,prog,ss⟩; simp
+    exact (premises.2.1 ((congrArg Prod.fst premises.1).symm.trans error)).elim
   | @call values names l1 l2 dest args body hb =>
     simp only [noMtSubprogsHOL,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp,Bool.and_eq_true] at noMt noInstall
     let power := (K + 1) ^ s.clock
@@ -320,6 +341,109 @@ theorem callBudgetBlock_simulation {width : Nat} [NeZero width] {C F : Type}
   exact callBudgetBlock_simulation_core ac _ p s shape noMt noInstall safe table
     (Nat.le_max_right _ _) (Nat.le_max_left _ _)
 
+/-- Alloc-free post-allocation programs have a bounded-call syntax. -/
+theorem callBudgetBlock_of_conventions {width : Nat} [NeZero width]
+    (p : WordLangProgHOL (BitVec width)) (noMt : noMtSubprogsHOL p = true)
+    (noAlloc : noAllocSubprogsHOL p = true) (flat : flatExpConventions p = true) : CallBudgetBlock p := by
+  cases p with
+  | skip => exact .base .skip
+  | move priority moves => exact .base (.move priority moves)
+  | inst inst => exact .base (.inst inst)
+  | assign name value => simp [flatExpConventions] at flat
+  | get reg store => exact .base (.get reg store)
+  | set store value => exact .base (.set store value)
+  | store address value => simp [flatExpConventions] at flat
+  | mustTerminate body => simp [noMtSubprogsHOL,notCreatedSubprogsWithMemOp] at noMt
+  | call returns dest args handler =>
+    cases returns with
+    | none =>
+      cases handler with
+      | none => exact .tail dest args
+      | some h =>
+        rcases h with ⟨hvar,body,h1,h2⟩
+        exact .invalidTail dest args hvar h1 h2 body
+    | some ret =>
+      rcases retEq : ret with ⟨values,names,body,l1,l2⟩
+      have bodySize : sizeOf body < sizeOf (.call (some ret) dest args handler : WordLangProgHOL (BitVec width)) := by
+        rw [retEq]
+        simp_wf
+        omega
+      cases handler with
+      | none =>
+        simp only [retEq] at noMt noAlloc flat
+        simp only [noMtSubprogsHOL,noAllocSubprogsHOL,notCreatedSubprogsWithMemOp,Bool.and_eq_true] at noMt noAlloc
+        simp only [flatExpConventions,Bool.and_eq_true] at flat
+        exact .call values names l1 l2 dest args
+          (callBudgetBlock_of_conventions body noMt.1.2 noAlloc.1.2 flat.1)
+      | some h =>
+        rcases handlerEq : h with ⟨hvar,catchCode,h1,h2⟩
+        have handlerSize : sizeOf catchCode < sizeOf (.call (some ret) dest args (some h) : WordLangProgHOL (BitVec width)) := by
+          rw [handlerEq]
+          simp_wf
+          omega
+        simp only [retEq,handlerEq] at noMt noAlloc flat
+        simp only [noMtSubprogsHOL,noAllocSubprogsHOL,notCreatedSubprogsWithMemOp,Bool.and_eq_true] at noMt noAlloc
+        simp only [flatExpConventions,Bool.and_eq_true] at flat
+        exact .handler values names l1 l2 dest args hvar h1 h2
+          (callBudgetBlock_of_conventions body noMt.1.2 noAlloc.1.2 flat.1)
+          (callBudgetBlock_of_conventions catchCode noMt.2.2 noAlloc.2.2 flat.2)
+  | seq a b =>
+    simp only [noMtSubprogsHOL,noAllocSubprogsHOL,notCreatedSubprogsWithMemOp,Bool.and_eq_true] at noMt noAlloc
+    simp only [flatExpConventions,Bool.and_eq_true] at flat
+    exact .seq (callBudgetBlock_of_conventions a noMt.1 noAlloc.1 flat.1)
+      (callBudgetBlock_of_conventions b noMt.2 noAlloc.2 flat.2)
+  | ite cmp reg ri a b =>
+    simp only [noMtSubprogsHOL,noAllocSubprogsHOL,notCreatedSubprogsWithMemOp,Bool.and_eq_true] at noMt noAlloc
+    simp only [flatExpConventions,Bool.and_eq_true] at flat
+    exact .ite cmp reg ri (callBudgetBlock_of_conventions a noMt.1 noAlloc.1 flat.1)
+      (callBudgetBlock_of_conventions b noMt.2 noAlloc.2 flat.2)
+  | loop names body exitNames =>
+    simp only [noMtSubprogsHOL,noAllocSubprogsHOL,notCreatedSubprogsWithMemOp] at noMt noAlloc
+    simp only [flatExpConventions] at flat
+    exact .loop names exitNames (callBudgetBlock_of_conventions body noMt noAlloc flat)
+  | alloc dest cuts => simp [noAllocSubprogsHOL,notCreatedSubprogsWithMemOp] at noAlloc
+  | storeConsts a b c d words => exact .storeConsts a b c d words
+  | raise name => exact .raise name
+  | «return» register values => exact .base (.ret register values)
+  | «break» label => exact .base (.break label)
+  | «continue» label => exact .base (.continue label)
+  | tick => exact .base .tick
+  | opCurrHeap op dst src => exact .base (.opCurrHeap op dst src)
+  | locValue dst src => exact .base (.locValue dst src)
+  | install a b c d names => exact .base (.install a b c d names)
+  | codeBufferWrite a b => exact .base (.codeBufferWrite a b)
+  | dataBufferWrite a b => exact .base (.dataBufferWrite a b)
+  | ffi index a b c d names => exact .base (.ffi index a b c d names)
+  | shareInst op v exp => exact .shareInst op v exp
+termination_by sizeOf p
+decreasing_by
+  all_goals try subst p
+  all_goals try subst returns
+  all_goals try subst handler
+  all_goals try subst ret
+  all_goals try subst h
+  all_goals simp_wf
+  all_goals simp_all
+  all_goals omega
+
+/-- The actual compiler state relation supplies the code-table expression
+conventions required by the whole-call simulation. -/
+theorem callBudgetBlock_code_of_relation {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (k f frame : Nat)
+    (source : WordSemStateFiniteExact width (Nat × C) F)
+    (target : StackSemStateFiniteExact width C F) (lens : List Nat)
+    (related : stateRel ac k f frame source target lens 0)
+    (safe : safeWordCode source) (noAllocCode : WordProps.noAllocCode source.code) :
+    ∀ loc arity prog, sptLookup loc source.code = some (arity,prog) → CallBudgetBlock prog := by
+  have rel := related
+  unfold stateRel at rel
+  obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, h25, -⟩ := rel
+  intro loc arity prog found
+  obtain ⟨_,flat,_⟩ := h25 loc prog arity found
+  exact callBudgetBlock_of_conventions prog (safe.1 loc arity prog found)
+    (noAllocCode loc arity prog found) flat
+
+
 /-- The concrete compiled Stack run has an explicit table-derived visit bound. -/
 theorem callBudgetBlock_stackVisits {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (p : WordLangProgHOL (BitVec width))
@@ -327,9 +451,9 @@ theorem callBudgetBlock_stackVisits {width : Nat} [NeZero width] {C F : Type}
     (target : StackSemStateFiniteExact width C F) (result : Option (WordSemResult width))
     (k f frame : Nat) (bs bsPost : AppList (BitVec width)) (n nPost : Nat)
     (compiled : HolProg width) (lens : List Nat)
-    (shape : CallBudgetBlock p) (noMt : noMtSubprogsHOL p = true)
+    (noMt : noMtSubprogsHOL p = true) (noAlloc : noAllocSubprogsHOL p = true)
     (noInstall : noInstallSubprogsHOL p = true) (safe : safeWordCode source)
-    (table : ∀ loc arity prog, sptLookup loc source.code = some (arity,prog) → CallBudgetBlock prog)
+    (tableNoAlloc : WordProps.noAllocCode source.code)
     (empty : StackSteps.emptyCodeOracle target)
     (premises : WordSemStateFiniteExact.evaluate p source = (result, post) ∧
       result ≠ some .error ∧ result ≠ some .timeOut ∧ stateRel ac k f frame source target lens 0 ∧
@@ -349,6 +473,8 @@ theorem callBudgetBlock_stackVisits {width : Nat} [NeZero width] {C F : Type}
           max (StackSteps.stackControlWeight compiled) (StackSteps.stackCodeWeight target.code) *
             (target.clock + allowance) := by
   dsimp only
+  have shape := callBudgetBlock_of_conventions p noMt noAlloc premises.2.2.2.2.2.1
+  have table := callBudgetBlock_code_of_relation ac k f frame source target lens premises.2.2.2.1 safe tableNoAlloc
   obtain ⟨targetPost,out,run,_,_,related⟩ :=
     callBudgetBlock_simulation ac p source shape noMt noInstall safe table
       k f frame post target result bs bsPost n nPost compiled lens premises 0

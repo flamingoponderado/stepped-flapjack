@@ -4,6 +4,7 @@ import SteppedFlapjack.WordToStackSteps.BudgetTailCall
 import SteppedFlapjack.WordToStackSteps.BudgetIf
 import SteppedFlapjack.WordToStackSteps.BudgetLoop
 import SteppedFlapjack.WordToStackSteps.BudgetSharedMemory
+import SteppedFlapjack.WordToStackSteps.BudgetStoreConsts
 import SteppedFlapjack.WordToStackSteps.RecursiveTailBudget
 import SteppedFlapjack.WordToStackSteps.BudgetReturning
 import SteppedFlapjack.WordToStackSteps.BudgetHandler
