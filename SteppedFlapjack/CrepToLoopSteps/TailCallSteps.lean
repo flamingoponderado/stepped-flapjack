@@ -168,6 +168,73 @@ theorem scalarCall_argumentPrefix {width : Nat} [NeZero width] {σ : Type}
       extra ≤ LoopSteps.structuralWeight (loopNestedSeqHOL code) from
       ⟨extra,post,run,runAssign,get,subset,postState,postMem,postGlobals,postCode,postLocals,bound⟩)
 
+/-- A concrete clock budget executes the actual call-argument prefix and retains its code table. -/
+theorem scalarCall_argumentPrefix_explicit {width : Nat} [NeZero width] {σ : Type}
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
+    (source : CrepSemHOLState width σ) (values : List (HolWordLab width))
+    (target : LoopSemStateFiniteExact width σ) (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (budget : Nat)
+    (evaluated : args.mapM (evalCrepSemHOLExp source) = some values)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
+    (budgetBound : LoopSteps.structuralWeight (loopNestedSeqHOL
+      (compileExpsHOLExact ctxt (ctxt.vmax+1) live args).1) ≤ budget) :
+    let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
+    let regs := genTemps comp.2.2.1 comp.2.1.length
+    let vals := values.map wlabWlocExact
+    ∃ post,
+      evaluate (loopNestedSeqHOL comp.1) {target with clock := target.clock+budget} = (none,post) ∧
+      evaluate (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign comp.2.1)) post =
+        (none,{post with locals := sptAlistInsert regs vals post.locals}) ∧
+      getVars regs {post with locals := sptAlistInsert regs vals post.locals} = some vals ∧
+      sptSubsetLive live (sptAlistInsert regs vals post.locals) ∧
+      source.clock ≤ post.clock ∧
+      crepToLoopStateRelExact source {post with clock := source.clock} ∧
+      crepToLoopMemRelHOLExact source.memory post.memory source.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact source.globals post.globals ∧
+      crepToLoopCodeRelExact ctxt source.code post.code ∧
+      post.code = target.code ∧
+      crepToLoopLocalsRelExact ctxt comp.2.2.2 source.locals post.locals := by
+  obtain ⟨extra,post,run,assign,get,subset,st,mem,gl,code,locals,bound⟩ :=
+    scalarCall_argumentPrefix args shape source values target ctxt live evaluated stateRel memRel globalsRel codeRel localsRel
+  let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
+  let regs := genTemps comp.2.2.1 comp.2.1.length
+  let vals := values.map wlabWlocExact
+  let middle : LoopSemStateFiniteExact width σ := {post with locals := sptAlistInsert regs vals post.locals}
+  let delta := budget - extra
+  have clockEq : target.clock + extra + delta = target.clock + budget := by
+    dsimp [delta]
+    omega
+  have prefixShift := evaluate_add_clock_eq (loopNestedSeqHOL comp.1)
+    {target with clock := target.clock+extra} none post delta run (by simp)
+  have assignShift := evaluate_add_clock_eq (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign comp.2.1))
+    post none middle delta assign (by simp)
+  have getShift : getVars regs {middle with clock := middle.clock + delta} = some vals := by
+    rw [getVars_upd_clock]
+    exact get
+  have codeSame : post.code = target.code := by
+    have h := SteppedFlapjack.LoopLiveSteps.evaluate_code (loopNestedSeqHOL comp.1)
+      {target with clock := target.clock+extra} post none run
+    exact h
+  refine ⟨{post with clock := post.clock+delta},?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_⟩
+  · simpa [clockEq] using prefixShift
+  · simpa [middle] using assignShift
+  · simpa [middle] using getShift
+  · exact subset
+  · have clock := st.2.2.1
+    simp only
+    omega
+  · have clock := st.2.2.1
+    simpa [crepToLoopStateRelExact,clock] using st
+  · exact mem
+  · exact gl
+  · exact code
+  · exact codeSame
+  · exact locals
+
 /-- Direct arguments are assigned to temporaries before a tail call. -/
 theorem compile_tailCall_direct {width : Nat} [NeZero width]
     (ctxt : CrepToLoopContextExact) (live : NumSet) (name : Flapjack.Basis.Pure.MlString.MlString)
@@ -703,6 +770,72 @@ theorem call_entry_relations {width : Nat} [NeZero width] {F : Type}
   · simpa [decClockCrepSemHOL,decClock] using globalsRel
   · simpa [decClockCrepSemHOL,decClock] using preserved.2.1
   · simpa [decClockCrepSemHOL,decClock] using preserved.2.2
+
+/-- The concrete argument budget reaches the selected callee with its entry relations. -/
+theorem scalarCall_calleeEntry_explicit {width : Nat} [NeZero width] {σ : Type}
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
+    (source : CrepSemHOLState width σ) (values : List (HolWordLab width))
+    (target : LoopSemStateFiniteExact width σ) (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (name : MlString) (params : List Nat) (body : CrepProgHOL width) (budget : Nat)
+    (evaluated : args.mapM (evalCrepSemHOLExp source) = some values)
+    (found : source.code.lookup name = some (params,body))
+    (distinct : params.Nodup) (arity : params.length = values.length)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
+    (budgetBound : LoopSteps.structuralWeight (loopNestedSeqHOL
+      (compileExpsHOLExact ctxt (ctxt.vmax+1) live args).1) ≤ budget) :
+    let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
+    let regs := genTemps comp.2.2.1 comp.2.1.length
+    let vals := values.map wlabWlocExact
+    let formals := List.range params.length
+    let sourceEntry := decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}
+    let calleeCtxt := ctxtFcExact ctxt.target ctxt.funcs params formals
+    ∃ post,
+      let middle : LoopSemStateFiniteExact width σ := {post with locals := sptAlistInsert regs vals post.locals}
+      let entry : LoopSemStateFiniteExact width σ :=
+        {decClock {post with clock := source.clock} with locals := sptFromAList (formals.zip vals)}
+      evaluate (loopNestedSeqHOL comp.1) {target with clock := target.clock+budget} = (none,post) ∧
+      evaluate (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign comp.2.1)) post = (none,middle) ∧
+      getVars regs middle = some vals ∧ source.clock ≤ post.clock ∧ post.code = target.code ∧
+      findCode (some (findLabExact ctxt name)) vals middle.code =
+        some (sptFromAList (formals.zip vals), ocompileHOLExact calleeCtxt (listToNumSetHOLExact formals) body) ∧
+      (source.clock ≠ 0 →
+        {decClock middle with locals := sptFromAList (formals.zip vals)} =
+          {entry with clock := entry.clock + (post.clock-source.clock)}) ∧
+      crepToLoopStateRelExact sourceEntry entry ∧
+      crepToLoopMemRelHOLExact sourceEntry.memory entry.memory sourceEntry.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact sourceEntry.globals entry.globals ∧
+      crepToLoopCodeRelExact calleeCtxt sourceEntry.code entry.code ∧
+      crepToLoopLocalsRelExact calleeCtxt (listToNumSetHOLExact formals) sourceEntry.locals entry.locals := by
+  obtain ⟨post,run,assign,get,subset,clock,st,mem,gl,code,codeSame,locals⟩ :=
+    scalarCall_argumentPrefix_explicit args shape source values target ctxt live budget evaluated stateRel memRel globalsRel codeRel localsRel budgetBound
+  let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
+  let regs := genTemps comp.2.2.1 comp.2.1.length
+  let vals := values.map wlabWlocExact
+  let formals := List.range params.length
+  let normalized : LoopSemStateFiniteExact width σ := {post with clock := source.clock}
+  have code' : crepToLoopCodeRelExact ctxt source.code normalized.code := code
+  have locals' : crepToLoopLocalsRelExact ctxt comp.2.2.2 source.locals normalized.locals := locals
+  obtain ⟨loc,len,lab,hlen,_⟩ := codeRel.2 name params body found
+  subst len
+  have preserve := crepToLoopCallPreserveStateCodeLocalsRelExact params formals values source normalized ctxt comp.2.2.2
+    name args body loc distinct (by simpa [formals] using (List.nodup_range : (List.range params.length).Nodup)) (by simp [formals]) (by simp [formals,arity]) st mem gl code' locals' found
+    (by simpa [formals] using lab) ((optMmapEqSome args _ _).mp evaluated)
+  have lookup := call_lookup ctxt source post name params body vals code found (by simp [vals,arity])
+  refine ⟨post,run,assign,get,clock,codeSame,?_,?_,?_,?_,?_,?_,?_⟩
+  · simpa [comp,regs,vals,formals] using lookup
+  · intro nonzero
+    simp only [decClock]
+    congr 1
+    omega
+  · simpa [normalized,formals,vals,decClockCrepSemHOL,decClock] using preserve.1
+  · simpa [normalized,formals,vals,decClockCrepSemHOL,decClock] using mem
+  · simpa [normalized,formals,vals,decClockCrepSemHOL,decClock] using gl
+  · simpa [normalized,formals,vals,decClockCrepSemHOL,decClock] using preserve.2.1
+  · simpa [normalized,formals,vals,decClockCrepSemHOL,decClock] using preserve.2.2
 
 /-- The ordinary caller state/code/locals relations derive all callee-entry
 relations for an empty-argument call, including the actual compiler context. -/
