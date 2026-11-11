@@ -15,6 +15,24 @@ def safeWordCode {width : Nat} [NeZero width] {C F : Type} (s : WordSemStateFini
   WordProps.noMtCode s.code ∧ WordProps.noInstallCode s.code
 
 open Flapjack.WordSemStateFiniteExact in
+/-- A reached callee preserves its caller’s code table. -/
+theorem handlerCallee_code {width : Nat} [NeZero width] {C F : Type} (source post : WordSemStateFiniteExact width C F)
+    (ret : Option (List Nat × WordLangCutsetsHOL × WordLangProgHOL (BitVec width) × Nat × Nat))
+    (dest : Option Nat) (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width)) (ss : Option Nat)
+    (envs : Spt (WordLocW width) × Spt (WordLocW width))
+    (handler : Option (Nat × WordLangProgHOL (BitVec width) × Nat × Nat))
+    (res : Option (WordSemResult width))
+    (find : wordSemFindCode dest (wordSemAddRetLoc ret xs) source.code source.stackSize = some (args1,prog,ss))
+    (run : evaluate prog (callEnv args1 ss (pushEnv envs handler (decClock source))) = (res,post)) :
+    safeWordCode source → post.code = source.code := by
+  intro safe
+  have ni := WordProps.noInstallFindCode source.code dest _ _ _ prog _ ⟨safe.2,find⟩
+  have entryCode : (callEnv args1 ss (pushEnv envs handler (decClock source))).code = source.code := code_pushEnv envs handler _
+  have h := code_evaluate prog _ ni (entryCode ▸ safe.2)
+  rw [run] at h
+  exact h.trans entryCode
+
+open Flapjack.WordSemStateFiniteExact in
 /-- A reached callee preserves the safety of the surrounding code table. -/
 theorem handlerCallee_safe {width : Nat} [NeZero width] {C F : Type} (source post : WordSemStateFiniteExact width C F)
     (ret : Option (List Nat × WordLangCutsetsHOL × WordLangProgHOL (BitVec width) × Nat × Nat))
@@ -26,11 +44,7 @@ theorem handlerCallee_safe {width : Nat} [NeZero width] {C F : Type} (source pos
     (run : evaluate prog (callEnv args1 ss (pushEnv envs handler (decClock source))) = (res,post)) :
     safeWordCode source → safeWordCode post := by
   intro safe
-  have ni := WordProps.noInstallFindCode source.code dest _ _ _ prog _ ⟨safe.2,find⟩
-  have entryCode : (callEnv args1 ss (pushEnv envs handler (decClock source))).code = source.code := code_pushEnv envs handler _
-  have h := code_evaluate prog _ ni (entryCode ▸ safe.2)
-  rw [run] at h
-  have postCode : post.code = source.code := h.trans entryCode
+  have postCode := handlerCallee_code source post ret dest xs args1 prog ss envs handler res find run safe
   simpa [safeWordCode,postCode] using safe
 
 

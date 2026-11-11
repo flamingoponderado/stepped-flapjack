@@ -225,7 +225,7 @@ theorem budgetContinuationFromHistory {width : Nat} [NeZero width] {C F : Type}
       (.call (some (values, names, retCode, l1, l2)) dest args none) < 2 * frame + 2 * k)
     (cost reserve : Nat)
     (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-      t.clock < source.clock → (safeWordCode source → safeWordCode t) → BudgetSimulation ac retCode t cost)
+      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac retCode t cost)
     (nonzero : source.clock ≠ 0)
     (execution : WordSemStateFiniteExact.evaluate
       (.call (some (values, names, retCode, l1, l2)) dest args none) source =
@@ -319,13 +319,18 @@ theorem budgetContinuationFromHistory {width : Nat} [NeZero width] {C F : Type}
   have smaller : (WordSemStateFiniteExact.setVars values returned popped).clock < source.clock := by
     simp only [WordSemStateFiniteExact.setVars]
     omega
-  have safeTransfer : safeWordCode source → safeWordCode (WordSemStateFiniteExact.setVars values returned popped) := by
+  have safeTransfer : safeWordCode source → safeWordCode (WordSemStateFiniteExact.setVars values returned popped) ∧
+      (WordSemStateFiniteExact.setVars values returned popped).code = source.code := by
     intro safe
     have postSafe := handlerCallee_safe source bodyPost (some (values,names,retCode,l1,l2)) dest xs args1 prog ss envs
       none _ guards.2.2.1 bodyRun safe
+    have postCode := handlerCallee_code source bodyPost (some (values,names,retCode,l1,l2)) dest xs args1 prog ss envs
+      none _ guards.2.2.1 bodyRun safe
     have h := WordSemStateFiniteExact.popEnvConst bodyPost popped popRun
     have codeEq : popped.code = bodyPost.code := h.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
-    simpa [safeWordCode,WordSemStateFiniteExact.setVars,codeEq] using postSafe
+    constructor
+    · simpa [safeWordCode,WordSemStateFiniteExact.setVars,codeEq] using postSafe
+    · simpa [WordSemStateFiniteExact.setVars,codeEq] using postCode
   let remaining := slack - cost
   have remainingLower : reserve ≤ remaining := by dsimp [remaining,slack]; omega
   have remainingUpper : cost + remaining ≤ bodyExtraClock := by dsimp [remaining,slack]; omega
@@ -378,7 +383,7 @@ theorem budgetContinuationCompiledFromHistory {width : Nat} [NeZero width] {C F 
       (.call (some (values, names, retCode, l1, l2)) dest args none) < 2 * frame + 2 * k)
     (cost reserve : Nat)
     (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-      t.clock < source.clock → (safeWordCode source → safeWordCode t) → BudgetSimulation ac retCode t cost)
+      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac retCode t cost)
     (nonzero : source.clock ≠ 0)
     (execution : WordSemStateFiniteExact.evaluate
       (.call (some (values, names, retCode, l1, l2)) dest args none) source =
@@ -623,10 +628,10 @@ theorem budgetSuccessfulReturningCall {width : Nat} [NeZero width] {C F : Type}
     (result bodyResult : Option (WordSemResult width))
     (bodyCost contCost reserve : Nat)
     (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-      t.clock < source.clock → (safeWordCode source → safeWordCode t) → BudgetSimulation ac retCode t contCost)
+      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac retCode t contCost)
     (codeBudget : ∀ loc arity p, sptLookup loc source.code = some (arity,p) →
       ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-        t.clock < source.clock → (safeWordCode source → safeWordCode t) → BudgetSimulation ac p t bodyCost)
+        t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac p t bodyCost)
     (nonzero : source.clock ≠ 0)
     (execution : WordSemStateFiniteExact.evaluate
       (.call (some (values, names, retCode, l1, l2)) dest args none) source =
@@ -682,10 +687,13 @@ theorem budgetSuccessfulReturningCall {width : Nat} [NeZero width] {C F : Type}
     simp only [WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.pushEnv_clock,WordSemStateFiniteExact.decClock]
     omega
   have calleeSafe : safeWordCode source → safeWordCode (WordSemStateFiniteExact.callEnv args1 ss
-      (WordSemStateFiniteExact.pushEnv envs none (WordSemStateFiniteExact.decClock source))) := by
+      (WordSemStateFiniteExact.pushEnv envs none (WordSemStateFiniteExact.decClock source))) ∧
+      (WordSemStateFiniteExact.callEnv args1 ss (WordSemStateFiniteExact.pushEnv envs none (WordSemStateFiniteExact.decClock source))).code = source.code := by
     intro safe
-    simpa [safeWordCode,WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.code_pushEnv,
-      WordSemStateFiniteExact.decClock] using safe
+    constructor
+    · simpa [safeWordCode,WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.code_pushEnv,
+        WordSemStateFiniteExact.decClock] using safe
+    · simp [WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.code_pushEnv,WordSemStateFiniteExact.decClock]
   obtain ⟨movedAgain, entry, calleeTarget, targetResult, moveAgain, allocationRun, bodyTargetRun,
     calleeRun0, calleeEnough, calleeAccounting, bodyConclusion⟩ :=
     budgetCalleeBodyAt ac k f frame values names retCode l1 l2 dest args source sourcePost
@@ -834,10 +842,10 @@ theorem budgetReturningNone {width : Nat} [NeZero width] {C F : Type}
     (source : WordSemStateFiniteExact width (Nat × C) F)
     (bodyCost contCost : Nat)
     (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-      t.clock < source.clock → (safeWordCode source → safeWordCode t) → BudgetSimulation ac retCode t contCost)
+      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac retCode t contCost)
     (codeBudget : ∀ loc arity p, sptLookup loc source.code = some (arity,p) →
       ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-        t.clock < source.clock → (safeWordCode source → safeWordCode t) → BudgetSimulation ac p t bodyCost) :
+        t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac p t bodyCost) :
     BudgetSimulation ac (.call (some (values, names, retCode, l1, l2)) dest args none) source (bodyCost + contCost) := by
   intro k f frame sourcePost target result bs finalBitmaps n finalIndex compiled lens premises reserve
   obtain ⟨execution, notError, notTimeout, related, conventions, flat, compilation, bitmapLength,
