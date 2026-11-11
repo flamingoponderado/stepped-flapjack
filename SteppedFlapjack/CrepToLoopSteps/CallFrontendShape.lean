@@ -370,6 +370,52 @@ theorem callFrontend_declaration_crepLoop_codeRel {width : Nat} [NeZero width]
   rw [eq]
   exact callFrontend_simp_fixed shape
 
+/-- Actual call-aware declarations establish the initial Crep/Loop and
+Loop/Word relations and table safety from the corresponding data relations. -/
+theorem wholeFrontend_initial_relations {width : Nat} [NeZero width] {C F : Type}
+    (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture) (declarations : List (DeclHOL width))
+    (noInline : (functionsHOL (declarations.filter inlinableHOL)).map Prod.fst = [])
+    (shapes : ∀ entry ∈ functionsHOL declarations,
+      CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
+        (makeFuncsExactHOL (functionsHOL declarations))
+        (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
+        (getEidsFromDeclsHOL declarations)) entry.2.2.1)
+    (unique : ((functionsHOL declarations).map Prod.fst).Nodup)
+    (start : Flapjack.Basis.Pure.MlString.MlString) (entry : CrepProgHOL width)
+    (found : holAlookup (compileProgDeclsHOLW declarations) start = some ([],entry))
+    (source : CrepSemHOLState width F) (loop : LoopSemStateFiniteExact width F)
+    (word : WordSemStateFiniteExact width C F)
+    (state : crepToLoopStateRelExact source loop)
+    (memory : crepToLoopMemRelHOLExact source.memory loop.memory source.memaddrs)
+    (globals : crepToLoopGlobalsRelHOLExact source.globals loop.globals)
+    (locals : crepToLoopLocalsRelExact
+      (mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (compileProgDeclsHOLW declarations)) 0)
+      .ln source.locals loop.locals)
+    (data : LoopWordDataRel loop word) :
+    let programs := compileProgDeclsHOLW declarations
+    let source := {source with code := alistToFmapCodeExact programs}
+    let loop := {loop with code := sptFromAList (compileProgHOLExact arch programs)}
+    let word := {word with code := sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch programs))}
+    crepToLoopStateRelExact source loop ∧
+    crepToLoopMemRelHOLExact source.memory loop.memory source.memaddrs ∧
+    crepToLoopGlobalsRelHOLExact source.globals loop.globals ∧
+    crepToLoopLocalsRelExact
+      (mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0)
+      .ln source.locals loop.locals ∧
+    crepToLoopCodeRelExact
+      (mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0)
+      source.code loop.code ∧
+    loopToWordStateRelHOLExact loop word ∧
+    LoopTableSupported loop.code ∧
+    WordAllocSteps.WordProgramSafety (loopToWordCompileHOL (compileProgHOLExact arch programs)) := by
+  obtain ⟨len,hm,hd,hs,hc,hbe,hffi,hbase,hlen,htop,hglobals⟩ := data
+  refine ⟨state,memory,globals,locals,?_,?_,?_,?_⟩
+  · exact callFrontend_declaration_crepLoop_codeRel arch declarations noInline shapes start entry unique found
+  · exact ⟨len,hm,hd,hs,hc,hbe,hffi,hbase,hlen,htop,hglobals,
+      LoopToWordSteps.wholeCrepLoopWord_codeRel arch (compileProgDeclsHOLW declarations)⟩
+  · exact callFrontend_declaration_loopTableSupported arch declarations noInline shapes
+  · exact WordAllocSteps.loopToWord_programSafety (compileProgHOLExact arch (compileProgDeclsHOLW declarations))
+
 private theorem nested_zero_callScalar {width : Nat} [NeZero width] (names : List Nat)
     (body : CrepProgHOL width) (shape : SteppedFlapjack.CrepSteps.CallScalarProgram body) :
     SteppedFlapjack.CrepSteps.CallScalarProgram (nestedDecsHOL names (List.replicate names.length (.const (0 : BitVec width))) body) := by

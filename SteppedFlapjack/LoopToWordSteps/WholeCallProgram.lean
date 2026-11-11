@@ -187,6 +187,8 @@ theorem callFrontend_word_explicit {width : Nat} [NeZero width] {C σ : Type}
     let factor := max (callSyntaxCost ref crep) (loopCodeWeight target.code+2)
     ∃ loopPost wordPost wordResult,
       evaluate loop {target with clock := target.clock+budget} = (resultToLoop result,loopPost) ∧
+      LoopSteps.steps loop {target with clock := target.clock+budget} ≤
+        callSyntaxCost ref crep + factor * (source.clock+budget) ∧
       WordSemStateFiniteExact.evaluate (LoopToWord.compHOL wordCtxt loop label).1 word = (wordResult,wordPost) ∧
       wordPost.ffi = loopPost.ffi ∧ resultCase wordCtxt retv word (resultToLoop result) loopPost wordResult wordPost ∧
       WordSteps.steps (LoopToWord.compHOL wordCtxt loop label).1 word ≤
@@ -227,7 +229,113 @@ theorem callFrontend_word_explicit {width : Nat} [NeZero width] {C σ : Type}
   have normalized := WordToStackSteps.tableWord_normalized_run _ word wordPost wordResult _
     (loopComp_noMt loop wordCtxt label) (loopComp_noInstall loop wordCtxt label)
     wordNoMt wordNoInstall wordRun wordNoTimeout bound
-  exact ⟨loopPost,wordPost,wordResult,ev,wordRun,ffi,resCase,bound,normalized,st,mem,gl,code,locals⟩
+  exact ⟨loopPost,wordPost,wordResult,ev,visitBound,wordRun,ffi,resCase,bound,normalized,st,mem,gl,code,locals⟩
+
+/-- Compose the declaration-based source bound with the existing call-aware
+Loop and Word simulations, using an explicit source control-step limit. -/
+theorem callFrontend_declaration_word_explicit {C σ : Type}
+    (declarations : List (DeclHOL 64))
+    (unique : ((functionsHOL declarations).map Prod.fst).Nodup)
+    (noInline : (functionsHOL (declarations.filter inlinableHOL)).map Prod.fst = [])
+    (shapes : ∀ entry ∈ functionsHOL declarations,
+      CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
+        (makeFuncsExactHOL (functionsHOL declarations))
+        (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
+        (getEidsFromDeclsHOL declarations)) entry.2.2.1)
+    (program : ProgHOL 64)
+    (shape : CallFrontend (mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+      (getEidsFromDeclsHOL declarations)) program)
+    (source sourceFinal : PanSemStateFiniteExact 64 σ) (value : BitVec 64)
+    (code : source.code = HolFiniteMapExact.empty.updateList (functionsHOL declarations).reverse)
+    (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
+    (structs : source.structs = []) (exceptions : source.eshapes = HolFiniteMapExact.empty)
+    (noExceptions : getEidsFromDeclsHOL declarations = HolFiniteMapExact.empty)
+    (run : source.evaluateHOLFiniteState program = (some (.returned (.val (.word value))),sourceFinal))
+    (sourceLimit : Nat) (sourceBound : controlSteps program source ≤ sourceLimit)
+    (arch : AsmArchitecture) (start : Flapjack.Basis.Pure.MlString.MlString) (entry : CrepProgHOL 64)
+    (found : holAlookup (compileProgDeclsHOLW declarations) start = some ([],entry))
+    (ref : CrepToLoopContextExact) (live : NumSet) (loop : LoopSemStateFiniteExact 64 σ)
+    (loopCode : loop.code = sptFromAList (compileProgHOLExact arch (compileProgDeclsHOLW declarations)))
+    (stateRel : crepToLoopStateRelExact (concreteDeclCrepState source (compileProgDeclsHOLW declarations)) loop)
+    (memRel : crepToLoopMemRelHOLExact (concreteDeclCrepState source (compileProgDeclsHOLW declarations)).memory
+      loop.memory (concreteDeclCrepState source (compileProgDeclsHOLW declarations)).memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact (concreteDeclCrepState source (compileProgDeclsHOLW declarations)).globals loop.globals)
+    (localsRel : crepToLoopLocalsRelExact
+      (mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (compileProgDeclsHOLW declarations)) 0)
+      live (concreteDeclCrepState source (compileProgDeclsHOLW declarations)).locals loop.locals)
+    (word : WordSemStateFiniteExact 64 C σ) (wordCtxt : Spt Nat) (retv : WordLocW 64) (label : Nat × Nat)
+    (wordCode : word.code = sptFromAList (loopToWordCompileHOL (compileProgHOLExact arch (compileProgDeclsHOLW declarations))))
+    (wordRel : let panCtxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0 (getEidsFromDeclsHOL declarations)
+      let programs := compileProgDeclsHOLW declarations
+      let crep := compileProgExactHOLW panCtxt program
+      let limit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) * sourceLimit
+      let rows := programs.map (fun row => (row.2.1,row.2.2))
+      let budget := callClockFactor ref rows source.clock crep * (limit+1)
+      loopToWordStateRelHOLExact {loop with clock := loop.clock+budget} word)
+    (wordLocals : LoopToWord.localsRelHOL wordCtxt loop.locals word.locals)
+    (retvLookup : sptLookup 0 word.locals = some retv) (notWord : ¬ wordSemIsWordLoc retv = true)
+    (acc : ∀ k, sptMem k (accVarsHOL (compileHOLExact
+      (mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (compileProgDeclsHOLW declarations)) 0) live
+      (compileProgExactHOLW (mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+        (getEidsFromDeclsHOL declarations)) program)) .ln) → sptMem k wordCtxt) :
+    let panCtxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+      (getEidsFromDeclsHOL declarations)
+    let programs := compileProgDeclsHOLW declarations
+    let crep := compileProgExactHOLW panCtxt program
+    let limit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) * sourceLimit
+    let rows := programs.map (fun row => (row.2.1,row.2.2))
+    let budget := callClockFactor ref rows source.clock crep * (limit+1)
+    let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
+    let loopProgram := compileHOLExact ctxt live crep
+    let factor := max (callSyntaxCost ref crep) (loopCodeWeight loop.code+2)
+    let bound := 6 * (callSyntaxCost ref crep + factor * (source.clock+budget))
+    ∃ crepFinal loopFinal wordFinal,
+      evalCrepSemHOLProgExact (concreteDeclCrepState source programs) crep = (some (.return [.word value]),crepFinal) ∧
+      evaluate loopProgram {loop with clock := loop.clock+budget} = (some (.result [.word value]),loopFinal) ∧
+      LoopSteps.steps loopProgram {loop with clock := loop.clock+budget} ≤
+        callSyntaxCost ref crep + factor * (source.clock+budget) ∧
+      WordSemStateFiniteExact.evaluate (LoopToWord.compHOL wordCtxt loopProgram label).1
+        {word with clock := bound} = (some (.result retv [.word value]),wordFinal) ∧
+      WordSteps.steps (LoopToWord.compHOL wordCtxt loopProgram label).1 word ≤ bound ∧
+      wordFinal.ffi = sourceFinal.ffi := by
+  let panCtxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL declarations)) 0
+    (getEidsFromDeclsHOL declarations)
+  let programs := compileProgDeclsHOLW declarations
+  let crep := compileProgExactHOLW panCtxt program
+  let limit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) * sourceLimit
+  let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
+  obtain ⟨crepResult,crepFinal,crepRun,panRel,_,_,resultRel,crepBound⟩ :=
+    callFrontend_declaration_steps declarations unique noInline shapes program shape source sourceFinal
+      (some (.returned (.val (.word value)))) code locals globals structs exceptions noExceptions run (by simp)
+      sourceLimit sourceBound
+  have resultEq : crepResult = some (.return [.word value]) := by
+    simpa [pcCompileCorrectResultRel,flattenHOL] using resultRel
+  rw [resultEq] at crepRun
+  have sources : ∀ row ∈ programs, ∃ (ctx : PanToCrepContextExact 64) (q : ProgHOL 64),
+      row.2.2 = compileProgExactHOLW ctx q ∧ CallFrontend ctx q := by
+    dsimp [programs]
+    rw [compileProgDeclsHOLW,noInline,CrepInlineRoute.compileInlTopHOLExact_nil]
+    exact callFrontend_declaration_sources declarations shapes
+  have codeRel : crepToLoopCodeRelExact ctxt (concreteDeclCrepState source programs).code loop.code := by
+    rw [loopCode]
+    exact callFrontend_declaration_crepLoop_codeRel arch declarations noInline shapes start entry unique found
+  have table : LoopTableSupported loop.code := by
+    rw [loopCode]
+    exact callFrontend_declaration_loopTableSupported arch declarations noInline shapes
+  have wordSpan := callFrontend_word_explicit panCtxt program shape programs sources ref ctxt live
+    (concreteDeclCrepState source programs) crepFinal (some (.return [.word value])) loop rfl crepRun (by simp) (by simp)
+    limit crepBound stateRel memRel globalsRel codeRel table localsRel word wordCtxt retv label _ wordCode
+    (by simpa [panCtxt,programs,crep,limit,concreteDeclCrepState] using wordRel)
+    wordLocals retvLookup (Or.inr rfl) notWord acc
+  obtain ⟨loopFinal,wordPost,wordResult,loopRun,loopBound,_,wordFfi,resultCase,wordBound,normalized,loopState,_,_,_,_⟩ := wordSpan
+  have wordResultEq : wordResult = some (.result retv [.word value]) := by
+    simpa [LoopToWord.CompileCorrect.resultCase,resultToLoop,wlabWlocExact] using resultCase.2.1
+  rw [wordResultEq] at normalized
+  rcases panRel with ⟨_,_,_,_,_,_,_,panFfi,_,_⟩
+  refine ⟨crepFinal,loopFinal,_,crepRun,?_,?_,normalized,wordBound,?_⟩
+  · simpa [panCtxt,programs,crep,limit,ctxt,concreteDeclCrepState,resultToLoop,wlabWlocExact] using loopRun
+  · simpa [panCtxt,programs,crep,limit,ctxt,concreteDeclCrepState] using loopBound
+  · exact wordFfi.trans (loopState.2.2.2.2.1.symm.trans panFfi.symm)
 
 end FrontendBound
 
