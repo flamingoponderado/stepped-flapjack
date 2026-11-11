@@ -741,6 +741,37 @@ theorem compile_tailCall_nil_crep_bound {F : Type}
 
 /-- A call with evaluated arguments preserves the compiler relations at the
 parameterized callee entry. -/
+theorem returnRegisters_of_locals {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (source : HolFiniteMapExact Nat (HolWordLab width)) (target : Spt (WordLocW width))
+    (names : List Nat) (old : List (HolWordLab width))
+    (existing : names.mapM source.lookup = some old) (distinct : names.Nodup)
+    (related : crepToLoopLocalsRelExact ctxt live source target) :
+    ∃ regs, names.mapM ctxt.vars.lookup = some regs ∧ regs.Nodup := by
+  have mapped : ∀ ns : List Nat, ∀ vs : List (HolWordLab width),
+      ns.mapM source.lookup = some vs → ∃ regs, ns.mapM ctxt.vars.lookup = some regs := by
+    intro ns
+    induction ns with
+    | nil => intro vs h; exact ⟨[],rfl⟩
+    | cons n ns ih =>
+      intro vs h
+      rw [List.mapM_cons] at h
+      cases hv : source.lookup n with
+      | none => simp [hv] at h
+      | some value =>
+        cases ht : ns.mapM source.lookup with
+        | none => simp [hv,ht] at h
+        | some tail =>
+          obtain ⟨reg,hreg,_,_⟩ := related.2.2.2 n value hv
+          obtain ⟨regs,hregs⟩ := ih tail ht
+          refine ⟨reg::regs,?_⟩
+          simp [List.mapM_cons,hreg,hregs]
+  obtain ⟨regs,hregs⟩ := mapped names old existing
+  have h := allDistinctCtxtLookupAllDistinctExact ctxt names (ctxt.vmax+1) distinct related.1
+  simp only [rtVars,FLOOKUP] at h
+  rw [hregs] at h
+  exact ⟨regs,hregs,h⟩
+
 theorem call_entry_relations {width : Nat} [NeZero width] {F : Type}
     (ctxt : CrepToLoopContextExact) (live : NumSet) (source : CrepSemHOLState width F)
     (target : LoopSemStateFiniteExact width F) (name : MlString) (params : List Nat) (body : CrepProgHOL width)
@@ -1564,13 +1595,13 @@ theorem compiledScalarReturning_explicit_from_body {width : Nat} [NeZero width] 
     (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
     (source sourceFinal : CrepSemHOLState width σ) (values returned : List (HolWordLab width))
     (target : LoopSemStateFiniteExact width σ) (ctxt : CrepToLoopContextExact) (live : NumSet)
-    (name : MlString) (params names returnNames : List Nat) (body : CrepProgHOL width)
+    (name : MlString) (params names : List Nat) (body : CrepProgHOL width)
     (prefixBudget bodyBudget : Nat) (cost : Nat → Nat)
     (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
     (evaluated : args.mapM (evalCrepSemHOLExp source) = some values)
     (found : source.code.lookup name = some (params,body))
     (distinct : params.Nodup) (arity : params.length = values.length) (nonzero : source.clock ≠ 0)
-    (namesDistinct : names.Nodup) (mapped : names.mapM ctxt.vars.lookup = some returnNames)
+    (namesDistinct : names.Nodup)
     (existing : ∃ old, names.mapM source.locals.lookup = some old) (retArity : returned.length = names.length)
     (stateRel : crepToLoopStateRelExact source target)
     (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
@@ -1597,6 +1628,9 @@ theorem compiledScalarReturning_explicit_from_body {width : Nat} [NeZero width] 
       crepToLoopGlobalsRelHOLExact finalSource.globals final.globals ∧
       crepToLoopCodeRelExact ctxt finalSource.code final.code ∧
       crepToLoopLocalsRelExact ctxt live finalSource.locals final.locals := by
+  obtain ⟨old, oldLookup⟩ := existing
+  obtain ⟨returnNames, mapped, _⟩ :=
+    returnRegisters_of_locals ctxt live source.locals target.locals names old oldLookup namesDistinct localsRel
   let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
   let regs := genTemps comp.2.2.1 comp.2.1.length
   let vals := values.map wlabWlocExact
@@ -1642,13 +1676,12 @@ theorem compiledScalarReturning_explicit_from_body {width : Nat} [NeZero width] 
     simp [evaluate]
   let finalSource := {sourceFinal with locals := source.locals.updateListEq (names.zip returned)}
   have sourceRun : evalCrepSemHOLProgExact source (.call (some (names,none)) name args) = (none,finalSource) := by
-    obtain ⟨old,oldValues⟩ := existing
     rw [evalCrepSemHOLProgExact_call_holShape]
     simp only [evaluated,lookupCodeFiniteHOL,found,arity,distinct,true_and,if_true,
       crepReturnInfoNodupError,namesDistinct,not_true_eq_false,if_false,nonzero]
     simp only [decClockCrepSemHOL] at bodyRun ⊢
     rw [bodyRun]
-    simp [retArity,oldValues,finalSource]
+    simp [retArity,oldLookup,finalSource]
   have rel := compiler_run_relations (.call (some (names,none)) name args) source finalSource none target targetFinal
     ctxt live (prefixBudget+extra) sourceRun (by simp) (by simp [resultToLoop]) stateRel memRel globalsRel codeRel localsRel
     (by simpa [resultToLoop] using targetRun)
