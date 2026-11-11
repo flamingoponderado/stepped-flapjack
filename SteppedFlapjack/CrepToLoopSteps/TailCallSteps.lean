@@ -923,4 +923,156 @@ theorem compiledReturningCall_bound_from_body {width : Nat} [NeZero width] {σ :
     have factorB : B ≤ max (2 * args.length + 4) B := Nat.le_max_right _ _
     nlinarith
 
+/-- One scalar-argument tail-call step inherits the reached callee bound. -/
+theorem compiledScalarTail_bound_from_body {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
+    (source : CrepSemHOLState width σ) (target : LoopSemStateFiniteExact width σ)
+    (values : List (HolWordLab width)) (params : List Nat) (body : CrepProgHOL width) (B : Nat)
+    (hargs : args.mapM (evalCrepSemHOLExp source) = some values)
+    (found : source.code.lookup name = some (params,body))
+    (arity : params.length = values.length) (distinct : params.Nodup)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
+    (bodyBound : ∀ post : LoopSemStateFiniteExact width σ,
+      crepToLoopStateRelExact source post → crepToLoopMemRelHOLExact source.memory post.memory source.memaddrs →
+      crepToLoopGlobalsRelHOLExact source.globals post.globals → crepToLoopCodeRelExact ctxt source.code post.code →
+      source.clock ≠ 0 → LoopSteps.steps
+      (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+        (listToNumSetHOLExact (List.range params.length)) body)
+      {decClock post with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))} ≤
+      B * CrepSteps.steps body (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)})) :
+    let prefixCost := LoopSteps.structuralWeight (loopNestedSeqHOL
+      (compileExpsHOLExact ctxt (ctxt.vmax+1) live args).1)
+    ∃ extra, extra ≤ prefixCost ∧
+      LoopSteps.steps (compileHOLExact ctxt live (.call none name args)) {target with clock := target.clock+extra} ≤
+        max (prefixCost + 2*args.length+3) B * CrepSteps.steps (.call none name args) source := by
+  obtain ⟨extra,post,prefixRun,assign,get,subset,postState,postMem,postGlobals,postCode,postLocals,extraBound,visits⟩ :=
+    compiledScalarCall_reaches_call ctxt live name none args shape source values target hargs stateRel memRel globalsRel codeRel localsRel
+  dsimp only at visits get extraBound
+  let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
+  let regs := genTemps comp.2.2.1 comp.2.1.length
+  let vals := values.map wlabWlocExact
+  let middle : LoopSemStateFiniteExact width σ := {post with locals := sptAlistInsert regs vals post.locals}
+  have get' : getVars regs middle = some vals := get
+  have targetCode : crepToLoopCodeRelExact ctxt source.code middle.code := by simpa [middle] using postCode
+  refine ⟨extra,extraBound,?_⟩
+  by_cases clock : source.clock = 0
+  · have zero : middle.clock = 0 := by
+      change post.clock = 0
+      exact postState.2.2.1.symm.trans clock
+    have call := loopCall_zero_steps none (some (findLabExact ctxt name)) regs none middle zero
+    change LoopSteps.steps (compileHOLExact ctxt live (.call none name args)) _ ≤
+      _ + _ + _ + LoopSteps.steps (.call none (some (findLabExact ctxt name)) regs none) middle at visits
+    rw [call] at visits
+    have positive := CrepSteps.steps_pos (.call none name args) source
+    have factor := Nat.le_max_left (LoopSteps.structuralWeight (loopNestedSeqHOL comp.1)+2*args.length+3) B
+    nlinarith
+  · have nonzero : middle.clock ≠ 0 := by
+      change post.clock ≠ 0
+      have rel := postState.2.2.1
+      rw [← rel]
+      exact clock
+    have callCount := call_tail_steps ctxt source middle name params regs body vals targetCode found (by simp [vals,arity]) get' nonzero
+    have sourceCount := CrepSteps.steps_call_tail name args source values params body hargs found arity distinct clock
+    change LoopSteps.steps (compileHOLExact ctxt live (.call none name args)) _ ≤
+      _ + _ + _ + LoopSteps.steps (.call none (some (findLabExact ctxt name)) regs none) middle at visits
+    rw [callCount] at visits
+    have bodyVisits := bodyBound post postState postMem postGlobals postCode clock
+    simp only [middle,decClock] at visits bodyVisits
+    rw [sourceCount]
+    have factorA := Nat.le_max_left (LoopSteps.structuralWeight (loopNestedSeqHOL comp.1)+2*args.length+3) B
+    have factorB := Nat.le_max_right (LoopSteps.structuralWeight (loopNestedSeqHOL comp.1)+2*args.length+3) B
+    nlinarith
+/-- One scalar-argument returning call inherits the reached callee bound. -/
+theorem compiledScalarReturning_bound_from_body {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
+    (names returnNames : List Nat) (mapped : names.mapM ctxt.vars.lookup = some returnNames)
+    (source : CrepSemHOLState width σ) (target : LoopSemStateFiniteExact width σ)
+    (values : List (HolWordLab width)) (params : List Nat) (body : CrepProgHOL width) (B : Nat)
+    (hargs : args.mapM (evalCrepSemHOLExp source) = some values)
+    (found : source.code.lookup name = some (params,body))
+    (arity : params.length = values.length) (distinct : params.Nodup) (namesDistinct : names.Nodup)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
+    (bodyBound : ∀ post : LoopSemStateFiniteExact width σ,
+      crepToLoopStateRelExact source post → crepToLoopMemRelHOLExact source.memory post.memory source.memaddrs →
+      crepToLoopGlobalsRelHOLExact source.globals post.globals → crepToLoopCodeRelExact ctxt source.code post.code →
+      source.clock ≠ 0 → LoopSteps.steps
+      (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+        (listToNumSetHOLExact (List.range params.length)) body)
+      {decClock post with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))} ≤
+      B * CrepSteps.steps body (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)})) :
+    let prefixCost := LoopSteps.structuralWeight (loopNestedSeqHOL
+      (compileExpsHOLExact ctxt (ctxt.vmax+1) live args).1)
+    ∃ extra, extra ≤ prefixCost ∧
+      LoopSteps.steps (compileHOLExact ctxt live (.call (some (names,none)) name args)) {target with clock := target.clock+extra} ≤
+        max (prefixCost + 2*args.length+4) B * CrepSteps.steps (.call (some (names,none)) name args) source := by
+  obtain ⟨extra,st,prefixRun,assign,get,subset,postState,postMem,postGlobals,postCode,postLocals,extraBound,visits⟩ :=
+    compiledScalarCall_reaches_call ctxt live name (some names) args shape source values target hargs stateRel memRel globalsRel codeRel localsRel
+  dsimp only at visits get extraBound
+  simp only [mapped,Option.getD] at visits
+  let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
+  let regs := genTemps comp.2.2.1 comp.2.1.length
+  let vals := values.map wlabWlocExact
+  let middle : LoopSemStateFiniteExact width σ := {st with locals := sptAlistInsert regs vals st.locals}
+  have get' : getVars regs middle = some vals := get
+  have subset' : sptSubsetLive live middle.locals := subset
+  have targetCode : crepToLoopCodeRelExact ctxt source.code middle.code := by simpa [middle] using postCode
+  refine ⟨extra,extraBound,?_⟩
+  by_cases clock : source.clock = 0
+  · have zero : middle.clock = 0 := by
+      change st.clock = 0
+      exact postState.2.2.1.symm.trans clock
+    have call := loopCall_zero_steps (some (returnNames,live)) (some (findLabExact ctxt name)) regs
+      (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live)) middle zero
+    change LoopSteps.steps (compileHOLExact ctxt live (.call (some (names,none)) name args)) _ ≤
+      _ + _ + _ + LoopSteps.steps (.call (some (returnNames,live)) (some (findLabExact ctxt name)) regs
+        (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) middle at visits
+    rw [call] at visits
+    have positive := CrepSteps.steps_pos (.call (some (names,none)) name args) source
+    have factor := Nat.le_max_left (LoopSteps.structuralWeight (loopNestedSeqHOL comp.1)+2*args.length+4) B
+    nlinarith
+  · let cut : LoopSemStateFiniteExact width σ := decClock {middle with locals := sptInter middle.locals live}
+    have nonzero : middle.clock ≠ 0 := by
+      change st.clock ≠ 0
+      have rel := postState.2.2.1
+      rw [← rel]
+      exact clock
+    have hcut : cutRes live (none,middle) = (none,cut) := by
+      rw [cutRes]
+      simp only
+      rw [cutState_of_subset live middle subset']
+      simp [nonzero,cut]
+    have hfind := call_lookup ctxt source middle name params body vals targetCode found (by simp [vals,arity])
+    have nd : returnNames.Nodup := by
+      have h := allDistinctCtxtLookupAllDistinctExact ctxt names (ctxt.vmax + 1) namesDistinct localsRel.1
+      simp only [rtVars,FLOOKUP] at h
+      rw [mapped] at h
+      exact h
+    rcases bodyRun : evaluate
+      (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+        (listToNumSetHOLExact (List.range params.length)) body)
+      {cut with locals := sptFromAList ((List.range params.length).zip vals)} with ⟨out,post⟩
+    have callBound := returningCall_generated_steps (some (findLabExact ctxt name)) regs returnNames live (ctxt.vmax+1)
+      middle cut post vals _ _ out get' hfind nd hcut bodyRun
+    have sourceCount := CrepSteps.steps_call_returning names name args source values params body hargs found arity distinct namesDistinct clock
+    change LoopSteps.steps (compileHOLExact ctxt live (.call (some (names,none)) name args)) _ ≤
+      _ + _ + _ + LoopSteps.steps (.call (some (returnNames,live)) (some (findLabExact ctxt name)) regs
+        (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) middle at visits
+    have bodyVisits := bodyBound st postState postMem postGlobals postCode clock
+    simp only [cut,middle,decClock] at callBound bodyVisits
+    rw [sourceCount]
+    have factorA := Nat.le_max_left (LoopSteps.structuralWeight (loopNestedSeqHOL comp.1)+2*args.length+4) B
+    have factorB := Nat.le_max_right (LoopSteps.structuralWeight (loopNestedSeqHOL comp.1)+2*args.length+4) B
+    nlinarith
+
+
 end SteppedFlapjack.CrepToLoopSteps
