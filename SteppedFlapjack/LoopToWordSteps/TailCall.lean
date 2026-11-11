@@ -1,4 +1,5 @@
 import SteppedFlapjack.LoopToWordSteps.LoopProgram
+import SteppedFlapjack.WordSteps.CallSteps
 import SteppedFlapjack.LoopLiveSteps.TailEntryCode
 import SteppedFlapjack.LoopLiveSteps.TailEntryBound
 import Flapjack.Pancake.LoopToWord.Proofs.CompileCorrect.Call.TailCall
@@ -144,5 +145,130 @@ theorem singleTailEntry_correct_with_steps {width : Nat} [NeZero width] {C F : T
   | @mark p hp ih =>
     intro s found
     exact sixBoundedMark p s (ih s found)
+
+/-- A reached Word call with compiler-generated raise/skip continuations costs
+at most its callee plus two visits. -/
+theorem wordReturning_generated_steps {width : Nat} [NeZero width] {C F : Type}
+    (dest : Option Nat) (args names : List Nat) (cuts : WordLangCutsetsHOL)
+    (l1 l2 h1 h2 exc : Nat) (s middle : WordSemStateFiniteExact width C F)
+    (res : Option (WordSemResult width)) (xs values : List (WordLocW width))
+    (ss : Option Nat) (callee : WordLangProgHOL (BitVec width))
+    (envs : Spt (WordLocW width) × Spt (WordLocW width))
+    (hargs : WordSemStateFiniteExact.getVars args s = some xs)
+    (hbad : wordSemBadDestArgs dest args = false)
+    (hfind : wordSemFindCode dest (wordSemAddRetLoc (some (names,cuts,(WordLangProgHOL.skip : WordLangProgHOL (BitVec width)),l1,l2)) xs)
+      s.code s.stackSize = some (values,callee,ss))
+    (hvalid : ¬ (sptDomainEmpty cuts.1 ∨ ¬ names.Nodup))
+    (hcut : wordSemCutEnvs cuts s.locals = some envs) (hclock : s.clock ≠ 0)
+    (run : WordSemStateFiniteExact.evaluate callee
+      (WordSemStateFiniteExact.callEnv values ss
+        (WordSemStateFiniteExact.pushEnv envs (some (exc,.raise exc,h1,h2)) (WordSemStateFiniteExact.decClock s))) = (res,middle)) :
+    WordSteps.steps (.call (some (names,cuts,.skip,l1,l2)) dest args (some (exc,.raise exc,h1,h2))) s ≤
+      2 + WordSteps.steps callee (WordSemStateFiniteExact.callEnv values ss
+        (WordSemStateFiniteExact.pushEnv envs (some (exc,.raise exc,h1,h2)) (WordSemStateFiniteExact.decClock s))) := by
+  have count := WordSteps.steps_call_returning dest args names cuts .skip l1 l2
+    (some (exc,.raise exc,h1,h2)) s middle res xs values ss callee envs hargs hbad hfind hvalid hcut hclock run
+  rw [count]
+  cases res with
+  | none => simp
+  | some r =>
+    cases r <;> try simp
+    case result addr ys =>
+      split <;> try omega
+      split <;> try omega
+      split <;> try omega
+      all_goals rw [WordSteps.steps_leaf WordLangProgHOL.skip _ (by rfl)]; omega
+    case exception addr value =>
+      split <;> try omega
+      split <;> try omega
+      all_goals rw [WordSteps.steps_leaf (WordLangProgHOL.raise exc) _ (by rfl)]; omega
+
+/-- The post-call tick and sequence add at most two Word visits. -/
+theorem wordReturning_generated_wrapper {width : Nat} [NeZero width] {C F : Type}
+    (dest : Option Nat) (args names : List Nat) (cuts : WordLangCutsetsHOL)
+    (l1 l2 h1 h2 exc : Nat) (s middle : WordSemStateFiniteExact width C F)
+    (res : Option (WordSemResult width)) (xs values : List (WordLocW width))
+    (ss : Option Nat) (callee : WordLangProgHOL (BitVec width))
+    (envs : Spt (WordLocW width) × Spt (WordLocW width))
+    (hargs : WordSemStateFiniteExact.getVars args s = some xs)
+    (hbad : wordSemBadDestArgs dest args = false)
+    (hfind : wordSemFindCode dest (wordSemAddRetLoc (some (names,cuts,(WordLangProgHOL.skip : WordLangProgHOL (BitVec width)),l1,l2)) xs)
+      s.code s.stackSize = some (values,callee,ss))
+    (hvalid : ¬ (sptDomainEmpty cuts.1 ∨ ¬ names.Nodup))
+    (hcut : wordSemCutEnvs cuts s.locals = some envs) (hclock : s.clock ≠ 0)
+    (run : WordSemStateFiniteExact.evaluate callee
+      (WordSemStateFiniteExact.callEnv values ss
+        (WordSemStateFiniteExact.pushEnv envs (some (exc,.raise exc,h1,h2)) (WordSemStateFiniteExact.decClock s))) = (res,middle)) :
+    WordSteps.steps (.seq (.call (some (names,cuts,.skip,l1,l2)) dest args (some (exc,.raise exc,h1,h2))) .tick) s ≤
+      4 + WordSteps.steps callee (WordSemStateFiniteExact.callEnv values ss
+        (WordSemStateFiniteExact.pushEnv envs (some (exc,.raise exc,h1,h2)) (WordSemStateFiniteExact.decClock s))) := by
+  have call := wordReturning_generated_steps dest args names cuts l1 l2 h1 h2 exc s middle res xs values ss callee envs
+    hargs hbad hfind hvalid hcut hclock run
+  rw [WordSteps.steps_seq]
+  rcases WordSemStateFiniteExact.evaluate (.call (some (names,cuts,.skip,l1,l2)) dest args (some (exc,.raise exc,h1,h2))) s with ⟨r,t⟩
+  cases r <;> simp only <;> try omega
+  rw [WordSteps.steps_leaf WordLangProgHOL.tick _ (by rfl)]
+  omega
+/-- The actual compiled ordinary call has the sixfold bound when the reached
+callee has it. The source and target execution facts are the local call
+simulation facts used by the surrounding compiler induction. -/
+theorem compiledReturning_steps_from_callee {width : Nat} [NeZero width] {C F : Type}
+    (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exception : Nat)
+    (markHandler markNormal : Bool)
+    (source sourceCut sourcePost : LoopSemStateFiniteExact width F)
+    (sourceVals : List (WordLocW width)) (sourceEnv : Spt (WordLocW width))
+    (body : HolLoopProg width) (out : Option (LoopResultExact width))
+    (target targetPost : WordSemStateFiniteExact width C F) (ctxt : Spt Nat) (labels : Nat × Nat)
+    (targetResult : Option (WordSemResult width)) (wordVals wordEnv : List (WordLocW width))
+    (ss : Option Nat) (wordBody : WordLangProgHOL (BitVec width))
+    (envs : Spt (WordLocW width) × Spt (WordLocW width))
+    (sourceGet : getVars args source = some sourceVals)
+    (sourceFound : findCode (some loc) sourceVals source.code = some (sourceEnv,body))
+    (sourceDistinct : names.Nodup) (sourceCutRun : cutRes live (none,source) = (none,sourceCut))
+    (sourceRun : evaluate body {sourceCut with locals := sourceEnv} = (out,sourcePost))
+    (targetGet : WordSemStateFiniteExact.getVars (args.map (findVarHOL ctxt)) target = some wordVals)
+    (targetFound : wordSemFindCode (some loc)
+      (wordSemAddRetLoc (some (names.map (findVarHOL ctxt), (mkNewCutsetHOL ctxt live,(Spt.ln : NumSet)),
+        (WordLangProgHOL.skip : WordLangProgHOL (BitVec width)),labels.1,labels.2)) wordVals)
+      target.code target.stackSize = some (wordEnv,wordBody,ss))
+    (targetValid : ¬ (sptDomainEmpty (mkNewCutsetHOL ctxt live) ∨ ¬ (names.map (findVarHOL ctxt)).Nodup))
+    (targetCut : wordSemCutEnvs (mkNewCutsetHOL ctxt live,(Spt.ln : NumSet)) target.locals = some envs)
+    (targetClock : target.clock ≠ 0)
+    (targetRun : WordSemStateFiniteExact.evaluate wordBody
+      (WordSemStateFiniteExact.callEnv wordEnv ss
+        (WordSemStateFiniteExact.pushEnv envs (some (findVarHOL ctxt exception,
+          .raise (findVarHOL ctxt exception),labels.1,labels.2+1)) (WordSemStateFiniteExact.decClock target))) =
+      (targetResult,targetPost))
+    (calleeBound : WordSteps.steps wordBody
+      (WordSemStateFiniteExact.callEnv wordEnv ss
+        (WordSemStateFiniteExact.pushEnv envs (some (findVarHOL ctxt exception,
+          .raise (findVarHOL ctxt exception),labels.1,labels.2+1)) (WordSemStateFiniteExact.decClock target))) ≤
+      6 * LoopSteps.steps body {sourceCut with locals := sourceEnv}) :
+    WordSteps.steps (LoopToWord.compHOL ctxt
+      (.call (some (names,live)) (some loc) args (some (exception,if markHandler then .mark (.raise exception) else .raise exception,
+          if markNormal then .mark .skip else .skip,liveOut))) labels).1 target ≤
+      6 * LoopSteps.steps (.call (some (names,live)) (some loc) args
+        (some (exception,if markHandler then .mark (.raise exception) else .raise exception,
+          if markNormal then .mark .skip else .skip,liveOut))) source := by
+  cases labels with
+  | mk lab1 lab2 =>
+   have wordBound := wordReturning_generated_wrapper (some loc) (args.map (findVarHOL ctxt))
+     (names.map (findVarHOL ctxt)) (mkNewCutsetHOL ctxt live,(Spt.ln : NumSet)) lab1 lab2 lab1 (lab2+1)
+     (findVarHOL ctxt exception) target targetPost targetResult wordVals wordEnv ss wordBody envs
+     targetGet (by simp [wordSemBadDestArgs]) targetFound targetValid targetCut targetClock targetRun
+   have loopCount := LoopSteps.steps_call_returning (some loc) args names live
+     (some (exception,if markHandler then .mark (.raise exception) else .raise exception,
+          if markNormal then .mark .skip else .skip,liveOut)) source sourceCut sourcePost sourceVals sourceEnv body out
+     sourceGet sourceFound sourceDistinct sourceCutRun sourceRun
+   have loopLower : 1 + LoopSteps.steps body {sourceCut with locals := sourceEnv} ≤
+       LoopSteps.steps (.call (some (names,live)) (some loc) args
+         (some (exception,if markHandler then .mark (.raise exception) else .raise exception,
+          if markNormal then .mark .skip else .skip,liveOut))) source := by
+     rw [loopCount]
+     omega
+   cases markHandler <;> cases markNormal <;>
+     simp only [Bool.false_eq_true,if_false,if_true,LoopToWord.compHOL] at loopLower ⊢ <;>
+     simp only at calleeBound <;> omega
+
 
 end SteppedFlapjack.LoopToWordSteps
