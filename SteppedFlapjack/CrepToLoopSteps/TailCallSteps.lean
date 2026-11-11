@@ -290,6 +290,87 @@ theorem scalarCall_prefix_visits {width : Nat} [NeZero width] {σ : Type}
 
 end ScalarPrefixVisits
 
+/-- The exact compiler output for tail and ordinary calls has the concrete
+argument-prefix visit bound, once that prefix has executed. -/
+theorem compiledScalarCall_prefix_steps {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
+    (names : Option (List Nat)) (args : List (CrepExpHOL width))
+    (shape : ∀ e ∈ args, CompiledScalar e) (s post : LoopSemStateFiniteExact width σ)
+    (run : evaluate (loopNestedSeqHOL (compileExpsHOLExact ctxt (ctxt.vmax+1) live args).1) s = (none,post)) :
+    let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
+    let regs := genTemps comp.2.2.1 comp.2.1.length
+    let call : HolLoopProg width := match names with
+      | none => .call none (some (findLabExact ctxt name)) regs none
+      | some ns =>
+        let returnNames := (ns.mapM ctxt.vars.lookup).getD [ctxt.vmax+2]
+        .call (some (returnNames,live)) (some (findLabExact ctxt name)) regs
+          (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))
+    LoopSteps.steps (compileHOLExact ctxt live (.call (names.map (fun ns => (ns,none))) name args)) s ≤
+      LoopSteps.structuralWeight (loopNestedSeqHOL comp.1) + 2*args.length + 2 +
+        match evaluate (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign comp.2.1)) post with
+        | (none,t) => LoopSteps.steps call t
+        | _ => 0 := by
+  obtain ⟨code,les,next,outLive,compiled,len,prefixShape⟩ :=
+    compiledScalars_prefix args shape ctxt (ctxt.vmax+1) live
+  have bound := scalarCall_prefix_visits args shape ctxt live
+    (match names with
+      | none => .call none (some (findLabExact ctxt name)) (genTemps next les.length) none
+      | some ns => .call (some ((ns.mapM ctxt.vars.lookup).getD [ctxt.vmax+2],live))
+          (some (findLabExact ctxt name)) (genTemps next les.length)
+          (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) s post run
+  simp only [compiled] at bound ⊢
+  cases names with
+  | none =>
+    simp only [Option.map_none,compileHOLExact,compiled] at ⊢
+    exact bound
+  | some ns =>
+    simp only [Option.map_some,compileHOLExact,compiled] at ⊢
+    cases h : ns.mapM ctxt.vars.lookup <;> simp only [h,Option.getD] at bound ⊢ <;> exact bound
+
+/-- A scalar-argument call reaches its actual call node after a bounded prefix,
+with the source arguments in the fresh target registers. -/
+theorem compiledScalarCall_reaches_call {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
+    (names : Option (List Nat)) (args : List (CrepExpHOL width))
+    (shape : ∀ e ∈ args, CompiledScalar e)
+    (source : CrepSemHOLState width σ) (values : List (HolWordLab width))
+    (target : LoopSemStateFiniteExact width σ)
+    (evaluated : args.mapM (evalCrepSemHOLExp source) = some values)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
+    let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
+    let regs := genTemps comp.2.2.1 comp.2.1.length
+    let vals := values.map wlabWlocExact
+    let call : HolLoopProg width := match names with
+      | none => .call none (some (findLabExact ctxt name)) regs none
+      | some ns => .call (some ((ns.mapM ctxt.vars.lookup).getD [ctxt.vmax+2],live))
+          (some (findLabExact ctxt name)) regs (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))
+    ∃ (extra : Nat) (post : LoopSemStateFiniteExact width σ),
+      let middle : LoopSemStateFiniteExact width σ := {post with locals := sptAlistInsert regs vals post.locals}
+      evaluate (loopNestedSeqHOL comp.1) {target with clock := target.clock+extra} = (none,post) ∧
+      evaluate (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign comp.2.1)) post = (none,middle) ∧
+      getVars regs middle = some vals ∧ sptSubsetLive live middle.locals ∧
+      crepToLoopStateRelExact source post ∧
+      crepToLoopMemRelHOLExact source.memory post.memory source.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact source.globals post.globals ∧
+      crepToLoopCodeRelExact ctxt source.code post.code ∧
+      crepToLoopLocalsRelExact ctxt comp.2.2.2 source.locals post.locals ∧
+      extra ≤ LoopSteps.structuralWeight (loopNestedSeqHOL comp.1) ∧
+      LoopSteps.steps (compileHOLExact ctxt live (.call (names.map (fun ns => (ns,none))) name args))
+        {target with clock := target.clock+extra} ≤
+          LoopSteps.structuralWeight (loopNestedSeqHOL comp.1) + 2*args.length + 2 + LoopSteps.steps call middle := by
+  obtain ⟨extra,post,prefixRun,assign,get,subset,state,mem,globals,code,locals,bound⟩ :=
+    scalarCall_argumentPrefix args shape source values target ctxt live evaluated stateRel memRel globalsRel codeRel localsRel
+  have visits := compiledScalarCall_prefix_steps ctxt live name names args shape
+    {target with clock := target.clock+extra} post prefixRun
+  dsimp only at visits
+  rw [assign] at visits
+  simp only at visits
+  exact ⟨extra,post,prefixRun,assign,get,subset,state,mem,globals,code,locals,bound,visits⟩
+
 /-- The direct-argument tail-call wrapper has linear cost in its arity. -/
 theorem compile_tailCall_direct_steps {width : Nat} [NeZero width] {F : Type}
     (ctxt : CrepToLoopContextExact) (live : NumSet) (name : Flapjack.Basis.Pure.MlString.MlString)
