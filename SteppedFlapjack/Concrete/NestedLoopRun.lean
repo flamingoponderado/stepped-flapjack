@@ -136,10 +136,14 @@ noncomputable def nestedLoopState : LoopSemStateFiniteExact 64 Unit :=
 
 theorem nestedCall_loop_run (memory : BitVec 64 → WordLocW 64) :
     evaluate nestedLoopCode64 {nestedLoopState with memory := memory} =
-      (some (.result [.word 7]),{{nestedLoopState with memory := memory} with locals := .ln,clock := 0}) := by
-  apply nestedLoop_entry_run {nestedLoopState with memory := memory}
-  · simp [nestedLoopState,concreteDeclLoopState,nestedCall_loop_code,nestedLoopTable]
-  · rfl
+      (some (.result [.word 7]),{{nestedLoopState with memory := memory} with locals := .ln,clock := 3}) := by
+  let base : LoopSemStateFiniteExact 64 Unit := {nestedLoopState with memory := memory, clock := 4}
+  have code : base.code = nestedLoopTable := by
+    simp [base,nestedLoopState,concreteDeclLoopState,nestedCall_loop_code,nestedLoopTable]
+  have run := nestedLoop_entry_run base code rfl
+  have lifted := evaluate_add_clock_eq nestedLoopCode64 base (some (.result [.word 7]))
+    {base with locals := .ln,clock := 0} 3 run (by simp)
+  simpa [base,nestedLoopState,concreteDeclLoopState,nestedCrepState,concreteDeclCrepState,sourceTemplate] using lifted
 
 open SteppedFlapjack.LoopSteps SteppedFlapjack.LoopLiveSteps SteppedFlapjack.LoopToWordSteps SteppedFlapjack.CrepToLoopSteps
 
@@ -157,8 +161,10 @@ theorem nestedCall_loop_steps_bound (memory : BitVec 64 → WordLocW 64) :
     simp [nestedLoopTable,sptLookup_sptFromAList,sptAListLookup]
   have bound := loopTable_entry_bound nestedLoopTable 64 [] nestedLoopCode64 {nestedLoopState with memory := memory} codeEq nestedTable_supported found
   rw [nestedCall_loop_codeWeight] at bound
-  have clock : ({nestedLoopState with memory := memory} : LoopSemStateFiniteExact 64 Unit).clock = 4 := rfl
+  rw [nestedCall_loop_run memory] at bound
+  have clock : ({nestedLoopState with memory := memory} : LoopSemStateFiniteExact 64 Unit).clock = 7 := rfl
   rw [clock] at bound
+  simp only [Prod.snd] at bound
   have entryWeight : loopVisitWeight nestedLoopCode64 = 10 := by with_unfolding_all rfl
   rw [entryWeight] at bound
   omega

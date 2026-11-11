@@ -48,7 +48,7 @@ theorem nested_optimized_start {C : Type} (template : WordSemStateFiniteExact 64
   have premises :
     let w := WordSemStateFiniteExact.callEnv [(.loc 1 0 : WordLocW 64)]
       (sptLookup 64 starter.stackSize) (WordSemStateFiniteExact.decClock starter)
-    evaluate nestedLoopCode64 loop = (some (.result [.word 7]),{loop with locals := .ln,clock := 0}) ∧
+    evaluate nestedLoopCode64 loop = (some (.result [.word 7]),{loop with locals := .ln,clock := 3}) ∧
     (some (.result [.word 7]) : Option (LoopResultExact 64)) ≠ some .error ∧
     loopToWordStateRelHOLExact loop w ∧ LoopToWord.localsRelHOL ctxt loop.locals w.locals ∧
     sptLookup 0 w.locals = some (.loc 1 0) ∧ goodDimindex 64 ∧ ¬ wordSemIsWordLoc (.loc 1 0 : WordLocW 64) = true ∧
@@ -57,7 +57,7 @@ theorem nested_optimized_start {C : Type} (template : WordSemStateFiniteExact 64
     · simpa [loop,nestedLoopState,starter] using starterFacts.1
     · simpa [loop,nestedLoopState,starter] using localFacts.1
     · exact Or.inr rfl
-  have span := loopTable_wholeWord_span shape loop {loop with locals := .ln,clock := 0}
+  have span := loopTable_wholeWord_span shape loop {loop with locals := .ln,clock := 3}
     (some (.result [.word 7])) table 64 starter ctxt (64,2) 122 words wc ac entryMember nodup
     (loopToWord_programSafety loops) rfl starterFacts.2.1 starterFacts.2.2.1 starterFacts.2.2.2
     premises (.return [.word 7]) (nestedCall_loop_steps_bound memory)

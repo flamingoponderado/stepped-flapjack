@@ -290,6 +290,10 @@ theorem nestedCall_crep_clock_consumed :
     exact SteppedFlapjack.CrepToLoopSteps.callFrontend_crepTable _
       (SteppedFlapjack.CrepToLoopSteps.callFrontend_declaration_sources _ nestedCall_declaration_shapes)
 
+/-- A replay clock equal to the counted source budget. -/
+def nestedClockedSource : PanSemStateFiniteExact 64 Unit := {nestedSourceState 1 with clock := 6}
+def nestedClockedProduction := {nestedCountedProduction with clock := 6}
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
 private theorem nestedEntryShapes : ∀ entry ∈ functionsHOL (nestedCallDeclarations.map declToHOL),
@@ -309,11 +313,11 @@ private theorem nestedEntryShapes : ∀ entry ∈ functionsHOL (nestedCallDeclar
     · simp [ProgByteRanged,ExpByteRanged]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
-private theorem nestedEntryCode : (nestedSourceState 1).code = HolFiniteMapExact.empty.updateList
+private theorem nestedEntryCode : (nestedClockedSource).code = HolFiniteMapExact.empty.updateList
     (functionsHOL (nestedCallDeclarations.map declToHOL)).reverse := by
   apply HolFiniteMapExact.ext_lookup
   intro name
-  simp [nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,
+  simp [nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,
     HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,nestedCallDeclarations,declToHOL,
     funDeclToHOL,functionsHOL,progToHOL,expToHOL,shapeToHOL]
   by_cases ha : name = ofString "main" <;> by_cases hb : name = ofString "middle" <;>
@@ -322,11 +326,11 @@ private theorem nestedEntryCode : (nestedSourceState 1).code = HolFiniteMapExact
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
-private theorem nestedEntryCodeRel : PanSimp.CodeRel (nestedSourceState 1).code (nestedSourceState 1).code := by
+private theorem nestedEntryCodeRel : PanSimp.CodeRel (nestedClockedSource).code (nestedClockedSource).code := by
   constructor
   · intro f h; exact h
   · intro f params body rsh found
-    simp only [nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,FUPDATE,
+    simp only [nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,FUPDATE,
       HolFiniteMapExact.lookup_empty] at found ⊢
     repeat' split at found
     all_goals try simp only [Option.some.injEq,Prod.mk.injEq] at found
@@ -337,7 +341,7 @@ private theorem nestedEntryCodeRel : PanSimp.CodeRel (nestedSourceState 1).code 
 open SteppedFlapjack.PanToCrepSteps
 
 def nestedRenamedState : PanSemStateFiniteExact 64 Unit :=
-  {nestedSourceState 1 with code := fpermCodeHOL (ofString "main") (newMainNameHOL (nestedCallDeclarations.map declToHOL)) (nestedSourceState 1).code}
+  {nestedClockedSource with code := fpermCodeHOL (ofString "main") (newMainNameHOL (nestedCallDeclarations.map declToHOL)) (nestedClockedSource).code}
 
 def nestedLoweredCode := HolFiniteMapExact.empty.updateList
   (functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))).reverse
@@ -352,7 +356,7 @@ private theorem nestedEntryGlobalRel : panGlobalsStateRelHOLExact true emptyGlob
   · rfl
   · rfl
   · rfl
-  · simp [nestedRenamedState,nestedSourceState,sourceTemplateFor,sourceTemplate,ordinaryAddress,heapTop,fixtureHeapEnd,heapEnd,
+  · simp [nestedRenamedState,nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate,ordinaryAddress,heapTop,fixtureHeapEnd,heapEnd,
       stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords,sourceBase]
   · change panGlobalsByteAlignedHOL heapTop
     change BitVec.ofNat 64 ((heapTop.toNat / 8) * 8) = heapTop
@@ -361,7 +365,7 @@ private theorem nestedEntryGlobalRel : panGlobalsStateRelHOLExact true emptyGlob
     rw [nestedLoweredCode,nestedCall_lowered_declarations]
     by_cases ha : function = ofString "main" <;> by_cases hb : function = ofString "main'" <;>
       by_cases hc : function = ofString "middle" <;> by_cases hd : function = ofString "leaf" <;>
-      simp_all [nestedRenamedState,flookupFpermCodeHOL',nestedSourceState,sourceTemplateFor,sourceTemplate,
+      simp_all [nestedRenamedState,flookupFpermCodeHOL',nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate,
         HolFiniteMapExact.lookup_update,FUPDATE,HolFiniteMapExact.lookup_empty,
         nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,newMainNameHOL,freshNameMlS,mlstrAppend,
         fpermName,ofString,MlString.explode_implode,
@@ -384,21 +388,23 @@ theorem nestedCounted_compilerEntry (context : PanValueFfiContext (RiscV.Word 64
     globalEntrySteps .skip (ofString "main'") [] (noGlobalsLoweredPreCall nestedRenamedState nestedLoweredCode) ≤
       sizeOf (.skip : ProgHOL 64) + SimpVisits.simpTableFactor (functionsHOL (nestedCallDeclarations.map declToHOL)) * 6 +
         SimpVisits.hw (progToHOL (panSimpProg nestedCallEntry)) + 2 := by
-  let _ : DecidablePred (nestedSourceState 1).memaddrs := by
+  let _ : DecidablePred (nestedClockedSource).memaddrs := by
     change DecidablePred ordinaryAddress
     infer_instance
   have shape : CallSupportedIn [] nestedCallEntry :=
     .call "answer" "middle" [] (by simp) (.base (.ret (.local "answer" (by simp))))
-  have ranged : PanSemStateRelExecRanged nestedCountedProduction := by
-    simp [nestedCountedProduction,sourceProduction,PanSemStateRelExecRanged,StructContextByteRanged,StructContext.toHOL]
-  have words : WordLocals nestedCountedProduction.locals := by
-    simpa [nestedCountedProduction,sourceProduction] using wordLocals_empty
-  have codeRanged : ∀ name entry, panSemCodeLookup nestedCountedProduction.code name = some entry → PanLangEntryByteRanged entry := by
-    simpa [nestedCountedProduction,PanSemCodeRanged] using
+  have ranged : PanSemStateRelExecRanged nestedClockedProduction := by
+    simp [nestedClockedProduction,nestedCountedProduction,sourceProduction,PanSemStateRelExecRanged,StructContextByteRanged,StructContext.toHOL]
+  have words : WordLocals nestedClockedProduction.locals := by
+    simpa [nestedClockedProduction,nestedCountedProduction,sourceProduction] using wordLocals_empty
+  have codeRanged : ∀ name entry, panSemCodeLookup nestedClockedProduction.code name = some entry → PanLangEntryByteRanged entry := by
+    simpa [nestedClockedProduction,nestedCountedProduction,PanSemCodeRanged] using
       panSemCodeRanged_of_functionEntries sourceProduction nestedCallDeclarations nestedCall_declarations_ranged
-  have result := countedCalls_renamedGlobalEntry shape nestedCountedProduction (nestedSourceState 1)
-    nestedCounted_related ranged words (by simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged])
-    codeRanged nestedCounted_shapes (nestedSourceState 1).code nestedEntryCodeRel
+  have result := countedCalls_renamedGlobalEntry shape nestedClockedProduction (nestedClockedSource)
+    (by
+      obtain ⟨a,b,c,d,e,f,g,h,_,j,k,l,m⟩ := nestedCounted_related
+      exact ⟨a,b,c,d,e,f,g,h,rfl,j,k,l,m⟩) ranged words (by simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged])
+    codeRanged (by simpa [nestedClockedProduction] using nestedCounted_shapes) (nestedClockedSource).code nestedEntryCodeRel
     (functionsHOL (nestedCallDeclarations.map declToHOL)) nestedEntryCode nestedEntryShapes
     (nestedCallDeclarations.map declToHOL) (ofString "main") []
     [.function ⟨ofString "main'",false,true,[],.decCall (ofString "answer") .one (ofString "middle") [] (.return (.var .local (ofString "answer"))),.one⟩,
@@ -409,8 +415,8 @@ theorem nestedCounted_compilerEntry (context : PanValueFfiContext (RiscV.Word 64
       dsimp only [List.filter,isFunctionHOL]
       simp [fpermDecsHOL,compileDecsExactHOL,decShapesHOL,fpermHOL,fpermName,compileProgExactHOL,compileExpExactHOL,compileExpExactHOLList,emptyGlobalsContext,ofString]) (noGlobalsLoweredPreCall nestedRenamedState nestedLoweredCode)
     (noGlobalsLoweredPreCall nestedRenamedState nestedLoweredCode) (by exact evaluateHOLFiniteState_skip _) (by simp [noGlobalsLoweredPreCall])
-    (by simp [nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,FUPDATE,ofString,MlString.explode_implode]) (by exact nestedEntryGlobalRel) context primitive handler [] 8 6 _ _ _ _ 7
-    (nestedCounted_run context primitive handler) (by decide)
+    (by simp [nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,FUPDATE,ofString,MlString.explode_implode]) (by exact nestedEntryGlobalRel) context primitive handler [] 8 6 _ _ _ _ 7
+    (by simpa [nestedClockedProduction,panSemBitVec64MemoryAccess] using nestedCounted_run context primitive handler) (by decide)
   obtain ⟨sourceFinal,lowerFinal,_,_,entry,bound,_,_⟩ := result
   refine ⟨emptyLocalsHOLFinite lowerFinal,?_,?_⟩
   · simpa [newMainNameHOL,nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,freshNameMlS,mlstrAppend,ofString,MlString.explode_implode,nestedSeqHOL] using entry

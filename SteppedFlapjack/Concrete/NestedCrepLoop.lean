@@ -42,7 +42,7 @@ theorem nestedCall_panCrep_code_relation : codeRelExactHOLW
 
 /-- The source configuration immediately before the generated entry call. -/
 def nestedLoweredSource : PanSemStateFiniteExact 64 Unit :=
-  noGlobalsLoweredPreCall {sourceTemplate with clock := 3}
+  noGlobalsLoweredPreCall {sourceTemplate with clock := 6}
     (HolFiniteMapExact.empty.updateList
       (functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))).reverse)
 
@@ -63,36 +63,25 @@ theorem nestedLoweredSource_run : ∃ final,
     HolFiniteMapExact.lookup_update,FUPDATE,callEntryStateHOLFinite,evalHOLExact,
     shapeOfHOLExact,shapeEqHOL,setVarHOLFinite,emptyLocalsHOLFinite,sourceTemplate]
 
-/-- The lowered entry's control visits are bounded across both calls. -/
-theorem nestedLoweredSource_steps :
-    controlSteps (.seq .skip (.call none (ofString "main'") [])) nestedLoweredSource ≤ 7 := by
-  have a : (ofString "main" == ofString "main'") = false := by decide
-  have b : (ofString "main" == ofString "middle") = false := by decide
-  have c : (ofString "main'" == ofString "middle") = false := by decide
-  have d : (ofString "main" == ofString "leaf") = false := by decide
-  have e : (ofString "main'" == ofString "leaf") = false := by decide
-  have f : (ofString "middle" == ofString "leaf") = false := by decide
-  simp [controlSteps.eq_def,a,b,c,d,e,f,nestedLoweredSource,noGlobalsLoweredPreCall,nestedCall_lowered_declarations,
-    functionsHOL,evaluateHOLFiniteState_skip,evaluateHOLFiniteState_call,evaluateHOLFiniteState_return,
-    evalListHOLFinite,evalListHOLExact,PanSemStateFiniteExact.lookupCodeHOLFinite,lookupCodeHOLExact,
-    HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,callEntryStateHOLFinite,evalHOLExact,
-    shapeOfHOLExact,shapeEqHOL,setVarHOLFinite,emptyLocalsHOLFinite,sourceTemplate]
-  simp only [fixClockHOLFinite,Prod.lex_def]
-  split_ifs <;> norm_num at *
+/-- The wrapper visit limit is computed from the counted source run and source declarations. -/
+def nestedSourceEntryLimit : Nat :=
+  1 + SimpVisits.simpTableFactor (functionsHOL (nestedCallDeclarations.map declToHOL)) * 6 +
+    SimpVisits.hw (progToHOL (panSimpProg nestedCallEntry)) + 2
 
-/-- The generated wrapper adds at most two visits to the original source entry. -/
+/-- The counted source run supplies the generated wrapper visit bound. -/
 theorem nestedLoweredSource_fromOriginal :
-    controlSteps (.seq .skip (.call none (ofString "main'") [])) nestedLoweredSource ≤
-      2 + controlSteps (.call none (ofString "main") []) {nestedSourceState 1 with clock := 4} := by
-  rw [nestedCall_controlSteps]
-  exact nestedLoweredSource_steps
+    controlSteps (.seq .skip (.call none (ofString "main'") [])) nestedLoweredSource ≤ nestedSourceEntryLimit := by
+  obtain ⟨_,_,bound⟩ := nestedCounted_compilerEntry (riscv64PanValueFfiContext (fun _ => false))
+    (fun _ _ => none) (fun _ _ _ _ _ _ _ => none)
+  simpa [globalEntrySteps,nestedLoweredSource,nestedSourceEntryLimit,nestedLoweredCode,
+    nestedRenamedState,nestedClockedSource,nestedSourceState,sourceTemplateFor_one,noGlobalsLoweredPreCall] using bound
 
 /-- The general source-to-Crep bound applies to the actual nested-call entry. -/
 theorem nestedCall_sourceToCrep_bound : ∃ final,
     evalCrepSemHOLProgExact nestedCrepState (.seq .skip (.call none (ofString "main'") [])) =
       (some (.return [.word 7]),final) ∧ final.ffi = sourceFfi ∧
     SteppedFlapjack.CrepSteps.steps (.seq .skip (.call none (ofString "main'") [])) nestedCrepState ≤
-      4 * (2 + controlSteps (.call none (ofString "main") []) {nestedSourceState 1 with clock := 4}) := by
+      4 * nestedSourceEntryLimit := by
   let decls := compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")
   let ctxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL decls)) 0
     (getEidsFromDeclsHOL decls)
@@ -110,7 +99,7 @@ theorem nestedCall_sourceToCrep_bound : ∃ final,
   have span := callFrontend_declaration_steps decls unique nestedCall_inline_selection_empty
     nestedCall_declaration_shapes entry shape nestedLoweredSource sourceFinal
     (some (.returned (.val (.word 7)))) rfl rfl rfl rfl rfl noEx sourceRun (by simp)
-    (2 + controlSteps (.call none (ofString "main") []) {nestedSourceState 1 with clock := 4}) nestedLoweredSource_fromOriginal
+    nestedSourceEntryLimit nestedLoweredSource_fromOriginal
   obtain ⟨targetResult,targetFinal,targetRun,finalState,_,_,resultRel,bound⟩ := span
   have compiled : compileProgExactHOLW ctxt entry = .seq .skip (.call none (ofString "main'") []) := by
     simp [ctxt,entry,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList]

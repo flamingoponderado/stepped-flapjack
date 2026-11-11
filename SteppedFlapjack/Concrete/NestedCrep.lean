@@ -37,7 +37,7 @@ theorem nestedCall_crep_code : compileProgDeclsHOLW (compileTopExactHOL (nestedC
 
 /-- The generated Crep code installed over the source fixture memory. -/
 def nestedCrepState : CrepSemHOLState 64 Unit :=
-  concreteDeclCrepState {sourceTemplate with clock := 4}
+  concreteDeclCrepState {sourceTemplate with clock := 7}
     (compileProgDeclsHOLW (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")))
 
 
