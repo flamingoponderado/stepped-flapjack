@@ -95,7 +95,7 @@ theorem loopStackReady_riscvWithin {F : Type}
   obtain ⟨wordComplete,wordNotError,wordNotTimeout⟩ :=
     completeLoop_resultCase ctxt word wordPost sourcePost result wordResult complete wordRelation
   have wordShape : CallSequence (LoopToWord.compHOL ctxt p labels).1 := .block (loopStackReady_wordBlock shape ctxt labels)
-  have noInstall := loopStackReady_noInstall shape ctxt labels
+  have noInstall := loopComp_noInstall p ctxt labels
   obtain ⟨outcome,ticks,finalMachine,finalFfi,stackPost,stackResult,tickBound,machineRun,events,classification,stackRelation⟩ :=
     allocatedWordSequenceRiscVWithin ac _ wordShape word wordPost wordResult entry k frameSize frame (6*limit) lens bs bsPost n nPost
       compiled start argumentCount noInstall noInstallCode wordCode wordComplete wordNotTimeout (by omega)

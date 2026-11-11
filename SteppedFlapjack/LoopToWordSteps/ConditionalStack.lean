@@ -45,27 +45,4 @@ theorem branchedStackReady_wordBlock {width : Nat} [NeZero width] {p : HolLoopPr
     simp only [h1,h2]
     exact .seq (.ite _ _ _ hwa hwb) .tick
 
-/-- Compiling this fragment does not introduce dynamic installation. -/
-theorem branchedStackReady_noInstall {width : Nat} [NeZero width] {p : HolLoopProg width}
-    (shape : BranchedStackReady p) (ctxt : Spt Nat) :
-    ∀ labels : Nat × Nat, noInstallSubprogsHOL (LoopToWord.compHOL ctxt p labels).1 = true := by
-  induction shape with
-  | leaf h => exact stackReady_noInstall (.leaf h) ctxt
-  | @seq a b ha hb iha ihb =>
-    intro labels
-    simp only [LoopToWord.compHOL,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp,Bool.and_eq_true]
-    exact ⟨iha labels,ihb (LoopToWord.compHOL ctxt a labels).2⟩
-  | mark h ih =>
-    intro labels
-    simpa only [LoopToWord.compHOL] using ih labels
-  | @ite cmp r ri live a b ha hb iha ihb =>
-    intro labels
-    rcases h1 : LoopToWord.compHOL ctxt a labels with ⟨wa,la⟩
-    rcases h2 : LoopToWord.compHOL ctxt b la with ⟨wb,lb⟩
-    have hwa : noInstallSubprogsHOL wa = true := by simpa only [h1] using iha labels
-    have hwb : noInstallSubprogsHOL wb = true := by simpa only [h2] using ihb la
-    unfold noInstallSubprogsHOL at hwa hwb
-    unfold LoopToWord.compHOL
-    simp [h1,h2,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp,hwa,hwb]
-
 end SteppedFlapjack.LoopToWordSteps

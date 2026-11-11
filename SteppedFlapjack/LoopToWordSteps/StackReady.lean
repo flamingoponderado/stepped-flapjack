@@ -1,5 +1,6 @@
 import SteppedFlapjack.LoopToWordSteps.Sequence
 import SteppedFlapjack.WordToStackSteps.EntryComposition
+import Flapjack.Pancake.LoopToWord.Proofs.NoInstallCode
 
 /-! The common fragment of the quantitative Loop-to-Word and Word-to-Stack proofs. -/
 namespace SteppedFlapjack.LoopToWordSteps
@@ -64,24 +65,32 @@ theorem stackReady_wordBlock {width : Nat} [NeZero width] {p : HolLoopProg width
     simpa only [LoopToWord.compHOL] using ih labels
 
 
-/-- Compilation of this common fragment introduces no dynamic installation. -/
-theorem stackReady_noInstall {width : Nat} [NeZero width] {p : HolLoopProg width}
-    (shape : StackReady p) (ctxt : Spt Nat) :
-    ∀ labels : Nat × Nat, noInstallSubprogsHOL (LoopToWord.compHOL ctxt p labels).1 = true := by
-  induction shape with
-  | leaf h =>
-    intro labels
-    cases labels
-    cases h <;> try { simp [LoopToWord.compHOL,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp] }
-    case arith a => cases a <;> simp [LoopToWord.compHOL,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp]
-  | @seq a b ha hb iha ihb =>
-    intro labels
-    simp only [LoopToWord.compHOL,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp,Bool.and_eq_true]
-    exact ⟨iha labels,ihb (LoopToWord.compHOL ctxt a labels).2⟩
-  | mark h ih =>
-    intro labels
-    simpa only [LoopToWord.compHOL] using ih labels
+/-- Loop-to-Word compilation never introduces code installation, even across calls. -/
+theorem loopComp_noInstall {width : Nat} [NeZero width]
+    (p : HolLoopProg width) (ctxt : Spt Nat) (labels : Nat × Nat) :
+    noInstallSubprogsHOL (LoopToWord.compHOL ctxt p labels).1 = true := by
+  rw [noInstallSubprogsHOL_eq_notCreated]
+  apply LoopToWord.loop_to_word_comp_not_created _ ?_ ctxt p labels _ _ rfl
+  intro x hx
+  cases x <;> simp at hx ⊢
 
+/-- Loop-to-Word compilation never introduces allocation. -/
+theorem loopComp_noAlloc {width : Nat} [NeZero width]
+    (p : HolLoopProg width) (ctxt : Spt Nat) (labels : Nat × Nat) :
+    noAllocSubprogsHOL (LoopToWord.compHOL ctxt p labels).1 = true := by
+  rw [noAllocSubprogsHOL_eq_notCreated]
+  apply LoopToWord.loop_to_word_comp_not_created _ ?_ ctxt p labels _ _ rfl
+  intro x hx
+  cases x <;> simp at hx ⊢
+
+/-- Loop-to-Word compilation never introduces must-terminate blocks. -/
+theorem loopComp_noMt {width : Nat} [NeZero width]
+    (p : HolLoopProg width) (ctxt : Spt Nat) (labels : Nat × Nat) :
+    noMtSubprogsHOL (LoopToWord.compHOL ctxt p labels).1 = true := by
+  rw [noMtSubprogsHOL_eq_notCreated]
+  apply LoopToWord.loop_to_word_comp_not_created _ ?_ ctxt p labels _ _ rfl
+  intro x hx
+  cases x <;> simp at hx ⊢
 
 /-- Completed Loop results whose Word return label is the program entry label. -/
 inductive CompleteLoopResult : Option (LoopResultExact 64) → Prop
@@ -147,7 +156,7 @@ theorem stackReady_loopToStack {C F : Type}
     completeLoop_resultCase ctxt word wordPost sourcePost result wordResult complete wordRelation
   have loopBlock := stackReady_wordBlock shape ctxt labels
   have callShape : CallSequence (LoopToWord.compHOL ctxt p labels).1 := .block loopBlock
-  have noInstall := stackReady_noInstall shape ctxt labels
+  have noInstall := loopComp_noInstall p ctxt labels
   obtain ⟨targetPost,targetResult,targetRun,targetRelation,targetBound⟩ :=
     callSequence_bounded ac _ callShape word wordPost target wordResult k f frame bs bsPost n nPost limit
       compiled lens noInstall noInstallCode code wordNotTimeout (wordBound.trans stepBound)
