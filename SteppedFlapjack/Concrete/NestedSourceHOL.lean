@@ -1,6 +1,7 @@
 import SteppedFlapjack.Concrete.NestedCalls
 import SteppedFlapjack.Concrete.Phase7SourceClock
 import SteppedFlapjack.PanToCrepSteps.WhileSteps
+import SteppedFlapjack.CrepToLoopSteps.CallFrontendShape
 
 /-! Original HOL-shaped source execution for the nested-call witness. -/
 namespace SteppedFlapjack.Concrete
@@ -79,6 +80,14 @@ theorem nestedCall_frontend (ctxt : PanToCrepContextExact 64) : CallFrontend ctx
     apply FrontendProgram.ret
     apply FrontendScalar.local (ofString "answer") (ctxt.vmax+1)
     simp [decCallSlots,HolFiniteMapExact.lookup_update,FUPDATE]
+
+/-- The actual ordinary-call witness compiles into the optimizer's recursive
+call-aware Loop shape in every compiler context. -/
+theorem nestedCall_optimised_frontend_shape (ctxt : PanToCrepContextExact 64)
+    (lc : CrepToLoopContextExact) (live : NumSet) :
+    SteppedFlapjack.LoopLiveSteps.SimpleLoopSequenceSource
+      (optimiseHOL (compileHOLExact lc live (compileProgExactHOLW ctxt (progToHOL nestedCallEntry)))) :=
+  SteppedFlapjack.CrepToLoopSteps.callFrontend_optimised_loopShape (nestedCall_frontend ctxt) lc live
 
 /-- The remaining functions provide the tail-call and return cases. -/
 theorem nestedCall_callees_frontend (ctxt : PanToCrepContextExact 64) :
