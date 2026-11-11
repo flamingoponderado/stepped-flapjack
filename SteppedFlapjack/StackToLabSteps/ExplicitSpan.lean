@@ -1,5 +1,6 @@
 import SteppedFlapjack.StackToLabSteps.FullInitStackLabSteps
 import SteppedFlapjack.StackRemoveSteps.ExplicitFields
+import SteppedFlapjack.StackSteps.TableBound
 import Flapjack.Compiler.Backend.LabProps.EvaluateAddClock
 namespace SteppedFlapjack.StackToLabSteps
 open Flapjack Flapjack.StackSemEvaluate
@@ -84,4 +85,37 @@ theorem fullInitStackLab_explicit {width : Nat} [NeZero width] {C F : Type}
     (stackLabTickLimit dataConf maxHeap sp offset bitmaps code coracle n - m) ⟨labRun,by simp⟩
   refine ⟨{labPost with clock := labPost.clock + (stackLabTickLimit dataConf maxHeap sp offset bitmaps code coracle n - m)},?_,events⟩
   simpa only [Nat.add_sub_of_le le] using boosted
+/-- With no dynamically installed code, the Stack-to-Lab theorem derives its
+visit budget from the concrete initial code and source clock. -/
+theorem fullInitStackLab_table_explicit {width : Nat} [NeZero width] {C F : Type}
+    (stackConf : StackToLab.Config) (dataConf : DataToWord.Config) (maxHeap sp : Nat)
+    (offset : BitVec width × BitVec width) (bitmaps : List (BitVec width))
+    (code : List (Nat × HolProg width)) (lab : LabSem.State width C F)
+    (saveRegs : Nat → Bool) (dataSp : Nat)
+    (coracle : Nat → C × List (Nat × HolProg width) × List (BitVec width))
+    (empty : ∀ i, (coracle i).2.1 = [])
+    (hwidth : 8 ≤ width)
+    (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle)
+    (k : Nat) (res : Option (StackSemResult width)) (post : StackSemStateFiniteExact width C F)
+    (outcome : HolOutcome)
+    (run : evaluate ((.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg width),
+      {((fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1) with clock := k}) = (res,post))
+    (nonError : res ≠ some .error) (complete : stackEntryClass res = .CompleteResult outcome) :
+    let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * k
+    ∃ labPost, LabSem.evaluate {lab with clock := stackLabTickLimit dataConf maxHeap sp offset bitmaps code coracle n} =
+      (.halt outcome,labPost) ∧ labPost.ffi.ioEvents = post.ffi.ioEvents := by
+  let initial := (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1
+  let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * k
+  have initCode : initial.code = sptFromAList code := by
+    simp [initial,fullMakeInit,StackAlloc.makeInit]
+  have initOracle : emptyCodeOracle {initial with clock := k} := by
+    intro i
+    simpa [initial,fullMakeInit,StackAlloc.makeInit] using empty i
+  have bounded := stackTable_clock_bound (.call none (.inl BvlToBvi.initGlobalsLocation) none)
+    {initial with clock := k} initOracle
+  have bound : steps (.call none (.inl BvlToBvi.initGlobalsLocation) none, {initial with clock := k}) ≤ n := by
+    simpa [stackControlWeight,initCode,n] using bounded
+  exact fullInitStackLab_explicit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle
+    hwidth hA k n res post outcome run nonError bound complete
+
 end SteppedFlapjack.StackToLabSteps
