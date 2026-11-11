@@ -70,4 +70,22 @@ theorem compiledScalar_prefix {width : Nat} [NeZero width] {e : CrepExpHOL width
     simp only [compileExpHOLExact,ea,eb,progIfHOLExact,suffix]
 
 
+/-- A list of scalar arguments compiles to loop-free prefixes, preserving
+argument order and the length of the value list. -/
+theorem compiledScalars_prefix {width : Nat} [NeZero width]
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
+    (ctxt : CrepToLoopContextExact) (tmp : Nat) (live : NumSet) :
+    ∃ code values next outLive,
+      compileExpsHOLExact ctxt tmp live args = (code,values,next,outLive) ∧
+      values.length = args.length ∧ PrefixShape code := by
+  induction args generalizing tmp live with
+  | nil => exact ⟨[],[],tmp,live,by simp [compileExpsHOLExact],rfl,by simp [PrefixShape]⟩
+  | cons e es ih =>
+    obtain ⟨code,value,next,outLive,compiled,headShape⟩ :=
+      compiledScalar_prefix (shape e (by simp)) ctxt tmp live
+    obtain ⟨rest,values,final,finalLive,compiledRest,len,restShape⟩ :=
+      ih (by intro x hx; exact shape x (by simp [hx])) next outLive
+    refine ⟨code ++ rest,value :: values,final,finalLive,?_,by simp [len],headShape.append restShape⟩
+    simp only [compileExpsHOLExact,compiled,compiledRest]
+
 end SteppedFlapjack.CrepToLoopSteps
