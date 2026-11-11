@@ -34,6 +34,7 @@ theorem branch_stackSize_preserved {p : WordLangProgHOL (BitVec width)} (hp : Br
 
 
 open SteppedFlapjack.WordToStackSteps
+open Flapjack.WordSemStackEq
 set_option maxHeartbeats 1000000 in
 /-- Call-free, no-install code preserves the maximum stack usage. -/
 theorem loopBlock_stackMax {p : WordLangProgHOL (BitVec width)} (hp : LoopBlock p) :
@@ -406,4 +407,124 @@ theorem regTail_stackMax_bound {p : WordLangProgHOL (BitVec width)} (shape : Reg
       refine ⟨mb,maxB,boundB,?_⟩
       intro hn
       exact (sizeB hn).trans sizeEq
+/-- Frame-key equivalence preserves concrete frame bounds. -/
+theorem stackFramesFit_of_keyEq (limit : Nat) (xs ys : List (WordSemStackFrame width))
+    (keys : sKeyEq xs ys) (fits : stackFramesFit limit xs) : stackFramesFit limit ys := by
+  induction xs generalizing ys with
+  | nil =>
+    cases ys with
+    | nil => exact fits
+    | cons _ _ => contradiction
+  | cons x xs ih =>
+    cases ys with
+    | nil => contradiction
+    | cons y ys =>
+      have k : sKeyEq xs ys ∧ sFrameKeyEq x y := keys
+      have tailFit : stackFramesFit limit xs := by
+        intro f hf
+        exact fits f (by simp [hf])
+      have outTail := ih ys k.1 tailFit
+      have headFit := fits x (by simp)
+      have outHead : match y with
+        | .stackFrame (some n) _ _ _ => n ≤ limit
+        | _ => False := by
+          cases x with
+          | stackFrame n a b h =>
+            cases y with
+            | stackFrame n' a' b' h' =>
+              have same := (sFrameKeyEqDef2 n n' a b a' b' h h').mp k.2
+              cases n <;> cases n' <;> simp_all
+      intro f hf
+      simp only [List.mem_cons] at hf
+      rcases hf with rfl | hf
+      · cases f with
+        | stackFrame n a b h => cases n <;> exact outHead
+      · exact outTail f hf
+
+/-- Results that preserve the caller stack instead of unwinding or flushing it. -/
+def stackPreservingResult (res : Option (WordSemResult width)) : Prop :=
+  match res with
+  | none | some (.result _ _) | some (.break _) | some (.continue _) => True
+  | _ => False
+
+/-- Continuing execution and ordinary returns preserve bounded saved frames. -/
+theorem evaluate_stackFramesFit (p : WordLangProgHOL (BitVec width))
+    (s t : WordSemStateFiniteExact width C F) (res : Option (WordSemResult width)) (limit : Nat)
+    (run : evaluate p s = (res,t)) (preserves : stackPreservingResult res)
+    (fits : stackFramesFit limit s.stack) :
+    stackFramesFit limit t.stack ∧ t.stack.length = s.stack.length := by
+  have h := evaluateStackSwap p s
+  unfold stackSwapPost at h
+  rw [run] at h
+  have keys : sKeyEq s.stack t.stack := by
+    cases res with
+    | none => exact h.1
+    | some r =>
+      cases r <;> simp_all [stackPreservingResult]
+  exact ⟨stackFramesFit_of_keyEq limit s.stack t.stack keys fits, (sKeyEqLength _ _ keys).symm⟩
+/-- Exception unwinding removes a frame and restores a bounded handler frame. -/
+theorem evaluate_exception_stackFramesFit (p : WordLangProgHOL (BitVec width))
+    (s t : WordSemStateFiniteExact width C F) (v payload : WordLocW width) (limit : Nat)
+    (run : evaluate p s = (some (.exception v payload),t))
+    (fits : stackFramesFit limit s.stack) :
+    stackFramesFit limit t.stack ∧ t.stack.length < s.stack.length ∧
+      ∃ size, t.localsSize = some size ∧ size ≤ limit := by
+  have h := evaluateStackSwap p s
+  unfold stackSwapPost at h
+  rw [run] at h
+  obtain ⟨_, e0, e, handler, rest, frameSize, locals, last, sizeEq, _, keyEq, _, _⟩ := h
+  have sub : ∀ f, f ∈ wordSemLastN (s.handler + 1) s.stack → f ∈ s.stack := by
+    intro f mem
+    unfold wordSemLastN at mem
+    simp only [List.mem_reverse] at mem
+    exact List.mem_reverse.mp (List.mem_of_mem_take mem)
+  have suffixFit : stackFramesFit limit (wordSemLastN (s.handler+1) s.stack) := by
+    intro f mem
+    exact fits f (sub f mem)
+  rw [last] at suffixFit
+  have head := suffixFit (.stackFrame frameSize e0 e (some handler)) (by simp)
+  have restFit : stackFramesFit limit rest := by
+    intro f mem
+    exact suffixFit f (by simp [mem])
+  have tailBound : rest.length + 1 ≤ s.stack.length := by
+    have len : (wordSemLastN (s.handler+1) s.stack).length ≤ s.stack.length := by
+      simp [wordSemLastN, List.length_take]
+    rw [last] at len
+    simp only [List.length_cons] at len
+    omega
+  have tlen := sKeyEqLength t.stack rest keyEq
+  refine ⟨stackFramesFit_of_keyEq limit rest t.stack ((sKeyEqSym _ _).mp keyEq) restFit, by omega, ?_⟩
+  cases frameSize with
+  | none => simp at head
+  | some size => exact ⟨size, sizeEq.symm, head⟩
+
+/-- A completed nested call restores the caller depth and a bounded active frame. -/
+theorem returningCall_preserves_frames (body : WordLangProgHOL (BitVec width))
+    (s middle final : WordSemStateFiniteExact width C F)
+    (envs : Spt (WordLocW width) × Spt (WordLocW width))
+    (handler : Option (Nat × WordLangProgHOL (BitVec width) × Nat × Nat))
+    (args : List (WordLocW width)) (v : WordLocW width) (vs : List (WordLocW width))
+    (callerSize calleeSize limit : Nat) (caller : s.localsSize = some callerSize)
+    (callerFits : callerSize ≤ limit) (fits : stackFramesFit limit s.stack)
+    (run : evaluate body (callEnv args (some calleeSize) (pushEnv envs handler (decClock s))) =
+      (some (.result v vs),middle))
+    (pop : popEnv middle = some final) :
+    stackFramesFit limit final.stack ∧ final.stack.length = s.stack.length ∧
+      ∃ size, final.localsSize = some size ∧ size ≤ limit := by
+  have initFit : stackFramesFit limit (callEnv args (some calleeSize) (pushEnv envs handler (decClock s))).stack := by
+    exact stackFramesFit_push (decClock s) envs handler callerSize limit (by simpa [decClock] using caller) callerFits (by simpa [decClock] using fits)
+  have pushedLen : (callEnv args (some calleeSize) (pushEnv envs handler (decClock s))).stack.length = s.stack.length + 1 := by
+    cases handler with
+    | none => simp [pushEnv, WordSemStateFiniteExact.callEnv, decClock]
+    | some h =>
+      obtain ⟨a,b,c,d⟩ := h
+      simp [pushEnv, WordSemStateFiniteExact.callEnv, decClock]
+  have h := evaluate_stackFramesFit body _ middle (some (.result v vs)) limit run (by simp [stackPreservingResult]) initFit
+  obtain ⟨finalFit,size,sizeEq,sizeFits⟩ := stackFramesFit_pop middle final limit h.1 pop
+  have popLen : final.stack.length + 1 = middle.stack.length := by
+    unfold popEnv at pop
+    split at pop <;> try contradiction
+    all_goals simp only [Option.some.injEq] at pop; subst final; simp_all
+  exact ⟨finalFit, by omega, size, sizeEq, sizeFits⟩
+
 end SteppedFlapjack.WordSimpSteps
