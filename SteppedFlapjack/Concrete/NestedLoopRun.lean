@@ -235,7 +235,7 @@ theorem nestedCounted_crepToLoop : ∃ final, evaluate (compileHOLExact nestedLo
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
-private theorem nestedOptimizedLoopBody_eq : nestedOptimizedLoopBody = nestedLoopCode64 := by
+theorem nestedOptimizedLoopBody_eq : nestedOptimizedLoopBody = nestedLoopCode64 := by
   have head := congrArg List.head? nestedCall_loop_code
   have crep : nestedCrepBody = .seq .skip (.call none (ofString "main'") []) := by
     simp [nestedCrepBody,nestedPanContext,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList]

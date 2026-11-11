@@ -245,15 +245,15 @@ theorem nestedCall_frontendCode (bitmapWords : Nat) (ctxt : PanToCrepContextExac
         exact nestedCall_frontend _
       · simp at found
 
-private def nestedHOLFunctions : List (FunDeclHOL 64) :=
+def nestedHOLFunctions : List (FunDeclHOL 64) :=
   [⟨ofString "main",false,true,[],progToHOL nestedCallEntry,.one⟩,
    ⟨ofString "middle",false,false,[],.call none (ofString "leaf") [],.one⟩,
    ⟨ofString "leaf",false,false,[],.return (.const 7),.one⟩]
 
-private theorem nestedHOLDeclarations : nestedHOLFunctions.map DeclHOL.function = nestedCallDeclarations.map declToHOL := by
+theorem nestedHOLDeclarations : nestedHOLFunctions.map DeclHOL.function = nestedCallDeclarations.map declToHOL := by
   simp [nestedHOLFunctions,nestedCallDeclarations,nestedCallEntry,declToHOL,funDeclToHOL,progToHOL,expToHOL,shapeToHOL]
 
-private theorem nestedHOLFunctionShapes : ∀ entry ∈ functionsHOL (nestedHOLFunctions.map DeclHOL.function),
+theorem nestedHOLFunctionShapes : ∀ entry ∈ functionsHOL (nestedHOLFunctions.map DeclHOL.function),
     ∃ names, ∃ program : Prog (RiscV.Word 64),
       entry.2.1 = names.map (fun n => (ofString n,ShapeHOL.one)) ∧
       entry.2.2.1 = progToHOL program ∧ CallSupportedIn names program ∧ ProgByteRanged program := by
