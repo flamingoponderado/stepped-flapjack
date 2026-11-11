@@ -12,6 +12,52 @@ open Flapjack.LoopSemStateFiniteExact Flapjack.WordSemStateFiniteExact
 open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.WordToWord
 open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 
+/-- A counted source return reaches the simplified body and related function
+  table within a concrete source-derived visit bound. -/
+theorem countedCalls_simplifiedVisits {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
+    [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
+    (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
+    (byteRanged : ProgByteRanged program)
+    (codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry)
+    (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
+      ∃ scope, CallSupportedIn scope body)
+    (targetCode : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (codeRel : PanSimp.CodeRel source.code targetCode) (factor : Nat) (positive : 1 ≤ factor)
+    (table : SimpVisits.SimpTableSupported source.code factor)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ) (exnContracts : InfoMap Shape) (fuel count : Nat)
+    (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))
+    (postMemory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (postFfi : FfiState σ) (value : BitVec 64)
+    (run : evalPanValueFfiProgSteps context primitive handler production.structs (countedFunctionsOfCode production.code)
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+      production.locals production.globals production.memory production.ffi program
+      (memoryAccess := some (panSemBitVec64MemoryAccess production))
+      (contracts := some (countedContractsOfCode production.code exnContracts)) =
+        some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
+    (budget : count ≤ source.clock) :
+    ∃ sourceFinal targetFinal,
+      source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word value))),sourceFinal) ∧
+      ({source with code := targetCode} : PanSemStateFiniteExact 64 σ).evaluateHOLFiniteState
+        (progToHOL (panSimpProg program)) = (some (.returned (.val (.word value))),targetFinal) ∧
+      controlSteps (progToHOL (panSimpProg program)) {source with code := targetCode} ≤
+        factor * count + SimpVisits.hw (progToHOL (panSimpProg program)) ∧
+      targetFinal.ffi = sourceFinal.ffi ∧ FfiStateRel postFfi sourceFinal.ffi := by
+  obtain ⟨holResult,sourceFinal,sourceRun,outcome,sourceBound,_⟩ := supportedCalls_counted_source supported production source
+    rel ranged words byteRanged codeRanged codeShape context primitive handler exnContracts fuel count
+    (.returned postLocals postGlobals postMemory postFfi [.word value]) run budget
+  cases outcome with
+  | returned _ _ _ _ _ _ finalRel _ _ =>
+    have cost := SimpVisits.callSupported_simp_tableVisits supported source targetCode codeRel factor positive table (by rw [sourceRun]; simp)
+    have original : controlSteps (progToHOL program) source ≤ count := by simpa [countedErrorBonus] using sourceBound
+    obtain ⟨targetFinal,targetRun,targetRel⟩ := callSupported_panSimp_run supported source sourceFinal {source with code := targetCode}
+      (some (.returned (.val (.word value)))) sourceRun (by simp) ⟨rfl,codeRel⟩
+    have ffi : targetFinal.ffi = sourceFinal.ffi := by
+      simpa using congrArg (fun st : PanSemStateFiniteExact 64 σ => st.ffi) targetRel.1
+    refine ⟨sourceFinal,targetFinal,sourceRun,targetRun,?_,ffi,finalRel.2.2.2.2.2.2.2.2.2.2.1⟩
+    exact cost.trans (Nat.add_le_add_right (Nat.mul_le_mul_left factor original) _)
+
 /-- A call-aware counted source return composes with the actual declaration
 frontend, carrying the source count into the Crep visit bound. -/
 theorem callFrontend_counted_declaration_steps {scope : List VarName} {program : Prog (RiscV.Word 64)}

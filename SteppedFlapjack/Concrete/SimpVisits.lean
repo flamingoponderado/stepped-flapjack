@@ -1241,4 +1241,62 @@ theorem callSupported_simp_tableVisits {scope : List VarName} {σ : Type} {progr
     (hw (progToHOL (panSimpProg program)))
   omega
 
+abbrev SimpEntry := MlS × List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL
+
+def simpTableFactor (entries : List SimpEntry) : Nat :=
+  1 + entries.foldr (fun entry n => max (hw (panSimpCompileHOL entry.2.2.1)) n) 0
+
+private theorem weight_mem (entries : List SimpEntry) (entry : SimpEntry) (member : entry ∈ entries) :
+    hw (panSimpCompileHOL entry.2.2.1) + 1 ≤ simpTableFactor entries := by
+  unfold simpTableFactor
+  induction entries with
+  | nil => simp at member
+  | cons head rest ih =>
+    simp only [List.mem_cons] at member
+    simp only [List.foldr_cons]
+    rcases member with rfl | member
+    · have h := Nat.le_max_left (hw (panSimpCompileHOL entry.2.2.1))
+        (List.foldr (fun entry n => max (hw (panSimpCompileHOL entry.2.2.1)) n) 0 rest)
+      omega
+    · have h := ih member
+      have h' := Nat.le_max_right (hw (panSimpCompileHOL head.2.2.1))
+        (List.foldr (fun entry n => max (hw (panSimpCompileHOL entry.2.2.1)) n) 0 rest)
+      omega
+
+private theorem lookupMem {α β : Type} [BEq α] [LawfulBEq α]
+    (entries : List (α × β)) (key : α) (value : β) (found : entries.lookup key = some value) :
+    (key,value) ∈ entries := by
+  induction entries with
+  | nil => simp at found
+  | cons entry rest ih =>
+    obtain ⟨name,body⟩ := entry
+    by_cases eq : key = name
+    · subst name; simp at found; subst body; simp
+    · have ne : (key == name) = false := by simp [eq]
+      simp only [List.lookup_cons,ne] at found
+      exact List.mem_cons_of_mem _ (ih found)
+
+/-- The table factor is computed from the source function entries. -/
+theorem simpTableSupported_of_entries (entries : List SimpEntry)
+    (shapes : ∀ entry ∈ entries, ∃ scope, ∃ program : Prog (RiscV.Word 64),
+      entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program) :
+    SimpTableSupported (HolFiniteMapExact.empty.updateList entries.reverse) (simpTableFactor entries) := by
+  intro name values body locals rsh found
+  obtain ⟨params,codeFound,_,_,_⟩ := lookupCodeHOLFinite_some_inv _ name values body locals rsh found
+  have lookup : entries.lookup name = some (params,body,rsh) := by
+    have h := FLOOKUP_FUPDATE_LIST_reverse_eq_lookup entries name
+    simp only [FLOOKUP] at h
+    rw [HolFiniteMapExact.lookup_updateList] at codeFound
+    change FUPDATE_LIST FEMPTY entries.reverse name = _ at codeFound
+    rw [h] at codeFound
+    exact codeFound
+  have member : (name,params,body,rsh) ∈ entries := lookupMem entries name (params,body,rsh) lookup
+  obtain ⟨scope,program,bodyEq,supported⟩ := shapes _ member
+  refine ⟨scope,program,bodyEq,supported,?_⟩
+  have w := weight_mem entries (name,params,body,rsh) member
+  simp only at w
+  change body = progToHOL program at bodyEq
+  rw [bodyEq,callSupported_panSimp_hol supported] at w
+  exact w
+
 end SteppedFlapjack.Concrete.SimpVisits
