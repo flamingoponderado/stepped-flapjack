@@ -1,3 +1,4 @@
+import SteppedFlapjack.LoopSteps.IterationShift
 import SteppedFlapjack.LoopLiveSteps.TailEntryCode
 import SteppedFlapjack.LoopLiveSteps.TailEntryBound
 import SteppedFlapjack.LoopLiveSteps.ExecutableBranch
@@ -1182,5 +1183,230 @@ theorem optimise_tailEntry_source_bound {p : HolLoopProg 64} {loc : Nat} (shape 
   have optBound := tailEntry_consumption_bound optShape s post result K code optRun
   have consumed := tailEntry_clock_consumed shape s post result K code run
   exact ⟨optRun,optShape,optBound.trans (Nat.mul_le_mul_left _ (by omega))⟩
+
+private theorem returning_shift_at {width : Nat} [NeZero width] {F : Type}
+    (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exc : Nat)
+    (markHandler markNormal : Bool) (s final : LoopSemStateFiniteExact width F)
+    (res : Option (LoopResultExact width)) (extra : Nat)
+    (bodyShift : ∀ values env body cut post bodyResult,
+      getVars args s = some values → findCode (some loc) values s.code = some (env,body) →
+      cutRes live (none,s) = (none,cut) → evaluate body {cut with locals := env} = (bodyResult,post) →
+      bodyResult ≠ some .timeOut →
+      steps body {{cut with locals := env} with clock := cut.clock + extra} = steps body {cut with locals := env})
+    (run : evaluate (.call (some (names,live)) (some loc) args
+      (some (exc,if markHandler then .mark (.raise exc) else .raise exc,
+        if markNormal then .mark .skip else .skip,liveOut))) s = (res,final))
+    (nonTimeout : res ≠ some .timeOut) :
+    steps (.call (some (names,live)) (some loc) args
+      (some (exc,if markHandler then .mark (.raise exc) else .raise exc,
+        if markNormal then .mark .skip else .skip,liveOut))) {s with clock := s.clock + extra} =
+    steps (.call (some (names,live)) (some loc) args
+      (some (exc,if markHandler then .mark (.raise exc) else .raise exc,
+        if markNormal then .mark .skip else .skip,liveOut))) s := by
+  have getShift : getVars args {s with clock := s.clock + extra} = getVars args s := getVars_upd_clock s _ args
+  cases get : getVars args s with
+  | none =>
+    rw [steps.eq_def,steps.eq_def]
+    simp [getShift,get]
+  | some values =>
+    cases found : findCode (some loc) values s.code with
+    | none =>
+      rw [steps.eq_def,steps.eq_def]
+      simp [getShift,get,found]
+    | some pair =>
+      obtain ⟨env,body⟩ := pair
+      by_cases nd : names.Nodup
+      · rcases cutRun : cutRes live (none,s) with ⟨cutResult,cut⟩
+        cases cutResult with
+        | some err =>
+          have errNotTimeout : some err ≠ some .timeOut := by
+            intro bad
+            have whole := run
+            rw [evaluate] at whole
+            simp only [get,found,nd,not_true_eq_false,if_false] at whole
+            rw [cutRun] at whole
+            simp only [Prod.mk.injEq] at whole
+            exact nonTimeout (whole.1.symm.trans bad)
+          have cutShift := cutRes_add_clock live none s cut (some err) extra cutRun errNotTimeout
+          rw [steps.eq_def,steps.eq_def]
+          simp [getShift,get,found,nd,cutRun,cutShift]
+        | none =>
+          rcases bodyRun : evaluate body {cut with locals := env} with ⟨bodyResult,post⟩
+          have bodyNotTimeout : bodyResult ≠ some .timeOut := by
+            intro bad
+            have whole := run
+            rw [evaluate] at whole
+            simp only [get,found,nd,not_true_eq_false,if_false] at whole
+            rw [cutRun] at whole
+            simp only at whole
+            rw [fix_clock_evaluate,bodyRun,bad] at whole
+            simp only [Prod.mk.injEq] at whole
+            exact nonTimeout whole.1.symm
+          have cutShift := cutRes_add_clock live none s cut none extra cutRun (by simp)
+          have bodyRunShift := evaluate_add_clock_eq body {cut with locals := env} bodyResult post extra bodyRun bodyNotTimeout
+          have count := bodyShift values env body cut post bodyResult get found cutRun bodyRun bodyNotTimeout
+          have get' : getVars args {s with clock := s.clock + extra} = some values := by rw [getShift,get]
+          have found' : findCode (some loc) values ({s with clock := s.clock + extra} : LoopSemStateFiniteExact width F).code = some (env,body) := found
+          have cutShift' : cutRes live (none,{s with clock := s.clock + extra}) = (none,{cut with clock := cut.clock + extra}) := cutShift
+          have bodyRunShift' : evaluate body {{cut with clock := cut.clock + extra} with locals := env} =
+              (bodyResult,{post with clock := post.clock + extra}) := by simpa using bodyRunShift
+          rw [steps_call_returning _ _ _ _ _ _ _ _ _ _ _ _ get' found' nd cutShift' bodyRunShift',
+            steps_call_returning _ _ _ _ _ _ _ _ _ _ _ _ get found nd cutRun bodyRun]
+          rw [count]
+          cases bodyResult with
+          | none => rfl
+          | some r =>
+            cases r <;> try rfl
+            all_goals cases markHandler <;> cases markNormal <;> simp [steps_mark,steps_leaf]
+
+      · rw [steps.eq_def,steps.eq_def]
+        simp [getShift,get,found,nd]
+
+set_option maxHeartbeats 5000000 in
+/-- A completed run retains its exact visit count when clock is added, including nested calls. -/
+theorem loopTable_steps_add_clock {width : Nat} [NeZero width] {F : Type}
+    (p : HolLoopProg width) (s final : LoopSemStateFiniteExact width F)
+    (res : Option (LoopResultExact width)) (shape : SimpleLoopSequenceSource p)
+    (table : LoopTableSupported s.code) (run : evaluate p s = (res,final))
+    (nonTimeout : res ≠ some .timeOut) (extra : Nat) :
+    steps p {s with clock := s.clock + extra} = steps p s := by
+  have key : ∀ (x : Nat × Nat) (p : HolLoopProg width) (s final : LoopSemStateFiniteExact width F)
+      (res : Option (LoopResultExact width)), (s.clock,sizeOf p) = x → SimpleLoopSequenceSource p →
+      LoopTableSupported s.code → evaluate p s = (res,final) → res ≠ some .timeOut →
+      steps p {s with clock := s.clock + extra} = steps p s := by
+    intro x
+    induction x using (Prod.lex Nat.lt_wfRel Nat.lt_wfRel).wf.induction with
+    | h x ih0 =>
+      intro p s final res hx shape table run nonTimeout
+      have ih : ∀ (q : HolLoopProg width) (t u : LoopSemStateFiniteExact width F) (r : Option (LoopResultExact width)),
+          Prod.Lex (· < ·) (· < ·) (t.clock,sizeOf q) (s.clock,sizeOf p) →
+          SimpleLoopSequenceSource q → t.code = s.code → evaluate q t = (r,u) → r ≠ some .timeOut →
+          steps q {t with clock := t.clock + extra} = steps q t := by
+        intro q t u r smaller qshape same qrun qnonTimeout
+        have table' : LoopTableSupported t.code := by rw [same]; exact table
+        exact ih0 _ (hx ▸ smaller) q t u r rfl qshape table' qrun qnonTimeout
+      clear ih0 hx
+      cases shape with
+      | branch h => exact branchedProgram_steps_add_clock (branch_branched h) s final res run nonTimeout extra
+      | @loop live exits body h =>
+        apply nestedLoop_steps_add_clock_at live exits body s final res run nonTimeout extra
+        intro t u r small same trun noTime
+        exact ih body t u r (Prod.Lex.left _ _ small) h same trun noTime
+      | @seq a b ha hb =>
+        rw [steps_seq,steps_seq]
+        rcases firstRun : evaluate a s with ⟨firstRes,middle⟩
+        have firstNotTimeout : firstRes ≠ some .timeOut := by
+          intro bad
+          have whole := run
+          rw [evaluate_seq,firstRun,bad] at whole
+          cases whole
+          exact nonTimeout rfl
+        have firstLift := evaluate_add_clock_eq a s firstRes middle extra firstRun firstNotTimeout
+        rw [firstLift]
+        have firstSteps := ih a s middle firstRes (Prod.Lex.right _ (by simp_wf; omega)) ha rfl firstRun firstNotTimeout
+        rw [firstSteps]
+        cases firstRes with
+        | some r => rfl
+        | none =>
+          have secondRun : evaluate b middle = (res,final) := by
+            rw [evaluate_seq,firstRun] at run
+            exact run
+          have clock := evaluate_clock a s none middle firstRun
+          have code := SteppedFlapjack.LoopLiveSteps.evaluate_code a s middle none firstRun
+          have secondSteps := ih b middle final res (lexLt clock (by simp_wf)) hb code secondRun nonTimeout
+          simpa only using congrArg (fun n => 1 + steps a s + n) secondSteps
+      | @mark q h =>
+        rw [steps_mark,steps_mark]
+        apply congrArg (Nat.add 1)
+        exact ih q s final res (Prod.Lex.right _ (by simp_wf)) h rfl (by simpa only [evaluate] using run) nonTimeout
+      | @conditional cmp r ri live a b ha hb =>
+        rw [steps_ite,steps_ite]
+        have sameLookup : sptLookup r ({s with clock := s.clock + extra} : LoopSemStateFiniteExact width F).locals =
+            sptLookup r s.locals := rfl
+        have sameImm : getVarImm ri {s with clock := s.clock + extra} = getVarImm ri s := by cases ri <;> rfl
+        rw [sameLookup,sameImm]
+        rcases hx : sptLookup r s.locals with _ | (x | ⟨_,_⟩) <;> try rfl
+        rcases hy : getVarImm ri s with _ | (y | ⟨_,_⟩) <;> try rfl
+        simp only
+        have run' := run
+        simp only [evaluate,hx,hy] at run'
+        by_cases compare : Flapjack.Compiler.Encoders.Asm.wordCmpHOL cmp x y = true
+        · simp only [compare,if_true] at run' ⊢
+          rcases branch : evaluate a s with ⟨branchResult,branchPost⟩
+          have noTimeout : branchResult ≠ some .timeOut := by
+            intro bad
+            rw [branch,bad] at run'
+            simp only [cutRes,Prod.mk.injEq] at run'
+            exact nonTimeout run'.1.symm
+          have bound := ih a s branchPost branchResult (Prod.Lex.right _ (by simp_wf; omega)) ha rfl branch noTimeout
+          exact congrArg (Nat.add 1) bound
+        · simp only [compare,Bool.false_eq_true,if_false] at run' ⊢
+          rcases branch : evaluate b s with ⟨branchResult,branchPost⟩
+          have noTimeout : branchResult ≠ some .timeOut := by
+            intro bad
+            rw [branch,bad] at run'
+            simp only [cutRes,Prod.mk.injEq] at run'
+            exact nonTimeout run'.1.symm
+          have bound := ih b s branchPost branchResult (Prod.Lex.right _ (by simp_wf; omega)) hb rfl branch noTimeout
+          exact congrArg (Nat.add 1) bound
+      | tail loc args =>
+        have getShift : getVars args {s with clock := s.clock + extra} = getVars args s := getVars_upd_clock s (s.clock + extra) args
+        cases get : getVars args s with
+        | none =>
+          rw [steps.eq_def,steps.eq_def]
+          simp [getShift,get]
+        | some values =>
+          cases found : findCode (some loc) values s.code with
+          | none =>
+            rw [steps.eq_def,steps.eq_def]
+            simp [getShift,get,found]
+          | some pair =>
+            obtain ⟨env,body⟩ := pair
+            have nz : s.clock ≠ 0 := by
+              intro zero
+              rw [evaluate] at run
+              simp [get,found,zero] at run
+              exact nonTimeout run.1.symm
+            rcases bodyRun : evaluate body {decClock s with locals := env} with ⟨bodyResult,post⟩
+            have bodyNotTimeout : bodyResult ≠ some .timeOut := by
+              intro bad
+              have whole := run
+              rw [evaluate] at whole
+              simp [get,found,nz,bodyRun,bad] at whole
+              exact nonTimeout whole.1.symm
+            obtain ⟨params,lookup⟩ := findCode_direct_body s.code loc values env body found
+            have smaller : (decClock s).clock < s.clock := by simp [decClock]; omega
+            have bound := ih body {decClock s with locals := env} post bodyResult
+              (Prod.Lex.left _ _ smaller) (table loc params body lookup) rfl bodyRun bodyNotTimeout
+            have get' : getVars args {s with clock := s.clock + extra} = some values := by rw [getShift,get]
+            have found' : findCode (some loc) values ({s with clock := s.clock + extra} : LoopSemStateFiniteExact width F).code = some (env,body) := found
+            have nz' : (s.clock + extra) ≠ 0 := by omega
+            rw [steps_call_tail _ _ _ _ _ _ get' found' nz', steps_call_tail _ _ _ _ _ _ get found nz]
+            apply congrArg (Nat.add 1)
+            have clockEq : s.clock + extra - 1 = s.clock - 1 + extra := by omega
+            simpa [decClock, clockEq] using bound
+      | returning names live loc exc args liveOut =>
+        apply returning_shift_at loc args names live liveOut exc false false s final res extra ?_ run nonTimeout
+        intro values env body cut post bodyResult get found cutRun bodyRun noTime
+        obtain ⟨params,lookup⟩ := findCode_direct_body s.code loc values env body found
+        have small := cutRes_none_clock cutRun
+        have same : cut.code = s.code := by
+          have h := SteppedFlapjack.LoopLiveSteps.cutRes_code live none s
+          rw [cutRun] at h
+          exact h
+        exact ih body {cut with locals := env} post bodyResult (Prod.Lex.left _ _ small)
+          (table loc params body lookup) same bodyRun noTime
+      | returningMarked names live loc exc args liveOut =>
+        apply returning_shift_at loc args names live liveOut exc true true s final res extra ?_ run nonTimeout
+        intro values env body cut post bodyResult get found cutRun bodyRun noTime
+        obtain ⟨params,lookup⟩ := findCode_direct_body s.code loc values env body found
+        have small := cutRes_none_clock cutRun
+        have same : cut.code = s.code := by
+          have h := SteppedFlapjack.LoopLiveSteps.cutRes_code live none s
+          rw [cutRun] at h
+          exact h
+        exact ih body {cut with locals := env} post bodyResult (Prod.Lex.left _ _ small)
+          (table loc params body lookup) same bodyRun noTime
+  exact key _ p s final res rfl shape table run nonTimeout
 
 end SteppedFlapjack.LoopLiveSteps
