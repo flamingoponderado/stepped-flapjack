@@ -69,6 +69,7 @@ import SteppedFlapjack.Concrete.WordTables
 import SteppedFlapjack.Concrete.WordSpan
 import SteppedFlapjack.Concrete.NestedWordSpan
 import SteppedFlapjack.Concrete.NestedMachine
+import SteppedFlapjack.Concrete.NestedCalculations
 import SteppedFlapjack.Concrete.CountdownWordSpan
 import SteppedFlapjack.Concrete.CountdownLiteral
 import SteppedFlapjack.Concrete.CountdownWordSimpLiteral
