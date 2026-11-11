@@ -98,6 +98,30 @@ theorem supported_globals_fixed {program : Prog (RiscV.Word 64)}
     compileProgExactHOL globals (progToHOL program) = progToHOL program :=
   supportedIn_globals_fixed supported.1 globals
 
+private theorem scalarList_globals_fixed {scope : List VarName} (args : List (Exp (RiscV.Word 64)))
+    (supported : ∀ e ∈ args, Scalar scope e) (globals : PanGlobalsContextExact 64) :
+    compileExpExactHOLList globals (args.map expToHOL) = args.map expToHOL := by
+  induction args with
+  | nil => simp [compileExpExactHOLList]
+  | cons e rest ih =>
+    have h : Scalar scope e := supported e (by simp)
+    have restShape : ∀ e ∈ rest, Scalar scope e := by
+      intro x hx; exact supported x (by simp [hx])
+    simp [compileExpExactHOLList,scalar_globals_fixed h globals,ih restShape]
+
+/-- Global lowering leaves every supported body, including calls, unchanged. -/
+theorem callSupportedIn_globals_fixed {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) (globals : PanGlobalsContextExact 64) :
+    compileProgExactHOL globals (progToHOL program) = progToHOL program := by
+  induction supported with
+  | base h => exact supportedIn_globals_fixed h globals
+  | tail name args scalar => simp [progToHOL,compileProgExactHOL,scalarList_globals_fixed args scalar globals]
+  | call dest name args scalar cont ih => simp [progToHOL,shapeToHOL,compileProgExactHOL,scalarList_globals_fixed args scalar globals,ih]
+  | decl name scalar body ih => simp [progToHOL,shapeToHOL,compileProgExactHOL,scalar_globals_fixed scalar globals,ih]
+  | seq a b iha ihb => simp [progToHOL,compileProgExactHOL,iha,ihb]
+  | ite scalar a b iha ihb => simp [progToHOL,compileProgExactHOL,scalar_globals_fixed scalar globals,iha,ihb]
+  | «while» scalar body ih => simp [progToHOL,compileProgExactHOL,scalar_globals_fixed scalar globals,ih]
+
 /-- The phase-zero witnesses instantiate the generalized frontend shape. -/
 theorem countdown_frontend_shape (n : Nat) (ctxt : PanToCrepContextExact 64) :
     FrontendProgram ctxt (countdownHOL n) := by
