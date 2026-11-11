@@ -1,3 +1,4 @@
+import SteppedFlapjack.WordToStackSteps.ClockSlack
 import SteppedFlapjack.WordToStackSteps.RaiseClock
 import SteppedFlapjack.StackSteps.TableBound
 import SteppedFlapjack.LoopToWordSteps.WholeCallProgram
