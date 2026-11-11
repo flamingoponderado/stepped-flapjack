@@ -1608,4 +1608,227 @@ theorem call_full_sim {width : Nat} [NeZero width] {σ : Type}
         simp [h]
       · exact bodySim
 
+section WholeTableClock
+open SteppedFlapjack.CrepSteps
+variable {width : Nat} [NeZero width]
+
+/-- Concrete clock factor from the function table, source clock, and program syntax. -/
+def callClockFactor (ref : CrepToLoopContextExact) (rows : List (List Nat × CrepProgHOL width))
+    (clock : Nat) (p : CrepProgHOL width) : Nat :=
+  3 * (callTableCost ref rows + 3)^(clock+1) * callSyntaxCost ref p
+
+private theorem simAt_mono {σ : Type} (p : CrepProgHOL width) (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (source : CrepSemHOLState width σ) (tableOk : Spt (List Nat × HolLoopProg width) → Prop) (a b : Nat)
+    (ab : a ≤ b) (sim : BodySimulationAt p ctxt live source (fun n => a*(n+1)) tableOk) :
+    BodySimulationAt p ctxt live source (fun n => b*(n+1)) tableOk := by
+  intro sourceFinal result target run nonerror sr mr gr cr tb lr
+  obtain ⟨extra,out,post,ev,hs,hm,hg,hcode,hr,hl,bound⟩ :=
+    sim sourceFinal result target run nonerror sr mr gr cr tb lr
+  exact ⟨extra,out,post,ev,hs,hm,hg,hcode,hr,hl,bound.trans (Nat.mul_le_mul_right _ ab)⟩
+
+private theorem cost_pos (ref : CrepToLoopContextExact) (p : CrepProgHOL width) : 1 ≤ callSyntaxCost ref p := by
+  cases p <;> simp only [callSyntaxCost] <;> omega
+
+private theorem factor_mono (ref : CrepToLoopContextExact) (rows : List (List Nat × CrepProgHOL width))
+    (p : CrepProgHOL width) (a b : Nat) (h : a ≤ b) : callClockFactor ref rows a p ≤ callClockFactor ref rows b p := by
+  unfold callClockFactor
+  have scale := Nat.pow_le_pow_right (n := callTableCost ref rows+3) (by omega) (show a+1 ≤ b+1 by omega)
+  exact Nat.mul_le_mul_right _ (Nat.mul_le_mul_left _ scale)
+
+private theorem factor_call (ref : CrepToLoopContextExact) (rows : List (List Nat × CrepProgHOL width))
+    (callee caller : CrepProgHOL width) (params : List Nat) (member : (params,callee) ∈ rows)
+    (a b : Nat) (h : a < b) : callClockFactor ref rows a callee ≤ callClockFactor ref rows b caller := by
+  let T := callTableCost ref rows
+  let K := T+3
+  have hcost : callSyntaxCost ref callee ≤ T := callSyntaxCost_le_table ref rows params callee member
+  have callerPos : 1 ≤ callSyntaxCost ref caller := cost_pos ref caller
+  have scale : K^(a+1) ≤ K^b := Nat.pow_le_pow_right (by dsimp [K]; omega) (by omega)
+  have step : K^(a+1) * callSyntaxCost ref callee ≤ K^(b+1) := by
+    calc
+      K^(a+1) * callSyntaxCost ref callee ≤ K^b * K := Nat.mul_le_mul scale (by dsimp [K]; omega)
+      _ = K^(b+1) := by rw [Nat.pow_succ]
+  have step' : K^(b+1) ≤ K^(b+1) * callSyntaxCost ref caller := by
+    simpa using Nat.mul_le_mul_left (K^(b+1)) callerPos
+  dsimp [callClockFactor]
+  change 3 * K^(a+1) * callSyntaxCost ref callee ≤ 3 * K^(b+1) * callSyntaxCost ref caller
+  nlinarith [step,step']
+
+set_option maxHeartbeats 4000000 in
+/-- Whole-table call-aware simulation with a program- and configuration-derived factor. -/
+theorem callWholeClock {σ : Type}
+    (ref : CrepToLoopContextExact) (rows : List (List Nat × CrepProgHOL width))
+    (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (p : CrepProgHOL width) (source : CrepSemHOLState width σ)
+    (shape : CallScalarProgram p) (table : CallScalarTable source.code)
+    (cover : ∀ name params body, source.code.lookup name = some (params,body) → (params,body) ∈ rows) :
+    ∀ ctxt live, BodySimulationAt p ctxt live source (fun n => callClockFactor ref rows source.clock p*(n+1)) tableOk := by
+  have key : ∀ (x : Nat × Nat) (p : CrepProgHOL width) (source : CrepSemHOLState width σ),
+      (source.clock,sizeOf p) = x → CallScalarProgram p → CallScalarTable source.code →
+      (∀ name params body, source.code.lookup name = some (params,body) → (params,body) ∈ rows) →
+      ∀ ctxt live, BodySimulationAt p ctxt live source (fun n => callClockFactor ref rows source.clock p*(n+1)) tableOk := by
+    intro x
+    induction x using (Prod.lex Nat.lt_wfRel Nat.lt_wfRel).wf.induction with
+    | h x ih0 =>
+      intro p source hx shape table cover ctxt live
+      have ih : ∀ (q : CrepProgHOL width) (entry : CrepSemHOLState width σ),
+          Prod.Lex (· < ·) (· < ·) (entry.clock,sizeOf q) (source.clock,sizeOf p) →
+          CallScalarProgram q → entry.code = source.code → ∀ cc ll,
+          BodySimulationAt q cc ll entry (fun n => callClockFactor ref rows entry.clock q*(n+1)) tableOk := by
+        intro q entry smaller qshape same cc ll
+        have table' : CallScalarTable entry.code := by rw [same]; exact table
+        have cover' : ∀ name params body, entry.code.lookup name = some (params,body) → (params,body) ∈ rows := by
+          intro name params body found
+          apply cover name params body
+          simpa [same] using found
+        exact ih0 _ (hx ▸ smaller) q entry rfl qshape table' cover' cc ll
+      clear ih0 hx
+      cases shape with
+      | base h =>
+        have sim := BodySimulation.at p ctxt live _ source tableOk (scalarProgram_clock h ctxt live)
+        apply simAt_mono p ctxt live source tableOk _ _ ?_ sim
+        have weight := callScalar_syntaxCost (CallScalarProgram.base h) ref ctxt live
+        have scale : 1 ≤ (callTableCost ref rows + 3)^(source.clock+1) := by
+          exact Nat.one_le_iff_ne_zero.mpr (Nat.ne_of_gt (Nat.pow_pos (by omega)))
+        dsimp [callClockFactor]
+        nlinarith
+      | @dec name e body he hb =>
+        let bf := callClockFactor ref rows source.clock body
+        let tmp := (compileExpHOLExact ctxt (ctxt.vmax+1) live e).2.2.1
+        let bc := {ctxt with vars := ctxt.vars.updateEq (name,tmp), vmax := tmp}
+        let bl := sptInsert tmp () live
+        have child : ∀ value, evalCrepSemHOLExp source e = some value →
+            BodySimulationAt body bc bl (CrepSemHOLState.setVar name value source) (fun n => bf*(n+1)) tableOk := by
+          intro value _
+          have smaller : Prod.Lex (· < ·) (· < ·)
+              ((CrepSemHOLState.setVar name value source).clock,sizeOf body)
+              (source.clock,sizeOf (.dec name e body : CrepProgHOL width)) := by
+            apply Prod.Lex.right
+            simp_wf
+          simpa [bf,CrepSemHOLState.setVar] using ih body (CrepSemHOLState.setVar name value source)
+            smaller hb (by rfl) bc bl
+        have sim := scalarDecl_clock name e he body ctxt live source tableOk bf child
+        apply simAt_mono _ ctxt live source tableOk _ _ ?_ sim
+        have eq := scalarExpressionWeight he ctxt ref (ctxt.vmax+1) (ref.vmax+1) live .ln
+        change _ = callExpressionCost ref e at eq
+        rw [eq]
+        have scale : 1 ≤ (callTableCost ref rows+3)^(source.clock+1) := by
+          exact Nat.one_le_iff_ne_zero.mpr (Nat.ne_of_gt (Nat.pow_pos (by omega)))
+        dsimp [bf,callClockFactor,callSyntaxCost]
+        nlinarith
+      | @seq a b ha hb =>
+        let af := callClockFactor ref rows source.clock a
+        let bf := callClockFactor ref rows source.clock b
+        have first := ih a source (Prod.Lex.right _ (by simp_wf; omega)) ha rfl ctxt live
+        have second : ∀ middle, evalCrepSemHOLProgExact source a = (none,middle) →
+            BodySimulationAt b ctxt live middle (fun n => bf*(n+1)) tableOk := by
+          intro middle run
+          have clock := evalCrepSemHOLProgExact_clock_le source a
+          rw [run] at clock
+          have same := evaluateCodeInvariantHOL a source none middle run
+          have smaller : Prod.Lex (· < ·) (· < ·) (middle.clock,sizeOf b)
+              (source.clock,sizeOf (.seq a b : CrepProgHOL width)) := by
+            by_cases eq : middle.clock = source.clock
+            · rw [eq]; apply Prod.Lex.right; simp_wf
+            · apply Prod.Lex.left; simp only at clock; omega
+          have child := ih b middle smaller hb same ctxt live
+          apply simAt_mono b ctxt live middle tableOk _ _ ?_ child
+          exact factor_mono ref rows b middle.clock source.clock (by simpa using clock)
+        have sim := sequence_clock_at a b ctxt live source af bf tableOk (by simpa [af] using first) second
+        apply simAt_mono _ ctxt live source tableOk _ _ ?_ sim
+        dsimp [af,bf,callClockFactor,callSyntaxCost]
+        simp only [Nat.mul_add,Nat.mul_one]
+        omega
+      | @ite e a b he ha hb =>
+        let af := callClockFactor ref rows source.clock a
+        let bf := callClockFactor ref rows source.clock b
+        have left := ih a source (Prod.Lex.right _ (by simp_wf; omega)) ha rfl ctxt live
+        have right := ih b source (Prod.Lex.right _ (by simp_wf)) hb rfl ctxt live
+        have sim := scalarIte_clock e he a b ctxt live source tableOk af bf (by simpa [af] using left) (by simpa [bf] using right)
+        apply simAt_mono _ ctxt live source tableOk _ _ ?_ sim
+        have eq := scalarExpressionWeight he ctxt ref (ctxt.vmax+1) (ref.vmax+1) live .ln
+        change _ = callExpressionCost ref e at eq
+        rw [eq]
+        have maxBound : max af bf ≤ af+bf := max_le (by omega) (by omega)
+        have scale : 1 ≤ (callTableCost ref rows+3)^(source.clock+1) := by
+          exact Nat.one_le_iff_ne_zero.mpr (Nat.ne_of_gt (Nat.pow_pos (by omega)))
+        dsimp [af,bf,callClockFactor,callSyntaxCost] at maxBound ⊢
+        simp only [Nat.mul_add]
+        nlinarith
+      | @loop e body he hb =>
+        let bf := callClockFactor ref rows source.clock body
+        have child : ∀ entry : CrepSemHOLState width σ, entry.clock < source.clock → entry.code = source.code →
+            BodySimulationAt body ctxt live entry (fun n => bf*(n+1)) tableOk := by
+          intro entry smaller same
+          have sim := ih body entry (Prod.Lex.left _ _ smaller) hb same ctxt live
+          apply simAt_mono body ctxt live entry tableOk _ _ ?_ sim
+          exact factor_mono ref rows body entry.clock source.clock (Nat.le_of_lt smaller)
+        intro sourceFinal result target run nonerror stateRel memRel globalsRel codeRel tableGood localsRel
+        obtain ⟨extra,post,bound,ev,hs,hm,hg,hcode,hl⟩ :=
+          branchConditionWhile_bounded_clock e he body bf source sourceFinal result target ctxt live tableOk child tableGood
+            run nonerror stateRel memRel globalsRel codeRel localsRel
+        refine ⟨extra,resultToLoop result,post,ev,hs,hm,hg,hcode,rfl,hl,?_⟩
+        apply bound.trans
+        apply Nat.mul_le_mul_right
+        have eq := scalarExpressionWeight he ctxt ref (ctxt.vmax+1) (ref.vmax+1) live .ln
+        change _ = callExpressionCost ref e at eq
+        rw [eq]
+        have scale : 1 ≤ (callTableCost ref rows+3)^(source.clock+1) := by
+          exact Nat.one_le_iff_ne_zero.mpr (Nat.ne_of_gt (Nat.pow_pos (by omega)))
+        dsimp [bf,callClockFactor,callSyntaxCost]
+        nlinarith
+      | call ret name args argsShape =>
+        apply call_full_sim args argsShape ret source ctxt ref live name _ tableOk ?_ ?_
+        · have pos := cost_pos ref (.call (ret.map (fun ns => (ns,none))) name args)
+          have scale : 1 ≤ (callTableCost ref rows+3)^(source.clock+1) := by
+            exact Nat.one_le_iff_ne_zero.mpr (Nat.ne_of_gt (Nat.pow_pos (by omega)))
+          dsimp [callClockFactor]
+          nlinarith
+        · intro values params body evaluated found smaller
+          let entry := decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}
+          have entryCode : entry.code = source.code := by rfl
+          have bodyShape := table name params body found
+          let cc := ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length)
+          let ll := listToNumSetHOLExact (List.range params.length)
+          have sim := ih body entry (Prod.Lex.left _ _ smaller) bodyShape entryCode cc ll
+          apply simAt_mono body cc ll entry tableOk _ _ ?_ sim
+          exact factor_call ref rows body (.call (ret.map (fun ns => (ns,none))) name args) params
+            (cover name params body found) entry.clock source.clock smaller
+  exact key _ p source rfl shape table cover
+
+/-- A completed source run is simulated at the concrete whole-table clock bound. -/
+theorem callWholeClock_explicit {width : Nat} [NeZero width] {σ : Type}
+    (ref ctxt : CrepToLoopContextExact) (live : NumSet)
+    (rows : List (List Nat × CrepProgHOL width)) (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (p : CrepProgHOL width) (source sourceFinal : CrepSemHOLState width σ)
+    (result : Option (CrepResultHOLExact width)) (target : LoopSemStateFiniteExact width σ)
+    (shape : CallScalarProgram p) (table : CallScalarTable source.code)
+    (cover : ∀ name params body, source.code.lookup name = some (params,body) → (params,body) ∈ rows)
+    (run : evalCrepSemHOLProgExact source p = (result,sourceFinal))
+    (nonerror : result ≠ some .error) (nonTimeout : result ≠ some .timeOut)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (tableGood : tableOk target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
+    ∃ post, evaluate (compileHOLExact ctxt live p)
+      {target with clock := target.clock + callClockFactor ref rows source.clock p * (CrepSteps.steps p source+1)} =
+        (resultToLoop result,post) ∧
+      crepToLoopStateRelExact sourceFinal {post with clock := sourceFinal.clock} ∧
+      crepToLoopMemRelHOLExact sourceFinal.memory post.memory sourceFinal.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact sourceFinal.globals post.globals ∧
+      crepToLoopCodeRelExact ctxt sourceFinal.code post.code ∧
+      localsResultRel ctxt live result sourceFinal post := by
+  have mappedNotTimeout : resultToLoop result ≠ some .timeOut := by
+    cases result with
+    | none => simp [resultToLoop]
+    | some r => cases r <;> simp_all [resultToLoop]
+  apply BodySimulationAt.explicit p ctxt live source sourceFinal result target
+    (fun n => callClockFactor ref rows source.clock p*(n+1))
+    (callClockFactor ref rows source.clock p * (CrepSteps.steps p source+1)) tableOk
+    (callWholeClock ref rows tableOk p source shape table cover ctxt live) run nonerror mappedNotTimeout
+    stateRel memRel globalsRel codeRel tableGood (by rfl) localsRel
+
+end WholeTableClock
+
 end SteppedFlapjack.CrepToLoopSteps

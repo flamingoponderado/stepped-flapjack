@@ -3,6 +3,7 @@ import SteppedFlapjack.CrepToLoopSteps.ExecutableFrontend
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
 import SteppedFlapjack.CrepSteps.CallClock
 import SteppedFlapjack.CrepToLoopSteps.CallCost
+import SteppedFlapjack.CrepToLoopSteps.TailCallSteps
 import SteppedFlapjack.LoopLiveSteps.TailEntryGlobalBound
 import Flapjack.Pancake.CrepInline.InlineRouteBridge
 namespace SteppedFlapjack.CrepToLoopSteps
@@ -316,6 +317,44 @@ theorem callFrontend_tableCost {width : Nat} [NeZero width]
   have rowMember : (params,body) ∈ programs.map (fun row => (row.2.1,row.2.2)) := by
     exact List.mem_map.mpr ⟨(name,params,body),member,rfl⟩
   exact callScalar_tableCost ref ctxt live _ params body rowMember bodyShape
+
+/-- Actual frontend output runs at a concrete whole-table Crep-to-Loop clock bound. -/
+theorem callFrontend_wholeClock_explicit {width : Nat} [NeZero width] {σ : Type}
+    (panCtxt : PanToCrepContextExact width) (p : ProgHOL width) (shape : CallFrontend panCtxt p)
+    (programs : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × CrepProgHOL width))
+    (sources : ∀ row ∈ programs, ∃ (ctx : PanToCrepContextExact width) (q : ProgHOL width),
+      row.2.2 = compileProgExactHOLW ctx q ∧ CallFrontend ctx q)
+    (ref ctxt : CrepToLoopContextExact) (live : NumSet)
+    (source sourceFinal : CrepSemHOLState width σ) (result : Option (CrepResultHOLExact width))
+    (target : LoopSemStateFiniteExact width σ) (sourceCode : source.code = alistToFmapCodeExact programs)
+    (run : evalCrepSemHOLProgExact source (compileProgExactHOLW panCtxt p) = (result,sourceFinal))
+    (nonerror : result ≠ some .error) (nonTimeout : result ≠ some .timeOut)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
+    let rows := programs.map (fun row => (row.2.1,row.2.2))
+    let crep := compileProgExactHOLW panCtxt p
+    ∃ post, evaluate (compileHOLExact ctxt live crep)
+      {target with clock := target.clock + callClockFactor ref rows source.clock crep * (CrepSteps.steps crep source+1)} =
+        (resultToLoop result,post) ∧
+      crepToLoopStateRelExact sourceFinal {post with clock := sourceFinal.clock} ∧
+      crepToLoopMemRelHOLExact sourceFinal.memory post.memory sourceFinal.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact sourceFinal.globals post.globals ∧
+      crepToLoopCodeRelExact ctxt sourceFinal.code post.code ∧
+      localsResultRel ctxt live result sourceFinal post := by
+  have table : CrepSteps.CallScalarTable source.code := by
+    rw [sourceCode]
+    exact callFrontend_crepTable programs sources
+  have cover : ∀ name params body, source.code.lookup name = some (params,body) →
+      (params,body) ∈ programs.map (fun row => (row.2.1,row.2.2)) := by
+    intro name params body found
+    rw [sourceCode,alistToFmapCodeExact,HolFiniteMapExact.lookup_updateList] at found
+    have member : (name,params,body) ∈ programs := flookup_fupdateList_reverse_mem' programs name (params,body) found
+    exact List.mem_map.mpr ⟨(name,params,body),member,rfl⟩
+  exact callWholeClock_explicit ref ctxt live _ (fun _ => True) _ source sourceFinal result target
+    (callFrontend_crepShape shape) table cover run nonerror nonTimeout stateRel memRel globalsRel codeRel trivial localsRel
 
 /-- Compose source statements whose first part may call functions in the actual supported table. -/
 theorem boundedCallSeq {width : Nat} [NeZero width] {σ : Type}
