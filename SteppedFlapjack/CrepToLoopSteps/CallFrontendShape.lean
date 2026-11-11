@@ -1,6 +1,7 @@
 import SteppedFlapjack.PanToCrepSteps.WhileSteps
 import SteppedFlapjack.CrepToLoopSteps.ExecutableFrontend
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
+import SteppedFlapjack.CrepSteps.CallClock
 import SteppedFlapjack.LoopLiveSteps.TailEntryGlobalBound
 import Flapjack.Pancake.CrepInline.InlineRouteBridge
 namespace SteppedFlapjack.CrepToLoopSteps
@@ -223,5 +224,72 @@ theorem callFrontend_declaration_loopTableSupported {width : Nat} [NeZero width]
     LoopTableSupported (sptFromAList (compileProgHOLExact arch (compileProgDeclsHOLW declarations))) := by
   rw [compileProgDeclsHOLW,noInline,CrepInlineRoute.compileInlTopHOLExact_nil]
   exact callFrontend_compiled_loopTableSupported arch _ (callFrontend_declaration_sources declarations shapes)
+
+private theorem nested_zero_callScalar {width : Nat} [NeZero width] (names : List Nat)
+    (body : CrepProgHOL width) (shape : SteppedFlapjack.CrepSteps.CallScalarProgram body) :
+    SteppedFlapjack.CrepSteps.CallScalarProgram (nestedDecsHOL names (List.replicate names.length (.const (0 : BitVec width))) body) := by
+  induction names with
+  | nil => simpa [nestedDecsHOL] using shape
+  | cons n ns ih =>
+    simp only [List.length_cons,List.replicate_succ,nestedDecsHOL]
+    exact .dec n (.direct (.const _)) ih
+
+/-- The actual Pancake frontend produces call-aware Crep syntax. -/
+theorem callFrontend_crepShape {width : Nat} [NeZero width]
+    {ctxt : PanToCrepContextExact width} {p : ProgHOL width} (shape : CallFrontend ctxt p) :
+    SteppedFlapjack.CrepSteps.CallScalarProgram (compileProgExactHOLW ctxt p) := by
+  induction shape with
+  | base h => exact .base (frontend_scalar_program h)
+  | @tail ctxt fname args ha =>
+    simpa only [compileProgExactHOLW,compileCallNoReturnExactHOLW,Option.map_none] using
+      (SteppedFlapjack.CrepSteps.CallScalarProgram.call none fname ((compileExpExactHOLWList ctxt args).flatMap Prod.fst))
+  | @decCall ctxt name sh fname args cont ha hb ih =>
+    simp only [compileProgExactHOLW,compileDecCallExactHOLW]
+    apply nested_zero_callScalar
+    apply SteppedFlapjack.CrepSteps.CallScalarProgram.seq
+    · exact .call (some _) fname _
+    · exact ih
+  | @decl ctxt name e body he hb ih =>
+    obtain ⟨value,compiled,scalar⟩ := frontendScalar_compiled he
+    simp [compileProgExactHOLW,compileDecExactHOLW,compiled,nestedDecsHOL]
+    exact .dec _ scalar ih
+  | @seq ctxt a b ha hb iha ihb => simpa only [compileProgExactHOLW] using SteppedFlapjack.CrepSteps.CallScalarProgram.seq iha ihb
+  | @ite ctxt e a b he ha hb iha ihb =>
+    obtain ⟨value,compiled,scalar⟩ := frontendScalar_compiled he
+    simp only [compileProgExactHOLW,compileIfExactHOLW,compiled]
+    exact .ite scalar iha ihb
+  | @«while» ctxt e body he hb ih =>
+    obtain ⟨value,compiled,scalar⟩ := frontendScalar_compiled he
+    simp only [compileProgExactHOLW,compileWhileExactHOLW,compiled]
+    exact .loop scalar ih
+
+/-- A Crep table compiled from call-aware source bodies has call-aware code. -/
+theorem callFrontend_crepTable {width : Nat} [NeZero width]
+    (programs : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × CrepProgHOL width))
+    (sources : ∀ row ∈ programs, ∃ (ctxt : PanToCrepContextExact width) (p : ProgHOL width),
+      row.2.2 = compileProgExactHOLW ctxt p ∧ CallFrontend ctxt p) :
+    SteppedFlapjack.CrepSteps.CallScalarTable (alistToFmapCodeExact programs) := by
+  intro name params body found
+  have member : (name,params,body) ∈ programs := by
+    rw [alistToFmapCodeExact,HolFiniteMapExact.lookup_updateList] at found
+    exact flookup_fupdateList_reverse_mem' programs name (params,body) found
+  obtain ⟨ctxt,p,eq,shape⟩ := sources (name,params,body) member
+  simp only at eq
+  rw [eq]
+  exact callFrontend_crepShape shape
+/-- The generated Crep entry consumes no more clock than its actual visits,
+including nested ordinary and tail calls into the generated function table. -/
+theorem callFrontend_crep_clock_consumed {width : Nat} [NeZero width] {σ : Type}
+    {ctxt : PanToCrepContextExact width} {p : ProgHOL width} (shape : CallFrontend ctxt p)
+    (programs : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × CrepProgHOL width))
+    (sources : ∀ row ∈ programs, ∃ (ctx : PanToCrepContextExact width) (q : ProgHOL width),
+      row.2.2 = compileProgExactHOLW ctx q ∧ CallFrontend ctx q)
+    (s : CrepSemHOLState width σ) (code : s.code = alistToFmapCodeExact programs) :
+    s.clock - (evalCrepSemHOLProgExact s (compileProgExactHOLW ctxt p)).2.clock ≤
+      SteppedFlapjack.CrepSteps.steps (compileProgExactHOLW ctxt p) s := by
+  apply SteppedFlapjack.CrepSteps.callScalarProgram_clock_consumed _ _ (callFrontend_crepShape shape)
+  rw [code]
+  exact callFrontend_crepTable programs sources
+
 
 end SteppedFlapjack.CrepToLoopSteps

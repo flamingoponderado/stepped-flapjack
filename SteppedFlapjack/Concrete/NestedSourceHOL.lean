@@ -141,4 +141,18 @@ theorem nestedCall_generated_table_supported :
   · exact nestedCall_inline_selection_empty
   · exact nestedCall_declaration_shapes
 
+/-- The generated nested-call Crep execution consumes at most its actual
+number of visits, with the code-table premise derived from source declarations. -/
+theorem nestedCall_crep_clock_consumed :
+    nestedCrepState.clock - (evalCrepSemHOLProgExact nestedCrepState
+      (.seq .skip (.call none (ofString "main'") []))).2.clock ≤
+      SteppedFlapjack.CrepSteps.steps (.seq .skip (.call none (ofString "main'") [])) nestedCrepState := by
+  apply SteppedFlapjack.CrepSteps.callScalarProgram_clock_consumed
+  · exact .seq (.base .skip) (.call none _ [])
+  · change SteppedFlapjack.CrepSteps.CallScalarTable (alistToFmapCodeExact
+      (compileProgDeclsHOLW (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))))
+    rw [compileProgDeclsHOLW,nestedCall_inline_selection_empty,CrepInlineRoute.compileInlTopHOLExact_nil]
+    exact SteppedFlapjack.CrepToLoopSteps.callFrontend_crepTable _
+      (SteppedFlapjack.CrepToLoopSteps.callFrontend_declaration_sources _ nestedCall_declaration_shapes)
+
 end SteppedFlapjack.Concrete
