@@ -3,6 +3,7 @@ import SteppedFlapjack.WordAllocSteps.TailShape
 import SteppedFlapjack.WordSimpSteps.TailCallBound
 import Flapjack.Compiler.Backend.WordToWord.Proofs.CompileSemantics
 import Flapjack.Pancake.LoopToWord.Proofs.NoInstallCode
+import Flapjack.Pancake.Proofs.PanToTarget.WordToWordNoInstall
 
 /-! Code-table facts for whole programs with loop callees and tail-call entries. -/
 namespace SteppedFlapjack.WordAllocSteps
@@ -105,6 +106,37 @@ theorem wholeCompile_codeRelations (wc : Config) (ac : AsmConfigExact width)
   have domain : sptDomain (sptFromAList programs) = sptDomain (sptFromAList (compile wc ac programs).2) := by
     rw [sptDomainFromAList,sptDomainFromAList,wholeCompile_names]
   exact ⟨noInstall,noMt,rel,domain,noInstallCode_of_codeRel _ _ rel domain noInstall,noAlloc⟩
+
+
+private theorem noMtCode_of_codeRel
+    (code target : Spt (Nat × WordLangProgHOL (BitVec width)))
+    (rel : codeRel code target) (dom : sptDomain code = sptDomain target)
+    (safe : WordProps.noMtCode code) : WordProps.noMtCode target := by
+  intro k n p hk
+  have hm : (sptLookup k code).isSome = true := by
+    have h := congrFun dom k
+    simp only [sptDomain] at h
+    rw [h, hk]
+    rfl
+  rcases hv : sptLookup k code with _ | ⟨ar,e⟩
+  · rw [hv] at hm; cases hm
+  obtain ⟨col,t,kk,a,c,h⟩ := rel k _ hv
+  rw [hk] at h
+  have hp : p = (compileSingle t kk a c ((k,ar,e),col)).2.2 :=
+    congrArg (·.2) (Option.some.inj h)
+  have he := safe k ar e hv
+  rw [hp, noMtSubprogsHOL_eq_notCreated] at *
+  exact WordConvs.compile_single_not_created_subprogs _ t kk a c ((k,ar,e),col) he
+
+/-- Whole-program Word optimization preserves the table safety properties,
+including for tables containing ordinary and tail calls. -/
+theorem wholeCompile_targetSafety (wc : Config) (ac : AsmConfigExact width)
+    (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (safety : WordProgramSafety programs) :
+    WordProgramSafety (compile wc ac programs).2 := by
+  obtain ⟨_,noMt,rel,dom,noInstall,noAlloc⟩ := wholeCompile_codeRelations wc ac programs safety
+  exact ⟨noInstall, noMtCode_of_codeRel _ _ rel dom noMt,
+    PanToTarget.noAllocCode_of_codeRel _ _ rel dom noAlloc⟩
 
 
 /-- Starting from the same explicit clock, whole-program Word optimization
