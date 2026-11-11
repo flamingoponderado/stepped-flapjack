@@ -2,6 +2,7 @@ import SteppedFlapjack.WordToStackSteps.BudgetHandler
 import SteppedFlapjack.WordToStackSteps.BudgetTailCall
 import SteppedFlapjack.WordToStackSteps.BudgetIf
 import SteppedFlapjack.WordToStackSteps.BudgetLoop
+import SteppedFlapjack.WordToStackSteps.BudgetSharedMemory
 import SteppedFlapjack.WordSimpSteps.LoopSequenceClock
 import SteppedFlapjack.StackSteps.TableBound
 namespace SteppedFlapjack.WordToStackSteps
@@ -14,6 +15,7 @@ open Flapjack.Compiler.Backend.WordToStack.Native
 inductive CallBudgetBlock {width : Nat} [NeZero width] : WordLangProgHOL (BitVec width) → Prop
   | base {p} : LoopBlock p → CallBudgetBlock p
   | raise (name) : CallBudgetBlock (.raise name)
+  | shareInst (op v exp) : CallBudgetBlock (.shareInst op v exp)
   | seq {a b} : CallBudgetBlock a → CallBudgetBlock b → CallBudgetBlock (.seq a b)
   | ite (cmp r ri) {a b} : CallBudgetBlock a → CallBudgetBlock b → CallBudgetBlock (.ite cmp r ri a b)
   | loop (names exitNames) {body} : CallBudgetBlock body → CallBudgetBlock (.loop names body exitNames)
@@ -56,6 +58,11 @@ private theorem callBudgetBlock_simulation_core {width : Nat} [NeZero width] {C 
     exact budgetMono ac p s 0 _ (zeroBudget ac p s (loopBlock_zero ac p s block)) (by omega)
   | raise name =>
     apply budgetMono ac _ s 1 _ (raiseBudget ac name s)
+    have hp : 0 < (K + 1) ^ (s.clock + 1) := Nat.pow_pos (by omega)
+    simp only [fixedTableBudget,wordControlWeight,Nat.one_mul]
+    omega
+  | shareInst op v exp =>
+    apply budgetMono ac _ s 1 _ (shareInst_budget ac op v exp s)
     have hp : 0 < (K + 1) ^ (s.clock + 1) := Nat.pow_pos (by omega)
     simp only [fixedTableBudget,wordControlWeight,Nat.one_mul]
     omega
