@@ -212,6 +212,77 @@ private theorem globalTailReached {scope calleeScope : List VarName} {σ : Type}
   rw [controlSteps_tailCall _ _ source values (progToHOL callee) locals returnShape sourceArgs sourceFound clock,
     controlSteps_tailCall _ _ target values (progToHOL callee) locals returnShape targetArgs targetFound targetClock,equal]
 
+/-- A reached ordinary call with a returned callee: both callee and
+continuation are charged exactly once. -/
+private theorem globalDecCallReturnReached {scope calleeScope : List VarName} {σ : Type}
+    (dest function : FunName) (args : List (Exp (RiscV.Word 64))) (argShape : ∀ e ∈ args, Scalar scope e)
+    (callee : Prog (RiscV.Word 64)) (calleeShape : CallSupportedIn calleeScope callee)
+    (cont : Prog (RiscV.Word 64)) (globals : PanGlobalsContextExact 64)
+    (source sourceFinal target : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
+    (values : List (ValueHOL 64)) (locals : HolFiniteMapExact MlS (ValueHOL 64)) (returnShape : ShapeHOL)
+    (value : ValueHOL 64) (bodyFinal : PanSemStateFiniteExact 64 σ)
+    (sourceArgs : @evalListHOLFinite 64 σ _ source (fun a => Classical.propDecidable (source.memaddrs a))
+      (args.map expToHOL) = some values)
+    (sourceFound : lookupCodeHOLFinite source.code.lookup (Flapjack.Basis.Pure.MlString.ofString function) values =
+      some (progToHOL callee,locals,returnShape)) (clock : source.clock ≠ 0)
+    (bodyRun : (callEntryStateHOLFinite source locals).evaluateHOLFiniteState (progToHOL callee) = (some (.returned value),bodyFinal))
+    (valid : shapeEqHOL (shapeOfHOLExact value) .one = true)
+    (returnValid : shapeEqHOL (shapeOfHOLExact value) returnShape = true)
+    (run : source.evaluateHOLFiniteState (progToHOL (.decCall dest .one function args cont)) = (result,sourceFinal))
+    (nonerror : result ≠ some .error) (rel : panGlobalsStateRelHOLExact true globals source target)
+    (calleeBound : controlSteps (progToHOL callee) (callEntryStateHOLFinite target locals) =
+      controlSteps (progToHOL callee) (callEntryStateHOLFinite source locals))
+    (contBound : ∀ sourceNext targetNext : PanSemStateFiniteExact 64 σ,
+      panGlobalsStateRelHOLExact true globals sourceNext targetNext →
+      (sourceNext.evaluateHOLFiniteState (progToHOL cont)).1 ≠ some .error →
+      controlSteps (progToHOL cont) targetNext = controlSteps (progToHOL cont) sourceNext) :
+    controlSteps (progToHOL (.decCall dest .one function args cont)) target =
+      controlSteps (progToHOL (.decCall dest .one function args cont)) source := by
+  have argFixed : (args.map expToHOL).map (compileExpExactHOL globals) = args.map expToHOL := by
+    rw [List.map_map]
+    apply List.map_congr_left
+    intro e member
+    exact scalar_globals_fixed (argShape e member) globals
+  have targetArgs := PanGlobalsOptMmapEvalCorrect.optMmapEvalCorrectHOL globals source target (args.map expToHOL) values ⟨rel,sourceArgs⟩
+  rw [argFixed] at targetArgs
+  have targetFound := PanGlobalsStateRelationCode.stateRelLookupCodeHOL globals source target true
+    (Flapjack.Basis.Pure.MlString.ofString function) values (progToHOL callee) locals returnShape ⟨rel,sourceFound⟩
+  rw [callSupportedIn_globals_fixed calleeShape globals] at targetFound
+  have clockRel : source.clock = target.clock := rel.2.2.2.2.2.1
+  have targetClock : target.clock ≠ 0 := clockRel ▸ clock
+  have decremented := PanGlobalsStateRelationClock.stateRelDecClockHOL globals source target true rel
+  have entryRel := (PanGlobalsStateRelationLocals.stateRelChangeLocalsHOL globals source.decClockHOLFinite
+    target.decClockHOLFinite true locals).1 decremented
+  change panGlobalsStateRelHOLExact true globals (callEntryStateHOLFinite source locals) (callEntryStateHOLFinite target locals) at entryRel
+  obtain ⟨targetBodyFinal,targetRun,postRel⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL (progToHOL callee)
+    (callEntryStateHOLFinite source locals) (some (.returned value)) globals (callEntryStateHOLFinite target locals) bodyFinal
+    ⟨entryRel,bodyRun,by simp⟩
+  rw [callSupportedIn_globals_fixed calleeShape globals] at targetRun
+  simp only [goodResHOL] at postRel
+  have localsEq : source.locals = target.locals := rel.2.1 rfl
+  have restored := (PanGlobalsStateRelationLocals.stateRelChangeLocalsHOL globals bodyFinal targetBodyFinal true source.locals).2 postRel
+  have nextRel := PanGlobalsStateRelationLocals.stateRelSetVarHOL globals {bodyFinal with locals := source.locals}
+    {targetBodyFinal with locals := source.locals} true (Flapjack.Basis.Pure.MlString.ofString dest) value restored
+  have nextNonerror : ((setVarHOLFinite (Flapjack.Basis.Pure.MlString.ofString dest) value
+      {bodyFinal with locals := source.locals}).evaluateHOLFiniteState (progToHOL cont)).1 ≠ some .error := by
+    simp only [progToHOL,shapeToHOL] at run
+    rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at run
+    simp only [sourceArgs,sourceFound,if_neg clock,bodyRun,valid,returnValid,Bool.true_and,if_true] at run
+    exact fun bad => nonerror ((Prod.mk.inj run).1.symm.trans bad)
+  have continuationCost := contBound _ _ nextRel nextNonerror
+  have fixed : fixClockHOLFinite (callEntryStateHOLFinite source locals) (some (PanSemResultExact.returned value),bodyFinal) =
+    (some (PanSemResultExact.returned value),bodyFinal) := by rw [← bodyRun,fixClockHOLFinite_evaluateState]
+  have fixedTarget : fixClockHOLFinite (callEntryStateHOLFinite target locals) (some (PanSemResultExact.returned value),targetBodyFinal) =
+    (some (PanSemResultExact.returned value),targetBodyFinal) := by rw [← targetRun,fixClockHOLFinite_evaluateState]
+  simp only [progToHOL,shapeToHOL]
+  rw [controlSteps_decCall_return _ _ _ _ _ source values (progToHOL callee) locals returnShape value bodyFinal
+    sourceArgs sourceFound clock bodyRun valid returnValid,
+    controlSteps_decCall_return _ _ _ _ _ target values (progToHOL callee) locals returnShape value targetBodyFinal
+    targetArgs targetFound targetClock targetRun valid returnValid]
+  simp only [fixed,fixedTarget,localsEq]
+  simp only [localsEq] at continuationCost
+  rw [calleeBound,continuationCost]
+
 /-- Global lowering preserves control visits for all supported programs,
 including arbitrarily nested control flow. -/
 private theorem supportedIn_globalControl {scope : List VarName} {program : Prog (RiscV.Word 64)}
