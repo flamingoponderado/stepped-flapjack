@@ -271,4 +271,270 @@ theorem compiledReturning_steps_from_callee {width : Nat} [NeZero width] {C F : 
      simp only at calleeBound <;> omega
 
 
+/-- A successful Loop call cut and the compiler relations determine the Word
+call's argument lookup, callee, cut environment, and callee-entry relations. -/
+theorem returningCall_word_setup {width : Nat} [NeZero width] {C F : Type}
+    (loc : Nat) (args names : List Nat) (live : NumSet)
+    (s cut : LoopSemStateFiniteExact width F) (vals : List (WordLocW width))
+    (env : Spt (WordLocW width)) (body : HolLoopProg width)
+    (t : WordSemStateFiniteExact width C F) (ctxt : Spt Nat) (retv : WordLocW width)
+    (labels : Nat × Nat) (exc : Nat) (sourceGet : getVars args s = some vals)
+    (sourceFound : findCode (some loc) vals s.code = some (env,body))
+    (distinct : names.Nodup) (sourceCut : cutRes live (none,s) = (none,cut))
+    (state : loopToWordStateRelHOLExact s t) (locals : localsRelHOL ctxt s.locals t.locals)
+    (ret : sptLookup 0 t.locals = some retv)
+    (namesInCtxt : ∀ k, k ∈ names → sptMem k ctxt) :
+    ∃ wordArgs ss calleeCtxt calleeLabels saved,
+      WordSemStateFiniteExact.getVars (args.map (findVarHOL ctxt)) t = some vals ∧
+      wordSemFindCode (some loc) (.loc labels.1 labels.2 :: vals) t.code t.stackSize =
+        some (wordArgs,(compHOL calleeCtxt body calleeLabels).1,ss) ∧
+      ¬ (sptDomainEmpty (mkNewCutsetHOL ctxt live) ∨ ¬ (names.map (findVarHOL ctxt)).Nodup) ∧
+      wordSemCutEnvs (mkNewCutsetHOL ctxt live,(Spt.ln : NumSet)) t.locals = some (saved,.ln) ∧
+      t.clock ≠ 0 ∧
+      let calleeState := WordSemStateFiniteExact.callEnv wordArgs ss
+        (WordSemStateFiniteExact.pushEnv (saved,.ln)
+          (some (findVarHOL ctxt exc,.raise (findVarHOL ctxt exc),labels.1,labels.2+1))
+          (WordSemStateFiniteExact.decClock t))
+      loopToWordStateRelHOLExact {cut with locals := env} calleeState ∧
+      localsRelHOL calleeCtxt env calleeState.locals ∧
+      sptLookup 0 calleeState.locals = some (.loc labels.1 labels.2) ∧
+      (∀ k, sptMem k (accVarsHOL body .ln) → sptMem k calleeCtxt) := by
+  have cutFacts : ∃ cs, cutState live s = some cs ∧ s.clock ≠ 0 ∧ cut = decClock cs := by
+    unfold cutRes at sourceCut
+    simp only at sourceCut
+    cases hc : cutState live s with
+    | none => rw [hc] at sourceCut; simp at sourceCut
+    | some cs =>
+      simp only [hc] at sourceCut
+      have hcClock : cs.clock = s.clock := cutState_clock hc
+      by_cases hz : s.clock = 0
+      · simp [hcClock,hz] at sourceCut
+      · simp only [hcClock,hz,if_false,Prod.mk.injEq,true_and] at sourceCut
+        exact ⟨cs,rfl,hz,sourceCut.symm⟩
+  obtain ⟨cs,hcs,nonzero,rfl⟩ := cutFacts
+  have subset : sptSubsetLive live s.locals ∧ cs = {s with locals := sptInter s.locals live} := by
+    unfold cutState at hcs
+    split at hcs
+    · exact ⟨‹_›,(Option.some.inj hcs).symm⟩
+    · cases hcs
+  obtain ⟨subset,rfl⟩ := subset
+  obtain ⟨len,hm,hmd,hsmd,hclock,hbe,hffi,hcur,hlen,htop,hglob,hcode⟩ := state
+  obtain ⟨wordGet,_⟩ := localsRelHOLGetVars ctxt s t args vals ⟨locals,sourceGet⟩
+  obtain ⟨wordArgs,ss,calleeCtxt,calleeLabels,wordFound,calleeRet,calleeLocals,calleeAcc⟩ :=
+    findCode_rel s.code t.code t.stackSize (some loc) vals env body (.loc labels.1 labels.2) hcode sourceFound
+  obtain ⟨saved,hce,savedRel⟩ := wordSemCutEnvMkNewCutsetHOL ctxt live s.locals t.locals retv ⟨locals,subset,ret⟩
+  have cutEnvs := wordSemCutEnvLNIMPHOL _ _ _ hce
+  have cutNonempty : ¬ sptDomainEmpty (mkNewCutsetHOL ctxt live) := fun h =>
+    domainMkNewCutsetNotEmpty ctxt live (funext fun k => propext ⟨fun hk => h k hk,False.elim⟩)
+  have mappedDistinct : (names.map (findVarHOL ctxt)).Nodup :=
+    localsRelHOLAllDistinctMap ctxt s.locals t.locals names ⟨locals,namesInCtxt,distinct⟩
+  have targetClock : t.clock ≠ 0 := by rw [hclock]; exact nonzero
+  refine ⟨wordArgs,ss,calleeCtxt,calleeLabels,saved,wordGet,wordFound,?_,cutEnvs,targetClock,?_,?_,?_,calleeAcc⟩
+  · simp [cutNonempty,mappedDistinct]
+  · exact ⟨len,hm,hmd,hsmd,by simp [WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.pushEnv,
+        WordSemStateFiniteExact.decClock,LoopSemStateFiniteExact.decClock,hclock],hbe,hffi,hcur,hlen,htop,hglob,hcode⟩
+  · simpa [WordSemStateFiniteExact.callEnv] using calleeLocals
+  · simpa [WordSemStateFiniteExact.callEnv] using calleeRet
+/-- Every return variable is in the compiler context when the call's
+accessed-variable condition holds. -/
+theorem returningCall_names_in_context {width : Nat} [NeZero width]
+    (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exc : Nat)
+    (handler normal : HolLoopProg width) (ctxt : Spt Nat)
+    (acc : ∀ k, sptMem k (accVarsHOL
+      (.call (some (names,live)) (some loc) args (some (exc,handler,normal,liveOut))) .ln) → sptMem k ctxt) :
+    ∀ k, k ∈ names → sptMem k ctxt := by
+  intro k member
+  apply acc
+  have e1 := congrFun (accVarsAccHOL handler
+    (accVarsHOL normal (sptInsert exc () (sptListInsert names .ln)))) k
+  have e2 := congrFun (accVarsAccHOL normal (sptInsert exc () (sptListInsert names .ln))) k
+  simp only [accVarsHOL]
+  change sptDomain _ k
+  rw [e1]
+  change sptMem k (accVarsHOL handler .ln) ∨ sptDomain _ k
+  rw [e2]
+  change sptMem k (accVarsHOL handler .ln) ∨ sptMem k (accVarsHOL normal .ln) ∨ sptDomain _ k
+  change sptMem k (accVarsHOL handler .ln) ∨ sptMem k (accVarsHOL normal .ln) ∨
+    sptMem k (sptInsert exc () (sptListInsert names .ln))
+  rw [sptMem_sptInsert,sptMem_sptListInsert_iff]
+  simp [member]
+
+/-- A non-error returning-call run cannot have an erroring callee. -/
+theorem returningCall_callee_nonerror {width : Nat} [NeZero width] {F : Type}
+    (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exc : Nat)
+    (handler normal : HolLoopProg width) (s cut post final : LoopSemStateFiniteExact width F)
+    (vals : List (WordLocW width)) (env : Spt (WordLocW width)) (body : HolLoopProg width)
+    (out result : Option (LoopResultExact width))
+    (get : getVars args s = some vals) (found : findCode (some loc) vals s.code = some (env,body))
+    (distinct : names.Nodup) (cutRun : cutRes live (none,s) = (none,cut))
+    (bodyRun : evaluate body {cut with locals := env} = (out,post))
+    (run : evaluate (.call (some (names,live)) (some loc) args (some (exc,handler,normal,liveOut))) s = (result,final))
+    (nonerror : result ≠ some .error) : out ≠ some .error := by
+  intro bad
+  rw [evaluate] at run
+  simp only [get,found,distinct,not_true_eq_false,if_false] at run
+  rw [cutRun] at run
+  simp only at run
+  rw [fix_clock_evaluate,bodyRun,bad] at run
+  simp only [Prod.mk.injEq] at run
+  exact nonerror run.1.symm
+
+/-- A reached returning call has the sixfold Word visit bound whenever its
+callee satisfies the compiler induction property. -/
+theorem sixBoundedReturning_reached {width : Nat} [NeZero width] {C F : Type}
+    (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exc : Nat)
+    (markHandler markNormal : Bool)
+    (s cut post : LoopSemStateFiniteExact width F) (vals : List (WordLocW width))
+    (env : Spt (WordLocW width)) (body : HolLoopProg width) (out : Option (LoopResultExact width))
+    (t : WordSemStateFiniteExact width C F) (ctxt : Spt Nat) (retv : WordLocW width) (labels : Nat × Nat)
+    (sourceGet : getVars args s = some vals)
+    (sourceFound : findCode (some loc) vals s.code = some (env,body))
+    (distinct : names.Nodup) (sourceCut : cutRes live (none,s) = (none,cut))
+    (bodyRun : evaluate body {cut with locals := env} = (out,post))
+    (sourceResult : Option (LoopResultExact width)) (sourceFinal : LoopSemStateFiniteExact width F)
+    (sourceRun : evaluate (.call (some (names,live)) (some loc) args
+      (some (exc,if markHandler then .mark (.raise exc) else .raise exc,
+        if markNormal then .mark .skip else .skip,liveOut))) s = (sourceResult,sourceFinal))
+    (nonerror : sourceResult ≠ some .error)
+    (bodyProp : SixBoundPropertyAt C body {cut with locals := env})
+    (state : loopToWordStateRelHOLExact s t) (locals : localsRelHOL ctxt s.locals t.locals)
+    (ret : sptLookup 0 t.locals = some retv) (dim : goodDimindex width)
+    (acc : ∀ k, sptMem k (accVarsHOL
+      (.call (some (names,live)) (some loc) args
+        (some (exc,if markHandler then .mark (.raise exc) else .raise exc,
+          if markNormal then .mark .skip else .skip,liveOut)) : HolLoopProg width) .ln) → sptMem k ctxt) :
+    WordSteps.steps (compHOL ctxt
+      (.call (some (names,live)) (some loc) args
+        (some (exc,if markHandler then .mark (.raise exc) else .raise exc,
+          if markNormal then .mark .skip else .skip,liveOut))) labels).1 t ≤
+      6 * LoopSteps.steps (.call (some (names,live)) (some loc) args
+        (some (exc,if markHandler then .mark (.raise exc) else .raise exc,
+          if markNormal then .mark .skip else .skip,liveOut))) s := by
+  have bodyNonerror := returningCall_callee_nonerror loc args names live liveOut exc _ _
+    s cut post sourceFinal vals env body out sourceResult sourceGet sourceFound distinct sourceCut bodyRun sourceRun nonerror
+  obtain ⟨wordArgs,ss,calleeCtxt,calleeLabels,saved,targetGet,targetFound,targetValid,targetCut,targetClock,
+    calleeState,calleeLocals,calleeRet,calleeAcc⟩ :=
+    returningCall_word_setup loc args names live s cut vals env body t ctxt retv labels exc
+      sourceGet sourceFound distinct sourceCut state locals ret
+      (returningCall_names_in_context loc args names live liveOut exc _ _ ctxt acc)
+  obtain ⟨targetPost,targetResult,targetRun,_,_,calleeBound⟩ := bodyProp out post
+    (WordSemStateFiniteExact.callEnv wordArgs ss
+      (WordSemStateFiniteExact.pushEnv (saved,.ln)
+        (some (findVarHOL ctxt exc,.raise (findVarHOL ctxt exc),labels.1,labels.2+1))
+        (WordSemStateFiniteExact.decClock t))) calleeCtxt (.loc labels.1 labels.2) calleeLabels
+    ⟨bodyRun,bodyNonerror,calleeState,calleeLocals,calleeRet,dim,by simp [wordSemIsWordLoc],calleeAcc⟩
+  have targetFound' : wordSemFindCode (some loc)
+      (wordSemAddRetLoc (some (names.map (findVarHOL ctxt), (mkNewCutsetHOL ctxt live,(Spt.ln : NumSet)),
+        (WordLangProgHOL.skip : WordLangProgHOL (BitVec width)),labels.1,labels.2)) vals)
+      t.code t.stackSize = some (wordArgs,(compHOL calleeCtxt body calleeLabels).1,ss) := by
+    simpa [wordSemAddRetLoc] using targetFound
+  exact compiledReturning_steps_from_callee loc args names live liveOut exc markHandler markNormal
+    s cut post vals env body out t targetPost ctxt labels targetResult vals wordArgs ss
+    (compHOL calleeCtxt body calleeLabels).1 (saved,.ln)
+    sourceGet sourceFound distinct sourceCut bodyRun targetGet targetFound' targetValid targetCut targetClock targetRun calleeBound
+
+/-- A returning call with a successful source cut inherits semantic
+correctness and the sixfold visit bound from the reached callee. -/
+theorem sixBoundedReturning_success {width : Nat} [NeZero width] {C F : Type}
+    (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exc : Nat)
+    (markHandler markNormal : Bool)
+    (s cut post : LoopSemStateFiniteExact width F) (vals : List (WordLocW width))
+    (env : Spt (WordLocW width)) (body : HolLoopProg width) (out : Option (LoopResultExact width))
+    (sourceGet : getVars args s = some vals)
+    (sourceFound : findCode (some loc) vals s.code = some (env,body))
+    (distinct : names.Nodup) (sourceCut : cutRes live (none,s) = (none,cut))
+    (bodyRun : evaluate body {cut with locals := env} = (out,post))
+    (bodyProp : SixBoundPropertyAt C body {cut with locals := env}) :
+    SixBoundPropertyAt C (.call (some (names,live)) (some loc) args
+      (some (exc,if markHandler then .mark (.raise exc) else .raise exc,
+        if markNormal then .mark .skip else .skip,liveOut))) s := by
+  intro result final target ctxt retv labels premises
+  obtain ⟨run,nonerror,state,locals,ret,dim,notWord,acc⟩ := premises
+  obtain ⟨targetFinal,targetResult,targetRun,ffi,relation⟩ :=
+    compileCorrect _ s result final target ctxt retv labels ⟨run,nonerror,state,locals,ret,dim,notWord,acc⟩
+  refine ⟨targetFinal,targetResult,targetRun,ffi,relation,?_⟩
+  exact sixBoundedReturning_reached loc args names live liveOut exc markHandler markNormal
+    s cut post vals env body out target ctxt retv labels sourceGet sourceFound distinct sourceCut bodyRun
+    result final run nonerror bodyProp state locals ret dim acc
+
+/-- A Word returning call at zero clock cannot visit a callee. -/
+theorem wordReturning_zero_steps {width : Nat} [NeZero width] {C F : Type}
+    (dest : Option Nat) (args names : List Nat) (cuts : WordLangCutsetsHOL)
+    (normal : WordLangProgHOL (BitVec width)) (l1 l2 : Nat)
+    (handler : Option (Nat × WordLangProgHOL (BitVec width) × Nat × Nat))
+    (s : WordSemStateFiniteExact width C F) (zero : s.clock = 0) :
+    WordSteps.steps (.call (some (names,cuts,normal,l1,l2)) dest args handler) s = 1 := by
+  rw [WordSteps.steps.eq_def]
+  simp only [zero,if_true]
+  repeat' split <;> simp_all
+
+/-- At zero clock the generated ordinary-call wrapper has the sixfold bound. -/
+theorem sixBoundedReturning_zero {width : Nat} [NeZero width] {C F : Type}
+    (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exc : Nat)
+    (markHandler markNormal : Bool) (s : LoopSemStateFiniteExact width F) (zero : s.clock = 0) :
+    SixBoundPropertyAt C (.call (some (names,live)) (some loc) args
+      (some (exc,if markHandler then .mark (.raise exc) else .raise exc,
+        if markNormal then .mark .skip else .skip,liveOut))) s := by
+  intro result final target ctxt retv labels premises
+  obtain ⟨run,nonerror,state,locals,ret,dim,notWord,acc⟩ := premises
+  obtain ⟨targetFinal,targetResult,targetRun,ffi,relation⟩ :=
+    compileCorrect _ s result final target ctxt retv labels ⟨run,nonerror,state,locals,ret,dim,notWord,acc⟩
+  refine ⟨targetFinal,targetResult,targetRun,ffi,relation,?_⟩
+  obtain ⟨_,_,_,_,clock,_,_,_,_,_,_,_⟩ := state
+  have targetZero : target.clock = 0 := by rw [clock]; exact zero
+  have positive := LoopSteps.steps_pos (.call (some (names,live)) (some loc) args
+    (some (exc,if markHandler then .mark (.raise exc) else .raise exc,
+      if markNormal then .mark .skip else .skip,liveOut))) s
+  cases labels with
+  | mk l1 l2 =>
+    cases markHandler <;> cases markNormal <;> simp only [Bool.false_eq_true,if_false,if_true,LoopToWord.compHOL] at ⊢
+    all_goals rw [WordSteps.steps_seq]
+    all_goals rw [wordReturning_zero_steps _ _ _ _ _ _ _ _ target targetZero]
+    all_goals rcases WordSemStateFiniteExact.evaluate _ target with ⟨r,st⟩
+    all_goals cases r <;> simp only
+    all_goals simp only [Bool.false_eq_true,if_false,if_true] at positive
+    all_goals try omega
+    all_goals rw [WordSteps.steps_leaf WordLangProgHOL.tick _ (by rfl)]
+    all_goals omega
+
+/-- Direct returning calls, including timeout and failed cuts, inherit the
+compiler's sixfold bound from their reached callee. -/
+theorem sixBoundedDirectReturning {width : Nat} [NeZero width] {C F : Type}
+    (loc : Nat) (args names : List Nat) (live liveOut : NumSet) (exc : Nat)
+    (markHandler markNormal : Bool) (s : LoopSemStateFiniteExact width F)
+    (vals : List (WordLocW width)) (env : Spt (WordLocW width)) (body : HolLoopProg width)
+    (sourceGet : getVars args s = some vals)
+    (sourceFound : findCode (some loc) vals s.code = some (env,body))
+    (distinct : names.Nodup)
+    (bodyProp : ∀ cut, cutRes live (none,s) = (none,cut) →
+      SixBoundPropertyAt C body {cut with locals := env}) :
+    SixBoundPropertyAt C (.call (some (names,live)) (some loc) args
+      (some (exc,if markHandler then .mark (.raise exc) else .raise exc,
+        if markNormal then .mark .skip else .skip,liveOut))) s := by
+  by_cases zero : s.clock = 0
+  · exact sixBoundedReturning_zero loc args names live liveOut exc markHandler markNormal s zero
+  · rcases cutRun : cutRes live (none,s) with ⟨cutResult,cut⟩
+    cases cutResult with
+    | none =>
+      rcases bodyRun : evaluate body {cut with locals := env} with ⟨out,post⟩
+      exact sixBoundedReturning_success loc args names live liveOut exc markHandler markNormal
+        s cut post vals env body out sourceGet sourceFound distinct cutRun bodyRun (bodyProp cut cutRun)
+    | some r =>
+      have cutError : r = .error := by
+        unfold cutRes at cutRun
+        cases hc : cutState live s with
+        | none => simp [hc] at cutRun; exact cutRun.1.symm
+        | some cs =>
+          have clock := cutState_clock hc
+          simp [hc,clock,zero] at cutRun
+      subst r
+      intro result final target ctxt retv labels premises
+      obtain ⟨run,nonerror,_⟩ := premises
+      rw [evaluate] at run
+      simp only [sourceGet,sourceFound,distinct,not_true_eq_false,if_false] at run
+      rw [cutRun] at run
+      simp only [Prod.mk.injEq] at run
+      exact False.elim (nonerror run.1.symm)
+
+
 end SteppedFlapjack.LoopToWordSteps
