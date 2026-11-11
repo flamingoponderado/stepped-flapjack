@@ -1534,16 +1534,21 @@ private theorem returning_callee_prepare {width : Nat} [NeZero width] {σ : Type
   · simp [slack]
 
 
-private theorem loopReturning_exception_run {width : Nat} [NeZero width] {F : Type}
+/-- Terminal outcomes propagated through an ordinary call. -/
+inductive CallTerminal {width : Nat} [NeZero width] : CrepResultHOLExact width → LoopResultExact width → Prop
+ | exception (eid : BitVec width) : CallTerminal (.exception eid) (.exception (.word eid))
+ | ffi (event : HolFinalEvent) : CallTerminal (.finalFfi event) (.finalFfi event)
+
+private theorem loopReturning_terminal_run {width : Nat} [NeZero width] {F : Type}
     (s post : LoopSemStateFiniteExact width F) (loc : Nat) (args names : List Nat)
     (live : NumSet) (exc : Nat) (body : HolLoopProg width)
-    (values : List (WordLocW width)) (raised : WordLocW width) (env : Spt (WordLocW width))
+    (values : List (WordLocW width)) (result : CrepResultHOLExact width) (out : LoopResultExact width)
+    (terminal : CallTerminal result out) (env : Spt (WordLocW width))
     (get : getVars args s = some values) (found : findCode (some loc) values s.code = some (env,body))
     (namesDistinct : names.Nodup) (subset : sptSubsetLive live s.locals) (clock : s.clock ≠ 0)
     (bodyRun : evaluate body {decClock {s with locals := sptInter s.locals live} with locals := env} =
-      (some (.exception raised),post)) :
-    (evaluate (.call (some (names,live)) (some loc) args (some (exc,.raise exc,.skip,live))) s).1 =
-      some (.exception raised) := by
+      (some out,post)) :
+    (evaluate (.call (some (names,live)) (some loc) args (some (exc,.raise exc,.skip,live))) s).1 = some out := by
   let cut := decClock {s with locals := sptInter s.locals live}
   have cutRun : cutRes live (none,s) = (none,cut) := by
     simp [cutRes,cutState_of_subset live s subset,cut,decClock,clock]
@@ -1552,8 +1557,7 @@ private theorem loopReturning_exception_run {width : Nat} [NeZero width] {F : Ty
   rw [cutRun]
   simp only
   rw [fix_clock_evaluate,bodyRun]
-  simp [evaluate,cutRes,setVar,sptLookup_sptInsert]
-
+  cases terminal <;> simp [evaluate,cutRes,setVar,sptLookup_sptInsert]
 
 /-- A returning call runs at the sum of the prefix, callee, and continuation budgets. -/
 theorem compiledScalarReturning_explicit_from_body {width : Nat} [NeZero width] {σ : Type}
@@ -1654,12 +1658,13 @@ theorem compiledScalarReturning_explicit_from_body {width : Nat} [NeZero width] 
 
 
 
-/-- The generated handler propagates a callee exception at a concrete clock budget. -/
-theorem compiledScalarReturning_exception_explicit_from_body {width : Nat} [NeZero width] {σ : Type}
+/-- Ordinary calls propagate exceptions and final FFI events at a concrete clock budget. -/
+theorem compiledScalarReturning_terminal_explicit_from_body {width : Nat} [NeZero width] {σ : Type}
     (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
     (source sourceFinal : CrepSemHOLState width σ) (values : List (HolWordLab width))
     (target : LoopSemStateFiniteExact width σ) (ctxt : CrepToLoopContextExact) (live : NumSet)
-    (name : MlString) (params names returnNames : List Nat) (body : CrepProgHOL width) (eid : BitVec width)
+    (name : MlString) (params names returnNames : List Nat) (body : CrepProgHOL width)
+    (result : CrepResultHOLExact width) (out : LoopResultExact width) (terminal : CallTerminal result out)
     (prefixBudget bodyBudget : Nat) (cost : Nat → Nat)
     (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
     (evaluated : args.mapM (evalCrepSemHOLExp source) = some values)
@@ -1679,13 +1684,13 @@ theorem compiledScalarReturning_exception_explicit_from_body {width : Nat} [NeZe
       (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}) cost tableOk)
     (bodyRun : evalCrepSemHOLProgExact
       (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}) body =
-        (some (.exception eid),sourceFinal))
+        (some result,sourceFinal))
     (bodyBudgetBound : cost (CrepSteps.steps body
       (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)})) ≤ bodyBudget) :
     let finalSource := CrepSemHOLState.emptyLocals sourceFinal
-    evalCrepSemHOLProgExact source (.call (some (names,none)) name args) = (some (.exception eid),finalSource) ∧
+    evalCrepSemHOLProgExact source (.call (some (names,none)) name args) = (some result,finalSource) ∧
     ∃ final, evaluate (compileHOLExact ctxt live (.call (some (names,none)) name args))
-        {target with clock := target.clock+(prefixBudget+(bodyBudget+1))} = (some (.exception (.word eid)),final) ∧
+        {target with clock := target.clock+(prefixBudget+(bodyBudget+1))} = (some out,final) ∧
       crepToLoopStateRelExact finalSource {final with clock := finalSource.clock} ∧
       crepToLoopMemRelHOLExact finalSource.memory final.memory finalSource.memaddrs ∧
       crepToLoopGlobalsRelHOLExact finalSource.globals final.globals ∧
@@ -1698,18 +1703,18 @@ theorem compiledScalarReturning_exception_explicit_from_body {width : Nat} [NeZe
   let extra := bodyBudget+1
   obtain ⟨post,bodyPost,pre,assign,get,lookup,nd,subset,nz,optRun,_⟩ :=
     returning_callee_prepare args shape source sourceFinal values target ctxt live name params names returnNames body
-      (.exception eid) (.exception (.word eid)) prefixBudget bodyBudget cost tableOk evaluated found distinct arity nonzero
+      result out prefixBudget bodyBudget cost tableOk evaluated found distinct arity nonzero
       namesDistinct mapped stateRel memRel globalsRel codeRel localsRel table prefixBound bodySim bodyRun bodyBudgetBound
-      (by simp [resultToLoop]) (by simp) (by simp) (by simp) (by simp)
+      (by cases terminal <;> simp [resultToLoop]) (by cases terminal <;> simp) (by cases terminal <;> simp) (by cases terminal <;> simp) (by cases terminal <;> simp)
   let middle : LoopSemStateFiniteExact width σ := {post with locals := sptAlistInsert regs vals post.locals}
   let shifted : LoopSemStateFiniteExact width σ := {middle with clock := middle.clock+extra}
-  have targetResult := loopReturning_exception_run shifted bodyPost (findLabExact ctxt name) regs returnNames live (ctxt.vmax+1)
-    (ocompileHOLExact calleeCtxt (listToNumSetHOLExact formals) body) vals (.word eid)
+  have targetResult := loopReturning_terminal_run shifted bodyPost (findLabExact ctxt name) regs returnNames live (ctxt.vmax+1)
+    (ocompileHOLExact calleeCtxt (listToNumSetHOLExact formals) body) vals result out terminal
     (sptFromAList (formals.zip vals)) get lookup nd subset nz optRun
   let targetFinal := (evaluate (.call (some (returnNames,live)) (some (findLabExact ctxt name)) regs
     (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) shifted).2
   have callRun : evaluate (.call (some (returnNames,live)) (some (findLabExact ctxt name)) regs
-    (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) shifted = (some (.exception (.word eid)),targetFinal) := by
+    (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) shifted = (some out,targetFinal) := by
     exact Prod.ext targetResult rfl
   have compiled : compileHOLExact ctxt live (.call (some (names,none)) name args) =
       loopNestedSeqHOL (comp.1 ++ (regs.zipWith HolLoopProg.assign comp.2.1) ++
@@ -1717,27 +1722,29 @@ theorem compiledScalarReturning_exception_explicit_from_body {width : Nat} [NeZe
           (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))]) := by
     simp [compileHOLExact,comp,regs,mapped,List.append_assoc]
   have targetRun : evaluate (compileHOLExact ctxt live (.call (some (names,none)) name args))
-      {target with clock := target.clock+(prefixBudget+extra)} = (some (.exception (.word eid)),targetFinal) := by
+      {target with clock := target.clock+(prefixBudget+extra)} = (some out,targetFinal) := by
     rw [compiled,List.append_assoc]
     rw [evaluate_nested_seq_append_none comp.1 _ _ _ pre]
     rw [evaluate_nested_seq_append_none _ _ _ _ assign]
     simp only [loopNestedSeqHOL,evaluate_seq]
     have callRun' : evaluate (.call (some (returnNames,live)) (some (findLabExact ctxt name)) regs
       (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live)))
-      {middle with clock := middle.clock+extra} = (some (.exception (.word eid)),targetFinal) := callRun
+      {middle with clock := middle.clock+extra} = (some out,targetFinal) := callRun
     rw [callRun']
   let finalSource := CrepSemHOLState.emptyLocals sourceFinal
   have sourceRun : evalCrepSemHOLProgExact source (.call (some (names,none)) name args) =
-      (some (.exception eid),finalSource) := by
+      (some result,finalSource) := by
     rw [evalCrepSemHOLProgExact_call_holShape]
     simp only [evaluated,lookupCodeFiniteHOL,found,arity,distinct,true_and,if_true,
       crepReturnInfoNodupError,namesDistinct,not_true_eq_false,if_false,nonzero]
     simp only [decClockCrepSemHOL] at bodyRun ⊢
     rw [bodyRun]
-  have rel := compiler_run_relations (.call (some (names,none)) name args) source finalSource (some (.exception eid)) target targetFinal
-    ctxt live (prefixBudget+extra) sourceRun (by simp) (by simp [resultToLoop]) stateRel memRel globalsRel codeRel localsRel
-    (by simpa [resultToLoop] using targetRun)
+    cases terminal <;> rfl
+  have rel := compiler_run_relations (.call (some (names,none)) name args) source finalSource (some result) target targetFinal
+    ctxt live (prefixBudget+extra) sourceRun (by cases terminal <;> simp) (by cases terminal <;> simp [resultToLoop]) stateRel memRel globalsRel codeRel localsRel
+    (by cases terminal <;> simpa [resultToLoop] using targetRun)
   exact ⟨sourceRun,targetFinal,by simpa [extra] using targetRun,rel.1,rel.2.1,rel.2.2.1,rel.2.2.2.1⟩
+
 
 
 end SteppedFlapjack.CrepToLoopSteps
