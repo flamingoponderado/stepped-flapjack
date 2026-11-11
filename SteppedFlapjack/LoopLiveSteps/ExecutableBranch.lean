@@ -164,7 +164,7 @@ theorem shrinkSequence_branch {p : HolLoopProg width} (shape : LoopBranch p) :
 loops with branch bodies, and direct calls with the compiler-generated handler. -/
 inductive SimpleLoopSequenceSource {width : Nat} [NeZero width] : HolLoopProg width → Prop
   | branch {p} : LoopBranch p → SimpleLoopSequenceSource p
-  | loop (live exits) {body} : LoopBranch body → SimpleLoopSequenceSource (.loop live body exits)
+  | loop (live exits) {body} : SimpleLoopSequenceSource body → SimpleLoopSequenceSource (.loop live body exits)
   | tail (loc : Nat) (args : List Nat) : SimpleLoopSequenceSource (.call none (some loc) args none)
   | returning (names : List Nat) (callLive : NumSet) (loc exception : Nat) (args : List Nat) (liveOut : NumSet) :
       SimpleLoopSequenceSource (.call (some (names,callLive)) (some loc) args
@@ -182,7 +182,7 @@ theorem loopCall_simpleSequence {p : HolLoopProg width} (shape : SimpleLoopSeque
     ∀ env, (loopCallCompHOL env p).1 = p := by
   induction shape with
   | branch h => exact loopCall_branch h
-  | loop live exits h => exact loopCall_sequence (.loop live exits h)
+  | loop live exits h ih => intro env; simp only [loopCallCompHOL,ih .ln]
   | tail loc args => intro env; simp [loopCallCompHOL]
   | returning names callLive loc exception args liveOut => intro env; simp [loopCallCompHOL]
   | returningMarked names callLive loc exception args liveOut => intro env; simp [loopCallCompHOL]
@@ -207,11 +207,9 @@ theorem shrinkSequence_eq {p : HolLoopProg width} (shape : SimpleLoopSequenceSou
   | @seq a b ha hb iha ihb =>
       intro lt live
       simp only [shrinkSequence,shrinkHOL,iha,ihb]
-  | @loop liveIn liveOut body h =>
+  | @loop liveIn liveOut body h ih =>
       intro lt live
-      have bodyEq : ∀ lt live, shrinkSequence lt body live = shrinkHOL lt body live := by
-        intro lt live
-        rw [shrinkSequence_branch h,shrinkBranch_eq h]
+      have bodyEq : ∀ lt live, shrinkSequence lt body live = shrinkHOL lt body live := ih
       have fixedEq := fixedpointUsing_eq _ bodyEq (sptSize liveIn + 1) lt liveIn .ln
         (sptUnion liveIn (sptInter liveOut live)) (by omega)
       simp only [shrinkSequence,shrinkHOL]
@@ -237,32 +235,18 @@ theorem optimiseSequence_eq {p : HolLoopProg width} (shape : SimpleLoopSequenceS
   simp only [optimiseSequence,optimiseHOL,loopCall_simpleSequence shape .ln,compHOL,shrinkSequence_eq shape]
 
 
-/-- The executable optimizer also handles an enclosing loop whose body is a
-supported sequence, including calls and already-supported loops. -/
-theorem optimiseSequence_loop_eq {body : HolLoopProg width}
-    (shape : SimpleLoopSequenceSource body) (liveIn liveOut : NumSet) :
-    optimiseSequence (.loop liveIn body liveOut) = optimiseHOL (.loop liveIn body liveOut) := by
-  have bodyEq := shrinkSequence_eq shape
-  have fixedEq := fixedpointUsing_eq _ bodyEq (sptSize liveIn + 1) [] liveIn .ln
-    (sptUnion liveIn (sptInter liveOut (.ln : NumSet))) (by omega)
-  simp only [optimiseSequence,optimiseHOL,compHOL,loopCallCompHOL,
-    loopCall_simpleSequence shape .ln,shrinkSequence,shrinkHOL]
-  rw [fixedEq]
-  simp only [bodyEq]
-  rfl
-
 theorem shrink_simpleSequence {p : HolLoopProg width} (shape : SimpleLoopSequenceSource p) :
     ∀ lt live, SimpleLoopSequenceSource (shrinkHOL lt p live).1 := by
   induction shape with
   | branch h => intro lt live; exact .branch (shrink_branch h lt live)
-  | @loop liveIn liveOut body h =>
+  | @loop liveIn liveOut body h ih =>
     intro lt live
     simp only [shrinkHOL]
     cases fixed : fixedpointHOL lt liveIn .ln (sptUnion liveIn (sptInter liveOut live)) body with
-    | none => exact .loop _ _ (shrink_branch h _ _)
+    | none => exact .loop _ _ (ih _ _)
     | some pair =>
       cases pair with
-      | mk body out => exact .loop _ _ (fixedpoint_preserves LoopBranch (shrink_branch h) lt liveIn .ln _ body out fixed)
+      | mk body out => exact .loop _ _ (fixedpoint_preserves SimpleLoopSequenceSource ih lt liveIn .ln _ body out fixed)
   | tail loc args => intro lt live; simp only [shrinkHOL]; exact .tail loc args
   | returning names callLive loc exception args liveOut =>
     intro lt live
@@ -286,7 +270,7 @@ theorem markAll_simpleSequence {p : HolLoopProg width} (shape : SimpleLoopSequen
     SimpleLoopSequenceSource (markAllHOL p).1 := by
   induction shape with
   | branch h => exact .branch (markAll_branch h).1
-  | loop live exits h => simp only [markAllHOL]; exact .loop _ _ (markAll_branch h).1
+  | loop live exits h ih => simp only [markAllHOL]; exact .loop _ _ ih
   | tail loc args => simp only [markAllHOL]; exact .mark (.tail loc args)
   | returning names callLive loc exception args liveOut => simp only [markAllHOL,Bool.true_and,if_true]; exact .mark (.returningMarked names callLive loc exception args liveOut)
   | returningMarked names callLive loc exception args liveOut => simp only [markAllHOL,Bool.true_and,if_true]; exact .mark (.returningMarked names callLive loc exception args liveOut)

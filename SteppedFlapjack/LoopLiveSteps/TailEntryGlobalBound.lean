@@ -288,6 +288,87 @@ theorem returningCall_consumed_step {width : Nat} [NeZero width] {F : Type}
 def LoopTableSupported (code : Spt (List Nat × HolLoopProg width)) : Prop :=
   ∀ loc params body, sptLookup loc code = some (params,body) → SimpleLoopSequenceSource body
 
+private theorem terminal_weighted (x y z a k visits : Nat)
+    (hxy : y < x) (hzy : z ≤ y) (bound : visits ≤ a + k * (y-z)) :
+    1 + visits ≤ 1+a+k*(x-z) := by
+  have budget : y-z ≤ x-z := by omega
+  have scaled := Nat.mul_le_mul_left k budget
+  nlinarith
+
+private theorem loop_weighted_step (live exits : NumSet) (body : HolLoopProg width)
+    (a k : Nat) (dominates : 1 + a ≤ k)
+    (s final : LoopSemStateFiniteExact width F) (result : Option (LoopResultExact width))
+    (run : evaluate (.loop live body exits) s = (result,final))
+    (bodyBound : ∀ (t u : LoopSemStateFiniteExact width F) (r : Option (LoopResultExact width)),
+      t.clock < s.clock → t.code = s.code → evaluate body t = (r,u) → steps body t ≤ a + k * (t.clock-u.clock))
+    (recurBound : ∀ (t u : LoopSemStateFiniteExact width F) (r : Option (LoopResultExact width)),
+      t.clock < s.clock → t.code = s.code → evaluate (.loop live body exits) t = (r,u) →
+      steps (.loop live body exits) t ≤ (1+a) + k * (t.clock-u.clock)) :
+    steps (.loop live body exits) s ≤ (1+a) + k * (s.clock-final.clock) := by
+  rcases cut : cutRes live (none,s) with ⟨cutResult,entry⟩
+  cases cutResult with
+  | some r =>
+    rw [steps_loop,cut]
+    simp only
+    omega
+  | none =>
+    rcases bodyRun : evaluate body entry with ⟨bodyResult,middle⟩
+    have entryClock := cutRes_none_clock cut
+    have bodyClock := evaluate_clock body entry bodyResult middle bodyRun
+    have entryCode : entry.code = s.code := by
+      have h := cutRes_code live none s
+      rw [cut] at h
+      exact h
+    have middleCode := evaluate_code body entry middle bodyResult bodyRun
+    have bodyVisits := bodyBound entry middle bodyResult entryClock entryCode bodyRun
+    have execution := run
+    rw [evaluate,cut] at execution
+    simp only at execution
+    rw [fix_clock_evaluate,bodyRun] at execution
+    rw [steps_loop,cut]
+    simp only
+    rw [bodyRun]
+    by_cases continuing : bodyResult = none ∨ bodyResult = some (.continue 0)
+    · have recurRun : evaluate (.loop live body exits) middle = (result,final) := by
+        rcases continuing with h | h <;> rw [h] at execution <;> exact execution
+      have smaller : middle.clock < s.clock := by omega
+      have recur := recurBound middle final result smaller (middleCode.trans entryCode) recurRun
+      have finalClock := evaluate_clock (.loop live body exits) middle result final recurRun
+      have budget : entry.clock - middle.clock + (middle.clock - final.clock) + 1 ≤ s.clock - final.clock := by omega
+      have scaled := Nat.mul_le_mul_left k budget
+      rcases continuing with h | h <;> rw [h] <;> simp only <;> nlinarith
+    · have hnone : bodyResult ≠ none := fun h => continuing (Or.inl h)
+      have hcont : bodyResult ≠ some (.continue 0) := fun h => continuing (Or.inr h)
+      cases bodyResult with
+      | none => exact (hnone rfl).elim
+      | some r =>
+        cases r <;> try (simp only at execution ⊢; cases execution; exact terminal_weighted _ _ _ _ _ _ entryClock bodyClock bodyVisits)
+        case «continue» label =>
+          cases label with
+          | zero => exact (hcont rfl).elim
+          | succ n =>
+            simp only at execution ⊢
+            cases execution
+            have budget : entry.clock - final.clock ≤ s.clock - final.clock := by omega
+            have scaled := Nat.mul_le_mul_left k budget
+            nlinarith
+        case «break» label =>
+          cases label with
+          | zero =>
+            simp only at execution ⊢
+            have exitClock := cutRes_clock_le exits (none,middle)
+            rw [execution] at exitClock
+            simp only at exitClock
+            have budget : entry.clock - middle.clock ≤ s.clock - final.clock := by omega
+            have scaled := Nat.mul_le_mul_left k budget
+            nlinarith
+          | succ n =>
+            simp only at execution ⊢
+            cases execution
+            have budget : entry.clock - final.clock ≤ s.clock - final.clock := by omega
+            have scaled := Nat.mul_le_mul_left k budget
+            nlinarith
+
 set_option maxHeartbeats 5000000 in
 /-- A call-aware Loop execution is bounded by its control weight and actual
 clock consumption, using a factor computed from the complete code table. -/
@@ -319,10 +400,20 @@ theorem simpleSequence_global_bound (p : HolLoopProg width) (s : LoopSemStateFin
         omega
       | @loop live exits body h =>
         rcases run : evaluate (.loop live body exits) s with ⟨out,post⟩
-        have bound := scalarLoop_control_consumption_bound (.loop live exits (.branch h)) s post out run
-        have scaled := Nat.mul_le_mul_right (s.clock-post.clock) weight
-        simp only at ⊢
-        nlinarith
+        have w : 1 + loopVisitWeight body ≤ loopCodeWeight s.code+2 := by
+          simpa only [loopVisitWeight] using weight
+        have bound := loop_weighted_step live exits body (loopVisitWeight body) (loopCodeWeight s.code+2)
+          w s post out run (by
+            intro t u r smaller same bodyRun
+            have bodyWeight : loopVisitWeight body ≤ loopCodeWeight s.code+2 := by omega
+            have hbody := ih body t (lexLtClock smaller) h same bodyWeight
+            rw [bodyRun] at hbody
+            exact hbody) (by
+            intro t u r smaller same loopRun
+            have hloop := ih (.loop live body exits) t (lexLtClock smaller) (.loop live exits h) same weight
+            rw [loopRun] at hloop
+            simpa only [loopVisitWeight] using hloop)
+        simpa only [run,loopVisitWeight] using bound
       | tail loc args =>
         cases hg : getVars args s with
         | none =>
@@ -509,8 +600,62 @@ theorem simpleSequence_global_consumed (p : HolLoopProg width) (s : LoopSemState
         simp only
         omega
       | @loop live exits body h =>
-        rcases run : evaluate (.loop live body exits) s with ⟨out,post⟩
-        exact scalarLoop_consumed (.loop live exits (.branch h)) s post out run
+        rcases cut : cutRes live (none,s) with ⟨cutResult,entry⟩
+        have cutBound := cutRes_clock_consumed live none s
+        rw [cut] at cutBound
+        simp only at cutBound
+        cases cutResult with
+        | some r =>
+          have execution : evaluate (.loop live body exits) s = (some r,entry) := by
+            rw [evaluate,cut]
+          rw [execution,steps_loop,cut]
+          simp only
+          omega
+        | none =>
+          rcases bodyRun : evaluate body entry with ⟨bodyResult,middle⟩
+          have entryClock := cutRes_none_clock cut
+          have bodyClock := evaluate_clock body entry bodyResult middle bodyRun
+          have entryCode : entry.code = s.code := by
+            have hc := cutRes_code live none s
+            rw [cut] at hc
+            exact hc
+          have middleCode := evaluate_code body entry middle bodyResult bodyRun
+          have bodyBound := ih body entry (lexLtClock entryClock) h entryCode
+          rw [bodyRun] at bodyBound
+          simp only at bodyBound
+          rcases run : evaluate (.loop live body exits) s with ⟨result,post⟩
+          have execution := run
+          rw [evaluate,cut] at execution
+          simp only at execution
+          rw [fix_clock_evaluate,bodyRun] at execution
+          rw [steps_loop,cut]
+          simp only
+          rw [bodyRun]
+          by_cases continuing : bodyResult = none ∨ bodyResult = some (.continue 0)
+          · have recurRun : evaluate (.loop live body exits) middle = (result,post) := by
+              rcases continuing with hc | hc <;> rw [hc] at execution <;> exact execution
+            have smaller : middle.clock < s.clock := by omega
+            have recur := ih (.loop live body exits) middle (lexLtClock smaller)
+              (.loop live exits h) (middleCode.trans entryCode)
+            rw [recurRun] at recur
+            simp only at recur
+            have finalClock := evaluate_clock (.loop live body exits) middle result post recurRun
+            rcases continuing with hc | hc <;> rw [hc] <;> simp only <;> omega
+          · have hnone : bodyResult ≠ none := fun hc => continuing (Or.inl hc)
+            have hcont : bodyResult ≠ some (.continue 0) := fun hc => continuing (Or.inr hc)
+            cases bodyResult with
+            | none => exact (hnone rfl).elim
+            | some r =>
+              cases r <;> try (simp only at execution ⊢; cases execution; omega)
+              case «break» label =>
+                cases label with
+                | zero =>
+                  simp only at execution ⊢
+                  have exitBound := cutRes_clock_consumed exits none middle
+                  rw [execution] at exitBound
+                  simp only at exitBound
+                  omega
+                | succ n => simp only at execution ⊢; cases execution; omega
       | tail loc args =>
         cases hg : getVars args s with
         | none => simp [evaluate,hg]
@@ -923,114 +1068,5 @@ theorem optimise_tailEntry_source_bound {p : HolLoopProg 64} {loc : Nat} (shape 
   have optBound := tailEntry_consumption_bound optShape s post result K code optRun
   have consumed := tailEntry_clock_consumed shape s post result K code run
   exact ⟨optRun,optShape,optBound.trans (Nat.mul_le_mul_left _ (by omega))⟩
-
-private theorem terminal_weighted (x y z a k visits : Nat)
-    (hxy : y < x) (hzy : z ≤ y) (bound : visits ≤ a + k * (y-z)) :
-    1 + visits ≤ 1+a+k*(x-z) := by
-  have budget : y-z ≤ x-z := by omega
-  have scaled := Nat.mul_le_mul_left k budget
-  nlinarith
-
-private theorem loop_weighted_step (live exits : NumSet) (body : HolLoopProg width)
-    (a k : Nat) (dominates : 1 + a ≤ k)
-    (s final : LoopSemStateFiniteExact width F) (result : Option (LoopResultExact width))
-    (run : evaluate (.loop live body exits) s = (result,final))
-    (bodyBound : ∀ (t u : LoopSemStateFiniteExact width F) (r : Option (LoopResultExact width)),
-      t.clock < s.clock → t.code = s.code → evaluate body t = (r,u) → steps body t ≤ a + k * (t.clock-u.clock))
-    (recurBound : ∀ (t u : LoopSemStateFiniteExact width F) (r : Option (LoopResultExact width)),
-      t.clock < s.clock → t.code = s.code → evaluate (.loop live body exits) t = (r,u) →
-      steps (.loop live body exits) t ≤ (1+a) + k * (t.clock-u.clock)) :
-    steps (.loop live body exits) s ≤ (1+a) + k * (s.clock-final.clock) := by
-  rcases cut : cutRes live (none,s) with ⟨cutResult,entry⟩
-  cases cutResult with
-  | some r =>
-    rw [steps_loop,cut]
-    simp only
-    omega
-  | none =>
-    rcases bodyRun : evaluate body entry with ⟨bodyResult,middle⟩
-    have entryClock := cutRes_none_clock cut
-    have bodyClock := evaluate_clock body entry bodyResult middle bodyRun
-    have entryCode : entry.code = s.code := by
-      have h := cutRes_code live none s
-      rw [cut] at h
-      exact h
-    have middleCode := evaluate_code body entry middle bodyResult bodyRun
-    have bodyVisits := bodyBound entry middle bodyResult entryClock entryCode bodyRun
-    have execution := run
-    rw [evaluate,cut] at execution
-    simp only at execution
-    rw [fix_clock_evaluate,bodyRun] at execution
-    rw [steps_loop,cut]
-    simp only
-    rw [bodyRun]
-    by_cases continuing : bodyResult = none ∨ bodyResult = some (.continue 0)
-    · have recurRun : evaluate (.loop live body exits) middle = (result,final) := by
-        rcases continuing with h | h <;> rw [h] at execution <;> exact execution
-      have smaller : middle.clock < s.clock := by omega
-      have recur := recurBound middle final result smaller (middleCode.trans entryCode) recurRun
-      have finalClock := evaluate_clock (.loop live body exits) middle result final recurRun
-      have budget : entry.clock - middle.clock + (middle.clock - final.clock) + 1 ≤ s.clock - final.clock := by omega
-      have scaled := Nat.mul_le_mul_left k budget
-      rcases continuing with h | h <;> rw [h] <;> simp only <;> nlinarith
-    · have hnone : bodyResult ≠ none := fun h => continuing (Or.inl h)
-      have hcont : bodyResult ≠ some (.continue 0) := fun h => continuing (Or.inr h)
-      cases bodyResult with
-      | none => exact (hnone rfl).elim
-      | some r =>
-        cases r <;> try (simp only at execution ⊢; cases execution; exact terminal_weighted _ _ _ _ _ _ entryClock bodyClock bodyVisits)
-        case «continue» label =>
-          cases label with
-          | zero => exact (hcont rfl).elim
-          | succ n =>
-            simp only at execution ⊢
-            cases execution
-            have budget : entry.clock - final.clock ≤ s.clock - final.clock := by omega
-            have scaled := Nat.mul_le_mul_left k budget
-            nlinarith
-        case «break» label =>
-          cases label with
-          | zero =>
-            simp only at execution ⊢
-            have exitClock := cutRes_clock_le exits (none,middle)
-            rw [execution] at exitClock
-            simp only at exitClock
-            have budget : entry.clock - middle.clock ≤ s.clock - final.clock := by omega
-            have scaled := Nat.mul_le_mul_left k budget
-            nlinarith
-          | succ n =>
-            simp only at execution ⊢
-            cases execution
-            have budget : entry.clock - final.clock ≤ s.clock - final.clock := by omega
-            have scaled := Nat.mul_le_mul_left k budget
-            nlinarith
-/-- A loop can contain supported direct calls: the table-derived factor pays
-for its cut on each re-entry as well as clock consumed by the body. -/
-theorem simpleSequence_loop_global_bound (live exits : NumSet) (body : HolLoopProg width)
-    (shape : SimpleLoopSequenceSource body) (s : LoopSemStateFiniteExact width F)
-    (code : LoopTableSupported s.code)
-    (weight : loopVisitWeight (.loop live body exits) ≤ loopCodeWeight s.code + 2) :
-    steps (.loop live body exits) s ≤ loopVisitWeight (.loop live body exits) +
-      (loopCodeWeight s.code+2) * (s.clock-(evaluate (.loop live body exits) s).2.clock) := by
-  induction hs : s.clock using Nat.strongRecOn generalizing s with
-  | _ clock ih =>
-    rcases run : evaluate (.loop live body exits) s with ⟨out,final⟩
-    have w : 1 + loopVisitWeight body ≤ loopCodeWeight s.code + 2 := by simpa [loopVisitWeight] using weight
-    have bound := loop_weighted_step live exits body (loopVisitWeight body) (loopCodeWeight s.code+2)
-      w s final out run (by
-        intro t u r smaller same bodyRun
-        have supported : LoopTableSupported t.code := by rw [same]; exact code
-        have bodyWeight : loopVisitWeight body ≤ loopCodeWeight t.code+2 := by rw [same]; omega
-        have h := simpleSequence_global_bound body t shape supported bodyWeight
-        rw [bodyRun] at h
-        simpa only [same] using h) (by
-        intro t u r smaller same loopRun
-        have supported : LoopTableSupported t.code := by rw [same]; exact code
-        have loopWeight : loopVisitWeight (.loop live body exits) ≤ loopCodeWeight t.code+2 := by rw [same]; exact weight
-        have smaller' : t.clock < clock := by omega
-        have h := ih t.clock smaller' t supported loopWeight rfl
-        rw [loopRun] at h
-        simpa only [same,loopVisitWeight] using h)
-    simpa only [loopVisitWeight, ← hs] using bound
 
 end SteppedFlapjack.LoopLiveSteps

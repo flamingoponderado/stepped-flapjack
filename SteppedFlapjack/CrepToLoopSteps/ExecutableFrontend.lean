@@ -70,6 +70,23 @@ theorem compiled_conditional_scalar_shape {width : Nat} [NeZero width]
   exact .seq (.branch (.assign _ _))
     (.seq (.conditional _ _ _ _ thenShape elseShape) (.branch .skip))
 
+/-- A scalar while condition compiles to the recursive optimizer shape when
+its body does, including when that body contains calls or further loops. -/
+theorem compiled_while_scalar_shape {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (condition : CrepExpHOL width) (body : CrepProgHOL width)
+    (conditionShape : CompiledScalar condition)
+    (bodyShape : SimpleLoopSequenceSource (compileHOLExact ctxt live body)) :
+    SimpleLoopSequenceSource (compileHOLExact ctxt live (.while condition body)) := by
+  obtain ⟨code,value,next,outLive,compiled,prefixShape⟩ :=
+    compiledScalar_prefix conditionShape ctxt (ctxt.vmax+1) live
+  rw [compileHOLExact,compiled]
+  apply SimpleLoopSequenceSource.loop
+  apply nestedSequence_shape code _ prefixShape.2.2
+  exact .seq (.branch (.assign _ _))
+    (.seq (.conditional _ _ _ _ (.seq bodyShape (.branch (.continue 0)))
+      (.branch (.break 0))) (.branch .skip))
+
 /-- Before optimization, every supported body has the shape required by the
 structural liveness evaluator. -/
 theorem supportedCodeBody_rawLoopShape {width : Nat} [NeZero width]
@@ -86,7 +103,7 @@ theorem supportedCodeBody_rawLoopShape {width : Nat} [NeZero width]
       branchConditionWhile_loopBranch _ (BranchCondition.toScalar hc) _ hb ctxt live
     simp only [compileHOLExact,loopCompiled]
     exact .seq (.branch (compile_branchProgram_loopBranch hi ctxt live))
-      (.seq (.loop live live loopBody) (.branch (compile_branchProgram_loopBranch ht ctxt live)))
+      (.seq (.loop live live (.branch loopBody)) (.branch (compile_branchProgram_loopBranch ht ctxt live)))
   | @declWhile name value condition body tail hv hc hb ht =>
     right
     have suffix (bc : CrepToLoopContextExact) (bl : NumSet) :
@@ -94,7 +111,7 @@ theorem supportedCodeBody_rawLoopShape {width : Nat} [NeZero width]
       obtain ⟨code,conditionValue,next,outLive,condCompiled,loopCompiled,loopBody⟩ :=
         branchConditionWhile_loopBranch condition (BranchCondition.toScalar hc) body hb bc bl
       simp only [compileHOLExact,loopCompiled]
-      exact .seq (.loop bl bl loopBody) (.branch (compile_branchProgram_loopBranch ht bc bl))
+      exact .seq (.loop bl bl (.branch loopBody)) (.branch (compile_branchProgram_loopBranch ht bc bl))
     obtain ⟨value2,compiled⟩ := directExpression_noCode hv ctxt (ctxt.vmax+1) live
     rw [compileHOLExact,compiled]
     exact .seq (.branch .skip) (.seq (.branch (.assign _ _)) (suffix _ _))
@@ -106,7 +123,7 @@ theorem supportedCodeBody_rawLoopShape {width : Nat} [NeZero width]
         branchConditionWhile_loopBranch condition (BranchCondition.toScalar hc) body hb bc bl
       simp only [compileHOLExact,loopCompiled]
       exact .seq (.branch (compile_branchProgram_loopBranch hi bc bl))
-        (.seq (.loop bl bl loopBody) (.branch (compile_branchProgram_loopBranch ht bc bl)))
+        (.seq (.loop bl bl (.branch loopBody)) (.branch (compile_branchProgram_loopBranch ht bc bl)))
     obtain ⟨value2,compiled⟩ := directExpression_noCode hv ctxt (ctxt.vmax+1) live
     rw [compileHOLExact,compiled]
     exact .seq (.branch .skip) (.seq (.branch (.assign _ _)) (suffix _ _))
