@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.SourceInitialGlobals
 import SteppedFlapjack.PanToCrepSteps.GlobalShapes
 import SteppedFlapjack.PanToCrepSteps.GlobalEntry
 import SteppedFlapjack.Concrete.ControlCodeIndependent
@@ -238,7 +239,7 @@ private theorem generated_initializers_static {width : Nat} [NeZero width] {F : 
 
 /-- The generated zero-argument tail entry inherits the counted source bound.
 The callee lookup is derived from simplification, renaming and the global-state relation. -/
-theorem countedCalls_renamedGlobalEntry {scope : List VarName} {program : Prog (RiscV.Word 64)}
+private theorem countedCalls_renamedGlobalEntry {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : CallSupportedIn scope program) {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
@@ -331,6 +332,79 @@ theorem countedCalls_renamedGlobalEntry {scope : List VarName} {program : Prog (
   have entryBound := entry.2.2
   refine ⟨sourceFinal,lowerFinal,sourceRun,entry.1,entry.2.1,?_,ffi,ffiRel⟩
   omega
+
+set_option linter.unnecessarySimpa false in
+set_option linter.unnecessarySeqFocus false in
+/-- Counted source execution reaches the actual initialized function-only entry. -/
+theorem countedCalls_functionOnlyGlobalEntry {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
+    [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
+    (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
+    (byteRanged : ProgByteRanged program)
+    (codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry)
+    (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
+      ∃ scope, CallSupportedIn scope body)
+    (targetCode : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (codeRel : PanSimp.CodeRel source.code targetCode)
+    (entries : List SimpVisits.SimpEntry)
+    (sourceCode : source.code = HolFiniteMapExact.empty.updateList entries.reverse)
+    (entryShapes : ∀ entry ∈ entries, ∃ scope, ∃ program : Prog (RiscV.Word 64),
+      entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program)
+    (fs : List (FunDeclHOL 64)) (start : MlS)
+    (targetTable : targetCode = HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)
+    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],progToHOL (panSimpProg program),.one))
+    (mainFound : source.code.lookup start = some ([],progToHOL program,.one))
+    (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
+    (structs : source.structs = []) (topOutside : ¬ source.memaddrs source.topAddr)
+    (aligned : panGlobalsByteAlignedHOL source.topAddr)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ) (exnContracts : InfoMap Shape) (fuel count : Nat)
+    (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))
+    (postMemory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (postFfi : FfiState σ) (value : BitVec 64)
+    (run : evalPanValueFfiProgSteps context primitive handler production.structs (countedFunctionsOfCode production.code)
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+      production.locals production.globals production.memory production.ffi program
+      (memoryAccess := some (panSemBitVec64MemoryAccess production))
+      (contracts := some (countedContractsOfCode production.code exnContracts)) =
+        some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
+    (budget : count ≤ source.clock) :
+    let decls := fs.map DeclHOL.function
+    let renamed := {source with code := fpermCodeHOL start (newMainNameHOL decls) targetCode}
+    let before := noGlobalsLoweredPreCall renamed (HolFiniteMapExact.empty.updateList
+      (functionsHOL (compileTopExactHOL decls start)).reverse)
+    ∃ (sourceFinal lowerFinal : PanSemStateFiniteExact 64 σ),
+      source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word value))),sourceFinal) ∧
+      before.evaluateHOLFiniteState (.seq .skip (.call none (newMainNameHOL decls) [])) =
+        (some (.returned (.val (.word value))),emptyLocalsHOLFinite lowerFinal) ∧
+      globalEntrySteps .skip (newMainNameHOL decls) [] before ≤
+        1 + (SimpVisits.simpTableFactor entries * count + SimpVisits.hw (progToHOL (panSimpProg program))) + 2 ∧
+      lowerFinal.ffi = sourceFinal.ffi ∧ FfiStateRel postFfi sourceFinal.ffi := by
+  let decls := fs.map DeclHOL.function
+  let fresh := newMainNameHOL decls
+  let renamed : PanSemStateFiniteExact 64 σ := {source with code := fpermCodeHOL start fresh targetCode}
+  let code := HolFiniteMapExact.empty.updateList (functionsHOL (compileTopExactHOL decls start)).reverse
+  let before := noGlobalsLoweredPreCall renamed code
+  have init := functionOnly_source_initialization fs start (progToHOL (panSimpProg program)) .one found renamed
+    (by simpa [renamed] using locals) (by simpa [renamed] using globals) (by simpa [renamed] using structs)
+    (by simpa [renamed] using topOutside) (by simpa [renamed] using aligned)
+    (by simpa [renamed,decls,fresh,targetTable])
+  dsimp only at init
+  let funs : List (DeclHOL 64) := (fpermDecsHOL start fresh decls).map (fun d => match d with
+    | .function f => .function {f with body := compileProgExactHOL emptyGlobalsContext f.body}
+    | _ => .name (Flapjack.Basis.Pure.MlString.ofString "") [])
+  have compiled := functionOnly_compileDecs fs start fresh
+  obtain ⟨sourceFinal,lowerFinal,sourceRun,_,lowerRun,bound,ffi,ffiRel⟩ :=
+    countedCalls_renamedGlobalEntry supported production source rel ranged words byteRanged codeRanged codeShape
+      targetCode codeRel entries sourceCode entryShapes decls start [] funs [] emptyGlobalsContext found
+      (by
+        dsimp only [decls,fresh,funs]
+        dsimp only at compiled
+        convert compiled using 1 <;> congr 2 <;> simp [fresh,decls]
+        intro d hd
+        cases d <;> rfl) before before init.1 init.2.1 mainFound init.2.2
+      context primitive handler exnContracts fuel count postLocals postGlobals postMemory postFfi value run budget
+  exact ⟨sourceFinal,lowerFinal,sourceRun,lowerRun,by simpa [nestedSeqHOL] using bound,ffi,ffiRel⟩
 
 /-- A call-aware counted source return composes with the actual declaration
 frontend, carrying the source count into the Crep visit bound. -/

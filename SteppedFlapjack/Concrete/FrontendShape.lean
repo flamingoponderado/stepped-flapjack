@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.WhileSteps
 import SteppedFlapjack.Concrete.SourceRuns
 import SteppedFlapjack.PanToCrepSteps.FrontendProgram
 
@@ -69,6 +70,38 @@ theorem supportedIn_frontend_shape {scope : List VarName} {program : Prog (RiscV
 theorem supported_frontend_shape {program : Prog (RiscV.Word 64)} (supported : Supported program)
     (ctxt : PanToCrepContextExact 64) : FrontendProgram ctxt (progToHOL program) :=
   supportedIn_frontend_shape supported.1 ctxt (by intro name member; simp at member)
+
+private theorem callContext_scalar (ctxt : PanToCrepContextExact 64) (name : MlS) :
+    decCallCtxt ctxt name .one = scalarDeclContext ctxt name := by
+  simp [decCallCtxt,decCallSlots,scalarDeclContext,sizeOfShapeHOL]
+/-- Every call-supported source body has the call-aware frontend shape. -/
+theorem callSupported_frontend_shape {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) : ∀ ctxt, ScopeRelation scope ctxt →
+      CallFrontend ctxt (progToHOL program) := by
+  induction supported with
+  | base h => intro ctxt relation; exact .base (supportedIn_frontend_shape h ctxt relation)
+  | tail name args shape =>
+    intro ctxt relation
+    simp only [progToHOL]
+    apply CallFrontend.tail
+    intro e member
+    obtain ⟨original,originalMember,rfl⟩ := List.mem_map.mp member
+    exact scalar_frontend_shape relation (shape original originalMember)
+  | call dest name args shape cont ih =>
+    intro ctxt relation
+    simp only [progToHOL,shapeToHOL]
+    apply CallFrontend.decCall
+    · intro e member
+      obtain ⟨original,originalMember,rfl⟩ := List.mem_map.mp member
+      exact scalar_frontend_shape relation (shape original originalMember)
+    · rw [callContext_scalar]
+      exact ih _ (relation.declare dest)
+  | decl name e body ih =>
+    intro ctxt relation
+    simpa only [progToHOL,shapeToHOL] using CallFrontend.decl (scalar_frontend_shape relation e) (ih _ (relation.declare name))
+  | seq a b iha ihb => intro ctxt relation; simpa only [progToHOL] using CallFrontend.seq (iha ctxt relation) (ihb ctxt relation)
+  | ite e a b iha ihb => intro ctxt relation; simpa only [progToHOL] using CallFrontend.ite (scalar_frontend_shape relation e) (iha ctxt relation) (ihb ctxt relation)
+  | «while» e body ih => intro ctxt relation; simpa only [progToHOL] using CallFrontend.while (scalar_frontend_shape relation e) (ih ctxt relation)
 
 /-- A comparison is accepted in an actual conditional and compiles to a
 single Crep comparison expression. -/
