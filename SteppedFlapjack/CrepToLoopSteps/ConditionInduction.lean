@@ -14,7 +14,10 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
     (body : CrepProgHOL width) (bodyFactor : Nat)
     (source sourceFinal : CrepSemHOLState width F) (result : Option (CrepResultHOLExact width))
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet)
-    (bodySim : @BodySimulation width _ F body ctxt live (fun n => bodyFactor*(n+1)))
+    (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (bodySim : ∀ entry : CrepSemHOLState width F, entry.clock < source.clock → entry.code = source.code →
+      BodySimulationAt body ctxt live entry (fun n => bodyFactor*(n+1)) tableOk)
+    (tableGood : tableOk target.code)
     (run : evalCrepSemHOLProgExact source (.while condition body) = (result,sourceFinal))
     (nonerror : result ≠ some .error)
     (stateRel : crepToLoopStateRelExact source target)
@@ -62,6 +65,10 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
           have bodyClock := evalCrepSemHOLProgExact_clock_le (decClockCrepSemHOL source) body
           rw [bodyRun] at bodyClock
           have smaller : postSource.clock < clock := by simp only [decClockCrepSemHOL] at bodyClock; omega
+          have sourceCode : postSource.code = source.code := by
+            have h := evaluateCodeInvariantHOL body (decClockCrepSemHOL source) bodyResult postSource bodyRun
+            simpa [decClockCrepSemHOL] using h
+          have bodyAt := bodySim (decClockCrepSemHOL source) (by simp only [decClockCrepSemHOL]; omega) (by rfl)
           have count := CrepSteps.steps_while condition body source
           simp only [guard,if_pos (show w.1 ≠ 0 ∧ source.clock ≠ 0 from ⟨nz,zero⟩),bodyRun] at count
           have continueCase (hcontinue : bodyResult = none ∨ bodyResult = some (.continue 0))
@@ -75,14 +82,16 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
                 crepToLoopGlobalsRelHOLExact sourceFinal.globals post.globals ∧
                 crepToLoopCodeRelExact ctxt sourceFinal.code post.code ∧
                 localsResultRel ctxt live result sourceFinal post := by
-            obtain ⟨code,value,next,outLive,first,middle,hcompiled,hfirst,hs,hm,hg,hcode,hl,step⟩ :=
+            obtain ⟨code,value,next,outLive,first,middle,hcompiled,hfirst,hs,hm,hg,hcode,postCode,hl,step⟩ :=
               branchCondition_continue_run condition conditionShape body (fun n => bodyFactor*(n+1)) source postSource bodyResult target ctxt live
-                bodySim w.1 guard nz zero bodyRun hcontinue stateRel memRel globalsRel codeRel localsRel
+                tableOk tableGood bodyAt w.1 guard nz zero bodyRun hcontinue stateRel memRel globalsRel codeRel localsRel
             have codeEq : code = (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1 := by
               simpa using congrArg Prod.fst hcompiled.symm
             rw [codeEq] at hfirst
             obtain ⟨tail,post,htail,he,hstate,hmem,hglobal,hcode',hlocal⟩ :=
-              ih postSource.clock smaller postSource sourceFinal result middle rest nonerror hs hm hg hcode hl rfl
+              ih postSource.clock smaller postSource sourceFinal result middle
+                (fun entry small same => bodySim entry (by omega) (same.trans sourceCode))
+                (by simpa [postCode] using tableGood) rest nonerror hs hm hg hcode hl rfl
             have counts : CrepSteps.steps body (decClockCrepSemHOL source) +
                 CrepSteps.steps (.while condition body) postSource + 1 ≤ CrepSteps.steps (.while condition body) source := by
               rcases hcontinue with h | h <;> simp only [h] at count <;> rw [count] <;> exact Nat.le_of_eq (Nat.add_comm _ _)
@@ -101,7 +110,7 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
                 obtain ⟨rfl,rfl⟩ := run
                 obtain ⟨code,value,next,outLive,extra,post,hcompiled,hbound,hs,hm,hg,hcode,hl,he⟩ :=
                   branchCondition_break_run condition conditionShape body (fun n => bodyFactor*(n+1)) source postSource target ctxt live
-                    bodySim w.1 guard nz zero bodyRun stateRel memRel globalsRel codeRel localsRel
+                    tableOk tableGood bodyAt w.1 guard nz zero bodyRun stateRel memRel globalsRel codeRel localsRel
                 have codeEq : code = (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1 := by
                   simpa using congrArg Prod.fst hcompiled.symm
                 rw [codeEq] at hbound
@@ -116,7 +125,7 @@ theorem branchConditionWhile_bounded_clock {width : Nat} [NeZero width] {F : Typ
                 have ne : r ≠ .error := by intro h; subst r; exact nonerror rfl
                 obtain ⟨code,value,next,outLive,extra,post,hcompiled,hbound,hs,hm,hg,hcode,hl,he⟩ :=
                   branchCondition_exit_run condition conditionShape body (fun n => bodyFactor*(n+1)) source postSource r target ctxt live
-                    bodySim w.1 guard nz zero bodyRun hcont hbreak ne stateRel memRel globalsRel codeRel localsRel
+                    tableOk tableGood bodyAt w.1 guard nz zero bodyRun hcont hbreak ne stateRel memRel globalsRel codeRel localsRel
                 have codeEq : code = (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1 := by
                   simpa using congrArg Prod.fst hcompiled.symm
                 rw [codeEq] at hbound
@@ -170,7 +179,9 @@ theorem branchConditionWhile_bounded_steps {width : Nat} [NeZero width] {F : Typ
   obtain ⟨code,value,next,outLive,exprCompiled,compiled,bodyLoop,_⟩ := branchCondition_compileWhile condition conditionShape body bodyShape ctxt live
   obtain ⟨extra,post,clockBound,targetRun,hs,hm,hg,hc,hl⟩ :=
     branchConditionWhile_bounded_clock condition conditionShape body (sizeOf (compileHOLExact ctxt live body)) source sourceFinal result target ctxt live
-      (loopFree_linearBodySimulation body bodyShape ctxt live) run nonerror stateRel memRel globalsRel codeRel localsRel
+      (fun _ => True)
+      (fun entry _ _ => BodySimulation.at body ctxt live _ entry _ (loopFree_linearBodySimulation body bodyShape ctxt live))
+      trivial run nonerror stateRel memRel globalsRel codeRel localsRel
   refine ⟨code,value,next,outLive,extra,post,exprCompiled,compiled,targetRun,hs,hm,hg,hc,hl,?_⟩
   have loopRun : evaluate (.loop live (branchConditionWhileBody ctxt live code value next body) live)
       {target with clock := target.clock+extra} = (resultToLoop result,post) := by

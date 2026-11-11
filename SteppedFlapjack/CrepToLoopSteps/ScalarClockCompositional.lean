@@ -470,7 +470,8 @@ theorem scalarProgram_clock {width : Nat} [NeZero width] {σ : Type}
     intro source sourceFinal result target run nonerror stateRel memRel globalsRel codeRel localsRel
     obtain ⟨extra,post,bound,ev,hs,hm,hg,hcode,hl⟩ :=
       branchConditionWhile_bounded_clock cond hc body bf source sourceFinal result target ctxt live
-        sim run nonerror stateRel memRel globalsRel codeRel localsRel
+        (fun _ => True) (fun entry _ _ => BodySimulation.at body ctxt live _ entry _ sim) trivial
+        run nonerror stateRel memRel globalsRel codeRel localsRel
     have weights := while_prefix_body_weight hc (body := body) ctxt live
     have factor : LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live cond).1) + bf+2 ≤
         3*loopVisitWeight (compileHOLExact ctxt live (.while cond body)) := by dsimp [bf]; omega
