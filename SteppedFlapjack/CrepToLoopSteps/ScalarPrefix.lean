@@ -1,5 +1,6 @@
 import SteppedFlapjack.CrepToLoopSteps.Branch
 import SteppedFlapjack.LoopToWordSteps.WordSimpLoop
+import SteppedFlapjack.LoopSteps.BranchedStatic
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.Pancake.PanLang SteppedFlapjack.LoopToWordSteps
 
@@ -87,5 +88,77 @@ theorem compiledScalars_prefix {width : Nat} [NeZero width]
       ih (by intro x hx; exact shape x (by simp [hx])) next outLive
     refine ⟨code ++ rest,value :: values,final,finalLive,?_,by simp [len],headShape.append restShape⟩
     simp only [compileExpsHOLExact,compiled,compiledRest]
+
+
+/-- Scalar expression costs are stable across compiler contexts and live sets. -/
+private def prefixMass {width : Nat} [NeZero width] (code : List (HolLoopProg width)) : Nat :=
+  (code.map (fun p => 1 + LoopSteps.structuralWeight p)).sum
+
+private theorem prefixMass_append {width : Nat} [NeZero width] (a b : List (HolLoopProg width)) :
+    prefixMass (a ++ b) = prefixMass a + prefixMass b := by simp [prefixMass]
+
+private theorem prefixMass_scalar {width : Nat} [NeZero width] {e : CrepExpHOL width}
+    (shape : CompiledScalar e) : ∀ c d : CrepToLoopContextExact, ∀ t u : Nat, ∀ l m : NumSet,
+      prefixMass (compileExpHOLExact c t l e).1 = prefixMass (compileExpHOLExact d u m e).1 := by
+  induction shape with
+  | direct h =>
+    intro c d t u l m
+    obtain ⟨v,hv⟩ := directExpression_noCode h c t l
+    obtain ⟨w,hw⟩ := directExpression_noCode h d u m
+    simp [hv,hw]
+  | @shift op a b ha hb ia ib =>
+    intro c d t u l m
+    have x := ia c d t u l m
+    have y := ib c d (compileExpHOLExact c t l a).2.2.1 (compileExpHOLExact d u m a).2.2.1
+      (compileExpHOLExact c t l a).2.2.2 (compileExpHOLExact d u m a).2.2.2
+    simp only [compileExpHOLExact]
+    simp_all [prefixMass_append]
+  | @op op a b ha hb ia ib =>
+    intro c d t u l m
+    have x := ia c d t u l m
+    have y := ib c d (compileExpHOLExact c t l a).2.2.1 (compileExpHOLExact d u m a).2.2.1
+      (compileExpHOLExact c t l a).2.2.2 (compileExpHOLExact d u m a).2.2.2
+    simp only [compileExpHOLExact,compileExpsHOLExact]
+    simp_all [prefixMass]
+  | @cmp op a b ha hb ia ib =>
+    intro c d t u l m
+    have x := ia c d t u l m
+    have y := ib c d (compileExpHOLExact c t l a).2.2.1 (compileExpHOLExact d u m a).2.2.1
+      (compileExpHOLExact c t l a).2.2.2 (compileExpHOLExact d u m a).2.2.2
+    simp only [compileExpHOLExact]
+    simp_all [prefixMass,progIfHOLExact,LoopSteps.structuralWeight]
+private theorem prefixMass_scalars {width : Nat} [NeZero width] (args : List (CrepExpHOL width))
+    (shape : ∀ e ∈ args, CompiledScalar e) :
+    ∀ c d : CrepToLoopContextExact, ∀ t u : Nat, ∀ l m : NumSet,
+      prefixMass (compileExpsHOLExact c t l args).1 = prefixMass (compileExpsHOLExact d u m args).1 := by
+  induction args with
+  | nil => simp [compileExpsHOLExact,prefixMass]
+  | cons e es ih =>
+    intro c d t u l m
+    have head := prefixMass_scalar (shape e (by simp)) c d t u l m
+    have tail := ih (by intro x hx; exact shape x (by simp [hx])) c d
+      (compileExpHOLExact c t l e).2.2.1 (compileExpHOLExact d u m e).2.2.1
+      (compileExpHOLExact c t l e).2.2.2 (compileExpHOLExact d u m e).2.2.2
+    simp only [compileExpsHOLExact]
+    simp_all [prefixMass_append]
+
+private theorem nestedPrefixWeight {width : Nat} [NeZero width] (code : List (HolLoopProg width)) :
+    LoopSteps.structuralWeight (loopNestedSeqHOL code) = 1 + prefixMass code := by
+  induction code with
+  | nil => rfl
+  | cons p ps ih => simp [loopNestedSeqHOL, LoopSteps.structuralWeight, prefixMass, ih]; omega
+
+/-- A concrete argument list has the same prefix cost in every compiler context. -/
+theorem scalarArgumentWeight {width : Nat} [NeZero width] (args : List (CrepExpHOL width))
+    (shape : ∀ e ∈ args, CompiledScalar e) (c d : CrepToLoopContextExact) (t u : Nat) (l m : NumSet) :
+    LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpsHOLExact c t l args).1) =
+      LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpsHOLExact d u m args).1) := by
+  simp only [nestedPrefixWeight, prefixMass_scalars args shape c d t u l m]
+/-- A scalar expression has the same prefix cost in every compiler context. -/
+theorem scalarExpressionWeight {width : Nat} [NeZero width] {e : CrepExpHOL width}
+    (shape : CompiledScalar e) (c d : CrepToLoopContextExact) (t u : Nat) (l m : NumSet) :
+    LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact c t l e).1) =
+      LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact d u m e).1) := by
+  simp only [nestedPrefixWeight, prefixMass_scalar shape c d t u l m]
 
 end SteppedFlapjack.CrepToLoopSteps
