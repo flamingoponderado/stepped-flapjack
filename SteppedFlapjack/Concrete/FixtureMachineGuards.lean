@@ -144,6 +144,35 @@ theorem fixtureLabCompiler_output (code : List (Nat × HolProg 64))
 
 
 /-- The Pancake compiler emits exactly the code bytes loaded in the machine. -/
+theorem fixturePancakeCompiler_outputFor (declarations : List (Flapjack.Pancake.PanLang.DeclHOL 64))
+    (bitmaps : List (BitVec 64))
+    (words : List (Nat × Nat × WordLangProgHOL (BitVec 64))) (code : List (Nat × HolProg 64))
+    (compiled : panToWordCompileProgHOL riscvConfig.isa
+      declarations = words)
+    (codeEq : (WordToStack.Native.compileNative riscvConfig false
+      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).2.2.2 = code)
+    (bitmap : (WordToStack.Native.compileNative riscvConfig false
+      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).1 = bitmaps)
+    (safe : fixtureStackSafe code = true) (success : (fixtureRemoveLabels code).isSome = true) :
+    ∃ final, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
+      declarations =
+        some (fixtureCodeBytes code,bitmaps,final) := by
+  obtain ⟨labFinal,labEq⟩ := fixtureLabCompiler_output code safe success
+  rw [Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast_eq_fst]
+  simp only [Flapjack.Pancake.Proofs.PanToTarget.compileProgMaxAsmExecutable,WordToWord.compileExecutable_eq,compiled]
+  change ∃ final, Backend.fromStack riscvConfig countdownRiscVBackend .ln
+    (WordToStack.Native.compileNative riscvConfig false
+      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).2.2.2
+    (WordToStack.Native.compileNative riscvConfig false
+      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).1 = _
+  rw [codeEq,bitmap]
+  change ∃ final, Backend.attachBitmaps .ln countdownRiscVBackend bitmaps
+    (LabToTarget.compile riscvConfig countdownRiscVBackend.labConf (fixtureLab code countdownRiscVBackend.labConf).code) = _
+  rw [labEq]
+  exact ⟨_,rfl⟩
+
+
+/-- The Pancake compiler emits exactly the code bytes loaded in the machine. -/
 theorem fixturePancakeCompiler_output (body : Flapjack.Pancake.PanLang.ProgHOL 64)
     (words : List (Nat × Nat × WordLangProgHOL (BitVec 64))) (code : List (Nat × HolProg 64))
     (compiled : panToWordCompileProgHOL riscvConfig.isa
@@ -156,18 +185,7 @@ theorem fixturePancakeCompiler_output (body : Flapjack.Pancake.PanLang.ProgHOL 6
     ∃ final, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
       (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main") body) =
         some (fixtureCodeBytes code,[4],final) := by
-  obtain ⟨labFinal,labEq⟩ := fixtureLabCompiler_output code safe success
-  rw [Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast_eq_fst]
-  simp only [Flapjack.Pancake.Proofs.PanToTarget.compileProgMaxAsmExecutable,WordToWord.compileExecutable_eq,compiled]
-  change ∃ final, Backend.fromStack riscvConfig countdownRiscVBackend .ln
-    (WordToStack.Native.compileNative riscvConfig false
-      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).2.2.2
-    (WordToStack.Native.compileNative riscvConfig false
-      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).1 = _
-  rw [codeEq,bitmap]
-  change ∃ final, Backend.attachBitmaps .ln countdownRiscVBackend ([4] : List (BitVec 64))
-    (LabToTarget.compile riscvConfig countdownRiscVBackend.labConf (fixtureLab code countdownRiscVBackend.labConf).code) = _
-  rw [labEq]
-  exact ⟨_,rfl⟩
+  exact fixturePancakeCompiler_outputFor (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main") body)
+    [4] words code compiled codeEq bitmap safe success
 
 end SteppedFlapjack.Concrete

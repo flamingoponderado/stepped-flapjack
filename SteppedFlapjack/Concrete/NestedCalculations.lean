@@ -149,6 +149,22 @@ theorem nested_compilerFacts : (fixtureRemoveLabels nestedCode).isSome = true �
     simp_rw [LabToTarget.progToBytesMap]
     with_unfolding_all decide
 
+/-- The original Pancake compiler emits exactly the bytes and bitmaps used by the witness. -/
+theorem nested_compilerOutput :
+    ∃ final, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
+      (nestedCallDeclarations.map declToHOL) = some (fixtureCodeBytes nestedCode,nestedBitmaps,final) := by
+  have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
+    funext a b c d e f g
+    exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
+  have codeEq : (WordToStack.Native.compileNative riscvConfig false
+      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig nestedRawWords).2).2.2.2 = nestedCode := by
+    simp [nestedCode,nestedNative,nestedOptimizedWords,compileWith_eq_compile _ allocator,phase3WordConfig_eq]
+  have bitmapEq : (WordToStack.Native.compileNative riscvConfig false
+      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig nestedRawWords).2).1 = nestedBitmaps := by
+    simp [nestedBitmaps,nestedNative,nestedOptimizedWords,compileWith_eq_compile _ allocator,phase3WordConfig_eq]
+  exact fixturePancakeCompiler_outputFor (nestedCallDeclarations.map declToHOL) nestedBitmaps nestedRawWords nestedCode
+    nested_panToWord codeEq bitmapEq nested_nativeSafe nested_compilerFacts.1
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
 /-- The concrete nested-call machine run follows from compiler and layout checks;
@@ -158,6 +174,8 @@ theorem nested_initialized_machine :
     let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig rawWords).2
     let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*122+2)
     let n := 1 + max 1 (stackCodeWeight (sptFromAList nestedCode)) * (6*122+1 + allowance)
+    ∃ compilerFinal, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
+      (nestedCallDeclarations.map declToHOL) = some (fixtureCodeBytes nestedCode,nestedBitmaps,compilerFinal) ∧
     ∃ finalMachine finalFfi,
       evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart nestedCode)) sourceFfi
         (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
@@ -181,7 +199,8 @@ theorem nested_initialized_machine :
     (fixtureMachineConfig (fixtureCodeStart nestedCode)) (fixtureCompiled nestedCode).1 (fixtureCompiled nestedCode).2
     (configuredMachineAsm nestedCode nestedBitmaps) (configuredMachineState nestedCode nestedBitmaps) rfl link tie rel
   simp only [buffer, fixtureLabMachineFactor nestedCode facts.2.1] at result
-  exact result
+  obtain ⟨compilerFinal,compiled⟩ := nested_compilerOutput
+  exact ⟨compilerFinal,compiled,result⟩
 
 
 end SteppedFlapjack.Concrete
