@@ -11,6 +11,7 @@ import SteppedFlapjack.WordToStackSteps.BudgetHandler
 import SteppedFlapjack.WordToStackSteps.WholeCallBudget
 import SteppedFlapjack.WordToStackSteps.StartCall
 import SteppedFlapjack.WordToStackSteps.StartRiscV
+import SteppedFlapjack.WordToStackSteps.FrameTable
 import SteppedFlapjack.WordToStackSteps.RaiseClock
 import SteppedFlapjack.StackSteps.TableBound
 import SteppedFlapjack.LoopToWordSteps.WholeCallProgram
