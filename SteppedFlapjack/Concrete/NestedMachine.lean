@@ -108,8 +108,8 @@ theorem nested_configured_machine (cfg : LabToTarget.Config)
     (rel : LabToTarget.stateRel (mc,labCode,labs,pc) filtered asm machine) :
     let rawWords := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms)
     let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig rawWords).2
-    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*122+2)
-    let n := 1 + max 1 (stackCodeWeight (sptFromAList nestedCode)) * (6*122+1 + allowance)
+    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*nestedOptimizedLoopBound+2)
+    let n := 1 + max 1 (stackCodeWeight (sptFromAList nestedCode)) * (6*nestedOptimizedLoopBound+1 + allowance)
     ∃ finalMachine finalFfi,
       evaluateTargetHOL mc sourceFfi (LabToTargetSteps.labTickBound 4 labCode filtered.codeBuffer *
         StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
@@ -125,7 +125,7 @@ theorem nested_configured_machine (cfg : LabToTarget.Config)
   have bsEq : bs = nestedBitmaps := nestedBitmaps_header.symm
   have fits' : 0xa0020018 + bs.length*8 ≤ sourceBase := by rw [bsEq]; exact fits
   have good : StackToLab.Proofs.GoodCode.goodCode 24 code := nested_nativeGoodCode
-  let source := {(configuredWord code words cfg bs) with clock := 6*122+1}
+  let source := {(configuredWord code words cfg bs) with clock := 6*nestedOptimizedLoopBound+1}
   let frame := nestedEntryFrame
   let entry := nestedEntry
   have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
@@ -172,7 +172,7 @@ theorem nested_configured_machine (cfg : LabToTarget.Config)
     (configuredStack code cfg bs) (configuredWordOracle cfg bs) noRaise noStore
     (by rw [fields.1,nativeCode]) (by rw [fields.2]; exact bitmapPrefix) initOk
   have clockRelated := stateRel_setClocks riscvConfig (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length))
-    0 0 _ _ [] 0 (6*122+1) related
+    0 0 _ _ [] 0 (6*nestedOptimizedLoopBound+1) related
   have targetSafe := wholeCompile_targetSafety phase3WordConfig riscvConfig rawWords (loopToWord_programSafety _)
   have safe : safeWordCode source := by
     simpa [source,configuredWord,Compiler.Backend.WordToStack.Native.Initialization.makeInit,safeWordCode,words] using
@@ -206,7 +206,7 @@ theorem nested_configured_machine (cfg : LabToTarget.Config)
     pc mc labCode labs asm machine hmc (by simpa [code,bsEq] using link) tie rel
   have allowanceEq : callTableBudget (.call none (some 64) [0] none) source =
       (max 1 (wordCodeWeight (sptFromAList (compileWith Flapjack.RegAlloc.regAllocExecutable
-        phase3WordConfig riscvConfig rawWords).2)) + 1) ^ (6*122+2) := by
+        phase3WordConfig riscvConfig rawWords).2)) + 1) ^ (6*nestedOptimizedLoopBound+2) := by
     rw [compileWith_eq_compile _ allocator]
     simp [callTableBudget,fixedTableBudget,wordControlWeight,source,configuredWord,
       Compiler.Backend.WordToStack.Native.Initialization.makeInit,words]

@@ -172,8 +172,8 @@ the Lab-to-machine relation is constructed from the initialized machine. -/
 theorem nested_initialized_machine :
     let rawWords := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms)
     let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig rawWords).2
-    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*122+2)
-    let n := 1 + max 1 (stackCodeWeight (sptFromAList nestedCode)) * (6*122+1 + allowance)
+    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*nestedOptimizedLoopBound+2)
+    let n := 1 + max 1 (stackCodeWeight (sptFromAList nestedCode)) * (6*nestedOptimizedLoopBound+1 + allowance)
     ∃ compilerFinal, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
       (nestedCallDeclarations.map declToHOL) = some (fixtureCodeBytes nestedCode,[4,2],compilerFinal) ∧
     ∃ finalMachine finalFfi,

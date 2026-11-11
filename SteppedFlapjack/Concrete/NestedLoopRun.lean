@@ -254,10 +254,10 @@ private theorem nestedOptimizedLoopBody_eq : nestedOptimizedLoopBody = nestedLoo
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
 /-- The counted source-derived visit bound survives the actual Loop optimizer. -/
-theorem nestedCounted_optimizedLoop : ∃ final, evaluate nestedLoopCode64
-      {nestedLoopState with clock := nestedLoopState.clock+nestedLoopBudget} = (some (.result [.word 7]),final) ∧
+theorem nestedCounted_optimizedLoop (memory : BitVec 64 → WordLocW 64) : ∃ final, evaluate nestedLoopCode64
+      {nestedLoopState with memory := memory, clock := nestedLoopState.clock+nestedLoopBudget} = (some (.result [.word 7]),final) ∧
     final.ffi = sourceFfi ∧ LoopSteps.steps nestedLoopCode64
-      {nestedLoopState with clock := nestedLoopState.clock+nestedLoopBudget} ≤ nestedOptimizedLoopBound := by
+      {nestedLoopState with memory := memory, clock := nestedLoopState.clock+nestedLoopBudget} ≤ nestedOptimizedLoopBound := by
   rw [← nestedOptimizedLoopBody_eq]
   obtain ⟨final,run,ffi,visits⟩ := nestedCounted_crepToLoop
   let source := {nestedLoopState with clock := nestedLoopState.clock+nestedLoopBudget}
@@ -271,18 +271,50 @@ theorem nestedCounted_optimizedLoop : ∃ final, evaluate nestedLoopCode64
   have optRun : evaluate (optimiseHOL body) source = (some (.result [.word 7]),final) := by
     apply optimise_correct
     exact ⟨run,by simp,by simp,by simp,by simp⟩
-  let K := max (loopVisitWeight (optimiseHOL body)) (loopCodeWeight source.code + 2)
-  have optimized := simpleSequence_global_bound (optimiseHOL body) source K (optimise_simpleSequence shape)
-    table (Nat.le_max_right _ _) (Nat.le_max_left _ _)
+  have originalLow := nestedCall_loop_run nestedLoopState.memory
+  have originalLift := evaluate_add_clock_eq nestedLoopCode64 {nestedLoopState with memory := nestedLoopState.memory}
+    (some (.result [.word 7])) {{nestedLoopState with memory := nestedLoopState.memory} with locals := .ln,clock := 3}
+    nestedLoopBudget originalLow (by simp)
+  have origRun : evaluate nestedLoopCode64 source =
+      (some (.result [.word 7]),{nestedLoopState with locals := .ln,clock := 3+nestedLoopBudget}) := by
+    simpa [source,nestedLoopState,concreteDeclLoopState,nestedCrepState,concreteDeclCrepState,sourceTemplate] using originalLift
+  have origOpt : evaluate nestedLoopCode64 source = (some (.result [.word 7]),final) := by
+    change evaluate nestedOptimizedLoopBody source = _ at optRun
+    rw [nestedOptimizedLoopBody_eq] at optRun
+    exact optRun
+  have sameFinal := (Prod.mk.inj (origOpt.symm.trans origRun)).2
+  have finalClock : final.clock = 3+nestedLoopBudget := by
+    simpa using congrArg (fun s : LoopSemStateFiniteExact 64 Unit => s.clock) sameFinal
+  have lowRun := nestedCall_loop_run memory
+  have lifted := evaluate_add_clock_eq nestedLoopCode64 {nestedLoopState with memory := memory}
+    (some (.result [.word 7])) {{nestedLoopState with memory := memory} with locals := .ln,clock := 3}
+    nestedLoopBudget lowRun (by simp)
+  let target := {nestedLoopState with memory := memory,clock := nestedLoopState.clock+nestedLoopBudget}
+  let targetFinal := {nestedLoopState with memory := memory,locals := .ln,clock := 3+nestedLoopBudget}
+  have targetRun : evaluate nestedLoopCode64 target = (some (.result [.word 7]),targetFinal) := by
+    simpa [target,targetFinal,nestedLoopState,concreteDeclLoopState,nestedCrepState,concreteDeclCrepState,sourceTemplate] using lifted
+  let K := max (loopVisitWeight (optimiseHOL body)) (loopCodeWeight target.code + 2)
+  have targetTable : LoopTableSupported target.code := by simpa [target,source] using table
+  have optimized := simpleSequence_global_bound (optimiseHOL body) target K (optimise_simpleSequence shape)
+    targetTable (Nat.le_max_right _ _) (Nat.le_max_left _ _)
   have consumed := simpleSequence_global_consumed body source shape table
   rw [run] at consumed
-  rw [optRun] at optimized
-  refine ⟨final,optRun,ffi,?_⟩
+  have targetRun' : evaluate (optimiseHOL body) target = (some (.result [.word 7]),targetFinal) := by
+    change evaluate nestedOptimizedLoopBody target = _
+    rw [nestedOptimizedLoopBody_eq]
+    exact targetRun
+  rw [targetRun'] at optimized
+  have clockEq : target.clock - targetFinal.clock = source.clock - final.clock := by
+    simp [target,targetFinal,source,finalClock]
+  rw [clockEq] at optimized
   have consumption : source.clock - final.clock ≤ 2 * nestedLoopBound :=
     consumed.trans (Nat.mul_le_mul_left 2 visits)
   have scaled := Nat.mul_le_mul_left K consumption
   have finalBound := optimized.trans (Nat.add_le_add_left scaled (loopVisitWeight (optimiseHOL body)))
-  simpa [nestedOptimizedLoopBound,nestedOptimizedLoopBody,K,body,source,nestedLoopState,concreteDeclLoopState] using finalBound
+  refine ⟨targetFinal,?_,?_,?_⟩
+  · simpa [nestedOptimizedLoopBody_eq,body,target] using targetRun
+  · simp [targetFinal,nestedLoopState,concreteDeclLoopState,nestedCrepState,concreteDeclCrepState,sourceTemplate]
+  · simpa [nestedOptimizedLoopBound,nestedOptimizedLoopBody,K,body,target,nestedLoopState,concreteDeclLoopState] using finalBound
 
 
 end SteppedFlapjack.Concrete
