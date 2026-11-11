@@ -140,7 +140,8 @@ theorem wholeCompile_targetSafety (wc : Config) (ac : AsmConfigExact width)
 
 
 /-- Starting from the same explicit clock, whole-program Word optimization
-preserves the start-call result and events for a supported code table. -/
+preserves the start-call result and events for a supported code table and
+bounds the optimized run using the concrete output table. -/
 theorem wholeCompile_start_agrees {C F : Type} (wc : Config) (ac : AsmConfigExact width)
     (programs : List (Nat × Nat × WordLangProgHOL (BitVec width)))
     (safety : WordProgramSafety programs) (s : WordSemStateFiniteExact width C F)
@@ -153,11 +154,18 @@ theorem wholeCompile_start_agrees {C F : Type} (wc : Config) (ac : AsmConfigExac
       (WordSemStateFiniteExact.evaluate (.call none (some start) [0] none) {s with clock := clock}).1 ∧
     (WordSemStateFiniteExact.evaluate (.call none (some start) [0] none)
         {s with clock := clock, code := sptFromAList (compile wc ac programs).2}).2.ffi =
-      (WordSemStateFiniteExact.evaluate (.call none (some start) [0] none) {s with clock := clock}).2.ffi := by
+      (WordSemStateFiniteExact.evaluate (.call none (some start) [0] none) {s with clock := clock}).2.ffi ∧
+    steps (.call none (some start) [0] none)
+      {s with clock := clock, code := sptFromAList (compile wc ac programs).2} ≤
+        1 + max 1 (wordCodeWeight (sptFromAList (compile wc ac programs).2)) * clock := by
+  have safe := wholeCompile_targetSafety wc ac programs safety
+  have bound := wordTable_clock_bound (.call none (some start) [0] none)
+    {s with clock := clock,code := sptFromAList (compile wc ac programs).2} rfl rfl safe.2.1 safe.1
   obtain ⟨noInstall,noMt,relation,domain,_,noAlloc⟩ := wholeCompile_codeRelations wc ac programs safety
   rw [← code] at noInstall noMt relation domain noAlloc
-  exact Flapjack.Compiler.Backend.WordToWord.compile_runs_agree s _ start clock relation
+  have agree := Flapjack.Compiler.Backend.WordToWord.compile_runs_agree s _ start clock relation
     noInstall noAlloc noMt domain gc stack nonerror
+  exact ⟨agree.1,agree.2,by simpa [wordControlWeight] using bound⟩
 
 /-- Actual Loop-to-Word function tables preserve start-call results and events through Word optimization. -/
 theorem wholeCompile_loopToWord_start_agrees {width : Nat} [NeZero width] {C F : Type}
@@ -171,7 +179,10 @@ theorem wholeCompile_loopToWord_start_agrees {width : Nat} [NeZero width] {C F :
       (evaluate (.call none (some start) [0] none) {s with clock := clock}).1 ∧
     (evaluate (.call none (some start) [0] none)
       {s with clock := clock, code := sptFromAList (compile wc ac (loopToWordCompileHOL programs)).2}).2.ffi =
-      (evaluate (.call none (some start) [0] none) {s with clock := clock}).2.ffi := by
+      (evaluate (.call none (some start) [0] none) {s with clock := clock}).2.ffi ∧
+    steps (.call none (some start) [0] none)
+      {s with clock := clock, code := sptFromAList (compile wc ac (loopToWordCompileHOL programs)).2} ≤
+        1 + max 1 (wordCodeWeight (sptFromAList (compile wc ac (loopToWordCompileHOL programs)).2)) * clock := by
   exact wholeCompile_start_agrees wc ac (loopToWordCompileHOL programs)
     (loopToWord_programSafety programs) s start clock code gc stack nonerror
 
@@ -245,6 +256,6 @@ theorem wholeCompile_start_result_and_bound {C F : Type} (wc : Config) (ac : Asm
   have bound := regTail_start_clock_bound start entryOut (regAllowed_shape allowed)
     {s with clock := clock, code := out} value (wordControlWeight calleeOut) entryLookup arg noInstall callBound
   have agree := wholeCompile_start_agrees wc ac programs (tailProgram_safety programs shapes) s start clock code gc stack nonerror
-  exact ⟨agree.1,agree.2,bound⟩
+  exact ⟨agree.1,agree.2.1,bound⟩
 
 end SteppedFlapjack.WordAllocSteps
