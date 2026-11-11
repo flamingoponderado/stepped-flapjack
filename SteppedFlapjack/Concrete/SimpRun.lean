@@ -62,4 +62,18 @@ theorem supported_panSimp_declarations (program : Prog (RiscV.Word 64)) (support
       declarations (progToHOL (panSimpProg program)) := by
   simp [declarations,singleEntryProgram,panSimpDeclsHOL,(supported_panSimp program supported).2]
 
+/-- With the entire function table related by pan_simp, every non-error run
+of a call-aware body is preserved by the executable simplifier. -/
+theorem callSupported_panSimp_run {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) {σ : Type}
+    (source sourceFinal target : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
+    (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal))
+    (nonerror : result ≠ some .error) (rel : PanSimp.stateRel source target target.code) :
+    ∃ targetFinal, target.evaluateHOLFiniteState (progToHOL (panSimpProg program)) = (result,targetFinal) ∧
+      PanSimp.stateRel sourceFinal targetFinal targetFinal.code := by
+  obtain ⟨targetFinal,targetRun,finalRel⟩ := PanSimp.compileCorrectHOL (progToHOL program)
+    source result sourceFinal target ⟨run,nonerror,rel⟩
+  rw [callSupported_seqAssocHOL supported] at targetRun
+  exact ⟨targetFinal,targetRun,finalRel⟩
+
 end SteppedFlapjack.Concrete
