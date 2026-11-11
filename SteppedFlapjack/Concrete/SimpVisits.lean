@@ -662,6 +662,45 @@ private theorem frontend_hw {width : Nat} [NeZero width] {context : PanToCrepCon
     simp only [hw,compileProgExactHOLW,compileWhileExactHOLW,compiled,CrepSteps.statementWeight]
     omega
 
+private theorem callFrontend_hw {width : Nat} [NeZero width] {context : PanToCrepContextExact width} {p : ProgHOL width}
+    (shape : CallFrontend context p) : hw p ≤ CrepSteps.statementWeight (compileProgExactHOLW context p) := by
+  induction shape with
+  | base h => exact frontend_hw h
+  | tail => simpa [hw] using CrepSteps.statementWeight_pos (compileProgExactHOLW _ _)
+  | @decCall ctxt name sh fn args cont ha hb ih =>
+    rw [decCall_statementWeight]
+    simp only [hw]
+    omega
+  | @decl ctxt name e body he hb ih =>
+    obtain ⟨value,compiled⟩ := frontendDecl_compile ctxt name e body he
+    rw [compiled]
+    simp only [hw, CrepSteps.statementWeight]
+    omega
+  | @seq ctxt a b ha hb iha ihb =>
+    simp only [hw,compileProgExactHOLW,CrepSteps.statementWeight]
+    omega
+  | @ite ctxt e a b he ha hb iha ihb =>
+    obtain ⟨value,compiled⟩ := frontendScalar_compile he
+    simp only [hw,compileProgExactHOLW,compileIfExactHOLW,compiled,CrepSteps.statementWeight]
+    omega
+  | @«while» ctxt e body he hb ih =>
+    obtain ⟨value,compiled⟩ := frontendScalar_compile he
+    simp only [hw,compileProgExactHOLW,compileWhileExactHOLW,compiled,CrepSteps.statementWeight]
+    omega
+
+/-- Reassociation overhead is bounded by the actual generated Crep weight for
+call-aware frontend programs. -/
+theorem callSupported_panSimp_controlSteps_compiled {scope : List VarName} {σ : Type}
+    {program : Prog (RiscV.Word 64)} (supported : CallSupportedIn scope program)
+    (context : PanToCrepContextExact 64)
+    (shape : CallFrontend context (progToHOL (panSimpProg program))) (s : PanSemStateFiniteExact 64 σ) :
+    controlSteps (progToHOL (panSimpProg program)) s ≤
+      controlSteps (progToHOL program) s +
+        CrepSteps.statementWeight (compileProgExactHOLW context (progToHOL (panSimpProg program))) := by
+  have h := callSupported_panSimp_controlSteps supported s
+  have w := callFrontend_hw shape
+  exact h.trans (Nat.add_le_add_left ((over_le _ _).trans w) _)
+
 /-- pan_simp's extra control visits are bounded by the weight of the simplified
 body, charged only on an abnormal exit. -/
 theorem supported_panSimp_controlSteps_simplified {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
@@ -678,8 +717,7 @@ theorem supported_panSimp_controlSteps_compiled {σ : Type} (program : Prog (Ris
     controlSteps (progToHOL (panSimpProg program)) s ≤
       controlSteps (progToHOL program) s +
         CrepSteps.statementWeight (compileProgExactHOLW context (progToHOL (panSimpProg program))) := by
-  have h := supported_panSimp_controlSteps_simplified program supported s
-  have w := frontend_hw (supported_frontend_shape (supported_panSimp program supported).1 context)
-  exact h.trans (Nat.add_le_add_left ((over_le _ _).trans w) _)
+  exact callSupported_panSimp_controlSteps_compiled (.base supported.1) context
+    (.base (supported_frontend_shape (supported_panSimp program supported).1 context)) s
 
 end SteppedFlapjack.Concrete.SimpVisits
