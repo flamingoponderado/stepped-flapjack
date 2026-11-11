@@ -10,16 +10,19 @@ variable {width : Nat} [NeZero width] {σ : Type}
 
 def hw : ProgHOL width → Nat
   | .dec _ _ _ body => 1 + hw body
+  | .decCall _ _ _ _ body => 1 + hw body
   | .seq a b => 1 + hw a + hw b
   | .ite _ a b => 1 + hw a + hw b
   | .while _ body => 1 + hw body
   | _ => 1
 
-/-- HOL images of call-free, loop-exit-free bodies. -/
+/-- HOL images of supported, loop-exit-free bodies, including calls. -/
 private inductive Plain : ProgHOL width → Prop
   | skip : Plain .skip
   | assign (k n e) : Plain (.assign k n e)
   | ret (e) : Plain (.return e)
+  | tail (name args) : Plain (.call none name args)
+  | decCall (name sh func args) {body} : Plain body → Plain (.decCall name sh func args body)
   | dec (n sh e) {body} : Plain body → Plain (.dec n sh e body)
   | seq {a b} : Plain a → Plain b → Plain (.seq a b)
   | ite (e) {a b} : Plain a → Plain b → Plain (.ite e a b)
@@ -61,6 +64,14 @@ private theorem plain_no_loop_exit {p : ProgHOL width} (plain : Plain p) :
     intro s
     rw [evaluateHOLFiniteState_return]
     repeat' (first | split | simp)
+  | tail name args =>
+    intro s
+    rw [evaluateHOLFiniteState_call]
+    repeat' (first | split | simp_all)
+  | decCall name sh func args _ ih =>
+    intro s
+    rw [evaluateHOLFiniteState_decCall_fixClockRewrite]
+    repeat' (first | split | simp_all)
   | @dec n sh e body _ ih =>
     intro s
     rw [evaluateHOLFiniteState_dec_total]
@@ -147,6 +158,51 @@ private theorem dec_node (n : MlS) (sh : ShapeHOL) (e : ExpHOL width) (body body
       omega
     · rw [controlSteps.eq_def, controlSteps.eq_def (.dec n sh e body)]
       simp [h, valid]
+
+private theorem decCall_node (n sh fn args body body' w)
+    (hb : ∀ t : PanSemStateFiniteExact width σ,
+      controlSteps body' t ≤ controlSteps body t + exitOver (t.evaluateHOLFiniteState body).1 w)
+    (t : PanSemStateFiniteExact width σ) :
+    controlSteps (.decCall n sh fn args body') t ≤ controlSteps (.decCall n sh fn args body) t +
+      exitOver (t.evaluateHOLFiniteState (.decCall n sh fn args body)).1 w := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite]
+  cases argsEval : @evalListHOLFinite width σ _ t (fun a => Classical.propDecidable (t.memaddrs a)) args with
+  | none => rw [controlSteps.eq_def,controlSteps.eq_def (.decCall n sh fn args body)]; simp only [argsEval]; simp [exitOver]
+  | some vs =>
+    cases lookup : lookupCodeHOLFinite t.code.lookup fn vs with
+    | none => rw [controlSteps.eq_def,controlSteps.eq_def (.decCall n sh fn args body)]; simp only [argsEval,lookup]; simp [exitOver]
+    | some entry =>
+      obtain ⟨callee,locals,rsh⟩ := entry
+      by_cases clock : t.clock = 0
+      · rw [controlSteps.eq_def,controlSteps.eq_def (.decCall n sh fn args body)]; simp only [argsEval,lookup,clock,if_true]; simp [exitOver]
+      · rcases run : (callEntryStateHOLFinite t locals).evaluateHOLFiniteState callee with ⟨result,post⟩
+        by_cases returned : ∃ value, result = some (.returned value)
+        · obtain ⟨value,rfl⟩ := returned
+          by_cases valid : shapeEqHOL (shapeOfHOLExact value) sh = true ∧ shapeEqHOL (shapeOfHOLExact value) rsh = true
+          · rw [controlSteps_decCall_return n fn sh args body' t vs callee locals rsh value post argsEval lookup clock run valid.1 valid.2,
+              controlSteps_decCall_return n fn sh args body t vs callee locals rsh value post argsEval lookup clock run valid.1 valid.2]
+            have fixed : fixClockHOLFinite (callEntryStateHOLFinite t locals) (some (PanSemResultExact.returned value),post) = (some (PanSemResultExact.returned value),post) := by
+              rw [← run,fixClockHOLFinite_evaluateState]
+            simp only [lookup,if_neg clock,run,valid.1,valid.2,Bool.true_and,if_true,fixed]
+            have bound := hb (setVarHOLFinite n value {post with locals := t.locals})
+            omega
+          · have bad : (shapeEqHOL (shapeOfHOLExact value) sh && shapeEqHOL (shapeOfHOLExact value) rsh) = false := by
+              cases h₁ : shapeEqHOL (shapeOfHOLExact value) sh <;>
+                cases h₂ : shapeEqHOL (shapeOfHOLExact value) rsh <;> simp_all
+            have small (cont : ProgHOL width) : Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b)
+                ((callEntryStateHOLFinite t locals).clock,sizeOf callee)
+                (t.clock,sizeOf (.decCall n sh fn args cont : ProgHOL width)) := by
+              apply Prod.Lex.left
+              simp only [callEntryStateHOLFinite]
+              omega
+            rw [controlSteps.eq_def,controlSteps.eq_def (.decCall n sh fn args body)]
+            simp only [argsEval,lookup,clock,if_false,run,bad,Bool.false_eq_true,dif_pos (small body),dif_pos (small body'),exitOver]
+            omega
+        · have terminal : ∀ value, result ≠ some (.returned value) := by
+            intro value h; exact returned ⟨value,h⟩
+          rw [controlSteps_decCall_terminal n fn sh args body' t vs callee locals rsh result post argsEval lookup clock run terminal,
+            controlSteps_decCall_terminal n fn sh args body t vs callee locals rsh result post argsEval lookup clock run terminal]
+          exact Nat.le_add_right _ _
 
 /-- Conditionals: the node bound follows from both branch bounds. -/
 private theorem ite_node (e : ExpHOL width) (a a' b b' : ProgHOL width) (w : Nat)
@@ -253,6 +309,14 @@ private theorem seqAssoc_eq_skip {a : ProgHOL width} (plain : Plain a) :
     intro pre h
     rw [show seqAssocHOL pre (.return e : ProgHOL width) = smartSeqHOL pre (.return e) by simp [seqAssocHOL]] at h
     cases smart_eq_skip h
+  | tail name args =>
+    intro pre h
+    rw [show seqAssocHOL pre (.call none name args) = smartSeqHOL pre (.call none name args) by simp [seqAssocHOL]] at h
+    cases smart_eq_skip h
+  | @decCall n sh func args body _ _ =>
+    intro pre h
+    rw [show seqAssocHOL pre (.decCall n sh func args body) = smartSeqHOL pre (.decCall n sh func args (seqAssocHOL .skip body)) by simp [seqAssocHOL]] at h
+    cases smart_eq_skip h
   | @dec n sh e body _ _ =>
     intro pre h
     rw [show seqAssocHOL pre (.dec n sh e body) = smartSeqHOL pre (.dec n sh e (seqAssocHOL .skip body)) by
@@ -312,6 +376,8 @@ private theorem hwPre_le {p : ProgHOL width} (plain : Plain p) :
   | skip => intro pre; simp only [show seqAssocHOL pre (.skip : ProgHOL width) = pre by simp [seqAssocHOL], hwPre]; split <;> omega
   | assign k n e => intro pre; rw [seqAssoc_assign, smart_hw]; omega
   | ret e => intro pre; rw [seqAssoc_ret, smart_hw]; omega
+  | tail name args => intro pre; simp only [seqAssocHOL]; rw [smart_hw]; omega
+  | decCall n sh func args _ _ => intro pre; simp only [seqAssocHOL]; rw [smart_hw]; omega
   | dec n sh e _ _ => intro pre; rw [seqAssoc_dec, smart_hw]; omega
   | ite e _ _ _ _ => intro pre; rw [seqAssoc_ite, smart_hw]; omega
   | «while» e _ _ => intro pre; rw [seqAssoc_while, smart_hw]; omega
@@ -349,6 +415,8 @@ private theorem abnormal_visits {p : ProgHOL width} (plain : Plain p) :
   | skip => intro pre s _ _; simp [show seqAssocHOL pre (.skip : ProgHOL width) = pre by simp [seqAssocHOL]]
   | assign k n e => intro pre s hs ab; unfold delta; rw [seqAssoc_assign]; exact leaf _ _ s hs ab
   | ret e => intro pre s hs ab; unfold delta; rw [seqAssoc_ret]; exact leaf _ _ s hs ab
+  | tail name args => intro pre s hs ab; unfold delta; simp only [seqAssocHOL]; exact leaf _ _ s hs ab
+  | decCall n sh func args _ _ => intro pre s hs ab; unfold delta; simp only [seqAssocHOL]; exact leaf _ _ s hs ab
   | dec n sh e _ _ => intro pre s hs ab; unfold delta; rw [seqAssoc_dec]; exact leaf _ _ s hs ab
   | ite e _ _ _ _ => intro pre s hs ab; unfold delta; rw [seqAssoc_ite]; exact leaf _ _ s hs ab
   | «while» e _ _ => intro pre s hs ab; unfold delta; rw [seqAssoc_while]; exact leaf _ _ s hs ab
@@ -409,6 +477,20 @@ private theorem seqAssoc_visits_delta {p : ProgHOL width} (plain : Plain p) :
     intro pre s
     unfold delta; rw [seqAssoc_ret]
     exact smart_bound pre _ _ _ (fun t => Nat.le_add_right _ _) s
+  | tail name args =>
+    intro pre s
+    unfold delta; simp only [seqAssocHOL]
+    exact smart_bound pre _ _ _ (fun t => Nat.le_add_right _ _) s
+  | @decCall n sh func args body _ ih =>
+    intro pre s
+    unfold delta; simp only [seqAssocHOL]
+    apply smart_bound
+    intro t
+    apply decCall_node
+    intro u
+    refine (skipForm ih u).trans (Nat.add_le_add_left (exitOver_mono _ ?_) _)
+    have := smartDelta pre (.decCall n sh func args (seqAssocHOL .skip body))
+    simp only [hw] at this; omega
   | @dec n sh e body _ ih =>
     intro pre s
     unfold delta; rw [seqAssoc_dec]
@@ -535,6 +617,29 @@ private theorem supportedIn_plain {scope : List VarName} {program : Prog (RiscV.
     (supported : SupportedIn scope program) : Plain (progToHOL program) := by
   induction supported <;> simp only [progToHOL] <;> constructor <;> assumption
 
+private theorem callSupportedIn_plain {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) : Plain (progToHOL program) := by
+  induction supported with
+  | base h => exact supportedIn_plain h
+  | tail name args scalar => simp only [progToHOL]; exact .tail _ _
+  | call dest name args scalar cont ih => simp only [progToHOL,shapeToHOL]; exact .decCall _ _ _ _ ih
+  | decl name scalar body ih => simp only [progToHOL,shapeToHOL]; exact .dec _ _ _ ih
+  | seq a b iha ihb => simp only [progToHOL]; exact .seq iha ihb
+  | ite scalar a b iha ihb => simp only [progToHOL]; exact .ite _ iha ihb
+  | «while» scalar body ih => simp only [progToHOL]; exact .while _ ih
+
+/-- Reassociation on a fixed function table has an explicit overhead, including
+ordinary calls and their continuations. -/
+theorem callSupported_panSimp_controlSteps {scope : List VarName} {σ : Type}
+    {program : Prog (RiscV.Word 64)} (supported : CallSupportedIn scope program)
+    (s : PanSemStateFiniteExact 64 σ) :
+    controlSteps (progToHOL (panSimpProg program)) s ≤
+      controlSteps (progToHOL program) s +
+        exitOver (s.evaluateHOLFiniteState (progToHOL program)).1 (hw (progToHOL (panSimpProg program))) := by
+  rw [← callSupported_seqAssocHOL supported]
+  have h := seqAssoc_visits_delta (callSupportedIn_plain supported) .skip s
+  simpa [prePart,isSkip,after,eval_seq_skip,delta,hwPre] using h
+
 private theorem frontend_hw {width : Nat} [NeZero width] {context : PanToCrepContextExact width} {p : ProgHOL width}
     (shape : FrontendProgram context p) : hw p ≤ CrepSteps.statementWeight (compileProgExactHOLW context p) := by
   induction shape with
@@ -564,9 +669,7 @@ theorem supported_panSimp_controlSteps_simplified {σ : Type} (program : Prog (R
     controlSteps (progToHOL (panSimpProg program)) s ≤
       controlSteps (progToHOL program) s +
         exitOver (s.evaluateHOLFiniteState (progToHOL program)).1 (hw (progToHOL (panSimpProg program))) := by
-  rw [← supported_seqAssocHOL program supported]
-  have h := seqAssoc_visits_delta (supportedIn_plain supported.1) .skip s
-  simpa [prePart, isSkip, after, eval_seq_skip, delta, hwPre] using h
+  exact callSupported_panSimp_controlSteps (.base supported.1) s
 
 /-- Compiled-code-only form: the overhead is at most the statement weight of
 the generated Crep body of the simplified program. -/
