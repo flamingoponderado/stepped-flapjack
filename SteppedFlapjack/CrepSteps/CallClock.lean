@@ -219,8 +219,8 @@ theorem callScalarProgram_clock_consumed {width : Nat} [NeZero width] {σ : Type
                   simp [hargs,found,lookupCodeFiniteHOL,crepReturnInfoNodupError,nd,valid]
 
   exact key _ p s rfl shape table
-/-- The caller outcome of a non-error, non-timeout return from the reached callee. -/
-def CallCompletedOutcome {width : Nat} [NeZero width] {σ : Type}
+/-- The caller outcome of a non-error result from the reached callee. -/
+def CallNonerrorOutcome {width : Nat} [NeZero width] {σ : Type}
     (ret : Option (List Nat)) (source : CrepSemHOLState width σ)
     (bodyResult : CrepResultHOLExact width) (bodyFinal : CrepSemHOLState width σ)
     (result : Option (CrepResultHOLExact width)) (final : CrepSemHOLState width σ) : Prop :=
@@ -233,24 +233,26 @@ def CallCompletedOutcome {width : Nat} [NeZero width] {σ : Type}
           final = {bodyFinal with locals := source.locals.updateListEq (names.zip values)}
   | .exception eid => result = some (.exception eid) ∧ final = CrepSemHOLState.emptyLocals bodyFinal
   | .finalFfi event => result = some (.finalFfi event) ∧ final = CrepSemHOLState.emptyLocals bodyFinal
+  | .timeOut => result = some .timeOut ∧ final = CrepSemHOLState.emptyLocals bodyFinal
   | _ => False
 
-/-- A completed source call reaches a smaller-clock callee and determines its caller outcome. -/
-theorem completedCall_reaches_callee {width : Nat} [NeZero width] {σ : Type}
+/-- A non-error call either times out immediately or reaches a smaller-clock callee and determines its caller outcome. -/
+theorem nonerrorCall_reaches_callee {width : Nat} [NeZero width] {σ : Type}
     (ret : Option (List Nat)) (name : Flapjack.Basis.Pure.MlString.MlString) (args : List (CrepExpHOL width))
     (source final : CrepSemHOLState width σ) (result : Option (CrepResultHOLExact width))
     (run : evalCrepSemHOLProgExact source (.call (ret.map (fun ns => (ns,none))) name args) = (result,final))
-    (nonerror : result ≠ some .error) (nonTimeout : result ≠ some .timeOut) :
-    ∃ values params body bodyResult bodyFinal,
+    (nonerror : result ≠ some .error) :
+    ∃ values params body,
       args.mapM (evalCrepSemHOLExp source) = some values ∧
       source.code.lookup name = some (params,body) ∧ params.length = values.length ∧ params.Nodup ∧
-      source.clock ≠ 0 ∧ (∀ names, ret = some names → names.Nodup) ∧
-      (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}).clock < source.clock ∧
-      evalCrepSemHOLProgExact (decClockCrepSemHOL {source with
-        locals := HolFiniteMapExact.empty.updateList (params.zip values)}) body = (some bodyResult,bodyFinal) ∧
-      bodyResult ≠ .error ∧ bodyResult ≠ .timeOut ∧
-      (∀ n, bodyResult ≠ .break n) ∧ (∀ n, bodyResult ≠ .continue n) ∧
-      CallCompletedOutcome ret source bodyResult bodyFinal result final := by
+      (∀ names, ret = some names → names.Nodup) ∧
+      ((source.clock = 0 ∧ result = some .timeOut ∧ final = CrepSemHOLState.emptyLocals source) ∨
+       ∃ bodyResult bodyFinal, source.clock ≠ 0 ∧
+        (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}).clock < source.clock ∧
+        evalCrepSemHOLProgExact (decClockCrepSemHOL {source with
+          locals := HolFiniteMapExact.empty.updateList (params.zip values)}) body = (some bodyResult,bodyFinal) ∧
+        bodyResult ≠ .error ∧ (∀ n, bodyResult ≠ .break n) ∧ (∀ n, bodyResult ≠ .continue n) ∧
+        CallNonerrorOutcome ret source bodyResult bodyFinal result final) := by
   have execution := run
   rw [evalCrepSemHOLProgExact_call_holShape] at execution
   cases hargs : args.mapM (evalCrepSemHOLExp source) with
@@ -266,9 +268,14 @@ theorem completedCall_reaches_callee {width : Nat} [NeZero width] {σ : Type}
         · simp only [if_pos nd,Prod.mk.injEq] at execution
           exact (nonerror execution.1.symm).elim
         · simp only [if_neg nd] at execution
+          have retDistinct : ∀ names, ret = some names → names.Nodup := by
+            intro names eq
+            subst ret
+            simpa [crepReturnInfoNodupError] using nd
           by_cases zero : source.clock = 0
           · simp only [zero,if_true,Prod.mk.injEq] at execution
-            exact (nonTimeout execution.1.symm).elim
+            exact ⟨values,params,body,rfl,rfl,valid.1,valid.2,retDistinct,
+              Or.inl ⟨zero,execution.1.symm,execution.2.symm⟩⟩
           · simp only [zero,if_false] at execution
             rcases bodyRun : evalCrepSemHOLProgExact (decClockCrepSemHOL {source with
               locals := HolFiniteMapExact.empty.updateList (params.zip values)}) body with ⟨bodyResult,bodyFinal⟩
@@ -278,19 +285,13 @@ theorem completedCall_reaches_callee {width : Nat} [NeZero width] {σ : Type}
             cases bodyResult with
             | none => simp only [Prod.mk.injEq] at execution; exact (nonerror execution.1.symm).elim
             | some r =>
-              refine ⟨values,params,body,r,bodyFinal,rfl,rfl,valid.1,valid.2,zero,?_,?_,bodyRun,?_,?_,?_,?_,?_⟩
-              · intro names eq
-                subst ret
-                simpa [crepReturnInfoNodupError] using nd
+              refine ⟨values,params,body,rfl,rfl,valid.1,valid.2,retDistinct,
+                Or.inr ⟨r,bodyFinal,zero,?_,bodyRun,?_,?_,?_,?_⟩⟩
               · simp only [decClockCrepSemHOL]; omega
               · intro bad
                 rw [bad] at execution
                 simp only [Prod.mk.injEq] at execution
                 exact nonerror execution.1.symm
-              · intro bad
-                rw [bad] at execution
-                simp only [Prod.mk.injEq] at execution
-                exact nonTimeout execution.1.symm
               · intro n bad
                 rw [bad] at execution
                 simp only [Prod.mk.injEq] at execution
@@ -302,24 +303,24 @@ theorem completedCall_reaches_callee {width : Nat} [NeZero width] {σ : Type}
               · cases r with
                 | «return» returned =>
                   cases ret with
-                  | none => simpa [CallCompletedOutcome] using execution.symm
+                  | none => simpa [CallNonerrorOutcome] using execution.symm
                   | some names =>
                     by_cases namesNd : names.Nodup
                     · by_cases lengths : returned.length = names.length
                       · cases old : names.mapM source.locals.lookup with
                         | none => simp [lengths,old] at execution; exact (nonerror execution.1.symm).elim
                         | some prev =>
-                          simp only [CallCompletedOutcome]
+                          simp only [CallNonerrorOutcome]
                           refine ⟨namesNd,lengths,⟨prev,old⟩,?_⟩
                           simp [lengths,old] at execution
                           exact ⟨execution.1.symm,execution.2.symm⟩
                       · simp [lengths] at execution
                         exact (nonerror execution.1.symm).elim
                     · simp [namesNd,crepReturnInfoNodupError] at nd
-                | exception eid => cases ret <;> simpa [CallCompletedOutcome] using execution.symm
-                | finalFfi event => cases ret <;> simpa [CallCompletedOutcome] using execution.symm
+                | exception eid => cases ret <;> simpa [CallNonerrorOutcome] using execution.symm
+                | finalFfi event => cases ret <;> simpa [CallNonerrorOutcome] using execution.symm
                 | error => simp only [Prod.mk.injEq] at execution; exact (nonerror execution.1.symm).elim
-                | timeOut => simp only [Prod.mk.injEq] at execution; exact (nonTimeout execution.1.symm).elim
+                | timeOut => cases ret <;> simpa [CallNonerrorOutcome] using execution.symm
                 | «break» n => simp only [Prod.mk.injEq] at execution; exact (nonerror execution.1.symm).elim
                 | «continue» n => simp only [Prod.mk.injEq] at execution; exact (nonerror execution.1.symm).elim
       · simp only [hargs,lookupCodeFiniteHOL,found,if_neg valid,Prod.mk.injEq] at execution
