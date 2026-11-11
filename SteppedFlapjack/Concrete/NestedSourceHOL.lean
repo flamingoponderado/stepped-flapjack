@@ -385,6 +385,9 @@ theorem nestedCounted_compilerLoop (context : PanValueFfiContext (RiscV.Word 64)
     let rows := programs.map (fun row => (row.2.1,row.2.2))
     let budget := SteppedFlapjack.CrepToLoopSteps.callClockFactor ctxt rows nestedCrepState.clock crep * (limit+1)
     let factor := max (SteppedFlapjack.CrepToLoopSteps.callSyntaxCost ctxt crep) (SteppedFlapjack.LoopLiveSteps.loopCodeWeight loop.code+2)
+    let loopLimit := SteppedFlapjack.CrepToLoopSteps.callSyntaxCost ctxt crep + factor * (nestedCrepState.clock+budget)
+    let opt := optimiseHOL (compileHOLExact ctxt .ln crep)
+    let optFactor := max (SteppedFlapjack.CrepToLoopSteps.loopVisitWeight opt) (SteppedFlapjack.LoopLiveSteps.loopCodeWeight loop.code+2)
     ∃ lowerFinal post,
       (noGlobalsLoweredPreCall nestedRenamedState nestedLoweredCode).evaluateHOLFiniteState p =
         (some (.returned (.val (.word 7))),emptyLocalsHOLFinite lowerFinal) ∧
@@ -392,6 +395,10 @@ theorem nestedCounted_compilerLoop (context : PanValueFfiContext (RiscV.Word 64)
         (some (.result [.word 7]),post) ∧
       SteppedFlapjack.LoopSteps.steps (compileHOLExact ctxt .ln crep) {loop with clock := loop.clock+budget} ≤
         SteppedFlapjack.CrepToLoopSteps.callSyntaxCost ctxt crep + factor * (nestedCrepState.clock+budget) ∧
+      Flapjack.LoopSemStateFiniteExact.evaluate opt {loop with clock := loop.clock+budget} =
+        (some (.result [.word 7]),post) ∧
+      SteppedFlapjack.LoopSteps.steps opt {loop with clock := loop.clock+budget} ≤
+        SteppedFlapjack.CrepToLoopSteps.loopVisitWeight opt + optFactor * (2 * loopLimit) ∧
       post.ffi = lowerFinal.ffi := by
   let _ : DecidablePred (nestedClockedSource).memaddrs := by
     change DecidablePred ordinaryAddress
@@ -428,17 +435,19 @@ theorem nestedCounted_compilerLoop (context : PanValueFfiContext (RiscV.Word 64)
     (by simpa only [nestedHOLDeclarations] using nestedCall_inline_selection_empty)
     outside aligned context primitive handler [] 8 6 _ _ _ _ 7
     (by simpa [nestedClockedProduction,panSemBitVec64MemoryAccess] using nestedCounted_run context primitive handler) (by decide) Flapjack.Compiler.Encoders.RiscV.Target.riscvConfig.isa
-  obtain ⟨sourceFinal,lowerFinal,post,_,entry,loopRun,bound,ffi,_,_⟩ := result
-  rw [nestedHOLDeclarations] at loopRun bound
+  obtain ⟨sourceFinal,lowerFinal,post,_,entry,loopRun,bound,optRun,optBound,ffi,_,_⟩ := result
+  rw [nestedHOLDeclarations] at loopRun bound optRun optBound
   have codeWeight : CrepSteps.codeWeight (compileProgDeclsHOLW
       (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))) = 4 := by
     rw [nestedCall_crep_code]
     rfl
   simp only [compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,
-    CrepSteps.statementWeight,codeWeight,show max 3 4 = 4 by decide] at loopRun bound
-  refine ⟨lowerFinal,post,?_,?_,?_,ffi⟩
+    CrepSteps.statementWeight,codeWeight,show max 3 4 = 4 by decide] at loopRun bound optRun optBound
+  refine ⟨lowerFinal,post,?_,?_,?_,?_,?_,ffi⟩
   · simpa [nestedHOLDeclarations,nestedRenamedState,nestedLoweredCode,newMainNameHOL,nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,freshNameMlS,mlstrAppend,ofString,MlString.explode_implode,nestedSeqHOL] using entry
   · simpa [nestedHOLDeclarations,nestedRenamedState,nestedLoweredCode,newMainNameHOL,nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,freshNameMlS,mlstrAppend,ofString,MlString.explode_implode,nestedSeqHOL,nestedCrepState,concreteDeclCrepState,noGlobalsLoweredPreCall,nestedClockedSource,nestedSourceState,sourceTemplateFor_one,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,Nat.add_assoc] using loopRun
   · simpa [nestedHOLDeclarations,nestedRenamedState,nestedLoweredCode,newMainNameHOL,nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,freshNameMlS,mlstrAppend,ofString,MlString.explode_implode,nestedSeqHOL,nestedCrepState,concreteDeclCrepState,noGlobalsLoweredPreCall,nestedClockedSource,nestedSourceState,sourceTemplateFor_one,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,Nat.add_assoc] using bound
+  · simpa [nestedHOLDeclarations,nestedRenamedState,nestedLoweredCode,newMainNameHOL,nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,freshNameMlS,mlstrAppend,ofString,MlString.explode_implode,nestedSeqHOL,nestedCrepState,concreteDeclCrepState,noGlobalsLoweredPreCall,nestedClockedSource,nestedSourceState,sourceTemplateFor_one,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,Nat.add_assoc] using optRun
+  · simpa [nestedHOLDeclarations,nestedRenamedState,nestedLoweredCode,newMainNameHOL,nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,freshNameMlS,mlstrAppend,ofString,MlString.explode_implode,nestedSeqHOL,nestedCrepState,concreteDeclCrepState,noGlobalsLoweredPreCall,nestedClockedSource,nestedSourceState,sourceTemplateFor_one,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,Nat.add_assoc] using optBound
 
 end SteppedFlapjack.Concrete

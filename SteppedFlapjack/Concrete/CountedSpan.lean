@@ -579,6 +579,33 @@ theorem functionOnlyCrep_toLoop {σ : Type} (fs : List (FunDeclHOL 64)) (start :
     relations.1 relations.2.1 relations.2.2 codeRel table locals
   exact ⟨post,by simpa [p,resultToLoop,wlabWlocExact] using ev,stateRel.2.2.2.2.1.symm,visits⟩
 
+/-- Optimize a completed call-aware Loop entry using its explicit source visit limit. -/
+theorem callFrontend_optimizedLoop {σ : Type} (pan : PanToCrepContextExact 64) (p : ProgHOL 64)
+    (shape : CallFrontend pan p) (ctxt : CrepToLoopContextExact)
+    (source final : LoopSemStateFiniteExact 64 σ) (value : BitVec 64) (limit : Nat)
+    (table : LoopTableSupported source.code)
+    (run : evaluate (compileHOLExact ctxt .ln (compileProgExactHOLW pan p)) source =
+      (some (.result [.word value]),final))
+    (bound : LoopSteps.steps (compileHOLExact ctxt .ln (compileProgExactHOLW pan p)) source ≤ limit) :
+    let body := compileHOLExact ctxt .ln (compileProgExactHOLW pan p)
+    let opt := optimiseHOL body
+    let factor := max (loopVisitWeight opt) (loopCodeWeight source.code+2)
+    evaluate opt source = (some (.result [.word value]),final) ∧
+    LoopSteps.steps opt source ≤ loopVisitWeight opt + factor * (2 * limit) := by
+  let body := compileHOLExact ctxt .ln (compileProgExactHOLW pan p)
+  let opt := optimiseHOL body
+  let factor := max (loopVisitWeight opt) (loopCodeWeight source.code+2)
+  have bodyShape : SimpleLoopSequenceSource body := callFrontend_compiled_loopShape shape ctxt .ln
+  have optRun : evaluate opt source = (some (.result [.word value]),final) := by
+    apply optimise_correct
+    exact ⟨run,by simp,by simp,by simp,by simp⟩
+  have optBound := simpleSequence_global_bound opt source factor (optimise_simpleSequence bodyShape)
+    table (Nat.le_max_right _ _) (Nat.le_max_left _ _)
+  have used := simpleSequence_global_consumed body source bodyShape table
+  rw [optRun] at optBound
+  rw [run] at used
+  exact ⟨optRun,optBound.trans (Nat.add_le_add_left (Nat.mul_le_mul_left factor (used.trans (Nat.mul_le_mul_left 2 bound))) _)⟩
+
 set_option maxHeartbeats 3000000 in
 set_option maxRecDepth 100000 in
 /-- Counted source execution reaches the generated Loop entry with an explicit bound. -/
@@ -638,12 +665,17 @@ theorem countedCalls_functionOnlyLoop {scope : List VarName} {program : Prog (Ri
     let rows := programs.map (fun row => (row.2.1,row.2.2))
     let budget := callClockFactor ctxt rows initial.clock crep * (limit+1)
     let factor := max (callSyntaxCost ctxt crep) (loopCodeWeight loop.code+2)
+    let loopLimit := callSyntaxCost ctxt crep + factor * (initial.clock+budget)
+    let opt := optimiseHOL (compileHOLExact ctxt .ln crep)
+    let optFactor := max (loopVisitWeight opt) (loopCodeWeight loop.code+2)
     ∃ (sourceFinal lowerFinal : PanSemStateFiniteExact 64 σ) (post : LoopSemStateFiniteExact 64 σ),
       source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word value))),sourceFinal) ∧
       before.evaluateHOLFiniteState p = (some (.returned (.val (.word value))),emptyLocalsHOLFinite lowerFinal) ∧
       evaluate (compileHOLExact ctxt .ln crep) {loop with clock := loop.clock+budget} = (some (.result [.word value]),post) ∧
       LoopSteps.steps (compileHOLExact ctxt .ln crep) {loop with clock := loop.clock+budget} ≤
         callSyntaxCost ctxt crep + factor * (initial.clock+budget) ∧
+      evaluate opt {loop with clock := loop.clock+budget} = (some (.result [.word value]),post) ∧
+      LoopSteps.steps opt {loop with clock := loop.clock+budget} ≤ loopVisitWeight opt + optFactor * (2 * loopLimit) ∧
       post.ffi = lowerFinal.ffi ∧ lowerFinal.ffi = sourceFinal.ffi ∧ FfiStateRel postFfi sourceFinal.ffi := by
   obtain ⟨sourceFinal,lowerFinal,crepFinal,sourceRun,lowerRun,crepRun,crepBound,crepFfi,lowerFfi,ffiRel⟩ :=
     countedCalls_functionOnlyCrep supported production source rel ranged words byteRanged codeRanged codeShape
@@ -653,7 +685,30 @@ theorem countedCalls_functionOnlyLoop {scope : List VarName} {program : Prog (Ri
   have span := functionOnlyCrep_toLoop fs start (progToHOL (panSimpProg program)) found unique shapes noInline
     _ crepFinal value _ rfl rfl arch rfl crepRun crepBound
   obtain ⟨post,loopRun,loopFfi,loopBound⟩ := span
-  exact ⟨sourceFinal,lowerFinal,post,sourceRun,lowerRun,loopRun,loopBound,loopFfi.trans crepFfi,lowerFfi,ffiRel⟩
+  let decls := fs.map DeclHOL.function
+  let lowered := compileTopExactHOL decls start
+  let programs := compileProgDeclsHOLW lowered
+  let renamed : PanSemStateFiniteExact 64 σ := {source with code := fpermCodeHOL start (newMainNameHOL decls) targetCode}
+  let before := noGlobalsLoweredPreCall renamed (HolFiniteMapExact.empty.updateList (functionsHOL lowered).reverse)
+  let pan := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL lowered)) 0 (getEidsFromDeclsHOL lowered)
+  let p : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL decls) [])
+  let initial := concreteDeclCrepState before programs
+  let loop := concreteDeclLoopState arch initial programs
+  let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
+  let crep := compileProgExactHOLW pan p
+  let limit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) *
+    (1 + (SimpVisits.simpTableFactor entries * count + SimpVisits.hw (progToHOL (panSimpProg program))) + 2)
+  let rows := programs.map (fun row => (row.2.1,row.2.2))
+  let extra := callClockFactor ctxt rows initial.clock crep * (limit+1)
+  let factor := max (callSyntaxCost ctxt crep) (loopCodeWeight loop.code+2)
+  have panShape : CallFrontend pan p := .seq (.base .skip) (.tail (by simp))
+  have shapeTable := functionOnly_callFrontend_shapes fs start (progToHOL (panSimpProg program)) .one found shapes
+  have table : LoopTableSupported {loop with clock := loop.clock+extra}.code :=
+    callFrontend_declaration_loopTableSupported arch lowered noInline shapeTable
+  have opt := callFrontend_optimizedLoop pan p panShape ctxt {loop with clock := loop.clock+extra} post value
+    (callSyntaxCost ctxt crep + factor * (initial.clock+extra)) table loopRun loopBound
+  exact ⟨sourceFinal,lowerFinal,post,sourceRun,lowerRun,loopRun,loopBound,opt.1,opt.2,
+    loopFfi.trans crepFfi,lowerFfi,ffiRel⟩
 
 /-- Counted source execution reaches the optimized Word start call at an explicit bound. -/
 theorem callFrontend_counted_optimizedStart {C σ : Type} {scope : List VarName}

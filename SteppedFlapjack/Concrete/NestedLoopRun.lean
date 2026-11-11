@@ -193,14 +193,23 @@ def nestedLoopBudget := callClockFactor nestedLoopContext
   (nestedCallCrepPrograms.map (fun row => (row.2.1,row.2.2))) 7 nestedCrepBody * (nestedCrepLimit + 1)
 def nestedLoopBound := callSyntaxCost nestedLoopContext nestedCrepBody +
   max (callSyntaxCost nestedLoopContext nestedCrepBody) (loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms))+2) * (7+nestedLoopBudget)
+def nestedOptimizedLoopBody := optimiseHOL (compileHOLExact nestedLoopContext .ln nestedCrepBody)
+def nestedOptimizedLoopBound :=
+  loopVisitWeight nestedOptimizedLoopBody +
+    max (loopVisitWeight nestedOptimizedLoopBody)
+      (loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms)) + 2) * (2 * nestedLoopBound)
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
-/-- The counted source bound supplies a concrete clock and visit bound for the generated Loop body. -/
+/-- The counted source bound supplies concrete limits for the generated Loop body and its optimized form. -/
 theorem nestedCounted_crepToLoop : ∃ final, evaluate (compileHOLExact nestedLoopContext .ln nestedCrepBody)
       {nestedLoopState with clock := nestedLoopState.clock+nestedLoopBudget} = (some (.result [.word 7]),final) ∧ final.ffi = sourceFfi ∧
     LoopSteps.steps (compileHOLExact nestedLoopContext .ln nestedCrepBody)
-      {nestedLoopState with clock := nestedLoopState.clock+nestedLoopBudget} ≤ nestedLoopBound := by
-  obtain ⟨lowerFinal,post,entry,loopRun,bound,ffi⟩ := nestedCounted_compilerLoop
+      {nestedLoopState with clock := nestedLoopState.clock+nestedLoopBudget} ≤ nestedLoopBound ∧
+    evaluate nestedOptimizedLoopBody {nestedLoopState with clock := nestedLoopState.clock+nestedLoopBudget} =
+      (some (.result [.word 7]),final) ∧
+    LoopSteps.steps nestedOptimizedLoopBody {nestedLoopState with clock := nestedLoopState.clock+nestedLoopBudget} ≤
+      nestedOptimizedLoopBound := by
+  obtain ⟨lowerFinal,post,entry,loopRun,bound,optRun,optBound,ffi⟩ := nestedCounted_compilerLoop
     (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none)
   have entry' : nestedLoweredSource.evaluateHOLFiniteState (.seq .skip (.call none (ofString "main'") [])) =
       (some (.returned (.val (.word 7))),emptyLocalsHOLFinite lowerFinal) := by
@@ -213,17 +222,17 @@ theorem nestedCounted_crepToLoop : ∃ final, evaluate (compileHOLExact nestedLo
   have lowerFfi : lowerFinal.ffi = sourceFfi := by
     rw [finalEq] at sourceFfiEq
     simpa [emptyLocalsHOLFinite] using sourceFfiEq
-  refine ⟨post,?_,ffi.trans lowerFfi,?_⟩
+  refine ⟨post,?_,ffi.trans lowerFfi,?_,?_,?_⟩
   · simpa [nestedLoopContext,nestedLoopState,nestedCrepBody,nestedPanContext,nestedLoopBudget,nestedCrepLimit,
       nestedSourceEntryLimit,nestedCallCrepPrograms,nestedCrepState,concreteDeclCrepState,concreteDeclLoopState,sourceTemplate,Nat.add_assoc] using loopRun
   · simpa [nestedLoopContext,nestedLoopState,nestedCrepBody,nestedPanContext,nestedLoopBudget,nestedLoopBound,
       nestedCrepLimit,nestedSourceEntryLimit,nestedCallCrepPrograms,nestedCrepState,concreteDeclCrepState,concreteDeclLoopState,sourceTemplate,Nat.add_assoc] using bound
+  · simpa [nestedOptimizedLoopBody,nestedLoopContext,nestedLoopState,nestedCrepBody,nestedPanContext,nestedLoopBudget,
+      nestedCrepLimit,nestedSourceEntryLimit,nestedCallCrepPrograms,nestedCrepState,concreteDeclCrepState,concreteDeclLoopState,sourceTemplate,Nat.add_assoc] using optRun
+  · simpa [nestedOptimizedLoopBound,nestedOptimizedLoopBody,nestedLoopContext,nestedLoopState,nestedCrepBody,nestedPanContext,
+      nestedLoopBudget,nestedLoopBound,nestedCrepLimit,nestedSourceEntryLimit,nestedCallCrepPrograms,nestedCrepState,
+      concreteDeclCrepState,concreteDeclLoopState,sourceTemplate,Nat.add_assoc] using optBound
 
-def nestedOptimizedLoopBody := optimiseHOL (compileHOLExact nestedLoopContext .ln nestedCrepBody)
-def nestedOptimizedLoopBound :=
-  loopVisitWeight nestedOptimizedLoopBody +
-    max (loopVisitWeight nestedOptimizedLoopBody)
-      (loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms)) + 2) * (2 * nestedLoopBound)
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
 private theorem nestedOptimizedLoopBody_eq : nestedOptimizedLoopBody = nestedLoopCode64 := by
@@ -247,7 +256,7 @@ theorem nestedCounted_optimizedLoop (memory : BitVec 64 → WordLocW 64) : ∃ f
     final.ffi = sourceFfi ∧ LoopSteps.steps nestedLoopCode64
       {nestedLoopState with memory := memory, clock := nestedLoopState.clock+nestedLoopBudget} ≤ nestedOptimizedLoopBound := by
   rw [← nestedOptimizedLoopBody_eq]
-  obtain ⟨final,run,ffi,visits⟩ := nestedCounted_crepToLoop
+  obtain ⟨final,run,ffi,visits,optRun,_⟩ := nestedCounted_crepToLoop
   let source := {nestedLoopState with clock := nestedLoopState.clock+nestedLoopBudget}
   let body := compileHOLExact nestedLoopContext .ln nestedCrepBody
   have panShape : CallFrontend nestedPanContext (.seq .skip (.call none (ofString "main'") [])) :=
@@ -256,9 +265,6 @@ theorem nestedCounted_optimizedLoop (memory : BitVec 64 → WordLocW 64) : ∃ f
     exact callFrontend_compiled_loopShape panShape nestedLoopContext .ln
   have table : LoopTableSupported source.code := by
     simpa only [source,nestedLoopState,concreteDeclLoopState,nestedCallCrepPrograms] using nestedCall_generated_table_supported
-  have optRun : evaluate (optimiseHOL body) source = (some (.result [.word 7]),final) := by
-    apply optimise_correct
-    exact ⟨run,by simp,by simp,by simp,by simp⟩
   have originalLow := nestedCall_loop_run nestedLoopState.memory
   have originalLift := evaluate_add_clock_eq nestedLoopCode64 {nestedLoopState with memory := nestedLoopState.memory}
     (some (.result [.word 7])) {{nestedLoopState with memory := nestedLoopState.memory} with locals := .ln,clock := 3}
