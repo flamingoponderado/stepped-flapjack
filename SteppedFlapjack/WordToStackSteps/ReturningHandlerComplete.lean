@@ -53,7 +53,7 @@ theorem returningHandler_consumed {width : Nat} [NeZero width] {C F : Type}
     xs args1 prog ss envs guards nonzero run bodyRun notError
   rcases outcomes with ⟨location, returned, hr⟩ | ⟨location, value, he⟩ | ht | hs | ⟨event, hf⟩
   · subst bodyResult
-    have ih := handlerOriginalIH_of_blocks ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source retBlock handlerBlock code
+    have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
     obtain ⟨_, _, popped, _, _, _, _, _, pop, domain, validReturn, _, _⟩ :=
       sourceHandlerReturningContinuation ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source sourcePost bodyPost result
         xs args1 prog ss envs location returned guards ih nonzero run notError bodyRun
@@ -63,7 +63,7 @@ theorem returningHandler_consumed {width : Nat} [NeZero width] {C F : Type}
     exact WordSteps.returningCall_consumed dest args values names retCode l1 l2 (some (handlerVar,handlerCode,h1,h2)) source bodyPost popped sourcePost result
       xs args1 returned ss prog envs bodyShape (loopBlock_loop retBlock) get badFalse find valid cut nonzero bodyRun lengthEq pop domain run
   · subst bodyResult
-    have ih := handlerOriginalIH_of_blocks ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source retBlock handlerBlock code
+    have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
     obtain ⟨validException, domain, _, _⟩ := sourceHandlerExceptionContinuation ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source sourcePost bodyPost result xs args1 prog ss envs location value guards ih nonzero run notError bodyRun
     have locationEq : location = .loc h1 h2 := by tauto
     subst location

@@ -1,3 +1,4 @@
+import Flapjack.Compiler.Backend.WordToStack.Proofs.CompCorrect.Assembly
 import SteppedFlapjack.WordToStackSteps.ReturningZeroClock
 import Flapjack.Compiler.Backend.WordToStack.Proofs.CompCorrect.CallReturningHandler.Execution
 
@@ -10,24 +11,19 @@ open Flapjack.Compiler.Backend.WordToStack.Native
 open Flapjack.WordToStackProofs.CallReturnHandler
 
 /-- The original handler induction hypotheses follow from proved loop blocks. -/
-theorem handlerOriginalIH_of_blocks {width : Nat} [NeZero width] {C F : Type}
+theorem handlerOriginalIH {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (values : List Nat) (names : WordLangCutsetsHOL)
     (retCode handlerCode : WordLangProgHOL (BitVec width)) (l1 l2 : Nat)
     (dest : Option Nat) (args : List Nat) (handlerVar h1 h2 : Nat)
-    (source : WordSemStateFiniteExact width (Nat × C) F)
-    (retBlock : LoopBlock retCode) (handlerBlock : LoopBlock handlerCode)
-    (code : ∀ loc arity p, sptLookup loc source.code = some (arity, p) → LoopBlock p) :
+    (source : WordSemStateFiniteExact width (Nat × C) F) :
     InductionHypotheses ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source := by
   refine ⟨?_, ?_, ?_⟩
   · intro xs args1 prog ss envs location ys calleePost popped facts
-    exact zeroSimulation_original ac retCode _ (loopBlock_zero ac retCode _ retBlock)
+    exact compCorrect ac retCode _
   · intro xs args1 prog ss envs location value calleePost facts
-    exact zeroSimulation_original ac handlerCode _ (loopBlock_zero ac handlerCode _ handlerBlock)
+    exact compCorrect ac handlerCode _
   · intro xs args1 prog ss envs facts
-    have find := facts.1.2.2.1
-    obtain ⟨loc, lookup, _, _, _⟩ := CallTail.findCode_facts dest
-      (wordSemAddRetLoc (some (values, names, retCode, l1, l2)) xs) source.code source.stackSize args1 prog ss find
-    exact zeroSimulation_original ac prog _ (loopBlock_zero ac prog _ (code loc args1.length prog lookup))
+    exact compCorrect ac prog _
 
 /-- A normal handler-call continuation executes at the existing target clock. -/
 theorem zeroHandlerNormalContinuation {width : Nat} [NeZero width] {C F : Type}
@@ -41,8 +37,7 @@ theorem zeroHandlerNormalContinuation {width : Nat} [NeZero width] {C F : Type}
     (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
     (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
     (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (retBlock : LoopBlock retCode) (handlerBlock : LoopBlock handlerCode)
-    (code : ∀ loc arity p, sptLookup loc source.code = some (arity, p) → LoopBlock p)
+    (retBlock : LoopBlock retCode)
     (conventions : postAllocConventionsHOL k
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) = true)
@@ -81,7 +76,7 @@ theorem zeroHandlerNormalContinuation {width : Nat} [NeZero width] {C F : Type}
           (popHandlerNative false (k,frame,payload) compiled),
           target) = (targetResult,targetPost) ∧
       compCorrectResult ac k frame payload source sourcePost targetPost result targetResult lens := by
-  have ih := handlerOriginalIH_of_blocks ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source retBlock handlerBlock code
+  have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
   obtain ⟨gc,rest,popped,sourceFrame,keys,tailKeys,handlerEq,poppedEq,popRun,domain,
     valid,sourceContinuation,continuationIH⟩ := sourceHandlerReturningContinuation
       ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source sourcePost bodyPost
@@ -140,8 +135,7 @@ theorem zeroHandlerExceptionContinuation {width : Nat} [NeZero width] {C F : Typ
     (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
     (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
     (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (retBlock : LoopBlock retCode) (handlerBlock : LoopBlock handlerCode)
-    (code : ∀ loc arity p, sptLookup loc source.code = some (arity, p) → LoopBlock p)
+    (handlerBlock : LoopBlock handlerCode)
     (conventions : postAllocConventionsHOL k
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) = true)
@@ -179,7 +173,7 @@ theorem zeroHandlerExceptionContinuation {width : Nat} [NeZero width] {C F : Typ
         (compiled,
           target) = (targetResult,targetPost) ∧
       compCorrectResult ac k frame payload source sourcePost targetPost result targetResult lens := by
-  have ih := handlerOriginalIH_of_blocks ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source retBlock handlerBlock code
+  have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
   obtain ⟨valid,domain,sourceContinuation,continuationIH⟩ := sourceHandlerExceptionContinuation
     ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source sourcePost bodyPost
     result xs args1 prog ss envs location value guards ih nonzero wholeRun notError bodyRun
@@ -247,7 +241,10 @@ theorem zeroHandlerCalleeBody {width : Nat} [NeZero width] {C F : Type}
       (WordSemStateFiniteExact.callEnv args1 ss
         (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
           (WordSemStateFiniteExact.decClock source))) = (bodyResult,bodyPost))
-    (bodyBlock : LoopBlock prog) :
+    (bodyZero : ZeroSimulation ac prog
+      (WordSemStateFiniteExact.callEnv args1 ss
+        (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
+          (WordSemStateFiniteExact.decClock source)))) :
     ∃ (destinationTarget saved header moved entry targetPost : StackSemStateFiniteExact width C F)
       (calleeCode body : HolProg width) (calleeSize calleeFrame : Nat)
       (targetResult : Option (StackSemResult width)),
@@ -341,7 +338,7 @@ theorem zeroHandlerCalleeBody {width : Nat} [NeZero width] {C F : Type}
     (some (handlerVar,handlerCode,h1,h2)) source sourcePost bodyPost result bodyResult
     xs args1 prog ss envs guards nonzero wholeExecution notError bodyRun
   obtain ⟨targetPost,targetResult,execution,conclusion⟩ :=
-    loopBlock_zero ac prog _ bodyBlock k calleeSize calleeFrame bodyPost entry bodyResult calleeBs calleeBsPost
+    bodyZero k calleeSize calleeFrame bodyPost entry bodyResult calleeBs calleeBsPost
       calleeIndex calleeIndexPost body (frame :: lens)
       ⟨bodyRun,bodyNotError,entryRelation,bodyConventions,bodyFlat,bodyCompile,
         calleeBitmapLength,entryBitmapBound,entryBitmapPrefix,bodyLabels,bodyMaximum⟩
@@ -369,8 +366,7 @@ theorem zeroNormalHandlerCallFromCallee {width : Nat} [NeZero width] {C F : Type
     (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
     (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
     (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (retBlock : LoopBlock retCode) (handlerBlock : LoopBlock handlerCode)
-    (code : ∀ loc arity p, sptLookup loc source.code = some (arity, p) → LoopBlock p)
+    (retBlock : LoopBlock retCode)
     (conventions : postAllocConventionsHOL k
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) = true)
@@ -419,7 +415,7 @@ theorem zeroNormalHandlerCallFromCallee {width : Nat} [NeZero width] {C F : Type
           {moved with clock := moved.clock+bodyExtra}) =
         (targetResult,targetPost) ∧
       compCorrectResult ac k frame payload source sourcePost targetPost result targetResult lens := by
-  have ih := handlerOriginalIH_of_blocks ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source retBlock handlerBlock code
+  have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
   obtain ⟨gc,rest,popped,sourceFrame,keys,tailKeys,handlerEq,poppedEq,popRun,domain,
     valid,sourceContinuation,continuationIH⟩ := sourceHandlerReturningContinuation
     ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source sourcePost bodyPost
@@ -430,7 +426,7 @@ theorem zeroNormalHandlerCallFromCallee {width : Nat} [NeZero width] {C F : Type
   obtain ⟨targetPost,targetResult,continuationRun,conclusion⟩ :=
     zeroHandlerNormalContinuation ac k frame payload source sourcePost bodyPost originalTarget target
       lens prior values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1 prog ss envs
-      guards retBlock handlerBlock code conventions flat maximum nonzero result wholeRun notError location returnedValues
+      guards retBlock conventions flat maximum nonzero result wholeRun notError location returnedValues
       bodyRun calleeSize calleeFrame bodyConclusion bs bsPost n nPost compiled compilation lengthBound
       bitmapBound bitmapPrefix labels
   have normalRun : StackSemEvaluate.evaluate
@@ -463,8 +459,7 @@ theorem zeroExceptionHandlerCallFromCallee {width : Nat} [NeZero width] {C F : T
     (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
     (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
     (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (retBlock : LoopBlock retCode) (handlerBlock : LoopBlock handlerCode)
-    (code : ∀ loc arity p, sptLookup loc source.code = some (arity, p) → LoopBlock p)
+    (handlerBlock : LoopBlock handlerCode)
     (conventions : postAllocConventionsHOL k
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) = true)
@@ -510,7 +505,7 @@ theorem zeroExceptionHandlerCallFromCallee {width : Nat} [NeZero width] {C F : T
         (.call (some (continuationTarget,0,l1,l2)) destination (some (compiled,h1,h2)),
           {moved with clock := moved.clock+bodyExtra}) = (targetResult,targetPost) ∧
       compCorrectResult ac k frame payload source sourcePost targetPost result targetResult lens := by
-  have ih := handlerOriginalIH_of_blocks ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source retBlock handlerBlock code
+  have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
   obtain ⟨valid,domain,sourceContinuation,continuationIH⟩ := sourceHandlerExceptionContinuation
     ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source sourcePost bodyPost
     result xs args1 prog ss envs location value guards ih nonzero wholeRun notError bodyRun
@@ -520,7 +515,7 @@ theorem zeroExceptionHandlerCallFromCallee {width : Nat} [NeZero width] {C F : T
   obtain ⟨targetPost,targetResult,handlerRun,conclusion⟩ :=
     zeroHandlerExceptionContinuation ac k frame payload source sourcePost bodyPost originalTarget target
       lens prior values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1 prog ss envs
-      guards retBlock handlerBlock code conventions flat maximum nonzero result wholeRun notError location value
+      guards handlerBlock conventions flat maximum nonzero result wholeRun notError location value
       bodyRun calleeSize calleeFrame bodyConclusion bs bsPost n nPost compiled compilation lengthBound
       bitmapBound bitmapPrefix labels
   have exceptionRun : StackSemEvaluate.evaluate
@@ -547,8 +542,7 @@ theorem zeroNormalCompiledHandlerCallFromHistory {width : Nat} [NeZero width] {C
     (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
     (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
     (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (retBlock : LoopBlock retCode) (handlerBlock : LoopBlock handlerCode)
-    (code : ∀ loc arity p, sptLookup loc source.code = some (arity, p) → LoopBlock p)
+    (retBlock : LoopBlock retCode)
     (conventions : postAllocConventionsHOL k
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) = true)
@@ -641,7 +635,7 @@ theorem zeroNormalCompiledHandlerCallFromHistory {width : Nat} [NeZero width] {C
   obtain ⟨targetPost,targetResult,callRun,conclusion⟩ :=
     zeroNormalHandlerCallFromCallee ac k frame payload source sourcePost bodyPost originalTarget target
       lens prior values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1 prog ss envs
-      guards retBlock handlerBlock code conventions flat maximum nonzero result wholeRun notError location returnedValues
+      guards retBlock conventions flat maximum nonzero result wholeRun notError location returnedValues
       bodyRun calleeSize calleeFrame bodyConclusion moved destination calleeCode handlerTarget bodyExtra found movedNonzero calleeRun
       savedBs retBs savedIndex retIndex returnCode returnCompile
       continuationLength (continuationBound.trans growth.1.length_le)
@@ -666,8 +660,7 @@ theorem zeroExceptionCompiledHandlerCallFromHistory {width : Nat} [NeZero width]
     (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
     (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
     (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (retBlock : LoopBlock retCode) (handlerBlock : LoopBlock handlerCode)
-    (code : ∀ loc arity p, sptLookup loc source.code = some (arity, p) → LoopBlock p)
+    (handlerBlock : LoopBlock handlerCode)
     (conventions : postAllocConventionsHOL k
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) = true)
@@ -760,7 +753,7 @@ theorem zeroExceptionCompiledHandlerCallFromHistory {width : Nat} [NeZero width]
   obtain ⟨targetPost,targetResult,callRun,conclusion⟩ :=
     zeroExceptionHandlerCallFromCallee ac k frame payload source sourcePost bodyPost originalTarget target
       lens prior values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1 prog ss envs
-      guards retBlock handlerBlock code conventions flat maximum nonzero result wholeRun notError location value
+      guards handlerBlock conventions flat maximum nonzero result wholeRun notError location value
       bodyRun calleeSize calleeFrame bodyConclusion moved destination calleeCode (.seq .skip (copyRetNative false true (k,frame,payload) values
         (popHandlerNative false (k,frame,payload) returnCode))) bodyExtra found movedNonzero calleeRun
       retBs handlerBs retIndex handlerIndex handlerTarget handlerCompile
@@ -827,8 +820,7 @@ theorem zeroSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
         (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
           (WordSemStateFiniteExact.decClock source))) = (bodyResult,bodyPost))
     (retBlock : LoopBlock retCode) (handlerBlock : LoopBlock handlerCode)
-    (bodyBlock : LoopBlock prog)
-    (code : ∀ loc arity p, sptLookup loc source.code = some (arity, p) → LoopBlock p) :
+    (bodyBlock : LoopBlock prog) :
     ∃ targetFinal targetResult,
       StackSemEvaluate.evaluate (compiled,target) =
         (targetResult,targetFinal) ∧
@@ -852,7 +844,7 @@ theorem zeroSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
       handlerCode source sourcePost bodyPost result bodyResult target lens xs args1 prog ss envs bs
       savedBitmaps n savedIndex destinationCode savedCode destination guards related conventions maximum
       destinationCompile savedCompile bitmapLength bitmapBound savedPrefix room handlerLocation space
-      nonzero wholeExecution notError bodyRun bodyBlock
+      nonzero wholeExecution notError bodyRun (loopBlock_zero ac prog _ bodyBlock)
   let bodyExtra : Nat := 0
   have calleeRun0 := calleeRun
   have calleeRun : StackSemEvaluate.evaluate
@@ -910,7 +902,7 @@ theorem zeroSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
       subst targetResult
       have assembled := zeroNormalCompiledHandlerCallFromHistory ac k frame payload source sourcePost bodyPost target
         calleeTarget lens related values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1
-        prog ss envs guards retBlock handlerBlock code conventions flat maximum nonzero result wholeExecution notError
+        prog ss envs guards retBlock conventions flat maximum nonzero result wholeExecution notError
         location returned bodyRun calleeSize calleeFrame bodyConclusion moved destination calleeCode
         bodyExtra found calleeRun bs savedBitmaps retBs handlerBs n savedIndex retIndex handlerIndex
         destinationCode savedCode returnCode handlerTarget compiled destinationCompile savedCompile
@@ -921,7 +913,7 @@ theorem zeroSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
       subst targetResult
       have assembled := zeroExceptionCompiledHandlerCallFromHistory ac k frame payload source sourcePost bodyPost target
         calleeTarget lens related values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1
-        prog ss envs guards retBlock handlerBlock code conventions flat maximum nonzero result wholeExecution notError
+        prog ss envs guards handlerBlock conventions flat maximum nonzero result wholeExecution notError
         location value bodyRun calleeSize calleeFrame bodyConclusion moved destination calleeCode
         bodyExtra found calleeRun bs savedBitmaps retBs handlerBs n savedIndex retIndex handlerIndex
         destinationCode savedCode returnCode handlerTarget compiled destinationCompile savedCompile
@@ -987,8 +979,7 @@ theorem zeroHandlerCallWithGuards {width : Nat} [NeZero width] {C F : Type}
         (some (handlerVar,handlerCode,h1,h2))) source = (result,sourcePost))
     (notError : result ≠ some .error)
     (retBlock : LoopBlock retCode) (handlerBlock : LoopBlock handlerCode)
-    (bodyBlock : LoopBlock prog)
-    (code : ∀ loc arity p, sptLookup loc source.code = some (arity, p) → LoopBlock p) :
+    (bodyBlock : LoopBlock prog) :
     ∃ targetFinal targetResult,
       StackSemEvaluate.evaluate (compiled,target) =
         (targetResult,targetFinal) ∧
@@ -1022,7 +1013,7 @@ theorem zeroHandlerCallWithGuards {width : Nat} [NeZero width] {C F : Type}
             prog ss envs bs savedBitmaps retBs handlerBs n savedIndex retIndex handlerIndex destinationCode
             savedCode returnCode handlerTarget compiled destination guards related conventions flat maximum
             destinationCompile savedCompile returnCompile handlerCompile compilation bitmapLength bitmapBound
-            bitmapPrefix labels room calleeSpace zero wholeExecution notError bodyRun retBlock handlerBlock bodyBlock code
+            bitmapPrefix labels room calleeSpace zero wholeExecution notError bodyRun retBlock handlerBlock bodyBlock
         · obtain ⟨targetPost,run,contract⟩ := compiledHandlerCalleeAllocationFailure ac k frame payload values names retCode l1 l2 dest args handlerVar h1 h2
             handlerCode source sourcePost result target lens xs args1 prog ss envs bs savedBitmaps retBs
             n savedIndex retIndex destinationCode savedCode returnCode destination guards related conventions
@@ -1080,7 +1071,7 @@ theorem zeroReturningHandlerCase {width : Nat} [NeZero width] {C F : Type}
     savedBitmaps retBs handlerBs n savedIndex retIndex handlerIndex destinationCode savedCode
     returnCode handlerTarget compiled destination guards related conventions flat maximum
     destinationCompile savedCompile returnCompile handlerCompile compilation lengthBound bitmapBound
-    bitmapPrefix labels execution notError retBlock handlerBlock bodyBlock code
+    bitmapPrefix labels execution notError retBlock handlerBlock bodyBlock
 
 
 end SteppedFlapjack.WordToStackSteps
