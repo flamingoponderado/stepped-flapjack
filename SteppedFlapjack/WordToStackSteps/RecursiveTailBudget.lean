@@ -1,4 +1,5 @@
 import SteppedFlapjack.WordToStackSteps.BudgetTailCall
+import SteppedFlapjack.WordToStackSteps.BudgetIf
 import SteppedFlapjack.WordSteps.ClockConsumption
 import SteppedFlapjack.WordSimpSteps.LoopSequenceClock
 namespace SteppedFlapjack.WordToStackSteps
@@ -8,12 +9,13 @@ open Flapjack.WordToStackProofs.CompCorrect.CallTail
 open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Backend.WordToStack.Native
 
-/-- Word programs with loop blocks, raises, sequencing, and tail calls. -/
+/-- Word programs with loop blocks, raises, sequencing, conditionals, and tail calls. -/
 inductive RaiseTail {width : Nat} [NeZero width] : WordLangProgHOL (BitVec width) → Prop
   | loopBlock {p} : LoopBlock p → RaiseTail p
   | raise (name) : RaiseTail (.raise name)
   | seq {a b} : RaiseTail a → RaiseTail b → RaiseTail (.seq a b)
   | tail (dest args) : RaiseTail (.call none dest args none)
+  | ite (cmp r ri) {a b} : RaiseTail a → RaiseTail b → RaiseTail (.ite cmp r ri a b)
 
 /-- Nested tail calls preserve the compiler relation with at most one extra
 Stack clock per actual Word evaluator visit. -/
@@ -68,6 +70,38 @@ theorem raiseTail_visitBudget {width : Nat} [NeZero width] {C F : Type}
         have impossible := congrArg Prod.fst guard.1
         rw [guard.2] at impossible
         cases impossible
+    | @ite cmp r ri a b ha hb =>
+      simp only [noInstallSubprogsHOL, notCreatedSubprogsWithMemOp, Bool.and_eq_true] at noInstall
+      obtain ⟨na,nb⟩ := noInstall
+      apply budgetIf ac cmp r ri a b s n
+      constructor
+      · intro v3 v4 x y value guard
+        obtain ⟨vars, v3eq, v4eq, compared, selected⟩ := guard
+        rw [v3eq,v4eq] at vars
+        have left := congrArg Prod.fst vars
+        have right := congrArg Prod.snd vars
+        have count := steps_ite cmp r ri a b s
+        simp only at left right
+        simp only [left,right] at count
+        rw [compared] at count
+        rw [selected] at count
+        have smaller : steps a s < n := by simp only at count; omega
+        have branch := ih _ smaller a s rfl ha na safe table
+        exact budgetMono ac a s _ _ branch (by omega)
+      · intro v3 v4 x y value guard
+        obtain ⟨vars, v3eq, v4eq, compared, selected⟩ := guard
+        rw [v3eq,v4eq] at vars
+        have left := congrArg Prod.fst vars
+        have right := congrArg Prod.snd vars
+        have count := steps_ite cmp r ri a b s
+        simp only at left right
+        simp only [left,right] at count
+        rw [compared] at count
+        have vfalse : value = false := by cases value <;> simp_all
+        rw [vfalse] at count
+        have smaller : steps b s < n := by simp only at count; omega
+        have branch := ih _ smaller b s rfl hb nb safe table
+        exact budgetMono ac b s _ _ branch (by omega)
     | tail dest args =>
       rw [← hh]
       apply budgetCallTail ac dest args none s (steps (.call none dest args none) s)
