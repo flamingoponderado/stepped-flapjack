@@ -410,4 +410,62 @@ theorem callSupported_fperm_control {scope : List VarName} {σ : Type}
       controlSteps (progToHOL program) source :=
   callSupported_fpermControl source.clock scope program supported f g source (Nat.le_refl _) table
 
+private theorem supportedIn_rename_identity {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : SupportedIn scope program) (f g : FunName) : globalRenameProg f g program = program := by
+  induction supported <;> simp_all [globalRenameProg]
+
+/-- Function renaming retains the supported call-aware fragment. -/
+theorem callSupported_globalRename {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) (f g : FunName) :
+    CallSupportedIn scope (globalRenameProg f g program) := by
+  induction supported with
+  | base h => simpa [supportedIn_rename_identity h f g] using (CallSupportedIn.base h)
+  | tail name args scalar => simpa only [globalRenameProg] using (CallSupportedIn.tail (globalRenameFunctionName f g name) args scalar)
+  | call dest name args scalar cont ih =>
+    simpa only [globalRenameProg] using (CallSupportedIn.call dest (globalRenameFunctionName f g name) args scalar ih)
+  | decl name scalar body ih => simpa only [globalRenameProg] using (CallSupportedIn.decl name scalar ih)
+  | seq a b iha ihb => simpa only [globalRenameProg] using (CallSupportedIn.seq iha ihb)
+  | ite scalar a b iha ihb => simpa only [globalRenameProg] using (CallSupportedIn.ite scalar iha ihb)
+  | «while» scalar body ih => simpa only [globalRenameProg] using (CallSupportedIn.while scalar ih)
+
+/-- Renaming a representable call-aware body yields another such body. -/
+theorem callSupported_fperm_shape {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) (ranged : ProgByteRanged program) (f g : MlString) :
+    ∃ renamed : Prog (RiscV.Word 64), fpermHOL f g (progToHOL program) = progToHOL renamed ∧
+      CallSupportedIn scope renamed := by
+  let renamed := globalRenameProg (toStringOfBytes f) (toStringOfBytes g) program
+  have bridge := progOfHOL_fpermHOL f g (progToHOL program)
+  rw [progOfHOL_progToHOL program ranged] at bridge
+  have encoded := congrArg progToHOL bridge
+  rw [progToHOL_progOfHOL] at encoded
+  exact ⟨renamed,encoded,callSupported_globalRename supported _ _⟩
+
+/-- Renaming a representable supported function table preserves its support. -/
+theorem fperm_globalTableSupported (source : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (f g : MlString)
+    (table : ∀ name values body locals rsh, lookupCodeHOLFinite source.lookup name values = some (body,locals,rsh) →
+      ∃ scope, ∃ program : Prog (RiscV.Word 64), body = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program) :
+    GlobalTableSupported (fpermCodeHOL f g source) := by
+  intro name values body locals rsh targetFound
+  have lookup := lookupCodeFpermCodeHOL f g source (fpermName f g name) values
+  simp only [fpermName_cancel] at lookup
+  change lookupCodeHOLFinite (fpermCodeHOL f g source).lookup name values =
+    (lookupCodeHOLFinite source.lookup (fpermName f g name) values).map
+      (fun entry => (fpermHOL f g entry.1,entry.2.1,entry.2.2)) at lookup
+  rw [targetFound] at lookup
+  cases found : lookupCodeHOLFinite source.lookup (fpermName f g name) values with
+  | none => simp [found] at lookup
+  | some entry =>
+    obtain ⟨original,originalLocals,originalShape⟩ := entry
+    simp only [found,Option.map_some,Option.some.injEq,Prod.mk.injEq] at lookup
+    obtain ⟨bodyEq,localsEq,shapeEq⟩ := lookup
+    subst locals
+    subst rsh
+    obtain ⟨scope,program,originalEq,supported,ranged⟩ := table _ _ _ _ _ found
+    obtain ⟨renamed,renameEq,renameSupported⟩ := callSupported_fperm_shape supported ranged f g
+    refine ⟨scope,renamed,?_,renameSupported⟩
+    rw [originalEq,renameEq] at bodyEq
+    exact bodyEq
+
+
 end SteppedFlapjack.Concrete
