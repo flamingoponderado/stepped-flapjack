@@ -9,6 +9,8 @@ import SteppedFlapjack.WordToStackSteps.RecursiveTailBudget
 import SteppedFlapjack.WordToStackSteps.BudgetReturning
 import SteppedFlapjack.WordToStackSteps.BudgetHandler
 import SteppedFlapjack.WordToStackSteps.WholeCallBudget
+import SteppedFlapjack.WordToStackSteps.StartCall
+import SteppedFlapjack.WordToStackSteps.StartRiscV
 import SteppedFlapjack.WordToStackSteps.RaiseClock
 import SteppedFlapjack.StackSteps.TableBound
 import SteppedFlapjack.LoopToWordSteps.WholeCallProgram
