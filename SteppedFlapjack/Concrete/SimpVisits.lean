@@ -943,4 +943,302 @@ theorem supported_panSimp_controlSteps_compiled {σ : Type} (program : Prog (Ris
   exact callSupported_panSimp_controlSteps_compiled (.base supported.1) context
     (.base (supported_frontend_shape (supported_panSimp program supported).1 context)) s
 
+
+private theorem tailBodyNonerror {σ : Type} (s : PanSemStateFiniteExact 64 σ)
+    (function : MlS) (args : List (ExpHOL 64)) (values : List (ValueHOL 64))
+    (body : ProgHOL 64) (locals : HolFiniteMapExact MlS (ValueHOL 64)) (shape : ShapeHOL)
+    (argsEval : @evalListHOLFinite 64 σ _ s (fun a => Classical.propDecidable (s.memaddrs a)) args = some values)
+    (found : lookupCodeHOLFinite s.code.lookup function values = some (body,locals,shape)) (clock : s.clock ≠ 0)
+    (nonerror : (s.evaluateHOLFiniteState (.call none function args)).1 ≠ some .error) :
+    ((callEntryStateHOLFinite s locals).evaluateHOLFiniteState body).1 ≠ some .error := by
+  intro bad
+  rw [evaluateHOLFiniteState_call] at nonerror
+  simp only [argsEval,found,if_neg clock] at nonerror
+  rcases run : (callEntryStateHOLFinite s locals).evaluateHOLFiniteState body with ⟨result,post⟩
+  rw [run] at bad
+  simp only at bad
+  subst result
+  simp [run] at nonerror
+
+private theorem decCallBodyNonerror {σ : Type} (s : PanSemStateFiniteExact 64 σ)
+    (dest function : MlS) (destShape : ShapeHOL) (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64) (locals : HolFiniteMapExact MlS (ValueHOL 64)) (shape : ShapeHOL)
+    (argsEval : @evalListHOLFinite 64 σ _ s (fun a => Classical.propDecidable (s.memaddrs a)) args = some values)
+    (found : lookupCodeHOLFinite s.code.lookup function values = some (body,locals,shape)) (clock : s.clock ≠ 0)
+    (nonerror : (s.evaluateHOLFiniteState (.decCall dest destShape function args cont)).1 ≠ some .error) :
+    ((callEntryStateHOLFinite s locals).evaluateHOLFiniteState body).1 ≠ some .error := by
+  intro bad
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at nonerror
+  simp only [argsEval,found,if_neg clock] at nonerror
+  rcases run : (callEntryStateHOLFinite s locals).evaluateHOLFiniteState body with ⟨result,post⟩
+  rw [run] at bad
+  simp only at bad
+  subst result
+  simp [run] at nonerror
+
+def SimpTableSupported (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (factor : Nat) : Prop :=
+  ∀ name values body locals rsh, lookupCodeHOLFinite code.lookup name values = some (body,locals,rsh) →
+    ∃ scope, ∃ program : Prog (RiscV.Word 64), body = progToHOL program ∧ CallSupportedIn scope program ∧
+      hw (progToHOL (panSimpProg program)) + 1 ≤ factor
+
+private theorem plainTableBound {σ : Type} (factor : Nat) (positive : 1 ≤ factor) :
+    ∀ p : ProgHOL 64, Plain p → ∀ (s : PanSemStateFiniteExact 64 σ)
+      (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL)),
+      PanSimp.CodeRel s.code code → SimpTableSupported s.code factor →
+      (s.evaluateHOLFiniteState p).1 ≠ some .error →
+      controlSteps p {s with code := code} ≤ factor * controlSteps p s := by
+  intro p shape s code rel table nonerror
+  induction clockEq : s.clock using Nat.strongRecOn generalizing p s with
+  | _ clock clockIH =>
+    induction shape generalizing s with
+    | skip =>
+      rw [controlSteps_skip,controlSteps_skip]
+      simpa using positive
+    | assign k name e =>
+      simpa only [controlSteps.eq_def,Nat.add_zero,Nat.mul_one] using positive
+    | ret e =>
+      simpa only [controlSteps.eq_def,Nat.add_zero,Nat.mul_one] using positive
+    | tail name args =>
+      rw [← clockEq]
+      have targetArgs := PanSimp.evalListCodeUpd code s args
+      cases argsEval : @evalListHOLFinite 64 σ _ s (fun a => Classical.propDecidable (s.memaddrs a)) args with
+      | none =>
+        rw [controlSteps.eq_def,controlSteps.eq_def (.call none name args)]
+        simp only [targetArgs,argsEval,Nat.add_zero,Nat.mul_one]
+        exact positive
+      | some values =>
+        cases found : lookupCodeHOLFinite s.code.lookup name values with
+        | none =>
+          have targetFound := PanSimp.lookupCodeRel s.code code rel name values
+          rw [found] at targetFound
+          simp only [Option.map_none] at targetFound
+          rw [controlSteps.eq_def,controlSteps.eq_def (.call none name args)]
+          simp only [targetArgs,argsEval,targetFound,found,Nat.add_zero,Nat.mul_one]
+          exact positive
+        | some entry =>
+          obtain ⟨body,locals,rsh⟩ := entry
+          by_cases noClock : s.clock = 0
+          · have targetFound := PanSimp.lookupCodeRel s.code code rel name values
+            rw [found] at targetFound
+            simp only [Option.map_some] at targetFound
+            rw [controlSteps.eq_def,controlSteps.eq_def (.call none name args)]
+            simp only [targetArgs,argsEval,targetFound,found,if_pos noClock,Nat.add_zero,Nat.mul_one]
+            exact positive
+          · obtain ⟨scope,program,bodyEq,supported,weight⟩ := table name values body locals rsh found
+            subst body
+            have bodyNonerror := tailBodyNonerror s name args values (progToHOL program) locals rsh
+              argsEval found noClock nonerror
+            have entryRel : PanSimp.CodeRel (callEntryStateHOLFinite s locals).code code := rel
+            have entryTable : SimpTableSupported (callEntryStateHOLFinite s locals).code factor := table
+            have entrySmall : (callEntryStateHOLFinite s locals).clock < clock := by
+              simp only [callEntryStateHOLFinite]
+              omega
+            have bound := clockIH (callEntryStateHOLFinite s locals).clock entrySmall
+              (progToHOL program) (callSupportedIn_plain supported) (callEntryStateHOLFinite s locals)
+              entryRel entryTable bodyNonerror rfl
+            apply tailTableStep supported s code rel name args values locals rsh argsEval found noClock factor weight
+            simpa [callEntryStateHOLFinite] using bound
+    | @decCall name sh fn args cont bodyShape bodyIH =>
+      rw [← clockEq]
+      have targetArgs := PanSimp.evalListCodeUpd code s args
+      cases argsEval : @evalListHOLFinite 64 σ _ s (fun a => Classical.propDecidable (s.memaddrs a)) args with
+      | none =>
+        rw [controlSteps.eq_def,controlSteps.eq_def (.decCall name sh fn args cont)]
+        simp only [targetArgs,argsEval,Nat.add_zero,Nat.mul_one]
+        exact positive
+      | some values =>
+        cases found : lookupCodeHOLFinite s.code.lookup fn values with
+        | none =>
+          have targetFound := PanSimp.lookupCodeRel s.code code rel fn values
+          rw [found] at targetFound
+          simp only [Option.map_none] at targetFound
+          rw [controlSteps.eq_def,controlSteps.eq_def (.decCall name sh fn args cont)]
+          simp only [targetArgs,argsEval,targetFound,found,Nat.add_zero,Nat.mul_one]
+          exact positive
+        | some entry =>
+          obtain ⟨body,locals,rsh⟩ := entry
+          by_cases noClock : s.clock = 0
+          · have targetFound := PanSimp.lookupCodeRel s.code code rel fn values
+            rw [found] at targetFound
+            simp only [Option.map_some] at targetFound
+            rw [controlSteps.eq_def,controlSteps.eq_def (.decCall name sh fn args cont)]
+            simp only [targetArgs,argsEval,targetFound,found,if_pos noClock,Nat.add_zero,Nat.mul_one]
+            exact positive
+          · obtain ⟨scope,program,bodyEq,supported,weight⟩ := table fn values body locals rsh found
+            subst body
+            have bodyNonerror := decCallBodyNonerror s name fn sh args cont values (progToHOL program) locals rsh
+              argsEval found noClock nonerror
+            have entryRel : PanSimp.CodeRel (callEntryStateHOLFinite s locals).code code := rel
+            have entryTable : SimpTableSupported (callEntryStateHOLFinite s locals).code factor := table
+            have entrySmall : (callEntryStateHOLFinite s locals).clock < clock := by
+              simp only [callEntryStateHOLFinite]
+              omega
+            have bodyBound := clockIH (callEntryStateHOLFinite s locals).clock entrySmall
+              (progToHOL program) (callSupportedIn_plain supported) (callEntryStateHOLFinite s locals)
+              entryRel entryTable bodyNonerror rfl
+            have bodyBound' : controlSteps (progToHOL program) (callEntryStateHOLFinite {s with code := code} locals) ≤
+                factor * controlSteps (progToHOL program) (callEntryStateHOLFinite s locals) := by
+              simpa [callEntryStateHOLFinite] using bodyBound
+            rcases run : (callEntryStateHOLFinite s locals).evaluateHOLFiniteState (progToHOL program) with ⟨result,post⟩
+            have bodyResultNonerror : result ≠ some .error := by simpa [run] using bodyNonerror
+            by_cases returned : ∃ value, result = some (.returned value)
+            · obtain ⟨value,rfl⟩ := returned
+              rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at nonerror
+              simp only [argsEval,found,if_neg noClock,run] at nonerror
+              by_cases valid : shapeEqHOL (shapeOfHOLExact value) sh = true ∧ shapeEqHOL (shapeOfHOLExact value) rsh = true
+              · simp only [valid.1,valid.2,Bool.true_and,if_true] at nonerror
+                let next := setVarHOLFinite name value {post with locals := s.locals}
+                have nextNonerror : (next.evaluateHOLFiniteState cont).1 ≠ some .error := nonerror
+                have postCode := (PanSimp.codeSimAll (progToHOL program) (callEntryStateHOLFinite s locals)
+                  (some (.returned value)) post code run (by simp) entryRel).2
+                have nextRel : PanSimp.CodeRel next.code code := by simpa [next,setVarHOLFinite,postCode,callEntryStateHOLFinite] using rel
+                have nextTable : SimpTableSupported next.code factor := by simpa [next,setVarHOLFinite,postCode,callEntryStateHOLFinite] using table
+                have nextSmall : next.clock < clock := by
+                  have h := evaluateHOLFiniteState_clock_le (callEntryStateHOLFinite s locals) (progToHOL program)
+                  rw [run] at h
+                  simp only [next,setVarHOLFinite,callEntryStateHOLFinite] at h ⊢
+                  omega
+                have nextBound := clockIH next.clock nextSmall cont bodyShape next nextRel nextTable nextNonerror rfl
+                apply decCallTableReturnStep supported s code rel name fn sh args cont values locals rsh value post
+                  argsEval found noClock run valid.1 valid.2 factor weight bodyBound'
+                simpa [next] using nextBound
+              · have bad : (shapeEqHOL (shapeOfHOLExact value) sh && shapeEqHOL (shapeOfHOLExact value) rsh) = false := by
+                  cases h₁ : shapeEqHOL (shapeOfHOLExact value) sh <;>
+                    cases h₂ : shapeEqHOL (shapeOfHOLExact value) rsh <;> simp_all
+                simp only [bad,Bool.false_eq_true,if_false] at nonerror
+                exact absurd rfl nonerror
+            · have terminal : ∀ value, result ≠ some (.returned value) := by
+                intro value h; exact returned ⟨value,h⟩
+              exact decCallTableTerminalStep supported s code rel name fn sh args cont values locals rsh result post
+                argsEval found noClock run bodyResultNonerror terminal factor weight bodyBound'
+    | @dec name sh e body bodyShape bodyIH =>
+      rw [← clockEq]
+      apply tableDeclStep name sh e body s code factor positive
+      intro value evaluated valid
+      have bodyNonerror : ((setVarHOLFinite name value s).evaluateHOLFiniteState body).1 ≠ some .error := by
+        rw [evaluateHOLFiniteState_dec_total] at nonerror
+        simp only [evaluated,valid,if_true] at nonerror
+        exact nonerror
+      have bodyRel : PanSimp.CodeRel (setVarHOLFinite name value s).code code := by simpa [setVarHOLFinite] using rel
+      have bodyTable : SimpTableSupported (setVarHOLFinite name value s).code factor := by simpa [setVarHOLFinite] using table
+      have bodyClock : (setVarHOLFinite name value s).clock = clock := by simpa [setVarHOLFinite] using clockEq
+      have bound := bodyIH (setVarHOLFinite name value s) bodyRel bodyTable bodyNonerror bodyClock
+      simpa [setVarHOLFinite,clockEq] using bound
+    | @seq a b ashape bshape aIH bIH =>
+      rw [← clockEq]
+      rcases run : s.evaluateHOLFiniteState a with ⟨result,post⟩
+      have firstNonerror : result ≠ some .error := by
+        intro bad
+        rw [evaluateHOLFiniteState_seq_line780,run,bad] at nonerror
+        exact nonerror rfl
+      have first := aIH s rel table (by simpa [run] using firstNonerror) clockEq
+      have first' : controlSteps a {s with code := code} ≤ factor * controlSteps a s := by
+        simpa [clockEq] using first
+      apply tableSeqStep a b s code rel result post run firstNonerror factor positive first'
+      intro done
+      subst result
+      have nextNonerror : (post.evaluateHOLFiniteState b).1 ≠ some .error := by
+        rw [evaluateHOLFiniteState_seq_line780,run] at nonerror
+        exact nonerror
+      have postCode := (PanSimp.codeSimAll a s none post code run (by simp) rel).2
+      have postRel : PanSimp.CodeRel post.code code := by rw [postCode]; exact rel
+      have postTable : SimpTableSupported post.code factor := by rw [postCode]; exact table
+      have postClock : post.clock ≤ clock := by
+        have h := evaluateHOLFiniteState_clock_le s a
+        rw [run] at h
+        simpa [clockEq] using h
+      by_cases same : post.clock = clock
+      · have bound := bIH post postRel postTable nextNonerror same
+        simpa [same] using bound
+      · have bound := clockIH post.clock (by omega) b bshape post postRel postTable nextNonerror rfl
+        simpa using bound
+    | @ite e a b ashape bshape aIH bIH =>
+      rw [← clockEq]
+      apply tableIteStep e a b s code factor positive
+      intro word evaluated
+      rw [evaluateHOLFiniteState_ite] at nonerror
+      simp only [evaluated] at nonerror
+      by_cases nonzero : word ≠ 0
+      · simp only [if_neg nonzero] at nonerror
+        simp only [if_pos nonzero]
+        have bound := aIH s rel table nonerror clockEq
+        simpa [clockEq] using bound
+      · have zero : word = 0 := Classical.not_not.mp nonzero
+        simp only [if_pos zero] at nonerror
+        simp only [if_neg nonzero]
+        have bound := bIH s rel table nonerror clockEq
+        simpa [clockEq] using bound
+    | @«while» e body bodyShape bodyIH =>
+      rw [← clockEq]
+      have evalSame := @evalHOLFinite_upd_code_eq 64 σ _ s
+        (fun address => Classical.propDecidable (s.memaddrs address)) code e
+      change @evalHOLExact 64 σ _ ({s with code := code} : PanSemStateFiniteExact 64 σ).toExact
+          (fun a => Classical.propDecidable (s.memaddrs a)) e =
+        @evalHOLExact 64 σ _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e at evalSame
+      cases tested : @evalHOLExact 64 σ _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e with
+      | none =>
+        rw [controlSteps_while,controlSteps_while,evalSame,tested]
+        simpa using positive
+      | some v =>
+        rcases v with ⟨⟨word⟩⟩ | _ | _
+        · by_cases guard : word ≠ 0 ∧ s.clock ≠ 0
+          · have bodyRun := s.decClockHOLFinite.evaluateHOLFiniteState body
+            rcases run : s.decClockHOLFinite.evaluateHOLFiniteState body with ⟨result,post⟩
+            have bodyNonerror : result ≠ some .error := by
+              intro bad
+              rw [evaluateHOLFiniteState_while_fixClockRewrite] at nonerror
+              change @evalHOLFinite 64 σ _ s (fun a => Classical.propDecidable (s.memaddrs a)) e = some (.val (.word word)) at tested
+              simp only [tested,if_pos guard.1,if_neg guard.2,run,bad] at nonerror
+              exact nonerror rfl
+            have entryRel : PanSimp.CodeRel s.decClockHOLFinite.code code := rel
+            have entryTable : SimpTableSupported s.decClockHOLFinite.code factor := table
+            have entrySmall : s.decClockHOLFinite.clock < clock := by simp only [decClockHOLFinite]; omega
+            have bodyBound := clockIH s.decClockHOLFinite.clock entrySmall body bodyShape s.decClockHOLFinite
+              entryRel entryTable (by simpa [run] using bodyNonerror) rfl
+            apply tableWhileStep e body s code rel word tested guard.1 guard.2 result post run bodyNonerror
+              factor positive (by simpa using bodyBound)
+            intro continues
+            have loopNonerror : (post.evaluateHOLFiniteState (.while e body)).1 ≠ some .error := by
+              rw [evaluateHOLFiniteState_while_fixClockRewrite] at nonerror
+              change @evalHOLFinite 64 σ _ s (fun address => Classical.propDecidable (s.memaddrs address)) e = some (.val (.word word)) at tested
+              rcases continues with h | h
+              · simp only [tested,if_pos guard.1,if_neg guard.2,run,h] at nonerror
+                exact nonerror
+              · simp only [tested,if_pos guard.1,if_neg guard.2,run,h] at nonerror
+                exact nonerror
+            have postCode := (PanSimp.codeSimAll body s.decClockHOLFinite result post code run bodyNonerror entryRel).2
+            have postRel : PanSimp.CodeRel post.code code := by rw [postCode]; exact entryRel
+            have postTable : SimpTableSupported post.code factor := by rw [postCode]; exact entryTable
+            have postSmall : post.clock < clock := by
+              have h := evaluateHOLFiniteState_clock_le s.decClockHOLFinite body
+              rw [run] at h
+              simp only [decClockHOLFinite] at h
+              omega
+            have bound := clockIH post.clock postSmall (.while e body) (.while e bodyShape) post postRel postTable loopNonerror rfl
+            simpa using bound
+          · rw [controlSteps_while,controlSteps_while,evalSame,tested]
+            simp only [if_neg guard,Nat.add_zero,Nat.mul_one]
+            exact positive
+        · rw [controlSteps_while,controlSteps_while,evalSame,tested]; simpa using positive
+        · rw [controlSteps_while,controlSteps_while,evalSame,tested]; simpa using positive
+
+
+/-- Simplifying a call-aware body and its related function table costs at most
+one concrete table factor per original source visit, plus the body overhead. -/
+theorem callSupported_simp_tableVisits {scope : List VarName} {σ : Type} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) (s : PanSemStateFiniteExact 64 σ)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (rel : PanSimp.CodeRel s.code code) (factor : Nat) (positive : 1 ≤ factor)
+    (table : SimpTableSupported s.code factor)
+    (nonerror : (s.evaluateHOLFiniteState (progToHOL program)).1 ≠ some .error) :
+    controlSteps (progToHOL (panSimpProg program)) {s with code := code} ≤
+      factor * controlSteps (progToHOL program) s + hw (progToHOL (panSimpProg program)) := by
+  have tableBound := plainTableBound factor positive (progToHOL program) (callSupportedIn_plain supported)
+    s code rel table nonerror
+  have reassoc := callSupported_panSimp_controlSteps supported {s with code := code}
+  have extra := over_le (({s with code := code} : PanSemStateFiniteExact 64 σ).evaluateHOLFiniteState (progToHOL program)).1
+    (hw (progToHOL (panSimpProg program)))
+  omega
+
 end SteppedFlapjack.Concrete.SimpVisits
