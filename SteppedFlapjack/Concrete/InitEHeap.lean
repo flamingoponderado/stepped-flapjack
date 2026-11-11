@@ -67,6 +67,16 @@ theorem configuredStack_heapMemory (code : List (Nat × HolProg 64)) (cfg : LabT
   change configuredLabMemory code bs a = .word (initialWordFor bs.length a) at read
   exact eq.trans read
 
+/-- Initialized Stack memory agrees with the source on its accessible domain. -/
+theorem configuredStack_sourceMemory (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
+    (bs : List (BitVec 64)) (fits : 0xa0020018 + bs.length*8 ≤ sourceBase)
+    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
+    crepToLoopMemRelHOLExact (sourceTemplateFor bs.length).memory (configuredStack code cfg bs).memory
+      (sourceTemplateFor bs.length).memaddrs := by
+  intro address member
+  change wlabWlocExact (.word (initialWordFor bs.length address)) = (configuredStack code cfg bs).memory address
+  exact (configuredStack_heapMemory code cfg bs fits good address member).symm
+
 /-- The FFI, byte order and shared-memory domain match the source fixture. -/
 theorem configuredStack_ambient (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
     (bs : List (BitVec 64)) (fits : 0xa0020018 + bs.length*8 ≤ sourceBase)

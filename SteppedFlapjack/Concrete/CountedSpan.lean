@@ -540,7 +540,8 @@ theorem functionOnlyCrep_toLoop {σ : Type} (fs : List (FunDeclHOL 64)) (start :
     (source : CrepSemHOLState 64 σ) (final : CrepSemHOLState 64 σ) (value : BitVec 64) (limit : Nat)
     (sourceLocals : source.locals = HolFiniteMapExact.empty)
     (sourceGlobals : source.globals = HolFiniteMapExact.empty)
-    (arch : AsmArchitecture)
+    (arch : AsmArchitecture) (memory : BitVec 64 → WordLocW 64)
+    (memoryRel : crepToLoopMemRelHOLExact source.memory memory source.memaddrs)
     (code : source.code = alistToFmapCodeExact (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
     (run : evalCrepSemHOLProgExact source (compileProgExactHOLW (mkCtxtExactHOL HolFiniteMapExact.empty
         (makeFuncsExactHOL (functionsHOL (compileTopExactHOL (fs.map DeclHOL.function) start))) 0
@@ -556,7 +557,7 @@ theorem functionOnlyCrep_toLoop {σ : Type} (fs : List (FunDeclHOL 64)) (start :
     let p : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL (fs.map DeclHOL.function)) [])
     let crep := compileProgExactHOLW pan p
     let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
-    let loop := concreteDeclLoopState arch source programs
+    let loop := {(concreteDeclLoopState arch source programs) with memory := memory}
     let rows := programs.map (fun row => (row.2.1,row.2.2))
     let budget := callClockFactor ctxt rows source.clock crep * (limit+1)
     let factor := max (callSyntaxCost ctxt crep) (loopCodeWeight loop.code+2)
@@ -569,7 +570,7 @@ theorem functionOnlyCrep_toLoop {σ : Type} (fs : List (FunDeclHOL 64)) (start :
   let pan := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL decls)) 0 (getEidsFromDeclsHOL decls)
   let p : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL (fs.map DeclHOL.function)) [])
   let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
-  let loop := concreteDeclLoopState arch source programs
+  let loop := {(concreteDeclLoopState arch source programs) with memory := memory}
   have shape : CallFrontend pan p := .seq (.base .skip) (.tail (by simp))
   have shapes' := functionOnly_callFrontend_shapes fs start body .one found shapes
   have sources := callFrontend_declaration_sources decls shapes'
@@ -591,7 +592,7 @@ theorem functionOnlyCrep_toLoop {σ : Type} (fs : List (FunDeclHOL 64)) (start :
     rfl
   obtain ⟨post,ev,visits,stateRel,_,_,_,_⟩ := callFrontend_wholeVisits_explicit pan p shape programs sources' ctxt ctxt .ln
     source final (some (.return [.word value])) loop code run (by simp) (by simp) limit bound
-    relations.1 relations.2.1 relations.2.2 codeRel table locals
+    relations.1 memoryRel relations.2.2 codeRel table locals
   exact ⟨post,by simpa [p,resultToLoop,wlabWlocExact] using ev,stateRel.2.2.2.2.1.symm,visits⟩
 
 /-- A first Crep function supplies the first optimized Loop function. -/
@@ -788,7 +789,8 @@ theorem countedCalls_functionOnlyLoop {scope : List VarName} {program : Prog (Ri
       (memoryAccess := some (panSemBitVec64MemoryAccess production))
       (contracts := some (countedContractsOfCode production.code exnContracts)) =
         some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
-    (budget : count ≤ source.clock) (arch : AsmArchitecture) :
+    (budget : count ≤ source.clock) (arch : AsmArchitecture) (memory : BitVec 64 → WordLocW 64)
+    (memoryRel : crepToLoopMemRelHOLExact source.memory memory source.memaddrs) :
     let decls := fs.map DeclHOL.function
     let lowered := compileTopExactHOL decls start
     let renamed := {source with code := fpermCodeHOL start (newMainNameHOL decls) targetCode}
@@ -798,7 +800,7 @@ theorem countedCalls_functionOnlyLoop {scope : List VarName} {program : Prog (Ri
     let programs := compileProgDeclsHOLW lowered
     let crep := compileProgExactHOLW pan p
     let initial := concreteDeclCrepState before programs
-    let loop := concreteDeclLoopState arch initial programs
+    let loop := {(concreteDeclLoopState arch initial programs) with memory := memory}
     let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
     let limit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) *
       (1 + (SimpVisits.simpTableFactor entries * count + SimpVisits.hw (progToHOL (panSimpProg program))) + 2)
@@ -823,7 +825,7 @@ theorem countedCalls_functionOnlyLoop {scope : List VarName} {program : Prog (Ri
       exceptions unique shapes noInline topOutside aligned context primitive handler exnContracts fuel count
       postLocals postGlobals postMemory postFfi value run budget
   have span := functionOnlyCrep_toLoop fs start (progToHOL (panSimpProg program)) found unique shapes noInline
-    _ crepFinal value _ rfl rfl arch rfl crepRun crepBound
+    _ crepFinal value _ rfl rfl arch memory (by simpa [concreteDeclCrepState,noGlobalsLoweredPreCall] using memoryRel) rfl crepRun crepBound
   obtain ⟨post,loopRun,loopFfi,loopBound⟩ := span
   let decls := fs.map DeclHOL.function
   let lowered := compileTopExactHOL decls start
@@ -833,7 +835,7 @@ theorem countedCalls_functionOnlyLoop {scope : List VarName} {program : Prog (Ri
   let pan := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL lowered)) 0 (getEidsFromDeclsHOL lowered)
   let p : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL decls) [])
   let initial := concreteDeclCrepState before programs
-  let loop := concreteDeclLoopState arch initial programs
+  let loop := {(concreteDeclLoopState arch initial programs) with memory := memory}
   let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
   let crep := compileProgExactHOLW pan p
   let limit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) *
@@ -892,7 +894,8 @@ theorem countedCalls_functionOnlyWord {C : Type} {scope : List VarName} {program
       (memoryAccess := some (panSemBitVec64MemoryAccess production))
       (contracts := some (countedContractsOfCode production.code exnContracts)) =
         some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
-    (budget : count ≤ source.clock) (arch : AsmArchitecture)
+    (budget : count ≤ source.clock) (arch : AsmArchitecture) (memory : BitVec 64 → WordLocW 64)
+    (memoryRel : crepToLoopMemRelHOLExact source.memory memory source.memaddrs)
     (template : WordSemStateFiniteExact 64 C σ) (heapLength : BitVec 64) (frame : Nat)
     (wc : Config) (ac : AsmConfigExact 64)
     (heap : source.topAddr = source.baseAddr + 2 * heapLength) :
@@ -905,7 +908,7 @@ theorem countedCalls_functionOnlyWord {C : Type} {scope : List VarName} {program
     let programs := compileProgDeclsHOLW lowered
     let crep := compileProgExactHOLW pan p
     let initial := concreteDeclCrepState before programs
-    let loop := concreteDeclLoopState arch initial programs
+    let loop := {(concreteDeclLoopState arch initial programs) with memory := memory}
     let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
     let crepLimit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) *
       (1 + (SimpVisits.simpTableFactor entries * count + SimpVisits.hw (progToHOL (panSimpProg program))) + 2)
@@ -918,7 +921,6 @@ theorem countedCalls_functionOnlyWord {C : Type} {scope : List VarName} {program
     let optLimit := loopVisitWeight opt + optFactor * (2 * loopLimit)
     let replay := {initial with clock := loop.clock+extra}
     let words := loopToWordCompileHOL (compileProgHOLExact arch programs)
-    let memory := loop.memory
     let starter := {(phase3Starter arch replay programs template heapLength firstLoopName frame) with memory := memory}
     let word := {starter with clock := 6*optLimit+1, code := sptFromAList (compile wc ac words).2}
     ∃ (sourceFinal : PanSemStateFiniteExact 64 σ) (post : WordSemStateFiniteExact 64 C σ),
@@ -932,7 +934,7 @@ theorem countedCalls_functionOnlyWord {C : Type} {scope : List VarName} {program
     countedCalls_functionOnlyLoop supported production source rel ranged words byteRanged codeRanged codeShape
       targetCode codeRel entries sourceCode entryShapes fs start targetTable found mainFound locals globals structs
       exceptions unique shapes noInline topOutside aligned context primitive handler exnContracts fuel count
-      postLocals postGlobals postMemory postFfi value run budget arch
+      postLocals postGlobals postMemory postFfi value run budget arch memory memoryRel
   let decls := fs.map DeclHOL.function
   let lowered := compileTopExactHOL decls start
   let programs := compileProgDeclsHOLW lowered
@@ -941,7 +943,7 @@ theorem countedCalls_functionOnlyWord {C : Type} {scope : List VarName} {program
   let pan := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL lowered)) 0 (getEidsFromDeclsHOL lowered)
   let p : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL decls) [])
   let initial := concreteDeclCrepState before programs
-  let loop := concreteDeclLoopState arch initial programs
+  let loop := {(concreteDeclLoopState arch initial programs) with memory := memory}
   let ctxt := mkCtxtExact arch (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
   let crep := compileProgExactHOLW pan p
   let limit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) *
@@ -956,17 +958,17 @@ theorem countedCalls_functionOnlyWord {C : Type} {scope : List VarName} {program
   let replay := {initial with clock := loop.clock+extra}
   have replayHeap : replay.topAddr = replay.baseAddr + 2 * heapLength := by
     simpa [replay,initial,concreteDeclCrepState,before,noGlobalsLoweredPreCall,renamed] using heap
-  have loopEq : {(concreteDeclLoopState arch replay programs) with memory := loop.memory} =
+  have loopEq : {(concreteDeclLoopState arch replay programs) with memory := memory} =
       {loop with clock := loop.clock+extra} := by
     simp [loop,replay,concreteDeclLoopState]
   have span := functionOnly_optimizedWord fs start (progToHOL (panSimpProg program)) found shapes noInline arch
-    replay template heapLength frame wc ac loop.memory optLimit value loopPost replayHeap
+    replay template heapLength frame wc ac memory optLimit value loopPost replayHeap
     (by
-      change evaluate opt {(concreteDeclLoopState arch replay programs) with memory := loop.memory} = _
+      change evaluate opt {(concreteDeclLoopState arch replay programs) with memory := memory} = _
       rw [loopEq]
       exact optRun)
     (by
-      change LoopSteps.steps opt {(concreteDeclLoopState arch replay programs) with memory := loop.memory} ≤ optLimit
+      change LoopSteps.steps opt {(concreteDeclLoopState arch replay programs) with memory := memory} ≤ optLimit
       rw [loopEq]
       exact optBound)
   obtain ⟨post,wordRun,wordFfi,wordBound⟩ := span
