@@ -123,4 +123,61 @@ theorem scalar_eval_word {scope : List VarName} {expression : Exp (RiscV.Word 64
           simp [leftRun,rightRun,shiftRun] at evaluated
           subst value
           exact ⟨word,rfl⟩
+/-- Scalar argument expressions evaluate to words. -/
+theorem scalar_expressions_eval_words {σ : Type} (scope : List VarName)
+    (expressions : List (Exp (RiscV.Word 64)))
+    (shape : ∀ e ∈ expressions, Scalar scope e)
+    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (words : WordLocals production.locals)
+    (values : List (PanValue (RiscV.Word 64)))
+    (evaluated : evalPanValueExps production.structs production.locals production.globals production.memory
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord expressions
+      (some (panSemBitVec64MemoryAccess production)) = some values) :
+    ∀ value ∈ values, ∃ word, value = .word word := by
+  induction expressions generalizing values with
+  | nil =>
+    simp [evalPanValueExps,evalPanValueExp.evalPanValueExps] at evaluated
+    subst values
+    simp
+  | cons e es ih =>
+    simp only [evalPanValueExps,evalPanValueExp.evalPanValueExps] at evaluated
+    cases head : evalPanValueExp production.structs production.locals production.globals production.memory
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord e
+        (some (panSemBitVec64MemoryAccess production)) with
+    | none => simp [head] at evaluated
+    | some value =>
+      cases tail : evalPanValueExp.evalPanValueExps production.structs production.locals production.globals production.memory
+          production.baseAddress production.topAddress panSemBitVec64BytesInWord es
+          (some (panSemBitVec64MemoryAccess production)) with
+      | none => simp [head,tail] at evaluated
+      | some rest =>
+        simp [head,tail] at evaluated
+        subst values
+        intro found member
+        simp only [List.mem_cons] at member
+        rcases member with rfl | member
+        · apply scalar_eval_word (shape e (by simp)) production words found
+          rw [evalPanSemStateExp_64_eq_previous]
+          exact head
+        · exact ih (fun e member => shape e (by simp [member])) rest
+            (by simpa [evalPanValueExps] using tail) found member
+
+/-- The counted argument evaluator preserves the scalar word invariant. -/
+theorem scalar_counted_arguments_words {σ : Type} (scope : List VarName)
+    (expressions : List (Exp (RiscV.Word 64))) (shape : ∀ e ∈ expressions, Scalar scope e)
+    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (words : WordLocals production.locals)
+    (values : List (PanValue (RiscV.Word 64))) (cost : Nat)
+    (evaluated : evalPanValueExpsCounted production.structs production.locals production.globals production.memory
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord expressions
+      (some (panSemBitVec64MemoryAccess production)) = some (values,cost)) :
+    ∀ value ∈ values, ∃ word, value = .word word := by
+  unfold evalPanValueExpsCounted at evaluated
+  cases h : evalPanValueExps production.structs production.locals production.globals production.memory
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord expressions
+      (some (panSemBitVec64MemoryAccess production)) with
+  | none => simp [h] at evaluated
+  | some result =>
+    simp only [h,Option.map_some,Option.some.injEq,Prod.mk.injEq] at evaluated
+    obtain ⟨rfl,_⟩ := evaluated
+    exact scalar_expressions_eval_words scope expressions shape production words result h
+
 end SteppedFlapjack.Concrete

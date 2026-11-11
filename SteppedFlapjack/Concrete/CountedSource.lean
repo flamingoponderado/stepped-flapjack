@@ -179,8 +179,11 @@ theorem countedCallEntry_rel {σ : Type}
     (state : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     (rel : PanSemStateRelExec state source.toExact) (ranged : PanSemStateRelExecRanged state)
     (exceptions : InfoMap Shape) (name : FunName) (nameRanged : NameRanged name)
-    (values : List (PanValue (RiscV.Word 64))) (valuesRanged : ∀ value ∈ values, PanValueByteRanged value)
-    (valueWords : ∀ value ∈ values, ∃ word, value = .word word)
+    (scope : List VarName) (expressions : List (Exp (RiscV.Word 64)))
+    (shape : ∀ e ∈ expressions, Scalar scope e) (words : WordLocals state.locals)
+    (values : List (PanValue (RiscV.Word 64))) (cost : Nat)
+    (arguments : panValueCallArguments state.structs state.baseAddress state.topAddress panSemBitVec64BytesInWord
+      state.locals state.globals state.memory expressions (some (panSemBitVec64MemoryAccess state)) = some (values,cost))
     (codeRanged : ∀ entry, panSemCodeLookup state.code name = some entry → PanLangEntryByteRanged entry)
     (callee : Prog (RiscV.Word 64)) (calleeLocals : VarName → Option (PanValue (RiscV.Word 64)))
     (found : panValueCallTarget state.structs (some (countedContractsOfCode state.code exceptions)) name
@@ -194,6 +197,12 @@ theorem countedCallEntry_rel {σ : Type}
         (callEntryStateHOLFinite source exactLocals).toExact ∧
       PanSemStateRelExecRanged {state with clock := state.clock-1, locals := calleeLocals} ∧
       WordLocals calleeLocals := by
+  have valueWords := scalar_counted_arguments_words scope expressions shape state words values cost (by
+    simpa [panValueCallArguments] using arguments)
+  have valuesRanged : ∀ value ∈ values, PanValueByteRanged value := by
+    intro value member
+    obtain ⟨word,rfl⟩ := valueWords value member
+    simp [PanValueByteRanged]
   have correspondence := countedCallTarget_hol state source rel exceptions name nameRanged values valuesRanged codeRanged
   rw [found] at correspondence
   cases h : lookupCodeHOLFinite source.code.lookup (ofString name) (values.map panValueToHOL) with
@@ -888,14 +897,21 @@ theorem supported_counted_source {scope : List VarName} {program : Prog (RiscV.W
     (primitive : PanPrimitiveHandler (RiscV.Word 64)) (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
     (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel count : Nat)
     (result : PanValueFfiControlResult (RiscV.Word 64) σ)
+    {contracts : Option PanValueCallContracts}
     (run : evalPanValueFfiProgSteps context primitive handler production.structs functions
       production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
       production.locals production.globals production.memory production.ffi program
-      (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (result,count))
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) (contracts := contracts) = some (result,count))
     (budget : count ≤ source.clock) :
     ∃ holResult sourceFinal, source.evaluateHOLFiniteState (progToHOL program) = (holResult,sourceFinal) ∧
       CountedOutcome production result holResult sourceFinal ∧
-      controlSteps (progToHOL program) source ≤ count + countedErrorBonus result ∧ source.clock ≤ sourceFinal.clock + count :=
-  supportedBridge supported production source rel ranged words byteRanged context primitive handler functions fuel count result run budget
+      controlSteps (progToHOL program) source ≤ count + countedErrorBonus result ∧ source.clock ≤ sourceFinal.clock + count := by
+  have same := supported_counted_contract_irrel context primitive handler production.structs functions
+    production.baseAddress production.topAddress (some (panSemBitVec64MemoryAccess production)) fuel supported
+    production.locals production.globals production.memory production.ffi contracts none
+  apply supportedBridge supported production source rel ranged words byteRanged context primitive handler functions fuel count result
+  · rw [← same]
+    exact run
+  · exact budget
 
 end SteppedFlapjack.Concrete
