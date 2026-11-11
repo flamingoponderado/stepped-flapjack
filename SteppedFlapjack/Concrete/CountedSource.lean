@@ -112,7 +112,7 @@ theorem countedCallTarget_hol {σ : Type}
     | none, none => True
     | some (callee, calleeLocals), some (body, exactLocals, exactShape) =>
         ∃ returnShape, lookupInfo name (countedContractsOfCode state.code exceptions).returnShapes = some returnShape ∧
-        exactShape = shapeToHOL returnShape ∧ body = progToHOL callee ∧ ProgByteRanged callee ∧
+        exactShape = shapeToHOL returnShape ∧ ShapeByteRanged returnShape ∧ body = progToHOL callee ∧ ProgByteRanged callee ∧
         (∀ name, NameRanged name → Option.map panValueToHOL (calleeLocals name) = exactLocals.lookup (ofString name)) ∧
         (∀ name value, calleeLocals name = some value → PanValueByteRanged value)
     | _, _ => False := by
@@ -129,7 +129,7 @@ theorem countedCallTarget_hol {σ : Type}
     | some exactEntry =>
       obtain ⟨body,exactLocals,exactShape⟩ := exactEntry
       simp only [prod,h] at agree
-      refine ⟨shape,?_,agree.2.1,agree.1,agree.2.2.1,agree.2.2.2.2⟩
+      refine ⟨shape,?_,agree.2.1,agree.2.2.2.1,agree.1,agree.2.2.1,agree.2.2.2.2⟩
       simp only [countedReturnLookup,panSemTotalCodeLookup] at prod ⊢
       cases lookup : lookupPanSemCodeCall state.structs state.code name values with
       | none => simp [lookup] at prod
@@ -208,7 +208,7 @@ theorem countedCallEntry_rel {σ : Type}
       lookupCodeHOLFinite source.code.lookup (ofString name) (values.map panValueToHOL) =
         some (holBody,exactLocals,shapeToHOL returnShape) ∧
       lookupInfo name (countedContractsOfCode state.code exceptions).returnShapes = some returnShape ∧
-      holBody = progToHOL callee ∧ ProgByteRanged callee ∧
+      ShapeByteRanged returnShape ∧ holBody = progToHOL callee ∧ ProgByteRanged callee ∧
       PanSemStateRelExec {state with clock := state.clock-1, locals := calleeLocals}
         (callEntryStateHOLFinite source exactLocals).toExact ∧
       PanSemStateRelExecRanged {state with clock := state.clock-1, locals := calleeLocals} ∧
@@ -230,8 +230,8 @@ theorem countedCallEntry_rel {σ : Type}
   | some entry =>
     obtain ⟨body,exactLocals,exactShape⟩ := entry
     simp only [h] at correspondence
-    obtain ⟨returnShape,retLookup,retEq,bodyEq,bodyRanged,localsRel,localsRanged⟩ := correspondence
-    refine ⟨body,exactLocals,returnShape,exactArgs,?_,retLookup,bodyEq,bodyRanged,?_,?_,?_⟩
+    obtain ⟨returnShape,retLookup,retEq,retRanged,bodyEq,bodyRanged,localsRel,localsRanged⟩ := correspondence
+    refine ⟨body,exactLocals,returnShape,exactArgs,?_,retLookup,retRanged,bodyEq,bodyRanged,?_,?_,?_⟩
     · rw [← retEq]
     · exact rel.callEntry calleeLocals exactLocals localsRel
     · exact ⟨localsRanged,ranged.2.1,ranged.2.2⟩
@@ -943,6 +943,292 @@ private theorem whileBridge {scope : List VarName} {condition : Exp (RiscV.Word 
                 cases outcome
   intro σ production source dec rel ranged words byteRanged context primitive handler functions fuel count result run budget fuelBound codeOk
   exact loopAt fuel production source rel ranged words byteRanged context primitive handler functions count result run budget fuelBound codeOk
+
+/-- A tail call reuses the smaller-fuel bridge of its resolved callee. -/
+private theorem tailCallBridge {scope : List VarName} (name : FunName)
+    (arguments : List (Exp (RiscV.Word 64)))
+    (shape : ∀ e ∈ arguments, Scalar scope e)
+    {invariant : PanSemCodeMap (RiscV.Word 64) → List (FunName × List VarName × Prog (RiscV.Word 64)) → Prop}
+    {contracts : Option PanValueCallContracts} {limit : Nat}
+    (coherent : ∀ code functions, invariant code functions →
+      ∃ exceptions, functions = countedFunctionsOfCode code ∧
+        contracts = some (countedContractsOfCode code exceptions) ∧
+        ∀ name entry, panSemCodeLookup code name = some entry → PanLangEntryByteRanged entry)
+    (calleeBound : ∀ code functions, invariant code functions → ∀ structs name values body locals,
+      panValueCallTarget structs contracts name functions values = some (body,locals) →
+      Bridge invariant contracts limit body) :
+    Bridge invariant contracts (limit+1) (.call none name arguments) := by
+  intro σ production source dec rel ranged words byteRanged context primitive handler functions fuel count result run budget fuelBound codeOk
+  classical
+  let _ : DecidablePred source.memaddrs := fun a => Classical.propDecidable (source.memaddrs a)
+  have nameRanged : NameRanged name := byteRanged.1
+  have exprRanged : ∀ e ∈ arguments, ExpByteRanged e := byteRanged.2.1
+  obtain ⟨exceptions,funcEq,contractsEq,codeRanged⟩ := coherent production.code functions codeOk
+  subst functions
+  subst contracts
+  cases fuel with
+  | zero => simp [evalPanValueFfiProgSteps] at run
+  | succ fuel =>
+    cases fuel with
+    | zero => simp [evalPanValueFfiProgSteps,evalPanValueFfiCallSteps] at run
+    | succ fuel =>
+      simp only [evalPanValueFfiProgSteps,evalPanValueFfiCallSteps] at run
+      have argsAgree := countedArguments_hol production source rel ranged arguments exprRanged
+      cases argsRun : panValueCallArguments production.structs production.baseAddress production.topAddress
+          panSemBitVec64BytesInWord production.locals production.globals production.memory arguments
+          (some (panSemBitVec64MemoryAccess production)) with
+      | none =>
+        simp [argsRun] at run
+        obtain ⟨rfl,rfl⟩ := run
+        rw [argsRun] at argsAgree
+        have argsExact : source.evalListHOLFinite (arguments.map expToHOL) = none := by simpa using argsAgree.symm
+        apply errorLeaf production source rel ranged words (.call none name arguments) 1
+        · simp only [progToHOL]
+          rw [evaluateHOLFiniteState_call,argsExact]
+        · simp only [progToHOL]
+          rw [controlSteps.eq_def]
+          simp only [argsExact]
+      | some argPair =>
+        rcases argPair with ⟨values,argCost⟩
+        cases targetRun : panValueCallTarget production.structs
+            (some (countedContractsOfCode production.code exceptions)) name (countedFunctionsOfCode production.code) values with
+        | none =>
+          simp [argsRun,targetRun] at run
+          obtain ⟨rfl,rfl⟩ := run
+          rw [argsRun] at argsAgree
+          have argsExact : source.evalListHOLFinite (arguments.map expToHOL) = some (values.map panValueToHOL) := by
+            simpa using argsAgree.symm
+          have valuesWord := scalar_counted_arguments_words scope arguments shape production words values argCost (by
+            simpa [panValueCallArguments] using argsRun)
+          have valuesRanged : ∀ value ∈ values, PanValueByteRanged value := by
+            intro value member
+            obtain ⟨word,rfl⟩ := valuesWord value member
+            simp [PanValueByteRanged]
+          have lookup := countedCallTarget_hol production source rel exceptions name nameRanged values valuesRanged (codeRanged name)
+          rw [targetRun] at lookup
+          have lookupExact : lookupCodeHOLFinite source.code.lookup (ofString name) (values.map panValueToHOL) = none := by
+            cases h : lookupCodeHOLFinite source.code.lookup (ofString name) (values.map panValueToHOL) <;> simp_all
+          apply errorLeaf production source rel ranged words (.call none name arguments) (argCost+1)
+          · simp only [progToHOL]
+            rw [evaluateHOLFiniteState_call,argsExact]
+            simp only
+            rw [lookupExact]
+          · simp only [progToHOL]
+            rw [controlSteps.eq_def]
+            simp only [argsExact,lookupExact]
+        | some target =>
+          obtain ⟨callee,calleeLocals⟩ := target
+          obtain ⟨holBody,exactLocals,returnShape,argsExact,lookupExact,returnLookup,returnRanged,bodyEq,bodyRanged,
+            entryRel,entryRanged,entryWords⟩ := countedCallEntry_rel production source rel ranged exceptions
+              name nameRanged scope arguments shape exprRanged words values argCost argsRun (codeRanged name)
+              callee calleeLocals targetRun
+          let entry := {production with clock := production.clock-1, locals := calleeLocals}
+          let exactEntry := callEntryStateHOLFinite source exactLocals
+          let _ : DecidablePred exactEntry.memaddrs := dec
+          have entryRel' : PanSemStateRelExec entry exactEntry.toExact := entryRel
+          have entryRanged' : PanSemStateRelExecRanged entry := entryRanged
+          have calleeBridge : Bridge invariant (some (countedContractsOfCode production.code exceptions)) limit callee := calleeBound production.code (countedFunctionsOfCode production.code) codeOk
+            production.structs name values callee calleeLocals targetRun
+          cases bodyRun : evalPanValueFfiProgSteps context primitive handler production.structs
+              (countedFunctionsOfCode production.code) production.baseAddress production.topAddress
+              panSemBitVec64BytesInWord fuel calleeLocals production.globals production.memory production.ffi callee
+              (memoryAccess := some (panSemBitVec64MemoryAccess production))
+              (contracts := some (countedContractsOfCode production.code exceptions)) with
+          | none => simp [argsRun,targetRun,bodyRun] at run
+          | some pair =>
+            obtain ⟨bodyResult,bodyCost⟩ := pair
+            cases bodyResult with
+            | normal l g m f =>
+              simp [argsRun,targetRun,bodyRun] at run
+              obtain ⟨rfl,rfl⟩ := run
+              have positive : source.clock ≠ 0 := by omega
+              have entryRun : evalPanValueFfiProgSteps context primitive handler entry.structs
+                  (countedFunctionsOfCode entry.code) entry.baseAddress entry.topAddress panSemBitVec64BytesInWord
+                  fuel entry.locals entry.globals entry.memory entry.ffi callee
+                  (memoryAccess := some (panSemBitVec64MemoryAccess entry))
+                  (contracts := some (countedContractsOfCode production.code exceptions)) =
+                    some (.normal l g m f,bodyCost) := by
+                simpa [entry,panSemBitVec64MemoryAccess] using bodyRun
+              obtain ⟨holResult,final,hol,outcome,visits,clock⟩ := calleeBridge entry exactEntry entryRel' entryRanged'
+                entryWords bodyRanged context primitive handler (countedFunctionsOfCode entry.code) fuel bodyCost
+                (.normal l g m f) entryRun (by simp [exactEntry,callEntryStateHOLFinite]; omega) (by omega) codeOk
+              cases outcome with
+              | normal l g m f final nextRel nextRanged nextWords =>
+                dsimp [exactEntry] at hol visits clock
+                refine ⟨some .error,final,?_,?_,?_,?_⟩
+                · simp only [progToHOL]
+                  rw [evaluateHOLFiniteState_call,argsExact]
+                  simp only
+                  rw [lookupExact]
+                  simp [positive,bodyEq,hol]
+                · exact .error l g m f final (by simpa [entry] using nextRel) (by simpa [entry] using nextRanged) nextWords
+                · simp only [progToHOL]
+                  rw [controlSteps_tailCall _ _ _ _ _ _ _ argsExact lookupExact positive]
+                  simp only [bodyEq]
+                  simp only [countedErrorBonus] at visits ⊢
+                  omega
+                · simp [callEntryStateHOLFinite] at clock
+                  omega
+            | returned l g m f returnedValues =>
+              have costEq : count = argCost + bodyCost + 1 := by
+                cases hv : panValueReturnValid production.structs
+                    (some (countedContractsOfCode production.code exceptions)) name returnedValues <;>
+                  simp [argsRun,targetRun,bodyRun,hv] at run <;> omega
+              have positive : source.clock ≠ 0 := by omega
+              have entryRun : evalPanValueFfiProgSteps context primitive handler entry.structs
+                  (countedFunctionsOfCode entry.code) entry.baseAddress entry.topAddress panSemBitVec64BytesInWord
+                  fuel entry.locals entry.globals entry.memory entry.ffi callee
+                  (memoryAccess := some (panSemBitVec64MemoryAccess entry))
+                  (contracts := some (countedContractsOfCode production.code exceptions)) =
+                    some (.returned l g m f returnedValues,bodyCost) := by
+                simpa [entry,panSemBitVec64MemoryAccess] using bodyRun
+              obtain ⟨holResult,final,hol,outcome,visits,clock⟩ := calleeBridge entry exactEntry entryRel' entryRanged'
+                entryWords bodyRanged context primitive handler (countedFunctionsOfCode entry.code) fuel bodyCost
+                (.returned l g m f returnedValues) entryRun (by simp [exactEntry,callEntryStateHOLFinite]; omega) (by omega) codeOk
+              cases outcome with
+              | returned l g m f word final nextRel nextRanged nextWords =>
+                dsimp [exactEntry] at hol visits clock
+                have valid : panValueReturnValid production.structs
+                    (some (countedContractsOfCode production.code exceptions)) name [.word word] =
+                    shapeEqHOL (shapeOfHOLExact (.val (.word word))) (shapeToHOL returnShape) := by
+                  simp only [panValueReturnValid,returnLookup]
+                  simp only [panValueShape,shapeOfHOLExact]
+                  simpa [shapeToHOL] using panShapeMatches_eq_shapeEqHOL Shape.one returnShape (by simp [Flapjack.Pancake.PanLang.ShapeByteRanged]) returnRanged
+                cases shapeOk : shapeEqHOL (shapeOfHOLExact (.val (.word word))) (shapeToHOL returnShape) with
+                | false =>
+                  have rejected : panValueReturnValid production.structs
+                      (some (countedContractsOfCode production.code exceptions)) name [.word word] = false := valid.trans shapeOk
+                  simp [argsRun,targetRun,bodyRun,rejected] at run
+                  obtain ⟨rfl,rfl⟩ := run
+                  refine ⟨some .error,final,?_,?_,?_,?_⟩
+                  · simp only [progToHOL]
+                    rw [evaluateHOLFiniteState_call,argsExact]
+                    simp only
+                    rw [lookupExact]
+                    simp [positive,bodyEq,hol,shapeOk]
+                  · exact .error l g m f final (by simpa [entry] using nextRel) (by simpa [entry] using nextRanged) nextWords
+                  · simp only [progToHOL]
+                    rw [controlSteps_tailCall _ _ _ _ _ _ _ argsExact lookupExact positive]
+                    simp only [bodyEq,countedErrorBonus] at visits ⊢
+                    omega
+                  · simp [callEntryStateHOLFinite] at clock
+                    omega
+                | true =>
+                  have accepted : panValueReturnValid production.structs
+                      (some (countedContractsOfCode production.code exceptions)) name [.word word] = true := valid.trans shapeOk
+                  simp [argsRun,targetRun,bodyRun,accepted] at run
+                  obtain ⟨rfl,rfl⟩ := run
+                  refine ⟨some (.returned (.val (.word word))),emptyLocalsHOLFinite final,?_,?_,?_,?_⟩
+                  · simp only [progToHOL]
+                    rw [evaluateHOLFiniteState_call,argsExact]
+                    simp only
+                    rw [lookupExact]
+                    simp [positive,bodyEq,hol,shapeOk]
+                  · apply CountedOutcome.returned
+                    · simpa [entry,emptyLocalsHOLFinite,emptyLocalsHOLExact,PanSemStateFiniteExact.toExact] using nextRel.emptyLocals
+                    · exact ⟨by simp,nextRanged.2.1,nextRanged.2.2⟩
+                    · exact wordLocals_empty
+                  · simp only [progToHOL]
+                    rw [controlSteps_tailCall _ _ _ _ _ _ _ argsExact lookupExact positive]
+                    simp only [bodyEq,countedErrorBonus] at visits ⊢
+                    omega
+                  · simp [callEntryStateHOLFinite] at clock
+                    simpa [emptyLocalsHOLFinite] using (show source.clock ≤ final.clock + (argCost+bodyCost+1) by omega)
+            | error l g m f =>
+              simp [argsRun,targetRun,bodyRun] at run
+              obtain ⟨rfl,rfl⟩ := run
+              have positive : source.clock ≠ 0 := by omega
+              have entryRun : evalPanValueFfiProgSteps context primitive handler entry.structs
+                  (countedFunctionsOfCode entry.code) entry.baseAddress entry.topAddress panSemBitVec64BytesInWord
+                  fuel entry.locals entry.globals entry.memory entry.ffi callee
+                  (memoryAccess := some (panSemBitVec64MemoryAccess entry))
+                  (contracts := some (countedContractsOfCode production.code exceptions)) =
+                    some (.error l g m f,bodyCost) := by
+                simpa [entry,panSemBitVec64MemoryAccess] using bodyRun
+              obtain ⟨holResult,final,hol,outcome,visits,clock⟩ := calleeBridge entry exactEntry entryRel' entryRanged'
+                entryWords bodyRanged context primitive handler (countedFunctionsOfCode entry.code) fuel bodyCost
+                (.error l g m f) entryRun (by simp [exactEntry,callEntryStateHOLFinite]; omega) (by omega) codeOk
+              cases outcome with
+              | error l g m f final nextRel nextRanged nextWords =>
+                dsimp [exactEntry] at hol visits clock
+                refine ⟨some .error,emptyLocalsHOLFinite final,?_,?_,?_,?_⟩
+                · simp only [progToHOL]
+                  rw [evaluateHOLFiniteState_call,argsExact]
+                  simp only
+                  rw [lookupExact]
+                  simp [positive,bodyEq,hol]
+                · apply CountedOutcome.error
+                  · simpa [entry,emptyLocalsHOLFinite,emptyLocalsHOLExact,PanSemStateFiniteExact.toExact] using nextRel.emptyLocals
+                  · exact ⟨by simp,nextRanged.2.1,nextRanged.2.2⟩
+                  · exact wordLocals_empty
+                · simp only [progToHOL]
+                  rw [controlSteps_tailCall _ _ _ _ _ _ _ argsExact lookupExact positive]
+                  simp only [bodyEq]
+                  simp only [countedErrorBonus] at visits ⊢
+                  omega
+                · simp [callEntryStateHOLFinite] at clock
+                  simpa [emptyLocalsHOLFinite] using (show source.clock ≤ final.clock + (argCost+bodyCost+1) by omega)
+            | raised l g m f e v =>
+              by_cases exceptionOk : panValueExceptionValid production.structs
+                  (some (countedContractsOfCode production.code exceptions)) e v = true
+              · by_cases payloadOk : panValuePayloadWithinLimit production.structs v = true
+                · simp [argsRun,targetRun,bodyRun,exceptionOk,payloadOk] at run
+                  obtain ⟨rfl,rfl⟩ := run
+                  have entryRun : evalPanValueFfiProgSteps context primitive handler entry.structs
+                      (countedFunctionsOfCode entry.code) entry.baseAddress entry.topAddress panSemBitVec64BytesInWord
+                      fuel entry.locals entry.globals entry.memory entry.ffi callee
+                      (memoryAccess := some (panSemBitVec64MemoryAccess entry))
+                      (contracts := some (countedContractsOfCode production.code exceptions)) =
+                        some (.raised l g m f e v,bodyCost) := by
+                    simpa [entry,panSemBitVec64MemoryAccess] using bodyRun
+                  obtain ⟨_,_,_,outcome,_,_⟩ := calleeBridge entry exactEntry entryRel' entryRanged'
+                    entryWords bodyRanged context primitive handler (countedFunctionsOfCode entry.code) fuel bodyCost
+                    (.raised l g m f e v) entryRun (by simp [exactEntry,callEntryStateHOLFinite]; omega) (by omega) codeOk
+                  cases outcome
+                · simp [argsRun,targetRun,bodyRun,exceptionOk,payloadOk] at run
+              · simp [argsRun,targetRun,bodyRun,exceptionOk] at run
+            | broke l g m f =>
+              simp [argsRun,targetRun,bodyRun] at run
+              obtain ⟨rfl,rfl⟩ := run
+              have entryRun : evalPanValueFfiProgSteps context primitive handler entry.structs
+                  (countedFunctionsOfCode entry.code) entry.baseAddress entry.topAddress panSemBitVec64BytesInWord
+                  fuel entry.locals entry.globals entry.memory entry.ffi callee
+                  (memoryAccess := some (panSemBitVec64MemoryAccess entry))
+                  (contracts := some (countedContractsOfCode production.code exceptions)) =
+                    some (.broke l g m f,bodyCost) := by
+                simpa [entry,panSemBitVec64MemoryAccess] using bodyRun
+              obtain ⟨_,_,_,outcome,_,_⟩ := calleeBridge entry exactEntry entryRel' entryRanged'
+                entryWords bodyRanged context primitive handler (countedFunctionsOfCode entry.code) fuel bodyCost
+                (.broke l g m f) entryRun (by simp [exactEntry,callEntryStateHOLFinite]; omega) (by omega) codeOk
+              cases outcome
+            | continued l g m f =>
+              simp [argsRun,targetRun,bodyRun] at run
+              obtain ⟨rfl,rfl⟩ := run
+              have entryRun : evalPanValueFfiProgSteps context primitive handler entry.structs
+                  (countedFunctionsOfCode entry.code) entry.baseAddress entry.topAddress panSemBitVec64BytesInWord
+                  fuel entry.locals entry.globals entry.memory entry.ffi callee
+                  (memoryAccess := some (panSemBitVec64MemoryAccess entry))
+                  (contracts := some (countedContractsOfCode production.code exceptions)) =
+                    some (.continued l g m f,bodyCost) := by
+                simpa [entry,panSemBitVec64MemoryAccess] using bodyRun
+              obtain ⟨_,_,_,outcome,_,_⟩ := calleeBridge entry exactEntry entryRel' entryRanged'
+                entryWords bodyRanged context primitive handler (countedFunctionsOfCode entry.code) fuel bodyCost
+                (.continued l g m f) entryRun (by simp [exactEntry,callEntryStateHOLFinite]; omega) (by omega) codeOk
+              cases outcome
+            | finalFfi l g m f e =>
+              simp [argsRun,targetRun,bodyRun] at run
+              obtain ⟨rfl,rfl⟩ := run
+              have entryRun : evalPanValueFfiProgSteps context primitive handler entry.structs
+                  (countedFunctionsOfCode entry.code) entry.baseAddress entry.topAddress panSemBitVec64BytesInWord
+                  fuel entry.locals entry.globals entry.memory entry.ffi callee
+                  (memoryAccess := some (panSemBitVec64MemoryAccess entry))
+                  (contracts := some (countedContractsOfCode production.code exceptions)) =
+                    some (.finalFfi l g m f e,bodyCost) := by
+                simpa [entry,panSemBitVec64MemoryAccess] using bodyRun
+              obtain ⟨_,_,_,outcome,_,_⟩ := calleeBridge entry exactEntry entryRel' entryRanged'
+                entryWords bodyRanged context primitive handler (countedFunctionsOfCode entry.code) fuel bodyCost
+                (.finalFfi l g m f e) entryRun (by simp [exactEntry,callEntryStateHOLFinite]; omega) (by omega) codeOk
+              cases outcome
 
 private theorem supportedBridge {invariant : PanSemCodeMap (RiscV.Word 64) → List (FunName × List VarName × Prog (RiscV.Word 64)) → Prop} {contracts : Option PanValueCallContracts} (limit : Nat) {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : SupportedIn scope program) : Bridge invariant contracts limit program := by
