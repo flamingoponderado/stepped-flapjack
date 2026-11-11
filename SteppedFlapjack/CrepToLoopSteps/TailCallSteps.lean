@@ -2,6 +2,7 @@ import SteppedFlapjack.CrepToLoopSteps.InlineEntry
 import SteppedFlapjack.CrepToLoopSteps.DirectExpressionEval
 import SteppedFlapjack.LoopSteps.Defs
 import SteppedFlapjack.LoopLiveSteps.Consumption
+import SteppedFlapjack.LoopLiveSteps.TailEntryCode
 import Flapjack.Pancake.CrepToLoop.StateRel
 import SteppedFlapjack.CrepToLoopSteps.ConditionPrefix
 import SteppedFlapjack.CrepToLoopSteps.WordSimpSequence
@@ -940,7 +941,7 @@ theorem compiledScalarTail_bound_from_body {width : Nat} [NeZero width] {σ : Ty
     (bodyBound : ∀ post : LoopSemStateFiniteExact width σ,
       crepToLoopStateRelExact source post → crepToLoopMemRelHOLExact source.memory post.memory source.memaddrs →
       crepToLoopGlobalsRelHOLExact source.globals post.globals → crepToLoopCodeRelExact ctxt source.code post.code →
-      source.clock ≠ 0 → LoopSteps.steps
+      post.code = target.code → source.clock ≠ 0 → LoopSteps.steps
       (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
         (listToNumSetHOLExact (List.range params.length)) body)
       {decClock post with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))} ≤
@@ -952,6 +953,8 @@ theorem compiledScalarTail_bound_from_body {width : Nat} [NeZero width] {σ : Ty
         max (prefixCost + 2*args.length+3) B * CrepSteps.steps (.call none name args) source := by
   obtain ⟨extra,post,prefixRun,assign,get,subset,postState,postMem,postGlobals,postCode,postLocals,extraBound,visits⟩ :=
     compiledScalarCall_reaches_call ctxt live name none args shape source values target hargs stateRel memRel globalsRel codeRel localsRel
+  have postCodeEq : post.code = target.code := by
+    simpa using SteppedFlapjack.LoopLiveSteps.evaluate_code _ _ post none prefixRun
   dsimp only at visits get extraBound
   let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
   let regs := genTemps comp.2.2.1 comp.2.1.length
@@ -981,7 +984,7 @@ theorem compiledScalarTail_bound_from_body {width : Nat} [NeZero width] {σ : Ty
     change LoopSteps.steps (compileHOLExact ctxt live (.call none name args)) _ ≤
       _ + _ + _ + LoopSteps.steps (.call none (some (findLabExact ctxt name)) regs none) middle at visits
     rw [callCount] at visits
-    have bodyVisits := bodyBound post postState postMem postGlobals postCode clock
+    have bodyVisits := bodyBound post postState postMem postGlobals postCode postCodeEq clock
     simp only [middle,decClock] at visits bodyVisits
     rw [sourceCount]
     have factorA := Nat.le_max_left (LoopSteps.structuralWeight (loopNestedSeqHOL comp.1)+2*args.length+3) B
@@ -1005,7 +1008,7 @@ theorem compiledScalarReturning_bound_from_body {width : Nat} [NeZero width] {σ
     (bodyBound : ∀ post : LoopSemStateFiniteExact width σ,
       crepToLoopStateRelExact source post → crepToLoopMemRelHOLExact source.memory post.memory source.memaddrs →
       crepToLoopGlobalsRelHOLExact source.globals post.globals → crepToLoopCodeRelExact ctxt source.code post.code →
-      source.clock ≠ 0 → LoopSteps.steps
+      post.code = target.code → source.clock ≠ 0 → LoopSteps.steps
       (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
         (listToNumSetHOLExact (List.range params.length)) body)
       {decClock post with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))} ≤
@@ -1017,6 +1020,8 @@ theorem compiledScalarReturning_bound_from_body {width : Nat} [NeZero width] {σ
         max (prefixCost + 2*args.length+4) B * CrepSteps.steps (.call (some (names,none)) name args) source := by
   obtain ⟨extra,st,prefixRun,assign,get,subset,postState,postMem,postGlobals,postCode,postLocals,extraBound,visits⟩ :=
     compiledScalarCall_reaches_call ctxt live name (some names) args shape source values target hargs stateRel memRel globalsRel codeRel localsRel
+  have postCodeEq : st.code = target.code := by
+    simpa using SteppedFlapjack.LoopLiveSteps.evaluate_code _ _ st none prefixRun
   dsimp only at visits get extraBound
   simp only [mapped,Option.getD] at visits
   let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
@@ -1067,7 +1072,7 @@ theorem compiledScalarReturning_bound_from_body {width : Nat} [NeZero width] {σ
     change LoopSteps.steps (compileHOLExact ctxt live (.call (some (names,none)) name args)) _ ≤
       _ + _ + _ + LoopSteps.steps (.call (some (returnNames,live)) (some (findLabExact ctxt name)) regs
         (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) middle at visits
-    have bodyVisits := bodyBound st postState postMem postGlobals postCode clock
+    have bodyVisits := bodyBound st postState postMem postGlobals postCode postCodeEq clock
     simp only [cut,middle,decClock] at callBound bodyVisits
     rw [sourceCount]
     have factorA := Nat.le_max_left (LoopSteps.structuralWeight (loopNestedSeqHOL comp.1)+2*args.length+4) B

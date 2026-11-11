@@ -1,4 +1,5 @@
 import SteppedFlapjack.LoopLiveSteps.TailEntryCode
+import SteppedFlapjack.LoopLiveSteps.TailEntryBound
 import SteppedFlapjack.LoopLiveSteps.ExecutableBranch
 
 /-! Whole tail-entry bounds from code shape and clock consumption. -/
@@ -914,6 +915,119 @@ theorem compiledReturningCall_optimised_bound_from_body {σ : Type}
     body (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}) B loc (List.range params.length)
     (by simpa [decClock] using table) (by simpa [decClock,ocompileHOLExact] using hcode) run complete (bodyBound clock)
   simpa [ocompileHOLExact,decClock] using h.2
+
+/-- A scalar-argument tail call lifts the unoptimized callee induction through
+the actual optimizer and the whole Loop code table. -/
+theorem compiledScalarTail_optimised_bound_from_body {σ : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : Flapjack.Basis.Pure.MlString.MlString)
+    (args : List (CrepExpHOL 64)) (shape : ∀ e ∈ args, CompiledScalar e)
+    (source : CrepSemHOLState 64 σ) (target : LoopSemStateFiniteExact 64 σ)
+    (values : List (HolWordLab 64)) (params : List Nat) (body : CrepProgHOL 64) (B : Nat)
+    (hargs : args.mapM (evalCrepSemHOLExp source) = some values)
+    (found : source.code.lookup name = some (params,body))
+    (arity : params.length = values.length) (distinct : params.Nodup)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
+    (table : LoopTableSupported target.code)
+    (bodyShape : SimpleLoopSequenceSource
+      (compileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+        (listToNumSetHOLExact (List.range params.length)) body))
+    (bodyComplete : ∀ st : LoopSemStateFiniteExact 64 σ,
+      crepToLoopStateRelExact source st → crepToLoopMemRelHOLExact source.memory st.memory source.memaddrs →
+      crepToLoopGlobalsRelHOLExact source.globals st.globals → crepToLoopCodeRelExact ctxt source.code st.code →
+      st.code = target.code → source.clock ≠ 0 → CompleteLoopResult
+      (evaluate (compileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+        (listToNumSetHOLExact (List.range params.length)) body)
+        {decClock st with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))}).1)
+    (bodyBound : ∀ st : LoopSemStateFiniteExact 64 σ,
+      crepToLoopStateRelExact source st → crepToLoopMemRelHOLExact source.memory st.memory source.memaddrs →
+      crepToLoopGlobalsRelHOLExact source.globals st.globals → crepToLoopCodeRelExact ctxt source.code st.code →
+      st.code = target.code → source.clock ≠ 0 → LoopSteps.steps
+      (compileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+        (listToNumSetHOLExact (List.range params.length)) body)
+      {decClock st with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))} ≤
+      B * CrepSteps.steps body (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)})) :
+    let prefixCost := LoopSteps.structuralWeight (loopNestedSeqHOL
+      (compileExpsHOLExact ctxt (ctxt.vmax+1) live args).1)
+    ∃ extra, extra ≤ prefixCost ∧
+      LoopSteps.steps (compileHOLExact ctxt live (.call none name args)) {target with clock := target.clock+extra} ≤
+        max (prefixCost + 2*args.length+3) ((loopCodeWeight target.code+2)*(2*B+1)) * CrepSteps.steps (.call none name args) source := by
+  apply compiledScalarTail_bound_from_body ctxt live name args shape source target values params body
+    ((loopCodeWeight target.code+2)*(2*B+1)) hargs found arity distinct stateRel memRel globalsRel codeRel localsRel
+  intro st stRel stMem stGlobals stCode same clock
+  rcases run : evaluate (compileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+    (listToNumSetHOLExact (List.range params.length)) body)
+    {decClock st with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))} with ⟨result,post⟩
+  have complete := bodyComplete st stRel stMem stGlobals stCode same clock
+  rw [run] at complete
+  obtain ⟨loc,len,hlab,hlen,hcode⟩ := stCode.2 name params body found
+  subst len
+  have h := optimise_callee_crep_bound _ bodyShape
+    ({decClock st with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))}) post result
+    body (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}) B loc (List.range params.length)
+    (by simpa [decClock,same] using table) (by simpa [decClock,ocompileHOLExact] using hcode) run complete
+    (bodyBound st stRel stMem stGlobals stCode same clock)
+  simpa [ocompileHOLExact,decClock,same] using h.2
+/-- A scalar-argument returning call lifts the unoptimized callee induction through
+the actual optimizer and the whole Loop code table. -/
+theorem compiledScalarReturning_optimised_bound_from_body {σ : Type}
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : Flapjack.Basis.Pure.MlString.MlString)
+    (args : List (CrepExpHOL 64)) (shape : ∀ e ∈ args, CompiledScalar e)
+    (names returnNames : List Nat) (mapped : names.mapM ctxt.vars.lookup = some returnNames)
+    (source : CrepSemHOLState 64 σ) (target : LoopSemStateFiniteExact 64 σ)
+    (values : List (HolWordLab 64)) (params : List Nat) (body : CrepProgHOL 64) (B : Nat)
+    (hargs : args.mapM (evalCrepSemHOLExp source) = some values)
+    (found : source.code.lookup name = some (params,body))
+    (arity : params.length = values.length) (distinct : params.Nodup) (namesDistinct : names.Nodup)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
+    (table : LoopTableSupported target.code)
+    (bodyShape : SimpleLoopSequenceSource
+      (compileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+        (listToNumSetHOLExact (List.range params.length)) body))
+    (bodyComplete : ∀ st : LoopSemStateFiniteExact 64 σ,
+      crepToLoopStateRelExact source st → crepToLoopMemRelHOLExact source.memory st.memory source.memaddrs →
+      crepToLoopGlobalsRelHOLExact source.globals st.globals → crepToLoopCodeRelExact ctxt source.code st.code →
+      st.code = target.code → source.clock ≠ 0 → CompleteLoopResult
+      (evaluate (compileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+        (listToNumSetHOLExact (List.range params.length)) body)
+        {decClock st with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))}).1)
+    (bodyBound : ∀ st : LoopSemStateFiniteExact 64 σ,
+      crepToLoopStateRelExact source st → crepToLoopMemRelHOLExact source.memory st.memory source.memaddrs →
+      crepToLoopGlobalsRelHOLExact source.globals st.globals → crepToLoopCodeRelExact ctxt source.code st.code →
+      st.code = target.code → source.clock ≠ 0 → LoopSteps.steps
+      (compileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+        (listToNumSetHOLExact (List.range params.length)) body)
+      {decClock st with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))} ≤
+      B * CrepSteps.steps body (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)})) :
+    let prefixCost := LoopSteps.structuralWeight (loopNestedSeqHOL
+      (compileExpsHOLExact ctxt (ctxt.vmax+1) live args).1)
+    ∃ extra, extra ≤ prefixCost ∧
+      LoopSteps.steps (compileHOLExact ctxt live (.call (some (names,none)) name args)) {target with clock := target.clock+extra} ≤
+        max (prefixCost + 2*args.length+4) ((loopCodeWeight target.code+2)*(2*B+1)) * CrepSteps.steps (.call (some (names,none)) name args) source := by
+  apply compiledScalarReturning_bound_from_body ctxt live name args shape names returnNames mapped source target values params body
+    ((loopCodeWeight target.code+2)*(2*B+1)) hargs found arity distinct namesDistinct stateRel memRel globalsRel codeRel localsRel
+  intro st stRel stMem stGlobals stCode same clock
+  rcases run : evaluate (compileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+    (listToNumSetHOLExact (List.range params.length)) body)
+    {decClock st with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))} with ⟨result,post⟩
+  have complete := bodyComplete st stRel stMem stGlobals stCode same clock
+  rw [run] at complete
+  obtain ⟨loc,len,hlab,hlen,hcode⟩ := stCode.2 name params body found
+  subst len
+  have h := optimise_callee_crep_bound _ bodyShape
+    ({decClock st with locals := sptFromAList ((List.range params.length).zip (values.map wlabWlocExact))}) post result
+    body (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}) B loc (List.range params.length)
+    (by simpa [decClock,same] using table) (by simpa [decClock,ocompileHOLExact] using hcode) run complete
+    (bodyBound st stRel stMem stGlobals stCode same clock)
+  simpa [ocompileHOLExact,decClock,same] using h.2
+
 
 /-- Every table entry has the global control-node bound. -/
 theorem loopTable_entry_bound (code : Spt (List Nat × HolLoopProg width))

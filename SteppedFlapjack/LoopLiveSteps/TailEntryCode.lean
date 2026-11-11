@@ -1,9 +1,9 @@
-import SteppedFlapjack.LoopLiveSteps.TailEntryBound
+import SteppedFlapjack.LoopSteps.Defs
 
 /-! Loop evaluation preserves its code table, including across nested calls. -/
 namespace SteppedFlapjack.LoopLiveSteps
 open Flapjack Flapjack.LoopSemStateFiniteExact
-open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.LoopSteps
+open SteppedFlapjack.LoopSteps
 variable {width : Nat} [NeZero width] {F : Type}
 
 /-- A result cut never changes the Loop code table. -/

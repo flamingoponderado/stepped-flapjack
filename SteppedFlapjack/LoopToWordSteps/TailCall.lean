@@ -1,5 +1,6 @@
 import SteppedFlapjack.LoopToWordSteps.LoopProgram
 import SteppedFlapjack.LoopLiveSteps.TailEntryCode
+import SteppedFlapjack.LoopLiveSteps.TailEntryBound
 import Flapjack.Pancake.LoopToWord.Proofs.CompileCorrect.Call.TailCall
 
 /-! Quantitative Loop-to-Word simulation for direct zero-argument tail calls. -/
