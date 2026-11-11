@@ -12,9 +12,50 @@ open Flapjack.LoopSemStateFiniteExact Flapjack.WordSemStateFiniteExact
 open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.WordToWord
 open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 
+/-- A simplified table retains supported bodies when the original table does. -/
+theorem simpTable_globalSupported
+    (source target : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (rel : PanSimp.CodeRel source target) (factor : Nat) (table : SimpVisits.SimpTableSupported source factor) :
+    GlobalTableSupported target := by
+  intro name values body locals rsh targetFound
+  have lookup := PanSimp.lookupCodeRel source target rel name values
+  rw [targetFound] at lookup
+  cases found : lookupCodeHOLFinite source.lookup name values with
+  | none => simp [found] at lookup
+  | some entry =>
+    obtain ⟨original,originalLocals,originalShape⟩ := entry
+    simp only [found,Option.map_some,Option.some.injEq,Prod.mk.injEq] at lookup
+    obtain ⟨bodyEq,localsEq,shapeEq⟩ := lookup
+    subst locals
+    subst rsh
+    obtain ⟨scope,program,originalEq,supported,_⟩ := table name values original originalLocals originalShape found
+    refine ⟨scope,panSimpProg program,?_,callSupported_panSimp supported⟩
+    rw [originalEq,callSupported_panSimp_hol supported] at bodyEq
+    exact bodyEq
+
+/-- Global lowering preserves the run and visit count of a simplified call-aware body. -/
+private theorem callSupported_simplified_globalRun {scope : List VarName} {σ : Type}
+    {program : Prog (RiscV.Word 64)} (supported : CallSupportedIn scope program)
+    (globals : PanGlobalsContextExact 64) (source sourceFinal target : PanSemStateFiniteExact 64 σ)
+    (result : Option (PanSemResultExact 64)) (table : GlobalTableSupported source.code)
+    (run : source.evaluateHOLFiniteState (progToHOL (panSimpProg program)) = (result,sourceFinal))
+    (nonerror : result ≠ some .error) (rel : panGlobalsStateRelHOLExact true globals source target) :
+    ∃ targetFinal,
+      target.evaluateHOLFiniteState (progToHOL (panSimpProg program)) = (result,targetFinal) ∧
+      controlSteps (progToHOL (panSimpProg program)) target = controlSteps (progToHOL (panSimpProg program)) source ∧
+      targetFinal.ffi = sourceFinal.ffi := by
+  have shape := callSupported_panSimp supported
+  obtain ⟨targetFinal,targetRun,postRel⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL
+    (progToHOL (panSimpProg program)) source result globals target sourceFinal ⟨rel,run,nonerror⟩
+  rw [callSupportedIn_globals_fixed shape globals] at targetRun
+  have visits := callSupported_globals_control shape globals source sourceFinal target result table run nonerror rel
+  rcases postRel with ⟨_,_,_,_,_,_,_,_,_,_,_,_,_,ffi,_,_⟩
+  exact ⟨targetFinal,targetRun,visits,ffi.symm⟩
+
+
 /-- A counted source return reaches the simplified body and related function
   table within a concrete source-derived visit bound. -/
-theorem countedCalls_simplifiedVisits {scope : List VarName} {program : Prog (RiscV.Word 64)}
+private theorem countedCalls_simplifiedVisits {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : CallSupportedIn scope program) {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
@@ -57,6 +98,50 @@ theorem countedCalls_simplifiedVisits {scope : List VarName} {program : Prog (Ri
       simpa using congrArg (fun st : PanSemStateFiniteExact 64 σ => st.ffi) targetRel.1
     refine ⟨sourceFinal,targetFinal,sourceRun,targetRun,?_,ffi,finalRel.2.2.2.2.2.2.2.2.2.2.1⟩
     exact cost.trans (Nat.add_le_add_right (Nat.mul_le_mul_left factor original) _)
+
+/-- A counted source return reaches the globally lowered body with a source-derived visit bound. -/
+theorem countedCalls_simplifiedGlobalVisits {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
+    [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
+    (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
+    (byteRanged : ProgByteRanged program)
+    (codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry)
+    (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
+      ∃ scope, CallSupportedIn scope body)
+    (targetCode : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (codeRel : PanSimp.CodeRel source.code targetCode) (factor : Nat) (positive : 1 ≤ factor)
+    (table : SimpVisits.SimpTableSupported source.code factor)
+    (globals : PanGlobalsContextExact 64) (lower : PanSemStateFiniteExact 64 σ)
+    (globalRel : panGlobalsStateRelHOLExact true globals {source with code := targetCode} lower)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ) (exnContracts : InfoMap Shape) (fuel count : Nat)
+    (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))
+    (postMemory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (postFfi : FfiState σ) (value : BitVec 64)
+    (run : evalPanValueFfiProgSteps context primitive handler production.structs (countedFunctionsOfCode production.code)
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+      production.locals production.globals production.memory production.ffi program
+      (memoryAccess := some (panSemBitVec64MemoryAccess production))
+      (contracts := some (countedContractsOfCode production.code exnContracts)) =
+        some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
+    (budget : count ≤ source.clock) :
+    ∃ sourceFinal simpFinal lowerFinal,
+      source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word value))),sourceFinal) ∧
+      ({source with code := targetCode} : PanSemStateFiniteExact 64 σ).evaluateHOLFiniteState
+        (progToHOL (panSimpProg program)) = (some (.returned (.val (.word value))),simpFinal) ∧
+      lower.evaluateHOLFiniteState (progToHOL (panSimpProg program)) = (some (.returned (.val (.word value))),lowerFinal) ∧
+      controlSteps (progToHOL (panSimpProg program)) lower ≤
+        factor * count + SimpVisits.hw (progToHOL (panSimpProg program)) ∧
+      lowerFinal.ffi = sourceFinal.ffi ∧ FfiStateRel postFfi sourceFinal.ffi := by
+  obtain ⟨sourceFinal,simpFinal,sourceRun,simpRun,bound,ffi,ffiRel⟩ := countedCalls_simplifiedVisits
+    supported production source rel ranged words byteRanged codeRanged codeShape targetCode codeRel factor positive table
+    context primitive handler exnContracts fuel count postLocals postGlobals postMemory postFfi value run budget
+  have supportedTable := simpTable_globalSupported source.code targetCode codeRel factor table
+  obtain ⟨lowerFinal,lowerRun,cost,lowerFfi⟩ := callSupported_simplified_globalRun supported globals
+    {source with code := targetCode} simpFinal lower (some (.returned (.val (.word value))))
+    supportedTable simpRun (by simp) globalRel
+  exact ⟨sourceFinal,simpFinal,lowerFinal,sourceRun,simpRun,lowerRun,by rw [cost]; exact bound,lowerFfi.trans ffi,ffiRel⟩
+
 
 /-- A call-aware counted source return composes with the actual declaration
 frontend, carrying the source count into the Crep visit bound. -/
