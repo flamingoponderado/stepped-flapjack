@@ -129,6 +129,72 @@ theorem loopTable_correct_with_steps {width : Nat} [NeZero width] {C F : Type}
         exact ih body {cut with locals := env} (Prod.Lex.left _ _ small) (table loc params body lookup) same
   exact key _ p s rfl shape table
 
+section FrontendBound
+open Flapjack.Pancake.PanLang Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
+open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps
+
+/-- The concrete frontend and whole-table Loop bounds compose with the sixfold Word simulation. -/
+theorem callFrontend_word_explicit {width : Nat} [NeZero width] {C σ : Type}
+    (panCtxt : PanToCrepContextExact width) (p : ProgHOL width) (shape : CallFrontend panCtxt p)
+    (programs : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × CrepProgHOL width))
+    (sources : ∀ row ∈ programs, ∃ (ctx : PanToCrepContextExact width) (q : ProgHOL width),
+      row.2.2 = compileProgExactHOLW ctx q ∧ CallFrontend ctx q)
+    (ref ctxt : CrepToLoopContextExact) (live : NumSet)
+    (source sourceFinal : CrepSemHOLState width σ) (result : Option (CrepResultHOLExact width))
+    (target : LoopSemStateFiniteExact width σ) (sourceCode : source.code = alistToFmapCodeExact programs)
+    (run : evalCrepSemHOLProgExact source (compileProgExactHOLW panCtxt p) = (result,sourceFinal))
+    (nonerror : result ≠ some .error) (nonTimeout : result ≠ some .timeOut)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code) (targetTable : LoopTableSupported target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals)
+    (word : WordSemStateFiniteExact width C σ) (wordCtxt : Spt Nat) (retv : WordLocW width) (label : Nat × Nat)
+    (wordRel : let rows := programs.map (fun row => (row.2.1,row.2.2))
+      let crep := compileProgExactHOLW panCtxt p
+      let budget := callClockFactor ref rows source.clock crep * (CrepSteps.steps crep source+1)
+      loopToWordStateRelHOLExact {target with clock := target.clock+budget} word)
+    (wordLocals : LoopToWord.localsRelHOL wordCtxt target.locals word.locals)
+    (retvLookup : sptLookup 0 word.locals = some retv) (dim : goodDimindex width)
+    (notWord : ¬ wordSemIsWordLoc retv = true)
+    (acc : ∀ k, sptMem k (accVarsHOL (compileHOLExact ctxt live (compileProgExactHOLW panCtxt p)) .ln) → sptMem k wordCtxt) :
+    let rows := programs.map (fun row => (row.2.1,row.2.2))
+    let crep := compileProgExactHOLW panCtxt p
+    let loop := compileHOLExact ctxt live crep
+    let budget := callClockFactor ref rows source.clock crep * (CrepSteps.steps crep source+1)
+    let factor := max (callSyntaxCost ref crep) (loopCodeWeight target.code+2)
+    ∃ loopPost wordPost wordResult,
+      evaluate loop {target with clock := target.clock+budget} = (resultToLoop result,loopPost) ∧
+      WordSemStateFiniteExact.evaluate (LoopToWord.compHOL wordCtxt loop label).1 word = (wordResult,wordPost) ∧
+      wordPost.ffi = loopPost.ffi ∧ resultCase wordCtxt retv word (resultToLoop result) loopPost wordResult wordPost ∧
+      WordSteps.steps (LoopToWord.compHOL wordCtxt loop label).1 word ≤
+        6 * (callSyntaxCost ref crep + factor*(source.clock+budget)) ∧
+      crepToLoopStateRelExact sourceFinal {loopPost with clock := sourceFinal.clock} ∧
+      crepToLoopMemRelHOLExact sourceFinal.memory loopPost.memory sourceFinal.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact sourceFinal.globals loopPost.globals ∧
+      crepToLoopCodeRelExact ctxt sourceFinal.code loopPost.code ∧ localsResultRel ctxt live result sourceFinal loopPost := by
+  let rows := programs.map (fun row => (row.2.1,row.2.2))
+  let crep := compileProgExactHOLW panCtxt p
+  let loop := compileHOLExact ctxt live crep
+  let budget := callClockFactor ref rows source.clock crep * (CrepSteps.steps crep source+1)
+  let factor := max (callSyntaxCost ref crep) (loopCodeWeight target.code+2)
+  let start := {target with clock := target.clock+budget}
+  obtain ⟨loopPost,ev,visitBound,st,mem,gl,code,locals⟩ :=
+    callFrontend_wholeVisits_explicit panCtxt p shape programs sources ref ctxt live source sourceFinal result target
+      sourceCode run nonerror nonTimeout stateRel memRel globalsRel codeRel targetTable localsRel
+  have mappedNonerror : resultToLoop result ≠ some .error := by
+    cases result with
+    | none => simp [resultToLoop]
+    | some r => cases r <;> simp_all [resultToLoop]
+  have simulation := loopTable_correct_with_steps (C := C) loop start
+    (callFrontend_compiled_loopShape shape ctxt live) (by simpa [start] using targetTable)
+  obtain ⟨wordPost,wordResult,wordRun,ffi,resCase,wordBound⟩ := simulation (resultToLoop result) loopPost word wordCtxt retv label
+    ⟨ev,mappedNonerror,wordRel,by simpa [start] using wordLocals,retvLookup,dim,notWord,acc⟩
+  refine ⟨loopPost,wordPost,wordResult,ev,wordRun,ffi,resCase,?_,st,mem,gl,code,locals⟩
+  exact wordBound.trans (Nat.mul_le_mul_left 6 visitBound)
+
+end FrontendBound
+
 /-- A reached entry in a supported table has the complete sixfold compiler
 simulation, including calls to other entries. -/
 theorem loopTable_entry_correct_with_steps {width : Nat} [NeZero width] {C F : Type}
