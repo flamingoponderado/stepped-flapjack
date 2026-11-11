@@ -244,7 +244,7 @@ theorem completedCall_reaches_callee {width : Nat} [NeZero width] {σ : Type}
     ∃ values params body bodyResult bodyFinal,
       args.mapM (evalCrepSemHOLExp source) = some values ∧
       source.code.lookup name = some (params,body) ∧ params.length = values.length ∧ params.Nodup ∧
-      source.clock ≠ 0 ∧
+      source.clock ≠ 0 ∧ (∀ names, ret = some names → names.Nodup) ∧
       (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}).clock < source.clock ∧
       evalCrepSemHOLProgExact (decClockCrepSemHOL {source with
         locals := HolFiniteMapExact.empty.updateList (params.zip values)}) body = (some bodyResult,bodyFinal) ∧
@@ -278,7 +278,10 @@ theorem completedCall_reaches_callee {width : Nat} [NeZero width] {σ : Type}
             cases bodyResult with
             | none => simp only [Prod.mk.injEq] at execution; exact (nonerror execution.1.symm).elim
             | some r =>
-              refine ⟨values,params,body,r,bodyFinal,rfl,rfl,valid.1,valid.2,zero,?_,bodyRun,?_,?_,?_,?_,?_⟩
+              refine ⟨values,params,body,r,bodyFinal,rfl,rfl,valid.1,valid.2,zero,?_,?_,bodyRun,?_,?_,?_,?_,?_⟩
+              · intro names eq
+                subst ret
+                simpa [crepReturnInfoNodupError] using nd
               · simp only [decClockCrepSemHOL]; omega
               · intro bad
                 rw [bad] at execution
