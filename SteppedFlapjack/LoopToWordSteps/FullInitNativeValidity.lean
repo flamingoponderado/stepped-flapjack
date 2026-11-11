@@ -117,6 +117,26 @@ theorem FullInitStackContext.heap_base_and_memory_lab {F : Type}
     have fact := memory address domain'
     simpa [stateEq',StackAlloc.makeInit,s2,s3,StackNames.makeInit,StackToLab.Proofs.MakeInit.makeInit] using fact
 
+/-- The initializer reads its three size pointers from the corresponding Lab registers. -/
+theorem FullInitStackContext.readPointers_lab {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack) :
+    InitLimits.readPointers (s2 backend.stackConf backend.dataConf backend.maxHeap backend.sp
+      backend.offset backend.inputCode backend.lab backend.saveRegs backend.coracle) =
+      (wordSemTheWord (backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 2)),
+       wordSemTheWord (backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 3)),
+       wordSemTheWord (backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 4))) := by
+  obtain ⟨_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,bij⟩ := backend.initAssumptions
+  have read2 := s2_regs_lookup (stackConf := backend.stackConf) (dataConf := backend.dataConf)
+    (maxHeap := backend.maxHeap) (sp := backend.sp) (offset := backend.offset) (code := backend.inputCode)
+    (t := backend.lab) (saveRegs := backend.saveRegs) (coracle := backend.coracle) bij (i := 2) (by simp)
+  have read3 := s2_regs_lookup (stackConf := backend.stackConf) (dataConf := backend.dataConf)
+    (maxHeap := backend.maxHeap) (sp := backend.sp) (offset := backend.offset) (code := backend.inputCode)
+    (t := backend.lab) (saveRegs := backend.saveRegs) (coracle := backend.coracle) bij (i := 3) (by simp)
+  have read4 := s2_regs_lookup (stackConf := backend.stackConf) (dataConf := backend.dataConf)
+    (maxHeap := backend.maxHeap) (sp := backend.sp) (offset := backend.offset) (code := backend.inputCode)
+    (t := backend.lab) (saveRegs := backend.saveRegs) (coracle := backend.coracle) bij (i := 4) (by simp)
+  simp [InitLimits.readPointers,read2,read3,read4,holThe]
+
 /-- Heap-half length calculated by the original initializer from the three
 Lab pointer registers. -/
 noncomputable def FullInitStackContext.labHeapLength {F : Type}
@@ -135,28 +155,34 @@ theorem FullInitStackContext.heap_length_lab {F : Type}
   have lim := prop
   rcases lim with ⟨_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,limitOk,_⟩
   have length := limitOk.1
-  obtain ⟨_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,bij⟩ := backend.initAssumptions
-  have read2 := s2_regs_lookup (stackConf := backend.stackConf) (dataConf := backend.dataConf)
-    (maxHeap := backend.maxHeap) (sp := backend.sp) (offset := backend.offset) (code := backend.inputCode)
-    (t := backend.lab) (saveRegs := backend.saveRegs) (coracle := backend.coracle) bij (i := 2) (by simp)
-  have read3 := s2_regs_lookup (stackConf := backend.stackConf) (dataConf := backend.dataConf)
-    (maxHeap := backend.maxHeap) (sp := backend.sp) (offset := backend.offset) (code := backend.inputCode)
-    (t := backend.lab) (saveRegs := backend.saveRegs) (coracle := backend.coracle) bij (i := 3) (by simp)
-  have read4 := s2_regs_lookup (stackConf := backend.stackConf) (dataConf := backend.dataConf)
-    (maxHeap := backend.maxHeap) (sp := backend.sp) (offset := backend.offset) (code := backend.inputCode)
-    (t := backend.lab) (saveRegs := backend.saveRegs) (coracle := backend.coracle) bij (i := 4) (by simp)
-  have pointers : InitLimits.readPointers (s2 backend.stackConf backend.dataConf backend.maxHeap backend.sp
-      backend.offset backend.inputCode backend.lab backend.saveRegs backend.coracle) =
-      (wordSemTheWord (backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 2)),
-       wordSemTheWord (backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 3)),
-       wordSemTheWord (backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames 4))) := by
-    simp [InitLimits.readPointers,read2,read3,read4,holThe]
-  rw [pointers] at length
+  rw [backend.readPointers_lab] at length
   have stateEq := backend.stackEq
   rw [fullMakeInit_eq] at stateEq
   have stateEq' : stack = StackAlloc.makeInit backend.dataConf (sptFromAList backend.inputCode) backend.coracle initialized := by
     simpa [InitMake.makeInitAny,fullOpt] using stateEq
   simpa [stateEq',StackAlloc.makeInit,FullInitStackContext.labHeapLength] using length
+
+/-- Stack length calculated from the same concrete Lab pointer registers. -/
+noncomputable def FullInitStackContext.labStackLength {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack) : Nat :=
+  let reg := fun n => wordSemTheWord (backend.lab.regs (StackNames.findNameSpt backend.stackConf.regNames n))
+  (InitLimits.getStackHeapLimit backend.maxHeap (reg 2,reg 3,reg 4)).1
+
+/-- Successful initialization gives exactly the configured stack length. -/
+theorem FullInitStackContext.stack_length_lab {F : Type}
+    {stack : StackSemStateFiniteExact 64 LabToTarget.Config F} (backend : FullInitStackContext stack) :
+    stack.stack.length = backend.labStackLength := by
+  obtain ⟨initialized,fullOpt⟩ := backend.initializer_succeeds
+  simp only [fullMakeInit_eq] at fullOpt
+  obtain ⟨_,_,prop⟩ := InitAny.makeInitOpt_eq_some fullOpt
+  rcases prop with ⟨_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,limitOk,_⟩
+  have length := limitOk.2.2
+  rw [backend.readPointers_lab] at length
+  have stateEq := backend.stackEq
+  rw [fullMakeInit_eq] at stateEq
+  have stateEq' : stack = StackAlloc.makeInit backend.dataConf (sptFromAList backend.inputCode) backend.coracle initialized := by
+    simpa [InitMake.makeInitAny,fullOpt] using stateEq
+  simpa [stateEq',StackAlloc.makeInit,FullInitStackContext.labStackLength] using length.symm
 
 /-- Successful full initialization provides the two contiguous, separated
 heap regions and the corresponding Stack store entries. -/

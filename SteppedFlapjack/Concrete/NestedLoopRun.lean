@@ -134,10 +134,10 @@ private theorem nestedLoop_entry_run (s : LoopSemStateFiniteExact 64 Unit) (code
 noncomputable def nestedLoopState : LoopSemStateFiniteExact 64 Unit :=
   concreteDeclLoopState riscvConfig.isa nestedCrepState nestedCallCrepPrograms
 
-theorem nestedCall_loop_run :
-    evaluate nestedLoopCode64 nestedLoopState =
-      (some (.result [.word 7]),{nestedLoopState with locals := .ln,clock := 0}) := by
-  apply nestedLoop_entry_run nestedLoopState
+theorem nestedCall_loop_run (memory : BitVec 64 → WordLocW 64) :
+    evaluate nestedLoopCode64 {nestedLoopState with memory := memory} =
+      (some (.result [.word 7]),{{nestedLoopState with memory := memory} with locals := .ln,clock := 0}) := by
+  apply nestedLoop_entry_run {nestedLoopState with memory := memory}
   · simp [nestedLoopState,concreteDeclLoopState,nestedCall_loop_code,nestedLoopTable]
   · rfl
 
@@ -149,14 +149,15 @@ private theorem nestedTable_supported : LoopTableSupported nestedLoopTable := by
   exact nestedCall_generated_table_supported
 
 /-- The actual nested-call entry is bounded by the general code-table theorem. -/
-theorem nestedCall_loop_steps_bound : steps nestedLoopCode64 nestedLoopState ≤ 122 := by
-  have codeEq : nestedLoopState.code = nestedLoopTable := by
+theorem nestedCall_loop_steps_bound (memory : BitVec 64 → WordLocW 64) :
+    steps nestedLoopCode64 {nestedLoopState with memory := memory} ≤ 122 := by
+  have codeEq : ({nestedLoopState with memory := memory} : LoopSemStateFiniteExact 64 Unit).code = nestedLoopTable := by
     simp [nestedLoopState,concreteDeclLoopState,nestedCall_loop_code,nestedLoopTable]
   have found : sptLookup 64 nestedLoopTable = some ([],nestedLoopCode64) := by
     simp [nestedLoopTable,sptLookup_sptFromAList,sptAListLookup]
-  have bound := loopTable_entry_bound nestedLoopTable 64 [] nestedLoopCode64 nestedLoopState codeEq nestedTable_supported found
+  have bound := loopTable_entry_bound nestedLoopTable 64 [] nestedLoopCode64 {nestedLoopState with memory := memory} codeEq nestedTable_supported found
   rw [nestedCall_loop_codeWeight] at bound
-  have clock : nestedLoopState.clock = 4 := rfl
+  have clock : ({nestedLoopState with memory := memory} : LoopSemStateFiniteExact 64 Unit).clock = 4 := rfl
   rw [clock] at bound
   have entryWeight : loopVisitWeight nestedLoopCode64 = 10 := by with_unfolding_all rfl
   rw [entryWeight] at bound

@@ -116,7 +116,7 @@ theorem wordStart_riscv_explicit {F : Type}
     (source post : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
     (result : Option (WordSemResult 64)) (outcome : HolOutcome)
     (related : stateRel ac regs 0 0 source
-      ((fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1) [] 0)
+      {((fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1) with clock := source.clock} [] 0)
     (safe : safeWordCode source) (noAllocCode : WordProps.noAllocCode source.code)
     (run : WordSemStateFiniteExact.evaluate (.call none (some BvlToBvi.initGlobalsLocation) [0] none) source = (result,post))
     (notError : result ≠ some .error) (notTimeout : result ≠ some .timeOut)
@@ -135,8 +135,7 @@ theorem wordStart_riscv_explicit {F : Type}
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
     (hmc : mc.target = riscvTarget) (link : LabToTargetSteps.LabExecutionLink filtered lab)
     (tie : LabToTarget.oracleTie mc machine filtered) (rel : LabToTarget.stateRel (mc,labCode,labs,pc) filtered asm machine) :
-    let initial := (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1
-    let clock := initial.clock + callTableBudget (.call none (some BvlToBvi.initGlobalsLocation) [0] none) source
+    let clock := source.clock + callTableBudget (.call none (some BvlToBvi.initGlobalsLocation) [0] none) source
     let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * clock
     ∃ finalMachine finalFfi,
       evaluateTargetHOL mc lab.ffi (LabToTargetSteps.labTickBound 4 labCode filtered.codeBuffer *
@@ -144,21 +143,22 @@ theorem wordStart_riscv_explicit {F : Type}
           (.halt outcome,finalMachine,finalFfi) ∧ finalFfi.ioEvents = post.ffi.ioEvents := by
   dsimp only
   let initial := (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1
-  have emptyInit : StackSteps.emptyCodeOracle initial := by
+  let target := {initial with clock := source.clock}
+  have emptyInit : StackSteps.emptyCodeOracle target := by
     intro i
-    simpa [initial,fullMakeInit,StackAlloc.makeInit] using empty i
+    simpa [target,initial,fullMakeInit,StackAlloc.makeInit] using empty i
   have stackBound := graph_start_bound BvlToBvi.initGlobalsLocation frame arg entry source post result
     entryLookup entryFrame entryArgs entryClock run notError capacity
   obtain ⟨targetPost,stackRun,ffiEq,_⟩ := wordStack_startCall_exact ac regs BvlToBvi.initGlobalsLocation source post
-    initial result related safe noAllocCode emptyInit run notError notTimeout stackBound
+    target result related safe noAllocCode emptyInit run notError notTimeout stackBound
   have stackNoError : result.map compileResult ≠ some .error := by
     cases result with
     | none => simp
     | some r => cases r <;> simp_all [compileResult]
   obtain ⟨finalMachine,finalFfi,machineRun,events⟩ := fullInitStackRiscV_table_explicit
     stackConf dataConf maxHeap sp offset bitmaps code lab filtered saveRegs dataSp coracle empty hA
-    (initial.clock + callTableBudget (.call none (some BvlToBvi.initGlobalsLocation) [0] none) source)
-    (result.map compileResult) targetPost outcome stackRun stackNoError complete pc mc labCode labs asm machine hmc link tie rel
+    (source.clock + callTableBudget (.call none (some BvlToBvi.initGlobalsLocation) [0] none) source)
+    (result.map compileResult) targetPost outcome (by simpa [target] using stackRun) stackNoError complete pc mc labCode labs asm machine hmc link tie rel
   exact ⟨finalMachine,finalFfi,machineRun,by rw [events,ffiEq]⟩
 /-- Word optimization followed by the Stack and RISC-V compilers preserves
 the initial Word run and events at a concrete target tick bound. -/
@@ -191,9 +191,9 @@ theorem wordOptimization_riscv_explicit {F : Type}
       let ((bm0,cfg),progs) := wordOracle n
       let (compiled,_,bm) := compileWordToStackNative ac false (ac.regCount-(5+ac.avoidRegs.length)) progs (.nil,bm0)
       (cfg,compiled,appListAppend bm.1)))
-    (sourceInit : source = makeInit ac (ac.regCount-(5+ac.avoidRegs.length))
+    (sourceInit : source = {makeInit ac (ac.regCount-(5+ac.avoidRegs.length))
       (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1
-      (sptFromAList (compile wc ac programs).2) wordOracle)
+      (sptFromAList (compile wc ac programs).2) wordOracle with clock := source.clock})
     (run : WordSemStateFiniteExact.evaluate (.call none (some BvlToBvi.initGlobalsLocation) [0] none)
       {source with code := sptFromAList programs} = (result,originalPost))
     (notError : result ≠ some .error) (notTimeout : result ≠ some .timeOut)
@@ -212,15 +212,14 @@ theorem wordOptimization_riscv_explicit {F : Type}
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
     (hmc : mc.target = riscvTarget) (link : LabToTargetSteps.LabExecutionLink filtered lab)
     (tie : LabToTarget.oracleTie mc machine filtered) (rel : LabToTarget.stateRel (mc,labCode,labs,pc) filtered asm machine) :
-    let initial := (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1
-    let clock := initial.clock + callTableBudget (.call none (some BvlToBvi.initGlobalsLocation) [0] none) source
+    let clock := source.clock + callTableBudget (.call none (some BvlToBvi.initGlobalsLocation) [0] none) source
     let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * clock
     ∃ finalMachine finalFfi,
       evaluateTargetHOL mc lab.ffi (LabToTargetSteps.labTickBound 4 labCode filtered.codeBuffer *
         stackLabTickLimit dataConf maxHeap sp offset bitmaps code coracle n) machine =
           (.halt outcome,finalMachine,finalFfi) ∧ finalFfi.ioEvents = originalPost.ffi.ioEvents := by
-  have codeEq : source.code = sptFromAList (compile wc ac programs).2 := by simp [sourceInit,makeInit]
-  have stack : source.stack = [] := by simp [sourceInit,makeInit]
+  have codeEq : source.code = sptFromAList (compile wc ac programs).2 := by rw [sourceInit]; rfl
+  have stack : source.stack = [] := by rw [sourceInit]; rfl
   have gc : Compiler.Backend.WordSimp.gcFunConstOk source.gcFun := by
     rw [sourceInit]
     change Compiler.Backend.WordSimp.gcFunConstOk
@@ -229,7 +228,8 @@ theorem wordOptimization_riscv_explicit {F : Type}
     change Compiler.Backend.WordSimp.gcFunConstOk (WordGcFunctions.wordGcFun dataConf)
     exact Compiler.Backend.DataToWord.Proofs.Gc.gcFunConstOkWordGcFun
   have entryArgs : WordSemStateFiniteExact.getVars [0] source = some [(.loc 1 0)] := by
-    simp [sourceInit,makeInit,WordSemStateFiniteExact.getVars,WordSemStateFiniteExact.getVar,sptLookup]
+    rw [sourceInit]
+    simp [makeInit,WordSemStateFiniteExact.getVars,WordSemStateFiniteExact.getVar,sptLookup]
   let backend : SteppedFlapjack.LoopToWordSteps.FullInitStackContext
       (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1 := {
     stackConf := stackConf, dataConf := dataConf, maxHeap := maxHeap, sp := sp, offset := offset,
@@ -246,7 +246,8 @@ theorem wordOptimization_riscv_explicit {F : Type}
   have related := wholeWordStack_initStateRel wc ac programs
     ((fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1)
     wordOracle noRaise noStore actualCode (by simpa [actualBitmaps] using bitmapPrefix) initOk
-  rw [← sourceInit] at related
+  have clockRelated := stateRel_setClocks ac (ac.regCount-(5+ac.avoidRegs.length)) 0 0 _ _ [] 0 source.clock related
+  rw [← sourceInit] at clockRelated
   let orig := {source with code := sptFromAList programs}
   have agree := wholeCompile_start_agrees wc ac programs safety orig BvlToBvi.initGlobalsLocation source.clock rfl gc stack
     (by simpa [orig,run] using notError)
@@ -262,7 +263,7 @@ theorem wordOptimization_riscv_explicit {F : Type}
   have optimizedRun : WordSemStateFiniteExact.evaluate (.call none (some BvlToBvi.initGlobalsLocation) [0] none) source = (result,post) := by
     exact Prod.ext resultEq rfl
   obtain ⟨finalMachine,finalFfi,machineRun,events⟩ := wordStart_riscv_explicit ac (ac.regCount-(5+ac.avoidRegs.length)) stackConf dataConf maxHeap sp
-    offset bitmaps code lab filtered saveRegs dataSp coracle empty hA source post result outcome related safe noAlloc
+    offset bitmaps code lab filtered saveRegs dataSp coracle empty hA source post result outcome clockRelated safe noAlloc
     optimizedRun notError notTimeout entry frame (.loc 1 0) entryLookup entryFrame entryArgs entryClock capacity
     complete pc mc labCode labs asm machine hmc link tie rel
   exact ⟨finalMachine,finalFfi,machineRun,by rw [events,ffiEq]⟩
