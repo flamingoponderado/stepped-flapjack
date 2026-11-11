@@ -1,4 +1,7 @@
 import SteppedFlapjack.WordToStackSteps.StartCall
+import SteppedFlapjack.WordToStackSteps.WholeInitialization
+import SteppedFlapjack.LoopToWordSteps.FullInitNativeValidity
+import Flapjack.Compiler.Backend.DataToWord.Proofs.Gc.GcFunConstOk
 import Flapjack.Compiler.Backend.WordDepthProof.CallGraphLemma
 import Flapjack.Compiler.Backend.WordDepth.Executable
 import Flapjack.Compiler.Backend.Semantics.WordSem.Props.EvaluateStackMax
@@ -16,6 +19,9 @@ open Flapjack.Compiler.Backend.WordToWord
 open Flapjack.WordSemStateFiniteExact Flapjack.Compiler.Backend.WordDepth
 open Flapjack.Compiler.Backend.WordDepthProof Flapjack.Compiler.Backend.BackendProps
 open Flapjack.Compiler.Backend.WordDepth.Executable
+open Flapjack.Compiler.Backend.WordToStack.Native
+open Flapjack.Compiler.Backend.WordToStack.Native.Initialization
+open Flapjack.WordToStackProofs.InitializationStateRel
 
 set_option maxHeartbeats 1000000 in
 private theorem fast_entry_depth {width : Nat} [NeZero width]
@@ -157,7 +163,7 @@ theorem wordStart_riscv_explicit {F : Type}
 /-- Word optimization followed by the Stack and RISC-V compilers preserves
 the initial Word run and events at a concrete target tick bound. -/
 theorem wordOptimization_riscv_explicit {F : Type}
-    (wc : Config) (ac : AsmConfigExact 64) (regs : Nat)
+    (wc : Flapjack.Compiler.Backend.WordToWord.Config) (ac : AsmConfigExact 64)
     (programs : List (Nat × Nat × WordLangProgHOL (BitVec 64))) (safety : WordProgramSafety programs)
     (stackConf : StackToLab.Config) (dataConf : DataToWord.Config) (maxHeap sp : Nat)
     (offset : BitVec 64 × BitVec 64) (bitmaps : List (BitVec 64))
@@ -168,18 +174,34 @@ theorem wordOptimization_riscv_explicit {F : Type}
     (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle)
     (source originalPost : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) F)
     (result : Option (WordSemResult 64)) (outcome : HolOutcome)
-    (codeEq : source.code = sptFromAList (compile wc ac programs).2)
-    (related : stateRel ac regs 0 0 source
-      ((fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1) [] 0)
-    (gc : Compiler.Backend.WordSimp.gcFunConstOk source.gcFun) (stack : source.stack = [])
+    (wordOracle : Nat → (Nat × LabToTarget.Config) × List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (noRaise : raiseStubLocation ∉ programs.map Prod.fst) (noStore : storeConstsStubLocation ∉ programs.map Prod.fst)
+    (nativeCode : code = (compileNative ac false (compile wc ac programs).2).2.2.2)
+    (bitmapPrefix : (compileNative ac false (compile wc ac programs).2).1.IsPrefix bitmaps)
+    (registers : 4 < ac.regCount-(5+ac.avoidRegs.length))
+    (bitmapTail : List (BitVec 64)) (bitmapHeader : bitmaps = 4 :: bitmapTail)
+    (oracleValid : ∀ n,
+      let ((bm0,_),progs) := wordOracle n
+      progs.all (fun p => postAllocConventionsHOL (ac.regCount-(5+ac.avoidRegs.length)) p.2.2) = true ∧
+      progs.all (fun p => flatExpConventions p.2.2) = true ∧
+      progs.all (fun p => decide (raiseStubLocation ≠ p.1)) = true ∧
+      progs.all (fun p => decide (storeConstsStubLocation ≠ p.1)) = true ∧
+      (n = 0 → bm0 = bitmaps.length))
+    (oracleEq : coracle = (fun n =>
+      let ((bm0,cfg),progs) := wordOracle n
+      let (compiled,_,bm) := compileWordToStackNative ac false (ac.regCount-(5+ac.avoidRegs.length)) progs (.nil,bm0)
+      (cfg,compiled,appListAppend bm.1)))
+    (sourceInit : source = makeInit ac (ac.regCount-(5+ac.avoidRegs.length))
+      (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1
+      (sptFromAList (compile wc ac programs).2) wordOracle)
     (run : WordSemStateFiniteExact.evaluate (.call none (some BvlToBvi.initGlobalsLocation) [0] none)
       {source with code := sptFromAList programs} = (result,originalPost))
     (notError : result ≠ some .error) (notTimeout : result ≠ some .timeOut)
-    (entry : WordLangProgHOL (BitVec 64)) (frame : Nat) (arg : WordLocW 64)
+    (entry : WordLangProgHOL (BitVec 64)) (frame : Nat)
     (entryLookup : sptLookup BvlToBvi.initGlobalsLocation source.code = some (1,entry))
     (entryFrame : sptLookup BvlToBvi.initGlobalsLocation source.stackSize = some frame)
-    (entryArgs : getVars [0] source = some [arg]) (entryClock : source.clock ≠ 0)
-    (capacity : let t := WordSemStateFiniteExact.callEnv [arg] (some frame) (decClock source)
+    (entryClock : source.clock ≠ 0)
+    (capacity : let t := WordSemStateFiniteExact.callEnv [(.loc 1 0)] (some frame) (decClock source)
       optionLe
         (optionMap₂ max t.stackMax
           (optionMap₂ (· + ·) (wordSemStackSize t.stack)
@@ -197,6 +219,34 @@ theorem wordOptimization_riscv_explicit {F : Type}
       evaluateTargetHOL mc lab.ffi (LabToTargetSteps.labTickBound 4 labCode filtered.codeBuffer *
         stackLabTickLimit dataConf maxHeap sp offset bitmaps code coracle n) machine =
           (.halt outcome,finalMachine,finalFfi) ∧ finalFfi.ioEvents = originalPost.ffi.ioEvents := by
+  have codeEq : source.code = sptFromAList (compile wc ac programs).2 := by simp [sourceInit,makeInit]
+  have stack : source.stack = [] := by simp [sourceInit,makeInit]
+  have gc : Compiler.Backend.WordSimp.gcFunConstOk source.gcFun := by
+    rw [sourceInit]
+    change Compiler.Backend.WordSimp.gcFunConstOk
+      ((fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1.gcFun)
+    rw [fullMakeInit_eq]
+    change Compiler.Backend.WordSimp.gcFunConstOk (WordGcFunctions.wordGcFun dataConf)
+    exact Compiler.Backend.DataToWord.Proofs.Gc.gcFunConstOkWordGcFun
+  have entryArgs : WordSemStateFiniteExact.getVars [0] source = some [(.loc 1 0)] := by
+    simp [sourceInit,makeInit,WordSemStateFiniteExact.getVars,WordSemStateFiniteExact.getVar,sptLookup]
+  let backend : SteppedFlapjack.LoopToWordSteps.FullInitStackContext
+      (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1 := {
+    stackConf := stackConf, dataConf := dataConf, maxHeap := maxHeap, sp := sp, offset := offset,
+    bitmaps := bitmaps, inputCode := code, lab := lab, saveRegs := saveRegs, dataSp := dataSp,
+    coracle := coracle, initAssumptions := hA, stackEq := rfl }
+  have initOk := backend.nativeInitOk ac wordOracle bitmapTail registers bitmapHeader
+    (by simpa [backend] using oracleValid) (by simpa [backend] using oracleEq)
+  have fields := backend.stack_code_and_bitmaps
+  have actualCode : (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1.code =
+      sptFromAList (compileNative ac false (compile wc ac programs).2).2.2.2 := by
+    simpa [backend,nativeCode] using fields.1
+  have actualBitmaps : (fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1.bitmaps = bitmaps := by
+    simpa [backend] using fields.2
+  have related := wholeWordStack_initStateRel wc ac programs
+    ((fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code lab saveRegs dataSp coracle).1)
+    wordOracle noRaise noStore actualCode (by simpa [actualBitmaps] using bitmapPrefix) initOk
+  rw [← sourceInit] at related
   let orig := {source with code := sptFromAList programs}
   have agree := wholeCompile_start_agrees wc ac programs safety orig BvlToBvi.initGlobalsLocation source.clock rfl gc stack
     (by simpa [orig,run] using notError)
@@ -211,9 +261,9 @@ theorem wordOptimization_riscv_explicit {F : Type}
   let post := (WordSemStateFiniteExact.evaluate (.call none (some BvlToBvi.initGlobalsLocation) [0] none) source).2
   have optimizedRun : WordSemStateFiniteExact.evaluate (.call none (some BvlToBvi.initGlobalsLocation) [0] none) source = (result,post) := by
     exact Prod.ext resultEq rfl
-  obtain ⟨finalMachine,finalFfi,machineRun,events⟩ := wordStart_riscv_explicit ac regs stackConf dataConf maxHeap sp
+  obtain ⟨finalMachine,finalFfi,machineRun,events⟩ := wordStart_riscv_explicit ac (ac.regCount-(5+ac.avoidRegs.length)) stackConf dataConf maxHeap sp
     offset bitmaps code lab filtered saveRegs dataSp coracle empty hA source post result outcome related safe noAlloc
-    optimizedRun notError notTimeout entry frame arg entryLookup entryFrame entryArgs entryClock capacity
+    optimizedRun notError notTimeout entry frame (.loc 1 0) entryLookup entryFrame entryArgs entryClock capacity
     complete pc mc labCode labs asm machine hmc link tie rel
   exact ⟨finalMachine,finalFfi,machineRun,by rw [events,ffiEq]⟩
 
