@@ -45,6 +45,52 @@ theorem nativeFrameSize_compile (ac : AsmConfigExact 64) (p : WordLangProgHOL (B
   cases x
   rfl
 
+/-- Maximum compiler-selected frame size for a concrete program table. -/
+def nativeMaxFrameSize {β : Type} (k : Nat)
+    (programs : List (β × Nat × WordLangProgHOL (BitVec 64))) : Nat :=
+  programs.foldr (fun row m => max (nativeFrameSize k row.2.1 row.2.2) m) 0
+
+theorem nativeFrames_compile {β : Type} (ac : AsmConfigExact 64) (k : Nat)
+    (programs : List (β × Nat × WordLangProgHOL (BitVec 64)))
+    (bitmaps : AppList (BitVec 64) × Nat) :
+    (compileWordToStackNative ac false k programs bitmaps).2.1 =
+      programs.map (fun row => nativeFrameSize k row.2.1 row.2.2) := by
+  induction programs generalizing bitmaps with
+  | nil => rfl
+  | cons row rows ih =>
+    rcases row with ⟨name, count, p⟩
+    generalize h : compileProgNative ac false p count k bitmaps = result
+    rcases result with ⟨body, frame, next⟩
+    have hf := nativeFrameSize_compile ac p k count bitmaps
+    rw [h] at hf
+    simp only at hf
+    simp [compileWordToStackNative, h, hf, ih]
+
+theorem nativeFrameSize_le_max {β : Type} (k : Nat)
+    (programs : List (β × Nat × WordLangProgHOL (BitVec 64)))
+    (name : β) (count : Nat) (p : WordLangProgHOL (BitVec 64))
+    (member : (name,count,p) ∈ programs) :
+    nativeFrameSize k count p ≤ nativeMaxFrameSize k programs := by
+  induction programs with
+  | nil => simp at member
+  | cons row rows ih =>
+    simp only [List.mem_cons] at member
+    simp only [nativeMaxFrameSize, List.foldr_cons]
+    rcases member with eq | mem
+    · subst row
+      exact Nat.le_max_left _ _
+    · exact Nat.le_trans (ih mem) (Nat.le_max_right _ _)
+theorem compiledFrame_le_max {β : Type} (ac : AsmConfigExact 64) (k : Nat)
+    (programs : List (β × Nat × WordLangProgHOL (BitVec 64)))
+    (bitmaps : AppList (BitVec 64) × Nat) (size : Nat)
+    (member : size ∈ (compileWordToStackNative ac false k programs bitmaps).2.1) :
+    size ≤ nativeMaxFrameSize k programs := by
+  rw [nativeFrames_compile] at member
+  obtain ⟨⟨name,count,p⟩, hmem, eq⟩ := List.mem_map.mp member
+  simp only at eq
+  subst size
+  exact nativeFrameSize_le_max k programs name count p hmem
+
 /-- The compiler-selected one-argument entry frame. -/
 def nativeEntryFrame (k : Nat) (q : WordLangProgHOL (BitVec 64)) : Nat :=
   nativeFrame k 1 q

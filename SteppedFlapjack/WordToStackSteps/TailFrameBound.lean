@@ -148,6 +148,115 @@ theorem pushed_call_frame_usage (s : WordSemStateFiniteExact width C F)
     simp [pushEnv,WordSemStateFiniteExact.callEnv,wordSemStackSize,wordSemStackSizeFrame,wordSemOptionAdd,wordSemOptionMax,caller,maxEq,stack]
     omega
 
+/-- Stack words used by each saved frame, including handler slots. -/
+def stackFrameCost (frame : WordSemStackFrame width) : Nat :=
+  (wordSemStackSizeFrame frame).getD 0
+
+/-- Exact word count of a stack whose frames have known sizes. -/
+def stackWords (stack : List (WordSemStackFrame width)) : Nat :=
+  stack.foldr (fun f n => stackFrameCost f + n) 1
+
+/-- Each saved frame has a known size within the program frame maximum. -/
+def stackFramesFit (limit : Nat) (stack : List (WordSemStackFrame width)) : Prop :=
+  ∀ f ∈ stack, match f with
+    | .stackFrame (some n) _ _ _ => n ≤ limit
+    | _ => False
+
+/-- A stack of bounded frames has a concrete linear bound in its depth. -/
+theorem stackWords_exact_bound (limit : Nat) (stack : List (WordSemStackFrame width))
+    (fits : stackFramesFit limit stack) :
+    wordSemStackSize stack = some (stackWords stack) ∧
+      stackWords stack ≤ 1 + (limit + 3) * stack.length := by
+  induction stack with
+  | nil => simp [wordSemStackSize, stackWords]
+  | cons f fs ih =>
+    have hf := fits f (by simp)
+    obtain ⟨n, hn, hbound⟩ : ∃ n, wordSemStackSizeFrame f = some n ∧ n ≤ limit + 3 := by
+      cases f with
+      | stackFrame size nongc gc handler =>
+        cases size with
+        | none => simp at hf
+        | some size =>
+          cases handler <;> simp [wordSemStackSizeFrame] at * <;> omega
+    have ft : stackFramesFit limit fs := by
+      intro g hg
+      exact fits g (by simp [hg])
+    obtain ⟨heq, hle⟩ := ih ft
+    have hs : stackFrameCost f = n := by simp [stackFrameCost, hn]
+    constructor
+    · change wordSemOptionAdd (wordSemStackSizeFrame f) (wordSemStackSize fs) =
+        some (stackFrameCost f + stackWords fs)
+      simp [hn, heq, hs, wordSemOptionAdd]
+    · simp only [stackWords, List.foldr_cons, hs, List.length_cons, Nat.mul_add, Nat.mul_one]
+      change n + stackWords fs ≤ 1 + ((limit + 3) * fs.length + (limit + 3))
+      omega
+
+/-- A returning call uses at most one more saved frame and one active frame. -/
+theorem pushed_call_depth_bound {C F : Type} (s : WordSemStateFiniteExact width C F)
+    (envs : Spt (WordLocW width) × Spt (WordLocW width))
+    (handler : Option (Nat × WordLangProgHOL (BitVec width) × Nat × Nat))
+    (args : List (WordLocW width)) (callerSize calleeSize maximum limit : Nat)
+    (caller : s.localsSize = some callerSize) (maxEq : s.stackMax = some maximum)
+    (callerFits : callerSize ≤ limit) (calleeFits : calleeSize ≤ limit)
+    (fits : stackFramesFit limit s.stack) :
+    (callEnv args (some calleeSize) (pushEnv envs handler s)).stackMax =
+      some (max maximum (callerSize + (if handler.isSome then 3 else 0) +
+        stackWords s.stack + calleeSize)) ∧
+    callerSize + (if handler.isSome then 3 else 0) + stackWords s.stack + calleeSize ≤
+      1 + (limit + 3) * (s.stack.length + 1) + limit := by
+  obtain ⟨exactSize,bound⟩ := stackWords_exact_bound limit s.stack fits
+  have use := pushed_call_frame_usage s envs handler args callerSize calleeSize
+    (stackWords s.stack) maximum caller exactSize maxEq
+  refine ⟨use.2, ?_⟩
+  cases handler <;> simp [Nat.mul_add] <;> omega
+
+/-- Saving a bounded caller preserves the per-frame stack invariant. -/
+theorem stackFramesFit_push (s : WordSemStateFiniteExact width C F)
+    (envs : Spt (WordLocW width) × Spt (WordLocW width))
+    (handler : Option (Nat × WordLangProgHOL (BitVec width) × Nat × Nat))
+    (callerSize limit : Nat) (caller : s.localsSize = some callerSize)
+    (callerFits : callerSize ≤ limit) (fits : stackFramesFit limit s.stack) :
+    stackFramesFit limit (pushEnv envs handler s).stack := by
+  cases handler with
+  | none =>
+    simp only [pushEnv, stackFramesFit, List.mem_cons, forall_eq_or_imp]
+    constructor
+    · simpa [caller] using callerFits
+    · exact fits
+  | some h =>
+    obtain ⟨v,p,l1,l2⟩ := h
+    simp only [pushEnv, stackFramesFit, List.mem_cons, forall_eq_or_imp]
+    constructor
+    · simpa [caller] using callerFits
+    · exact fits
+
+/-- Restoring a caller recovers its bounded frame and the stack invariant. -/
+theorem stackFramesFit_pop (s t : WordSemStateFiniteExact width C F) (limit : Nat)
+    (fits : stackFramesFit limit s.stack) (popped : popEnv s = some t) :
+    stackFramesFit limit t.stack ∧ ∃ size, t.localsSize = some size ∧ size ≤ limit := by
+  cases hs : s.stack with
+  | nil => simp [popEnv, hs] at popped
+  | cons frame tail =>
+    cases frame with
+    | stackFrame size nongc gc handler =>
+      have head := fits (.stackFrame size nongc gc handler) (by simp [hs])
+      have rest : stackFramesFit limit tail := by
+        intro f hf
+        exact fits f (by simp [hs,hf])
+      cases size with
+      | none => simp at head
+      | some size =>
+        cases handler with
+        | none =>
+          simp [popEnv, hs] at popped
+          subst t
+          exact ⟨rest, size, rfl, head⟩
+        | some h =>
+          obtain ⟨a,b,c⟩ := h
+          simp [popEnv, hs] at popped
+          subst t
+          exact ⟨rest, size, rfl, head⟩
+
 /-- Restoring a caller frame leaves the recorded maximum unchanged. -/
 theorem popEnv_stackMax (s t : WordSemStateFiniteExact width C F) (h : popEnv s = some t) : t.stackMax = s.stackMax := by
   unfold popEnv at h
