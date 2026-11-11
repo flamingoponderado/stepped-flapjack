@@ -2064,14 +2064,14 @@ theorem call_zeroClock_sim {width : Nat} [NeZero width] {σ : Type}
     · have positive := CrepSteps.steps_pos (.call (ret.map (fun ns => (ns,none))) name args) source
       nlinarith
 
-/-- A source timeout, including one reached in the callee, is simulated within the syntax-derived bound. -/
-theorem call_nestedTimeout_sim {width : Nat} [NeZero width] {σ : Type}
+/-- Tail calls and ordinary calls with terminal results preserve exact clock relations within the syntax-derived budget. -/
+theorem call_terminal_sim {width : Nat} [NeZero width] {σ : Type}
     (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
     (ret : Option (List Nat)) (source : CrepSemHOLState width σ) (ctxt ref : CrepToLoopContextExact) (live : NumSet)
     (name : MlString) (factor : Nat) (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
     (existing : ∀ names, ret = some names → ∃ old, names.mapM source.locals.lookup = some old)
     (syntaxBound : callSyntaxCost ref (.call (ret.map (fun ns => (ns,none))) name args) ≤ factor)
-    (timeout : (evalCrepSemHOLProgExact source (.call (ret.map (fun ns => (ns,none))) name args)).1 = some .timeOut)
+    (tailOrTerminal : ret = none ∨ (evalCrepSemHOLProgExact source (.call (ret.map (fun ns => (ns,none))) name args)).1 ≠ none)
     (bodySim : ∀ values params body,
       args.mapM (evalCrepSemHOLExp source) = some values → source.code.lookup name = some (params,body) →
       (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}).clock < source.clock →
@@ -2083,19 +2083,22 @@ theorem call_nestedTimeout_sim {width : Nat} [NeZero width] {σ : Type}
   by_cases zero : source.clock = 0
   · exact call_zeroClock_sim args shape ret source ctxt ref live name factor tableOk existing zero syntaxBound
   · intro sourceFinal result target run nonerror stateRel memRel globalsRel codeRel table localsRel
-    rw [run] at timeout
-    simp only at timeout
-    subst result
+    have only : ret = none ∨ result ≠ none := by simpa [run] using tailOrTerminal
     obtain ⟨values,params,body,evaluated,found,arity,distinct,retDistinct,branch⟩ :=
       CrepSteps.nonerrorCall_reaches_callee ret name args source sourceFinal _ run nonerror
     rcases branch with ⟨z,_,_⟩ | ⟨r,bodyFinal,nz,smaller,bodyRun,notError,notBreak,notContinue,outcome⟩
     · exact (zero z).elim
-    have rTimeout : r = .timeOut := by
-      cases ret <;> cases r <;> simp_all [CrepSteps.CallNonerrorOutcome]
-    subst r
-    have finalEq : sourceFinal = CrepSemHOLState.emptyLocals bodyFinal := by
-      simpa [CrepSteps.CallNonerrorOutcome] using outcome.2
-    subst sourceFinal
+    have outcomeEq : result = some r ∧ sourceFinal = CrepSemHOLState.emptyLocals bodyFinal := by
+      rcases only with tail | timeout
+      · subst ret
+        cases r <;> simp_all [CrepSteps.CallNonerrorOutcome]
+      · cases ret <;> cases r <;> simp_all [CrepSteps.CallNonerrorOutcome]
+    obtain ⟨rfl,rfl⟩ := outcomeEq
+    obtain ⟨outValue,map,outNe,outBreak,outContinue⟩ : ∃ outValue : LoopResultExact width,
+        resultToLoop (some r) = some outValue ∧ outValue ≠ .error ∧
+        (∀ n, outValue ≠ .break n) ∧ (∀ n, outValue ≠ .continue n) := by
+      cases r <;> simp_all [resultToLoop]
+
     let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
     let regs := genTemps comp.2.2.1 comp.2.1.length
     let vals := values.map wlabWlocExact
@@ -2117,15 +2120,16 @@ theorem call_nestedTimeout_sim {width : Nat} [NeZero width] {σ : Type}
       have same := SteppedFlapjack.LoopLiveSteps.evaluate_code _ _ post none pre
       simpa [entry,decClock,same] using table
     obtain ⟨bodyExtra,out,bodyPost,bodyEval,bodySt,bodyMem,bodyGl,bodyCode,outEq,_,bodyBound⟩ :=
-      bodySim values params body evaluated found smaller bodyFinal (some .timeOut) entry bodyRun (by simp)
+      bodySim values params body evaluated found smaller bodyFinal (some r) entry bodyRun (by simpa using notError)
         entState entMem entGl entCode entTable entLocals
-    have outEq' : out = some .timeOut := by simpa [resultToLoop] using outEq
+    have outEq' : out = some outValue := outEq.trans map
     subst out
     have optRun : evaluate (ocompileHOLExact calleeCtxt (listToNumSetHOLExact formals) body)
-      {entry with clock := entry.clock+bodyExtra} = (some .timeOut,bodyPost) := by
+      {entry with clock := entry.clock+bodyExtra} = (some outValue,bodyPost) := by
       unfold ocompileHOLExact
       apply optimise_correct
-      exact ⟨bodyEval,by simp,by simp,by simp,by simp⟩
+      rw [map] at bodyEval
+      exact ⟨bodyEval,by simpa using outNe,by simpa using outBreak,by simpa using outContinue,by simp⟩
     have preShift := evaluate_add_clock_eq _ _ _ post bodyExtra pre (by simp)
     have assignShift := evaluate_add_clock_eq _ _ _ middle bodyExtra assign (by simp)
     let shifted : LoopSemStateFiniteExact width σ := {middle with clock := middle.clock+bodyExtra}
@@ -2140,10 +2144,14 @@ theorem call_nestedTimeout_sim {width : Nat} [NeZero width] {σ : Type}
       have := st.2.2.1
       omega
     have bodyRun' : evaluate (ocompileHOLExact calleeCtxt (listToNumSetHOLExact formals) body)
-      {decClock shifted with locals := sptFromAList (formals.zip vals)} = (some .timeOut,bodyPost) := by
+      {decClock shifted with locals := sptFromAList (formals.zip vals)} = (some outValue,bodyPost) := by
       rw [entryEq]; exact optRun
+    let callFinal : LoopSemStateFiniteExact width σ :=
+      match ret,r with
+      | some _, .exception _ => {bodyPost with locals := .ln}
+      | _,_ => bodyPost
     have targetCall : evaluate (compileHOLExact ctxt live (.call (ret.map (fun ns => (ns,none))) name args))
-        {target with clock := target.clock+(extra+bodyExtra)} = (some .timeOut,bodyPost) := by
+        {target with clock := target.clock+(extra+bodyExtra)} = (some outValue,callFinal) := by
       have preShift' : evaluate (loopNestedSeqHOL comp.1) {target with clock := target.clock+(extra+bodyExtra)} =
           (none,{post with clock := post.clock+bodyExtra}) := by
         simpa [comp,Nat.add_assoc] using preShift
@@ -2152,10 +2160,16 @@ theorem call_nestedTimeout_sim {width : Nat} [NeZero width] {σ : Type}
         simpa [shifted,middle,comp,regs,vals] using assignShift
       cases ret with
       | none =>
+        simp only [callFinal]
         have callRun : evaluate (.call none (some (findLabExact ctxt name)) regs none) shifted =
-            (some .timeOut,bodyPost) := by
+            (some outValue,bodyPost) := by
           rw [evaluate]
-          simp [get',lookup,shiftNonzero,bodyRun',calleeCtxt,formals]
+          simp only [get',lookup,Option.isSome_none,Bool.false_eq_true,if_false,shiftNonzero]
+          rw [show evaluate (ocompileHOLExact (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
+            (listToNumSetHOLExact (List.range params.length)) body)
+            {decClock shifted with locals := sptFromAList ((List.range params.length).zip vals)} = (some outValue,bodyPost) by
+              simpa [calleeCtxt,formals] using bodyRun']
+          cases outValue <;> simp_all
         have compiled : compileHOLExact ctxt live (.call none name args) =
           loopNestedSeqHOL (comp.1 ++ (regs.zipWith HolLoopProg.assign comp.2.1) ++
             [.call none (some (findLabExact ctxt name)) regs none]) := by
@@ -2179,15 +2193,32 @@ theorem call_nestedTimeout_sim {width : Nat} [NeZero width] {σ : Type}
           rw [cutState_of_subset live shifted subset']
           simp [shiftNonzero,cut,decClock]
         have bodyRun'' : evaluate (ocompileHOLExact calleeCtxt (listToNumSetHOLExact formals) body)
-            {cut with locals := sptFromAList (formals.zip vals)} = (some .timeOut,bodyPost) := by
+            {cut with locals := sptFromAList (formals.zip vals)} = (some outValue,bodyPost) := by
           simpa [cut,decClock] using bodyRun'
         have callRun : evaluate (.call (some (returnNames,live)) (some (findLabExact ctxt name)) regs
-            (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) shifted = (some .timeOut,bodyPost) := by
+            (some (ctxt.vmax+1,.raise (ctxt.vmax+1),.skip,live))) shifted = (some outValue,callFinal) := by
           rw [evaluate]
           simp only [get',lookup,returnDistinct,not_true_eq_false,if_false]
           rw [cutRun]
           simp only
           rw [fix_clock_evaluate,bodyRun'']
+          cases r with
+          | «return» values => simp [CrepSteps.CallNonerrorOutcome] at outcome
+          | exception eid =>
+            have outId : outValue = .exception (.word eid) := by simpa [resultToLoop] using map.symm
+            subst outValue
+            simp [callFinal,evaluate,cutRes,setVar,sptLookup_sptInsert,LoopSemStateFiniteExact.callEnv,LoopSemStateFiniteExact.sptFromList]
+          | finalFfi event =>
+            have outId : outValue = .finalFfi event := by simpa [resultToLoop] using map.symm
+            subst outValue
+            rfl
+          | timeOut =>
+            have outId : outValue = .timeOut := by simpa [resultToLoop] using map.symm
+            subst outValue
+            rfl
+          | error => exact (notError rfl).elim
+          | «break» n => exact (notBreak n rfl).elim
+          | «continue» n => exact (notContinue n rfl).elim
         have compiled : compileHOLExact ctxt live (.call (some (names,none)) name args) =
           loopNestedSeqHOL (comp.1 ++ (regs.zipWith HolLoopProg.assign comp.2.1) ++
             [.call (some (returnNames,live)) (some (findLabExact ctxt name)) regs
@@ -2211,12 +2242,16 @@ theorem call_nestedTimeout_sim {width : Nat} [NeZero width] {σ : Type}
       cases ret with
       | none => simpa [sourceEntry,Nat.add_comm] using (CrepSteps.steps_call_tail name args source values params body evaluated found arity distinct nz).symm
       | some ns => simpa [sourceEntry,Nat.add_comm] using (CrepSteps.steps_call_returning ns name args source values params body evaluated found arity distinct (retDistinct ns rfl) nz).symm
-    refine ⟨extra+bodyExtra,some .timeOut,bodyPost,targetCall,?_,?_,?_,?_,rfl,?_,?_⟩
-    · simpa [CrepSemHOLState.emptyLocals,crepToLoopStateRelExact] using bodySt
-    · simpa [CrepSemHOLState.emptyLocals] using bodyMem
-    · simpa [CrepSemHOLState.emptyLocals] using bodyGl
-    · simpa [CrepSemHOLState.emptyLocals,calleeCtxt,ctxtFcExact,crepToLoopCodeRelExact] using bodyCode
-    · simp [localsResultRel]
+    refine ⟨extra+bodyExtra,some outValue,callFinal,targetCall,?_,?_,?_,?_,map.symm,?_,?_⟩
+    · cases ret <;> cases r <;> simpa [callFinal,CrepSemHOLState.emptyLocals,crepToLoopStateRelExact] using bodySt
+    · cases ret <;> cases r <;> simpa [callFinal,CrepSemHOLState.emptyLocals] using bodyMem
+    · cases ret <;> cases r <;> simpa [callFinal,CrepSemHOLState.emptyLocals] using bodyGl
+    · cases ret <;> cases r <;> simpa [callFinal,CrepSemHOLState.emptyLocals,calleeCtxt,ctxtFcExact,crepToLoopCodeRelExact] using bodyCode
+    · cases r with
+      | error => exact (notError rfl).elim
+      | «break» n => exact (notBreak n rfl).elim
+      | «continue» n => exact (notContinue n rfl).elim
+      | «return» _ | exception _ | finalFfi _ | timeOut => trivial
     · nlinarith [bodyCount]
 
 end SteppedFlapjack.CrepToLoopSteps
