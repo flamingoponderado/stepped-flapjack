@@ -13,7 +13,7 @@ private def GlobalControl (program : Prog (RiscV.Word 64)) : Prop :=
     controlSteps (progToHOL program) target = controlSteps (progToHOL program) source
 
 private theorem globalSeq {scope : List VarName} {a b : Prog (RiscV.Word 64)}
-    (ashape : SupportedIn scope a) (aBound : GlobalControl a) (bBound : GlobalControl b) : GlobalControl (.seq a b) := by
+    (ashape : CallSupportedIn scope a) (aBound : GlobalControl a) (bBound : GlobalControl b) : GlobalControl (.seq a b) := by
   intro σ globals source sourceFinal target result run nonerror rel
   simp only [progToHOL] at run ⊢
   rw [evaluateHOLFiniteState_seq_line780] at run
@@ -26,7 +26,7 @@ private theorem globalSeq {scope : List VarName} {a b : Prog (RiscV.Word 64)}
     exact nonerror (Prod.mk.inj run).1.symm
   obtain ⟨targetMiddle,targetRun,postRel⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL
     (progToHOL a) source firstResult globals target middle ⟨rel,firstRun,firstNonerror⟩
-  rw [supportedIn_globals_fixed ashape globals] at targetRun
+  rw [callSupportedIn_globals_fixed ashape globals] at targetRun
   have firstCost := aBound globals source middle target firstResult firstRun firstNonerror rel
   rw [controlSteps_seq,controlSteps_seq,firstRun,targetRun]
   cases firstResult with
@@ -94,7 +94,7 @@ private theorem globalIte {scope : List VarName} {condition : Exp (RiscV.Word 64
 
 private theorem globalWhile {scope : List VarName} {condition : Exp (RiscV.Word 64)}
     {body : Prog (RiscV.Word 64)} (scalar : Scalar scope condition)
-    (bodyShape : SupportedIn scope body) (bodyBound : GlobalControl body) :
+    (bodyShape : CallSupportedIn scope body) (bodyBound : GlobalControl body) :
     GlobalControl (.while condition body) := by
   classical
   intro σ globals source sourceFinal target result run nonerror rel
@@ -134,7 +134,7 @@ private theorem globalWhile {scope : List VarName} {condition : Exp (RiscV.Word 
         have bodyRel := PanGlobalsStateRelationClock.stateRelDecClockHOL globals source target true rel
         obtain ⟨targetPost,targetRun,postRel⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL (progToHOL body)
           source.decClockHOLFinite bodyResult globals target.decClockHOLFinite sourcePost ⟨bodyRel,bodyRun,bodyNonerror⟩
-        rw [supportedIn_globals_fixed bodyShape globals] at targetRun
+        rw [callSupportedIn_globals_fixed bodyShape globals] at targetRun
         rw [targetRun]
         have bodyCost := bodyBound globals source.decClockHOLFinite sourcePost target.decClockHOLFinite bodyResult bodyRun bodyNonerror bodyRel
         have bodyClock := evaluateHOLFiniteState_clock_le source.decClockHOLFinite (progToHOL body)
@@ -166,6 +166,52 @@ private theorem globalWhile {scope : List VarName} {condition : Exp (RiscV.Word 
       simp only [if_neg sz,Nat.add_zero] at sourceCount
       exact sourceCount.symm
 
+/-- The reached-tail-call visit step, parameterized by the callee induction hypothesis. -/
+private theorem globalTailReached {scope calleeScope : List VarName} {σ : Type}
+    (function : FunName) (args : List (Exp (RiscV.Word 64))) (argShape : ∀ e ∈ args, Scalar scope e)
+    (callee : Prog (RiscV.Word 64)) (calleeShape : CallSupportedIn calleeScope callee)
+    (globals : PanGlobalsContextExact 64) (source sourceFinal target : PanSemStateFiniteExact 64 σ)
+    (result : Option (PanSemResultExact 64)) (values : List (ValueHOL 64))
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (returnShape : ShapeHOL)
+    (sourceArgs : @evalListHOLFinite 64 σ _ source (fun a => Classical.propDecidable (source.memaddrs a))
+      (args.map expToHOL) = some values)
+    (sourceFound : lookupCodeHOLFinite source.code.lookup (Flapjack.Basis.Pure.MlString.ofString function) values =
+      some (progToHOL callee,locals,returnShape)) (clock : source.clock ≠ 0)
+    (run : source.evaluateHOLFiniteState (progToHOL (.call none function args)) = (result,sourceFinal))
+    (nonerror : result ≠ some .error) (rel : panGlobalsStateRelHOLExact true globals source target)
+    (calleeBound : ∀ bodyResult bodyFinal,
+      (callEntryStateHOLFinite source locals).evaluateHOLFiniteState (progToHOL callee) = (bodyResult,bodyFinal) →
+      bodyResult ≠ some .error →
+      panGlobalsStateRelHOLExact true globals (callEntryStateHOLFinite source locals) (callEntryStateHOLFinite target locals) →
+      controlSteps (progToHOL callee) (callEntryStateHOLFinite target locals) =
+        controlSteps (progToHOL callee) (callEntryStateHOLFinite source locals)) :
+    controlSteps (progToHOL (.call none function args)) target = controlSteps (progToHOL (.call none function args)) source := by
+  have argFixed : (args.map expToHOL).map (compileExpExactHOL globals) = args.map expToHOL := by
+    rw [List.map_map]
+    apply List.map_congr_left
+    intro e member
+    exact scalar_globals_fixed (argShape e member) globals
+  have targetArgs := PanGlobalsOptMmapEvalCorrect.optMmapEvalCorrectHOL globals source target (args.map expToHOL) values ⟨rel,sourceArgs⟩
+  rw [argFixed] at targetArgs
+  have targetFound := PanGlobalsStateRelationCode.stateRelLookupCodeHOL globals source target true
+    (Flapjack.Basis.Pure.MlString.ofString function) values (progToHOL callee) locals returnShape ⟨rel,sourceFound⟩
+  rw [callSupportedIn_globals_fixed calleeShape globals] at targetFound
+  have clockRel : source.clock = target.clock := rel.2.2.2.2.2.1
+  have targetClock : target.clock ≠ 0 := clockRel ▸ clock
+  have decremented := PanGlobalsStateRelationClock.stateRelDecClockHOL globals source target true rel
+  have entryRel := (PanGlobalsStateRelationLocals.stateRelChangeLocalsHOL globals source.decClockHOLFinite
+    target.decClockHOLFinite true locals).1 decremented
+  change panGlobalsStateRelHOLExact true globals (callEntryStateHOLFinite source locals) (callEntryStateHOLFinite target locals) at entryRel
+  rcases bodyRun : (callEntryStateHOLFinite source locals).evaluateHOLFiniteState (progToHOL callee) with ⟨bodyResult,bodyFinal⟩
+  have bodyNonerror : bodyResult ≠ some .error := by
+    intro bad
+    simp only [progToHOL,evaluateHOLFiniteState_call,sourceArgs,sourceFound,if_neg clock,bodyRun,bad] at run
+    exact nonerror (Prod.mk.inj run).1.symm
+  have equal := calleeBound bodyResult bodyFinal bodyRun bodyNonerror entryRel
+  simp only [progToHOL]
+  rw [controlSteps_tailCall _ _ source values (progToHOL callee) locals returnShape sourceArgs sourceFound clock,
+    controlSteps_tailCall _ _ target values (progToHOL callee) locals returnShape targetArgs targetFound targetClock,equal]
+
 /-- Global lowering preserves control visits for all supported programs,
 including arbitrarily nested control flow. -/
 private theorem supportedIn_globalControl {scope : List VarName} {program : Prog (RiscV.Word 64)}
@@ -175,9 +221,9 @@ private theorem supportedIn_globalControl {scope : List VarName} {program : Prog
     intro σ globals source sourceFinal target result run nonerror rel
     simp [progToHOL,controlSteps.eq_def]
   | decl name scalar body ih => exact globalDecl name scalar ih
-  | seq a b iha ihb => exact globalSeq a iha ihb
+  | seq a b iha ihb => exact globalSeq (.base a) iha ihb
   | ite scalar a b iha ihb => exact globalIte scalar iha ihb
-  | «while» scalar body ih => exact globalWhile scalar body ih
+  | «while» scalar body ih => exact globalWhile scalar (.base body) ih
 
 /-- A non-error supported run has the same number of control visits after
 global lowering, including every reached iteration of nested loops. -/
