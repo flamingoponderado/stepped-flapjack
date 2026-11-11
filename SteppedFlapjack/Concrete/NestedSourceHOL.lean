@@ -24,9 +24,22 @@ theorem nestedCall_declared_semantics (bitmapWords : Nat) :
       semantics (nestedSourceState bitmapWords) (ofString "main") := by
     cases nestedSourceState bitmapWords
     rfl
-  simpa [semanticsDecls,nestedCallDeclarations,nestedCallEntry,declToHOL,funDeclToHOL,
-    progToHOL,expToHOL,shapeToHOL,decsStcnamesHOLExact,evaluateDeclsHOLFinite,
-    nestedSourceState,sourceTemplateFor,sourceTemplate,isWfShapeExactHOL] using same
+  let fs : List (FunDeclHOL 64) :=
+    [⟨ofString "main",false,true,[],progToHOL nestedCallEntry,.one⟩,
+     ⟨ofString "middle",false,false,[],.call none (ofString "leaf") [],.one⟩,
+     ⟨ofString "leaf",false,false,[],.return (.const 7),.one⟩]
+  have wellFormed : fs.all (fun f =>
+      f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
+        isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true := by
+    simp [fs,isWfShapeExactHOL]
+  have sem := source_function_declarations_semantics
+    {sourceTemplateFor bitmapWords with clock := 0} (ofString "main") fs wellFormed
+  have sem' : semanticsDecls {sourceTemplateFor bitmapWords with clock := 0} (ofString "main")
+      (nestedCallDeclarations.map declToHOL) =
+      semantics {nestedSourceState bitmapWords with clock := 0} (ofString "main") := by
+    simpa [fs,nestedCallDeclarations,declToHOL,funDeclToHOL,progToHOL,expToHOL,shapeToHOL,nestedSourceState,
+      sourceTemplateFor,sourceTemplate] using sem
+  exact sem'.trans same
 
 /-- The original source entry returns the witness value with unchanged FFI. -/
 theorem nestedCall_hol_run (bitmapWords : Nat) :

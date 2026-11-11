@@ -17,8 +17,14 @@ private theorem semantics_setClock (s : PanSemStateFiniteExact 64 Unit) (start :
 theorem source_declared_semantics (body : ProgHOL 64) :
     semanticsDecls {sourceTemplate with clock := 0} (ofString "main") (declarations body) =
       semantics (sourceDeclared body) (ofString "main") := by
-  unfold semanticsDecls declarations singleEntryProgram sourceDeclared
-  simp only [decsStcnamesHOLExact,evaluateDeclsHOLFinite,List.all_nil,Bool.true_and,isWfShapeExactHOL,↓reduceIte]
+  classical
+  have names : decsStcnamesHOLExact [] (declarations body) = some [] := by
+    rfl
+  have initialized : evaluateDeclsHOLFinite
+      {{sourceTemplate with clock := 0} with structs := []} (declarations body) =
+      some {(sourceDeclared body) with clock := 0} := by
+    simp [declarations,singleEntryProgram,sourceDeclared,sourceTemplate,evaluateDeclsHOLFinite,isWfShapeExactHOL]
+  rw [source_declarations_semantics _ _ _ _ _ names initialized]
   exact semantics_setClock (sourceDeclared body) (ofString "main") 0
 
 /-- The original declarations exhibit the same successful return and event
