@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.NestedWordSpan
+import SteppedFlapjack.Concrete.FixtureTargetLab
 import SteppedFlapjack.WordToStackSteps.StartRiscV
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
@@ -102,7 +103,7 @@ theorem nested_configured_machine (cfg : LabToTarget.Config)
     (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
     (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
     (hmc : mc.target = riscvTarget)
-    (link : LabToTargetSteps.LabExecutionLink filtered (configuredLab nestedCode cfg nestedBitmaps))
+    (link : LabToTargetSteps.LabExecutionLink filtered (configuredTargetLab nestedCode cfg nestedBitmaps machine))
     (tie : LabToTarget.oracleTie mc machine filtered)
     (rel : LabToTarget.stateRel (mc,labCode,labs,pc) filtered asm machine) :
     let rawWords := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms)
@@ -194,12 +195,12 @@ theorem nested_configured_machine (cfg : LabToTarget.Config)
       WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.decClock,wordSemStackSize,wordSemOptionMax,
       wordSemOptionAdd,nestedFrameSizes,nestedOptimizedWords,nestedRawWords,words,rawWords,bs,frame,
       compileWith_eq_compile _ allocator] using capacity'
-  have hA := configuredLab_initAssumptions code cfg bs fits' good
+  have hA := configuredTargetLab_assumptions code cfg bs machine fits' good
   obtain ⟨finalMachine,finalFfi,machineRun,events⟩ := wordStart_riscv_explicit riscvConfig
     (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) countdownRiscVBackend.stackConf
-    countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset bs code (configuredLab code cfg bs) filtered
+    countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset bs code (configuredTargetLab code cfg bs machine) filtered
     fixtureSavedRegs 0 (fixtureStackOracle cfg) (by intro i; rfl) hA source post
-    (some (.result (.loc 1 0) [.word 7])) .success (by simpa [source,configuredWord,configuredStack] using clockRelated)
+    (some (.result (.loc 1 0) [.word 7])) .success (by rw [configuredTargetLab_stack]; simpa [source,configuredWord] using clockRelated)
     safe noAlloc run (by simp) (by simp) entry frame (.loc 1 0) (by simpa [source,loc] using entryLookup)
     (by simpa [source,loc] using frameLookup) args (by simp [source]) machineCapacity (by rfl)
     pc mc labCode labs asm machine hmc (by simpa [code,bsEq] using link) tie rel
@@ -213,6 +214,6 @@ theorem nested_configured_machine (cfg : LabToTarget.Config)
   rw [allowanceEq] at machineRun
   have outputEvents : finalFfi.ioEvents = sourceFfi.ioEvents := by rw [events,ffi]
   refine ⟨finalMachine,finalFfi,?_,outputEvents,?_⟩
-  · simpa [configuredLab,fixtureLab,source,words,rawWords,bs,tail,code,← nestedBitmaps_header] using machineRun
+  · simpa [configuredTargetLab_shape,configuredLab,fixtureLab,source,words,rawWords,bs,tail,code,← nestedBitmaps_header] using machineRun
   · simpa [outputEvents,sourceFfi] using nestedCall_source_semantics nestedBitmaps.length
 end SteppedFlapjack.Concrete

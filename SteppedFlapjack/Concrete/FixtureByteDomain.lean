@@ -8,18 +8,61 @@ open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.LabToTarget
 open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Pancake.Proofs.PanToTarget
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.LabToTargetSteps
 
-/-- The word-addressed fixture heap and bitmap are aligned. -/
-theorem fixtureLabDomain_aligned (a : BitVec 64) (h : fixtureLabDomain a) : holByteAligned a = true := by
-  rcases h with h | h
-  · subst a
-    rw [holByteAligned_iff_mod (Or.inr rfl)]
-    decide
-  · rw [holByteAligned_iff_mod (Or.inr rfl)]
-    exact h.2.2
+/-- Machine byte domain for all compiler-provided bitmaps and the source heap. -/
+noncomputable def configuredByteDomain (bs : List (BitVec 64)) : BitVec 64 → Bool :=
+  byteClosure (fun a => decide (configuredLabDomain bs a))
+
+theorem configuredLabDomain_aligned (bs : List (BitVec 64)) (a : BitVec 64)
+    (h : configuredLabDomain bs a) : holByteAligned a = true := by
+  rw [holByteAligned_iff_mod (Or.inr rfl)]
+  rcases h with bitmap | heap
+  · exact bitmap.2.2
+  · exact heap.2.2
+
+theorem configuredByteDomain_closed (bs : List (BitVec 64)) (a : BitVec 64) :
+    configuredByteDomain bs (holByteAlign a) = true → configuredByteDomain bs a = true :=
+  byteClosure_closed _ a
+
+theorem configuredByteDomain_aligned (bs : List (BitVec 64)) :
+    (fun a => configuredByteDomain bs a && holByteAligned a) = fun a => decide (configuredLabDomain bs a) := by
+  apply byteClosure_aligned
+  intro a h
+  exact configuredLabDomain_aligned bs a (of_decide_eq_true h)
+
+theorem configuredByteDomain_false_below (bs : List (BitVec 64)) (a : BitVec 64)
+    (below : a.toNat < 0xa0020018) : configuredByteDomain bs a = false := by
+  cases h : configuredByteDomain bs a with
+  | false => rfl
+  | true =>
+    have data : configuredLabDomain bs (holByteAlign a) := by
+      simpa [configuredByteDomain,byteClosure] using h
+    have alignedLe : (holByteAlign a).toNat ≤ a.toNat := by
+      rw [holByteAlign_toNat (Or.inr rfl)]
+      exact Nat.div_mul_le_self _ _
+    rcases data with bitmap | heap
+    · simp only [bitmapDomain] at bitmap
+      omega
+    · simp only [sourceBase] at heap
+      omega
 
 /-- Machine data memory contains all bytes of each fixture word. -/
 noncomputable def fixtureByteDomain : BitVec 64 → Bool :=
   byteClosure (fun a => decide (fixtureLabDomain a))
+
+theorem configuredLabDomain_one (a : BitVec 64) : configuredLabDomain [4] a ↔ fixtureLabDomain a := by
+  simp [configuredLabDomain, fixtureLabDomain, bitmapDomain_singleton]
+
+theorem configuredByteDomain_one : configuredByteDomain [4] = fixtureByteDomain := by
+  unfold configuredByteDomain fixtureByteDomain
+  congr 1
+  funext a
+  apply Bool.eq_iff_iff.mpr
+  simpa only [decide_eq_true_eq] using configuredLabDomain_one a
+
+/-- The word-addressed fixture heap and bitmap are aligned. -/
+theorem fixtureLabDomain_aligned (a : BitVec 64) (h : fixtureLabDomain a) : holByteAligned a = true := by
+  apply configuredLabDomain_aligned [4] a
+  simpa [configuredLabDomain, fixtureLabDomain, bitmapDomain_singleton] using h
 
 /-- Machine shared memory contains all bytes of each fixture shared word. -/
 noncomputable def fixtureSharedByteDomain : BitVec 64 → Bool :=
@@ -36,9 +79,15 @@ theorem fixtureSharedByteDomain_closed (a : BitVec 64) :
 /-- Aligning the machine data domain recovers the Lab fixture's word domain. -/
 theorem fixtureByteDomain_aligned :
     (fun a => fixtureByteDomain a && holByteAligned a) = fun a => decide (fixtureLabDomain a) := by
-  apply byteClosure_aligned
-  intro a h
-  exact fixtureLabDomain_aligned a (of_decide_eq_true h)
+  have h := configuredByteDomain_aligned [4]
+  rw [configuredByteDomain_one] at h
+  have domains : (fun a => decide (configuredLabDomain [4] a)) =
+      (fun a => decide (fixtureLabDomain a)) := by
+    funext a
+    apply Bool.eq_iff_iff.mpr
+    simpa only [decide_eq_true_eq] using configuredLabDomain_one a
+  rw [domains] at h
+  exact h
 
 /-- Aligning the machine shared domain recovers the source shared-word domain. -/
 theorem fixtureSharedByteDomain_aligned :
@@ -61,21 +110,21 @@ theorem fixtureMachineConfig_disjoint (pc : BitVec 64) :
   simp [fixtureMachineConfig,Set.disjoint_left]
 
 
-/-- All fixture data bytes lie in program memory when code starts below the bitmap. -/
-theorem fixtureByteDomain_in_program (pc a : BitVec 64)
-    (pcBound : pc.toNat ≤ 0xa0020018) (inData : fixtureByteDomain a = true) :
+/-- The bitmap must end before the init-e shared output region. -/
+theorem configuredByteDomain_in_program (bs : List (BitVec 64)) (pc a : BitVec 64)
+    (bitmapFits : 0xa0020018 + bs.length * 8 ≤ 0xa0410000)
+    (pcBound : pc.toNat ≤ 0xa0020018) (inData : configuredByteDomain bs a = true) :
     (fixtureMachineConfig pc).progAddresses a := by
-  have data : fixtureLabDomain (holByteAlign a) := by
-    simpa [fixtureByteDomain,byteClosure] using inData
-  have base : 0xa0020018 ≤ (holByteAlign a).toNat := by
-    rcases data with h | h
-    · rw [h]
-      decide
-    · simp only [sourceBase] at h
-      omega
+  have data : configuredLabDomain bs (holByteAlign a) := by
+    simpa [configuredByteDomain,byteClosure] using inData
   have alignedLe : (holByteAlign a).toNat ≤ a.toNat := by
     rw [holByteAlign_toNat (Or.inr rfl)]
     exact Nat.div_mul_le_self _ _
+  have base : 0xa0020018 ≤ (holByteAlign a).toNat := by
+    rcases data with bitmap | heap
+    · exact bitmap.1
+    · simp only [sourceBase] at heap
+      omega
   have notShared : fixtureSharedByteDomain a = false := by
     cases h : fixtureSharedByteDomain a with
     | false => rfl
@@ -84,11 +133,19 @@ theorem fixtureByteDomain_in_program (pc a : BitVec 64)
         simpa [fixtureSharedByteDomain,byteClosure] using h
       simp only [sharedAddress,inputStart,inputEnd,inputSize,outputStart,outputEnd,outputSize] at shared
       rcases data with bitmap | heap
-      · rw [bitmap] at shared
-        simp [fixtureBitmapBase] at shared
+      · simp only [bitmapDomain] at bitmap
+        omega
       · simp only [sourceBase] at heap
         omega
   exact ⟨by omega,notShared⟩
+
+/-- All fixture data bytes lie in program memory when code starts below the bitmap. -/
+theorem fixtureByteDomain_in_program (pc a : BitVec 64)
+    (pcBound : pc.toNat ≤ 0xa0020018) (inData : fixtureByteDomain a = true) :
+    (fixtureMachineConfig pc).progAddresses a := by
+  apply configuredByteDomain_in_program [4] pc a (by decide) pcBound
+  rw [configuredByteDomain_one]
+  exact inData
 
 
 /-- The code and service-address region is outside the init-e shared ranges. -/
@@ -145,21 +202,8 @@ theorem fixtureMachineConfig_startPc (pc : BitVec 64)
 /-- Addresses below the bitmap cannot belong to the fixture data domain. -/
 theorem fixtureByteDomain_false_below (a : BitVec 64) (below : a.toNat < 0xa0020018) :
     fixtureByteDomain a = false := by
-  cases h : fixtureByteDomain a with
-  | false => rfl
-  | true =>
-    have data : fixtureLabDomain (holByteAlign a) := by
-      simpa [fixtureByteDomain,byteClosure] using h
-    have alignedLe : (holByteAlign a).toNat ≤ a.toNat := by
-      rw [holByteAlign_toNat (Or.inr rfl)]
-      exact Nat.div_mul_le_self _ _
-    rcases data with bitmap | heap
-    · rw [bitmap] at alignedLe
-      have v : fixtureBitmapBase.toNat = 0xa0020018 := rfl
-      rw [v] at alignedLe
-      omega
-    · simp only [sourceBase] at heap
-      omega
+  have h := configuredByteDomain_false_below [4] a below
+  rwa [configuredByteDomain_one] at h
 
 
 /-- The fixture machine has identity ordinary interference and no FFI entries. -/
