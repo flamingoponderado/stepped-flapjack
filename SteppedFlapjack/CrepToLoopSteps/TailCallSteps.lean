@@ -86,6 +86,87 @@ theorem directCall_argumentPrefix {width : Nat} [NeZero width] {σ : Type}
     · rfl
   exact ⟨les,compiled,run,get,subset⟩
 
+/-- Scalar call arguments are evaluated and assigned to the compiler's fresh
+registers with an explicit bound for the expression prefix. -/
+theorem scalarCall_argumentPrefix {width : Nat} [NeZero width] {σ : Type}
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
+    (source : CrepSemHOLState width σ) (values : List (HolWordLab width))
+    (target : LoopSemStateFiniteExact width σ) (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (evaluated : args.mapM (evalCrepSemHOLExp source) = some values)
+    (stateRel : crepToLoopStateRelExact source target)
+    (memRel : crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs)
+    (globalsRel : crepToLoopGlobalsRelHOLExact source.globals target.globals)
+    (codeRel : crepToLoopCodeRelExact ctxt source.code target.code)
+    (localsRel : crepToLoopLocalsRelExact ctxt live source.locals target.locals) :
+    let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
+    let regs := genTemps comp.2.2.1 comp.2.1.length
+    let vals := values.map wlabWlocExact
+    ∃ extra post,
+      evaluate (loopNestedSeqHOL comp.1) {target with clock := target.clock+extra} = (none,post) ∧
+      evaluate (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign comp.2.1)) post =
+        (none,{post with locals := sptAlistInsert regs vals post.locals}) ∧
+      getVars regs {post with locals := sptAlistInsert regs vals post.locals} = some vals ∧
+      sptSubsetLive live (sptAlistInsert regs vals post.locals) ∧
+      crepToLoopStateRelExact source post ∧
+      crepToLoopMemRelHOLExact source.memory post.memory source.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact source.globals post.globals ∧
+      crepToLoopCodeRelExact ctxt source.code post.code ∧
+      crepToLoopLocalsRelExact ctxt comp.2.2.2 source.locals post.locals ∧
+      extra ≤ LoopSteps.structuralWeight (loopNestedSeqHOL comp.1) := by
+  obtain ⟨code,les,next,outLive,compiled,len,prefixShape⟩ :=
+    compiledScalars_prefix args shape ctxt (ctxt.vmax+1) live
+  obtain ⟨extra,post,run,heval,postState,postMem,postGlobals,postCode,postLocals,bound⟩ :=
+    scalarExpressions_preserves_eval_bounded args shape source values target ctxt (ctxt.vmax+1) live
+      evaluated stateRel memRel globalsRel codeRel localsRel (Nat.lt_succ_self _)
+  simp only [compiled] at run heval postLocals bound
+  obtain ⟨syntaxOk,tempLe,liveEq,_⟩ := compile_exp_out_rel_cases.2 ctxt (ctxt.vmax+1) live args code les next outLive compiled
+  let regs := genTemps next les.length
+  let vals := values.map wlabWlocExact
+  have valsLen : vals.length = les.length := by
+    have h := congrArg List.length ((optMmapEqSome les _ _).mp heval)
+    simpa [vals] using h.symm
+  have nodup : regs.Nodup := by
+    simp only [regs,genTemps,List.Nodup,List.pairwise_map]
+    exact List.nodup_range.imp (fun h => by omega)
+  have disjoint : distinctListsHol regs (les.map holLoopLocalsTouched).flatten = true := by
+    simp only [distinctListsHol,List.all_eq_true,decide_eq_true_eq]
+    intro x hx hmem
+    have hx' : next ≤ x := by
+      simp only [regs,genTemps,List.mem_map,List.mem_range] at hx
+      obtain ⟨a,_,rfl⟩ := hx
+      omega
+    have h := (compile_exps_le_tmp_domain ctxt (ctxt.vmax+1) live args code les next outLive x
+      ⟨localsRel.2.1,compiled,Nat.lt_succ_self _,fun k hk => by
+        obtain ⟨w,hw⟩ := crepOptMmapEval_some_var_cexp_local_lookup source args values k ⟨evaluated,hk⟩
+        obtain ⟨m,hm1,hm2,_⟩ := localsRel.2.2.2 k w hw
+        exact ⟨m,hm1,hm2⟩,hmem⟩).1
+    omega
+  have regsLen : regs.length = les.length := by simp [regs,genTemps]
+  have runAssign := loop_eval_nested_assign_distinct_eq les regs post vals
+    ⟨(optMmapEqSome les _ _).mp heval,disjoint,nodup,regsLen⟩
+  have get := get_vars_local_update_some_eq regs vals post nodup (by simp [regs,genTemps,valsLen])
+  have subset : sptSubsetLive live (sptAlistInsert regs vals post.locals) := by
+    intro k hk
+    have present := postLocals.2.2.1 k (liveEq ▸ cut_sets_union_domain_subset _ live syntaxOk k hk)
+    show (sptLookup k (sptAlistInsert regs vals post.locals)).isSome
+    rw [lookup_alist_insert_any]
+    split
+    · exact present
+    · rfl
+  simpa only [compiled] using
+    (show ∃ extra post, evaluate (loopNestedSeqHOL code) {target with clock := target.clock+extra} = (none,post) ∧
+      evaluate (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign les)) post =
+        (none,{post with locals := sptAlistInsert regs vals post.locals}) ∧
+      getVars regs {post with locals := sptAlistInsert regs vals post.locals} = some vals ∧
+      sptSubsetLive live (sptAlistInsert regs vals post.locals) ∧
+      crepToLoopStateRelExact source post ∧
+      crepToLoopMemRelHOLExact source.memory post.memory source.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact source.globals post.globals ∧
+      crepToLoopCodeRelExact ctxt source.code post.code ∧
+      crepToLoopLocalsRelExact ctxt outLive source.locals post.locals ∧
+      extra ≤ LoopSteps.structuralWeight (loopNestedSeqHOL code) from
+      ⟨extra,post,run,runAssign,get,subset,postState,postMem,postGlobals,postCode,postLocals,bound⟩)
+
 /-- Direct arguments are assigned to temporaries before a tail call. -/
 theorem compile_tailCall_direct {width : Nat} [NeZero width]
     (ctxt : CrepToLoopContextExact) (live : NumSet) (name : Flapjack.Basis.Pure.MlString.MlString)
@@ -153,6 +234,61 @@ theorem assignmentPrefix_steps {width : Nat} [NeZero width] {F : Type}
         have bound := ih es post
         omega
       | some r => simp only; omega
+
+section ScalarPrefixVisits
+open SteppedFlapjack.LoopSteps
+
+/-- A successful nested prefix contributes its visits before the suffix. -/
+theorem nestedSeq_append_steps {width : Nat} [NeZero width] {σ : Type}
+    (code rest : List (HolLoopProg width)) (s post : LoopSemStateFiniteExact width σ)
+    (run : evaluate (loopNestedSeqHOL code) s = (none,post)) :
+    steps (loopNestedSeqHOL (code ++ rest)) s ≤
+      steps (loopNestedSeqHOL code) s + steps (loopNestedSeqHOL rest) post := by
+  induction code generalizing s post with
+  | nil =>
+    simp only [loopNestedSeqHOL,evaluate,Prod.mk.injEq] at run
+    obtain ⟨_,rfl⟩ := run
+    simp only [List.nil_append]
+    omega
+  | cons p ps ih =>
+    simp only [loopNestedSeqHOL,evaluate_seq] at run
+    rcases first : evaluate p s with ⟨out,middle⟩
+    rw [first] at run
+    cases out with
+    | some result => simp at run
+    | none =>
+      simp only at run
+      have tail := ih middle post run
+      simp only [List.cons_append,loopNestedSeqHOL,steps_seq,first]
+      omega
+/-- A successful scalar argument prefix and its assignments have a concrete
+visit cost computed from the generated code and argument count. -/
+theorem scalarCall_prefix_visits {width : Nat} [NeZero width] {σ : Type}
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (call : HolLoopProg width)
+    (s post : LoopSemStateFiniteExact width σ)
+    (run : evaluate (loopNestedSeqHOL (compileExpsHOLExact ctxt (ctxt.vmax+1) live args).1) s = (none,post)) :
+    let comp := compileExpsHOLExact ctxt (ctxt.vmax+1) live args
+    let regs := genTemps comp.2.2.1 comp.2.1.length
+    steps (loopNestedSeqHOL (comp.1 ++ regs.zipWith HolLoopProg.assign comp.2.1 ++ [call])) s ≤
+      structuralWeight (loopNestedSeqHOL comp.1) + 2*args.length + 2 +
+        match evaluate (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign comp.2.1)) post with
+        | (none,t) => steps call t
+        | _ => 0 := by
+  obtain ⟨code,les,next,outLive,compiled,len,prefixShape⟩ :=
+    compiledScalars_prefix args shape ctxt (ctxt.vmax+1) live
+  simp only [compiled] at run ⊢
+  have count := nestedSeq_append_steps code (List.zipWith HolLoopProg.assign (genTemps next les.length) les ++ [call]) s post run
+  have static := branchedProgram_structural_bound (nestedSeq_branched code prefixShape.1) s
+  have suffix := assignmentPrefix_steps (genTemps next les.length) les call post
+  rw [List.append_assoc]
+  have zipLen : ((genTemps next les.length).zip les).length = args.length := by simp [genTemps,len]
+  simp only [zipLen] at suffix ⊢
+  cases h : evaluate (loopNestedSeqHOL (List.zipWith HolLoopProg.assign (genTemps next les.length) les)) post with
+  | mk out st => cases out <;> simp only [h] at * <;> omega
+
+
+end ScalarPrefixVisits
 
 /-- The direct-argument tail-call wrapper has linear cost in its arity. -/
 theorem compile_tailCall_direct_steps {width : Nat} [NeZero width] {F : Type}
