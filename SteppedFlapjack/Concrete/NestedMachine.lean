@@ -93,27 +93,15 @@ theorem nested_panToWord :
 /-- The actual source compiler output satisfies the Stack code contract. -/
 theorem nested_nativeGoodCode : StackToLab.Proofs.GoodCode.goodCode 24
     (compileNative riscvConfig false nestedOptimizedWords).2.2.2 := by
-  let pan := nestedCallDeclarations.map declToHOL
-  let w := compile countdownRiscVBackend.wordToWordConf riscvConfig nestedRawWords
-  let st := compileNative riscvConfig false w.2
-  have h := Flapjack.Pancake.Proofs.PanToTarget.word_to_stack_good_code_lemma countdownRiscVBackend countdownMachineConfig
-    pan w.1 w.2 st.1 st.2.1 st.2.2.1 st.2.2.2
-  have hw : compile countdownRiscVBackend.wordToWordConf countdownMachineConfig.target.config
-      (panToWordCompileProgHOL countdownMachineConfig.target.config.isa pan) = (w.1,w.2) := by
-    change compile countdownRiscVBackend.wordToWordConf riscvConfig (panToWordCompileProgHOL riscvConfig.isa pan) = _
-    rw [show panToWordCompileProgHOL riscvConfig.isa pan = nestedRawWords from nested_panToWord]
-  have hs : compileNative countdownMachineConfig.target.config false w.2 = (st.1,st.2.1,st.2.2.1,st.2.2.2) := by rfl
-  have hn : ((functionsHOL pan).map Prod.fst).Nodup := by
-    simp [pan,nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL]
+  have unique : ((functionsHOL (nestedCallDeclarations.map declToHOL)).map Prod.fst).Nodup := by
+    simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL]
     decide
-  have good := h ⟨hw,by decide,hs,by decide,hn⟩
-  have reg : countdownMachineConfig.target.config.regCount -
-      (countdownMachineConfig.target.config.avoidRegs.length + 3) = 24 := by decide
-  rw [reg] at good
+  have good := source_nativeGoodCode (nestedCallDeclarations.map declToHOL) unique
+  rw [nested_panToWord] at good
   have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
     funext a b c d e f g
     exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
-  simpa [nestedOptimizedWords,compileWith_eq_compile _ allocator,phase3WordConfig_eq,w,st] using good
+  simpa [nestedOptimizedWords,nestedRawWords,compileWith_eq_compile _ allocator,phase3WordConfig_eq] using good
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
