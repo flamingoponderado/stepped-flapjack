@@ -1,20 +1,21 @@
 import SteppedFlapjack.Concrete.FrontendShape
+import Flapjack.Pancake.Proofs.PanGlobals.SemanticsInitCall
 import Flapjack.Pancake.Proofs.PanGlobals.CompileCorrect.Assembly
 import Flapjack.Pancake.Proofs.PanGlobals.StateRelationClock
 import Flapjack.Pancake.Proofs.PanGlobals.StateRelationLocals
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact SteppedFlapjack.PanToCrepSteps
 
-private def GlobalControl (limit : Nat) (program : Prog (RiscV.Word 64)) : Prop :=
+private def GlobalControl (P : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL) → Prop) (limit : Nat) (program : Prog (RiscV.Word 64)) : Prop :=
   ∀ {σ : Type} (globals : PanGlobalsContextExact 64)
     (source sourceFinal target : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64)),
-    source.clock ≤ limit → source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal) → result ≠ some .error →
+    source.clock ≤ limit → P source.code → source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal) → result ≠ some .error →
     panGlobalsStateRelHOLExact true globals source target →
     controlSteps (progToHOL program) target = controlSteps (progToHOL program) source
 
-private theorem globalSeq {limit : Nat} {scope : List VarName} {a b : Prog (RiscV.Word 64)}
-    (ashape : CallSupportedIn scope a) (aBound : GlobalControl limit a) (bBound : GlobalControl limit b) : GlobalControl limit (.seq a b) := by
-  intro σ globals source sourceFinal target result budget run nonerror rel
+private theorem globalSeq {P : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL) → Prop} {limit : Nat} {scope : List VarName} {a b : Prog (RiscV.Word 64)}
+    (ashape : CallSupportedIn scope a) (aBound : GlobalControl P limit a) (bBound : GlobalControl P limit b) : GlobalControl P limit (.seq a b) := by
+  intro σ globals source sourceFinal target result budget tableInvariant run nonerror rel
   simp only [progToHOL] at run ⊢
   rw [evaluateHOLFiniteState_seq_line780] at run
   rcases firstRun : source.evaluateHOLFiniteState (progToHOL a) with ⟨firstResult,middle⟩
@@ -27,7 +28,7 @@ private theorem globalSeq {limit : Nat} {scope : List VarName} {a b : Prog (Risc
   obtain ⟨targetMiddle,targetRun,postRel⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL
     (progToHOL a) source firstResult globals target middle ⟨rel,firstRun,firstNonerror⟩
   rw [callSupportedIn_globals_fixed ashape globals] at targetRun
-  have firstCost := aBound globals source middle target firstResult budget firstRun firstNonerror rel
+  have firstCost := aBound globals source middle target firstResult budget tableInvariant firstRun firstNonerror rel
   rw [controlSteps_seq,controlSteps_seq,firstRun,targetRun]
   cases firstResult with
   | none =>
@@ -37,15 +38,20 @@ private theorem globalSeq {limit : Nat} {scope : List VarName} {a b : Prog (Risc
       rw [firstRun] at h
       simp only at h
       omega
-    have secondCost := bBound globals middle sourceFinal targetMiddle result middleBudget run nonerror postRel
+    have middleCode : middle.code = source.code := by
+      have h := SemInitSupport.eval_code source (progToHOL a)
+      rw [firstRun] at h
+      exact h
+    have middleTable : P middle.code := by rw [middleCode]; exact tableInvariant
+    have secondCost := bBound globals middle sourceFinal targetMiddle result middleBudget middleTable run nonerror postRel
     simp only [secondCost,firstCost]
   | some r => simp only [firstCost]
 
-private theorem globalDecl {limit : Nat} {scope : List VarName} (name : VarName)
+private theorem globalDecl {P : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL) → Prop} {limit : Nat} {scope : List VarName} (name : VarName)
     {initializer : Exp (RiscV.Word 64)} {body : Prog (RiscV.Word 64)}
-    (scalar : Scalar scope initializer) (bodyBound : GlobalControl limit body) :
-    GlobalControl limit (.dec name .one initializer body) := by
-  intro σ globals source sourceFinal target result budget run nonerror rel
+    (scalar : Scalar scope initializer) (bodyBound : GlobalControl P limit body) :
+    GlobalControl P limit (.dec name .one initializer body) := by
+  intro σ globals source sourceFinal target result budget tableInvariant run nonerror rel
   simp only [progToHOL,shapeToHOL] at run ⊢
   rw [evaluateHOLFiniteState_dec_total] at run
   dsimp only at run
@@ -68,17 +74,19 @@ private theorem globalDecl {limit : Nat} {scope : List VarName} (name : VarName)
       subst result
       have bodyBudget : (setVarHOLFinite (Flapjack.Basis.Pure.MlString.ofString name) value source).clock ≤ limit := by
         simpa [setVarHOLFinite] using budget
-      have bound := bodyBound globals _ bodyFinal _ bodyResult bodyBudget bodyRun nonerror bodyRel
+      have bodyTable : P (setVarHOLFinite (Flapjack.Basis.Pure.MlString.ofString name) value source).code := by
+        simpa [setVarHOLFinite] using tableInvariant
+      have bound := bodyBound globals _ bodyFinal _ bodyResult bodyBudget bodyTable bodyRun nonerror bodyRel
       rw [controlSteps_dec _ _ _ _ _ value evaluated valid,
         controlSteps_dec _ _ _ _ _ value targetEval valid, bound]
     · simp only [valid,Bool.false_eq_true,ite_false] at run
       exact absurd (Prod.mk.inj run).1.symm nonerror
 
-private theorem globalIte {limit : Nat} {scope : List VarName} {condition : Exp (RiscV.Word 64)}
+private theorem globalIte {P : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL) → Prop} {limit : Nat} {scope : List VarName} {condition : Exp (RiscV.Word 64)}
     {a b : Prog (RiscV.Word 64)} (scalar : Scalar scope condition)
-    (aBound : GlobalControl limit a) (bBound : GlobalControl limit b) : GlobalControl limit (.ite condition a b) := by
+    (aBound : GlobalControl P limit a) (bBound : GlobalControl P limit b) : GlobalControl P limit (.ite condition a b) := by
   classical
-  intro σ globals source sourceFinal target result budget run nonerror rel
+  intro σ globals source sourceFinal target result budget tableInvariant run nonerror rel
   simp only [progToHOL] at run ⊢
   rw [evaluateHOLFiniteState_ite] at run
   split at run
@@ -94,17 +102,17 @@ private theorem globalIte {limit : Nat} {scope : List VarName} {condition : Exp 
   by_cases zero : w = 0
   · simp only [zero] at run
     simp only [zero,ne_eq,not_true_eq_false,if_false]
-    rw [bBound globals source sourceFinal target result budget run nonerror rel]
+    rw [bBound globals source sourceFinal target result budget tableInvariant run nonerror rel]
   · simp only [if_neg zero] at run
     simp only [if_pos zero]
-    rw [aBound globals source sourceFinal target result budget run nonerror rel]
+    rw [aBound globals source sourceFinal target result budget tableInvariant run nonerror rel]
 
-private theorem globalWhile {limit : Nat} {scope : List VarName} {condition : Exp (RiscV.Word 64)}
+private theorem globalWhile {P : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL) → Prop} {limit : Nat} {scope : List VarName} {condition : Exp (RiscV.Word 64)}
     {body : Prog (RiscV.Word 64)} (scalar : Scalar scope condition)
-    (bodyShape : CallSupportedIn scope body) (bodyBound : GlobalControl limit body) :
-    GlobalControl limit (.while condition body) := by
+    (bodyShape : CallSupportedIn scope body) (bodyBound : GlobalControl P limit body) :
+    GlobalControl P limit (.while condition body) := by
   classical
-  intro σ globals source sourceFinal target result budget run nonerror rel
+  intro σ globals source sourceFinal target result budget tableInvariant run nonerror rel
   simp only [progToHOL] at run ⊢
   induction hc : source.clock using Nat.strongRecOn generalizing source sourceFinal result target with
   | _ clock ih =>
@@ -144,23 +152,29 @@ private theorem globalWhile {limit : Nat} {scope : List VarName} {condition : Ex
         rw [callSupportedIn_globals_fixed bodyShape globals] at targetRun
         rw [targetRun]
         have bodyBudget : source.decClockHOLFinite.clock ≤ limit := by simp only [decClockHOLFinite]; omega
-        have bodyCost := bodyBound globals source.decClockHOLFinite sourcePost target.decClockHOLFinite bodyResult bodyBudget bodyRun bodyNonerror bodyRel
+        have bodyTable : P source.decClockHOLFinite.code := tableInvariant
+        have bodyCost := bodyBound globals source.decClockHOLFinite sourcePost target.decClockHOLFinite bodyResult bodyBudget bodyTable bodyRun bodyNonerror bodyRel
         have bodyClock := evaluateHOLFiniteState_clock_le source.decClockHOLFinite (progToHOL body)
         rw [bodyRun] at bodyClock
         have smaller : sourcePost.clock < clock := by
           simp only [decClockHOLFinite] at bodyClock
           omega
         have postBudget : sourcePost.clock ≤ limit := by omega
+        have postCode : sourcePost.code = source.code := by
+          have h := SemInitSupport.eval_code source.decClockHOLFinite (progToHOL body)
+          rw [bodyRun] at h
+          simpa [decClockHOLFinite] using h
+        have postTable : P sourcePost.code := by rw [postCode]; exact tableInvariant
         simp only [if_pos (show w ≠ 0 ∧ source.clock ≠ 0 from ⟨nz,z⟩),bodyRun] at sourceCount
         cases bodyResult with
         | none =>
-          have recurse := ih sourcePost.clock smaller sourcePost sourceFinal targetPost result postBudget nonerror postRel (by simpa using run) rfl
+          have recurse := ih sourcePost.clock smaller sourcePost sourceFinal targetPost result postBudget postTable nonerror postRel (by simpa using run) rfl
           simp only at sourceCount ⊢
           rw [bodyCost,recurse,← sourceCount]
         | some r =>
           cases r with
           | «continue» =>
-            have recurse := ih sourcePost.clock smaller sourcePost sourceFinal targetPost result postBudget nonerror postRel (by simpa using run) rfl
+            have recurse := ih sourcePost.clock smaller sourcePost sourceFinal targetPost result postBudget postTable nonerror postRel (by simpa using run) rfl
             simp only at sourceCount ⊢
             rw [bodyCost,recurse,← sourceCount]
           | error => exact absurd rfl bodyNonerror
@@ -340,10 +354,11 @@ private theorem globalDecCallTerminalReached {scope calleeScope : List VarName} 
 /-- Global lowering preserves control visits for all supported programs,
 including arbitrarily nested control flow. -/
 private theorem supportedIn_globalControl {scope : List VarName} {program : Prog (RiscV.Word 64)}
-    (supported : SupportedIn scope program) (limit : Nat) : GlobalControl limit program := by
+    (supported : SupportedIn scope program) (P : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL) → Prop)
+    (limit : Nat) : GlobalControl P limit program := by
   induction supported with
   | skip | assign | ret =>
-    intro σ globals source sourceFinal target result budget run nonerror rel
+    intro σ globals source sourceFinal target result budget tableInvariant run nonerror rel
     simp [progToHOL,controlSteps.eq_def]
   | decl name scalar body ih => exact globalDecl name scalar ih
   | seq a b iha ihb => exact globalSeq (.base a) iha ihb
@@ -358,6 +373,6 @@ theorem supported_globals_control {σ : Type} {program : Prog (RiscV.Word 64)}
     (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal))
     (nonerror : result ≠ some .error) (rel : panGlobalsStateRelHOLExact true globals source target) :
     controlSteps (progToHOL program) target = controlSteps (progToHOL program) source :=
-  supportedIn_globalControl supported.1 source.clock globals source sourceFinal target result (Nat.le_refl _) run nonerror rel
+  supportedIn_globalControl supported.1 (fun _ => True) source.clock globals source sourceFinal target result (Nat.le_refl _) trivial run nonerror rel
 
 end SteppedFlapjack.Concrete
