@@ -175,14 +175,14 @@ theorem nested_initialized_machine :
     let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*122+2)
     let n := 1 + max 1 (stackCodeWeight (sptFromAList nestedCode)) * (6*122+1 + allowance)
     ∃ compilerFinal, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
-      (nestedCallDeclarations.map declToHOL) = some (fixtureCodeBytes nestedCode,nestedBitmaps,compilerFinal) ∧
+      (nestedCallDeclarations.map declToHOL) = some (fixtureCodeBytes nestedCode,[4,2],compilerFinal) ∧
     ∃ finalMachine finalFfi,
       evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart nestedCode)) sourceFfi
         (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
-          nestedBitmaps nestedCode (fixtureStackOracle (fixtureCompilerConfig nestedCode)) n)
-        (configuredMachineState nestedCode nestedBitmaps) = (.halt .success,finalMachine,finalFfi) ∧
+          [4,2] nestedCode (fixtureStackOracle (fixtureCompilerConfig nestedCode)) n)
+        (configuredMachineState nestedCode [4,2]) = (.halt .success,finalMachine,finalFfi) ∧
       finalFfi.ioEvents = sourceFfi.ioEvents ∧
-      PanSemStateFiniteExact.semanticsDecls {sourceTemplateFor nestedBitmaps.length with clock := 0} (ofString "main")
+      PanSemStateFiniteExact.semanticsDecls {sourceTemplateFor 2 with clock := 0} (ofString "main")
         (nestedCallDeclarations.map declToHOL) = .terminate .success finalFfi.ioEvents := by
   let cfg := fixtureCompilerConfig nestedCode
   have facts := nested_compilerFacts
@@ -200,6 +200,7 @@ theorem nested_initialized_machine :
     (configuredMachineAsm nestedCode nestedBitmaps) (configuredMachineState nestedCode nestedBitmaps) rfl link tie rel
   simp only [buffer, fixtureLabMachineFactor nestedCode facts.2.1] at result
   obtain ⟨compilerFinal,compiled⟩ := nested_compilerOutput
+  rw [nested_bitmaps] at compiled result
   exact ⟨compilerFinal,compiled,result⟩
 
 
