@@ -37,16 +37,17 @@ theorem fixtureCompiled_noSharedMetadata (code : List (Nat × HolProg 64))
 
 /-- Good compiled code, operation safety, and checked compiler output imply
 all original machine initialization guards. -/
-theorem fixtureMachine_allGuards (code : List (Nat × HolProg 64))
+theorem configuredMachine_allGuards (code : List (Nat × HolProg 64)) (bs : List (BitVec 64))
+    (bitmapFits : 0xa0020018 + bs.length * 8 ≤ 0xa0410000)
     (good : goodCode riscvConfig (.ln : Spt (Spt Nat))
       (LabFilter.filterSkip (fixtureLab code (fixtureCompilerConfig code)).code))
     (safe : fixtureStackSafe code = true)
     (facts : (fixtureRemoveLabels code).isSome = true ∧
       (fixtureCodeBytes code).length ≤ 0xecc ∧ (fixtureCodeBytes code).length % 4 = 0) :
-    LabMachineInitGuards (fixtureMachineConfig (fixtureCodeStart code)) (fixtureMachineState code)
+    LabMachineInitGuards (fixtureMachineConfig (fixtureCodeStart code)) (configuredMachineState code bs)
       (LabFilter.filterSkip (fixtureLab code (fixtureCompilerConfig code)).code)
-      (fixtureCompiled code).1 (fixtureCompiled code).2 5 0 0xecc (fixtureMachineAsm code)
-      (fixtureLabMemoryFor code) fixtureByteDomain fixtureSharedByteDomain
+      (fixtureCompiled code).1 (fixtureCompiled code).2 5 0 0xecc (configuredMachineAsm code bs)
+      (configuredLabMemory code bs) (configuredByteDomain bs) fixtureSharedByteDomain
       (fun n => (((fixtureLab code (fixtureCompilerConfig code)).compileOracle n).1,
         LabFilter.filterSkip ((fixtureLab code (fixtureCompilerConfig code)).compileOracle n).2)) [] [] [] := by
   have safety := fixtureLabSafe code (fixtureCompilerConfig code) safe
@@ -59,8 +60,29 @@ theorem fixtureMachine_allGuards (code : List (Nat × HolProg 64))
   have length : (fixtureCompilerConfig code).pos = (progToBytes (fixtureCompiled code).1).length := by
     change (fixtureCodeBytes code).length = _
     rw [fixtureCompiled_bytes]
-  exact fixtureMachine_guards code (fixtureCompilerConfig code) (fixtureCompiled code).1 (fixtureCompiled code).2
+  exact configuredMachine_guards code (fixtureCompilerConfig code) bs bitmapFits (fixtureCompiled code).1 (fixtureCompiled code).2
     good safety.2 removed info noInstall rfl length rfl (by omega) facts.2.2
+
+
+
+/-- Good compiled code, operation safety, and checked compiler output imply
+all original machine initialization guards. -/
+theorem fixtureMachine_allGuards (code : List (Nat × HolProg 64))
+    (good : goodCode riscvConfig (.ln : Spt (Spt Nat))
+      (LabFilter.filterSkip (fixtureLab code (fixtureCompilerConfig code)).code))
+    (safe : fixtureStackSafe code = true)
+    (facts : (fixtureRemoveLabels code).isSome = true ∧
+      (fixtureCodeBytes code).length ≤ 0xecc ∧ (fixtureCodeBytes code).length % 4 = 0) :
+    LabMachineInitGuards (fixtureMachineConfig (fixtureCodeStart code)) (fixtureMachineState code)
+      (LabFilter.filterSkip (fixtureLab code (fixtureCompilerConfig code)).code)
+      (fixtureCompiled code).1 (fixtureCompiled code).2 5 0 0xecc (fixtureMachineAsm code)
+      (fixtureLabMemoryFor code) fixtureByteDomain fixtureSharedByteDomain
+      (fun n => (((fixtureLab code (fixtureCompilerConfig code)).compileOracle n).1,
+        LabFilter.filterSkip ((fixtureLab code (fixtureCompilerConfig code)).compileOracle n).2)) [] [] [] := by
+  have memEq := congrArg (fun lab => lab.memory) (configuredLab_one code (fixtureCompilerConfig code))
+  change configuredLabMemory code [4] = fixtureLabMemoryFor code at memEq
+  have h := configuredMachine_allGuards code [4] (by decide) good safe facts
+  rwa [configuredMachineState_one, configuredMachineAsm_one, memEq, configuredByteDomain_one] at h
 
 
 /-- The concrete buffer dominates every line of a fitting compiled program,

@@ -1,5 +1,5 @@
 import SteppedFlapjack.Concrete.NestedWordSpan
-import SteppedFlapjack.Concrete.FixtureTargetLab
+import SteppedFlapjack.Concrete.FixtureMachineGuards
 import SteppedFlapjack.WordToStackSteps.StartRiscV
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
@@ -216,4 +216,62 @@ theorem nested_configured_machine (cfg : LabToTarget.Config)
   refine ⟨finalMachine,finalFfi,?_,outputEvents,?_⟩
   · simpa [configuredTargetLab_shape,configuredLab,fixtureLab,source,words,rawWords,bs,tail,code,← nestedBitmaps_header] using machineRun
   · simpa [outputEvents,sourceFfi] using nestedCall_source_semantics nestedBitmaps.length
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 3000000 in
+/-- The source compiler provides the nested witness's Lab good-code fact. -/
+theorem nested_labGoodCode (cfg : LabToTarget.Config) :
+    LabToTarget.goodCode riscvConfig (.ln : Spt (Spt Nat))
+      (LabFilter.filterSkip (fixtureLab nestedCode cfg).code) := by
+  have nodup : ((functionsHOL (nestedCallDeclarations.map declToHOL)).map Prod.fst).Nodup := by
+    simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL]
+    decide
+  have sourceGood : pancakeGoodCodeHOL (nestedCallDeclarations.map declToHOL) = true := by
+    decide +kernel
+  have good := source_labGoodCode (nestedCallDeclarations.map declToHOL) nestedRawWords nested_panToWord sourceGood nodup
+  have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
+    funext a b c d e f g
+    exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
+  simpa [fixtureLab,nestedCode,nestedNative,nestedOptimizedWords,
+    compileWith_eq_compile _ allocator,phase3WordConfig_eq] using good
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 3000000 in
+/-- The concrete nested-call machine run follows from compiler and layout checks;
+the Lab-to-machine relation is constructed from the initialized machine. -/
+theorem nested_initialized_machine
+    (bitmapFits : 0xa0020018 + nestedBitmaps.length * 8 ≤ 0xa0410000)
+    (capacity : optionLe
+      (optionMap₂ max (some (max 1 (1+nestedEntryFrame)))
+        (optionMap₂ (· + ·) (some 1) (fullCallGraphDepth nestedFrameSizes 64 (sptFromAList nestedOptimizedWords))))
+      (some 2097172))
+    (safe : fixtureStackSafe nestedCode = true)
+    (facts : (fixtureRemoveLabels nestedCode).isSome = true ∧
+      (fixtureCodeBytes nestedCode).length ≤ 0xecc ∧ (fixtureCodeBytes nestedCode).length % 4 = 0) :
+    let rawWords := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms)
+    let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig rawWords).2
+    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*122+2)
+    let n := 1 + max 1 (stackCodeWeight (sptFromAList nestedCode)) * (6*122+1 + allowance)
+    ∃ finalMachine finalFfi,
+      evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart nestedCode)) sourceFfi
+        (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
+          nestedBitmaps nestedCode (fixtureStackOracle (fixtureCompilerConfig nestedCode)) n)
+        (configuredMachineState nestedCode nestedBitmaps) = (.halt .success,finalMachine,finalFfi) ∧
+      finalFfi.ioEvents = sourceFfi.ioEvents ∧
+      PanSemStateFiniteExact.semanticsDecls {sourceTemplateFor nestedBitmaps.length with clock := 0} (ofString "main")
+        (nestedCallDeclarations.map declToHOL) = .terminate .success finalFfi.ioEvents := by
+  let cfg := fixtureCompilerConfig nestedCode
+  have fits : 0xa0020018 + nestedBitmaps.length * 8 ≤ sourceBase := by simp only [sourceBase]; omega
+  have removed : LabToTarget.removeLabels 5 riscvConfig 0 .ln []
+      (LabFilter.filterSkip (configuredLab nestedCode cfg nestedBitmaps).code) =
+      some ((fixtureCompiled nestedCode).1,(fixtureCompiled nestedCode).2) := fixtureRemoveLabels_eq nestedCode facts.1
+  have guards := configuredMachine_allGuards nestedCode nestedBitmaps bitmapFits (nested_labGoodCode _) safe facts
+  obtain ⟨filtered,link,tie,rel,buffer⟩ := configuredMachine_relations nestedCode cfg nestedBitmaps bitmapFits
+    (fixtureCompiled nestedCode).1 (fixtureCompiled nestedCode).2 nested_nativeGoodCode removed guards
+  have result := nested_configured_machine cfg fits capacity filtered (fixtureCodeStart nestedCode)
+    (fixtureMachineConfig (fixtureCodeStart nestedCode)) (fixtureCompiled nestedCode).1 (fixtureCompiled nestedCode).2
+    (configuredMachineAsm nestedCode nestedBitmaps) (configuredMachineState nestedCode nestedBitmaps) rfl link tie rel
+  simp only [buffer, fixtureLabMachineFactor nestedCode facts.2.1] at result
+  exact result
+
 end SteppedFlapjack.Concrete

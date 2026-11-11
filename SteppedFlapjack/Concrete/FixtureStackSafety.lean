@@ -19,18 +19,16 @@ def fixtureStackSafe (code : List (Nat × HolProg 64)) : Bool :=
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 1000000 in
 /-- The actual source compiler establishes the Lab good-code guard. -/
-theorem singleEntry_labGoodCode (body : Flapjack.Pancake.PanLang.ProgHOL 64)
+theorem source_labGoodCode (source : List (Flapjack.Pancake.PanLang.DeclHOL 64))
     (words : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
-    (compiled : panToWordCompileProgHOL riscvConfig.isa (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main") body) = words)
-    (sourceGood : pancakeGoodCodeHOL (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main") body) = true) :
+    (compiled : panToWordCompileProgHOL riscvConfig.isa source = words)
+    (sourceGood : pancakeGoodCodeHOL source = true)
+    (nodup : ((Flapjack.Pancake.PanLang.functionsHOL source).map Prod.fst).Nodup) :
     goodCode riscvConfig (.ln : Spt (Spt Nat))
       (LabFilter.filterSkip (fixtureLab
         (Flapjack.Compiler.Backend.WordToStack.Native.compileNative riscvConfig false
           (Flapjack.Compiler.Backend.WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).2.2.2
         countdownRiscVBackend.labConf).code) := by
-  let source := singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main") body
-  have nodup : ((Flapjack.Pancake.PanLang.functionsHOL source).map Prod.fst).Nodup := by
-    simp [source,singleEntryProgram,Flapjack.Pancake.PanLang.functionsHOL]
   have good := Flapjack.Pancake.Proofs.PanToTarget.panToTargetGoodCodeSource (β := Nat)
     countdownRiscVBackend countdownMachineConfig source (by exact riscvPancakeBackendConfigOk)
     (by simp [goodDimindex]) (by decide) nodup sourceGood
@@ -40,10 +38,25 @@ theorem singleEntry_labGoodCode (body : Flapjack.Pancake.PanLang.ProgHOL 64)
           (Flapjack.Compiler.Backend.WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).2.2.2) := by
     have htarget : countdownMachineConfig.target.config = riscvConfig := rfl
     rw [htarget] at good
-    dsimp only [source] at good
     rw [compiled,fixture_backend_maxHeap] at good
     exact good
   exact goodCode_filterSkip riscvConfig (.ln : Spt (Spt Nat)) _ whole
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 1000000 in
+/-- The actual source compiler establishes the Lab good-code guard. -/
+theorem singleEntry_labGoodCode (body : Flapjack.Pancake.PanLang.ProgHOL 64)
+    (words : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
+    (compiled : panToWordCompileProgHOL riscvConfig.isa (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main") body) = words)
+    (sourceGood : pancakeGoodCodeHOL (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main") body) = true) :
+    goodCode riscvConfig (.ln : Spt (Spt Nat))
+      (LabFilter.filterSkip (fixtureLab
+        (Flapjack.Compiler.Backend.WordToStack.Native.compileNative riscvConfig false
+          (Flapjack.Compiler.Backend.WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).2.2.2
+        countdownRiscVBackend.labConf).code) := by
+  apply source_labGoodCode _ words compiled sourceGood
+  simp [singleEntryProgram,Flapjack.Pancake.PanLang.functionsHOL]
 
 /-- An FFI-free, shared-operation-free native table has the corresponding Lab properties. -/
 theorem fixtureLabSafe (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)

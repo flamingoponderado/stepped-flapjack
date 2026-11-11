@@ -206,6 +206,46 @@ noncomputable def configuredMachineContext (code : List (Nat × HolProg 64)) (cf
 
 
 
+/-- The initialized machine provides the Lab execution and target relations. -/
+theorem configuredMachine_relations (code : List (Nat × HolProg 64)) (cfg : Config) (bs : List (BitVec 64))
+    (bitmapFits : 0xa0020018 + bs.length*8 ≤ 0xa0410000)
+    (code2 : LabProgHOL 64) (labs : Spt (Spt Nat))
+    (good : StackToLab.Proofs.GoodCode.goodCode 24 code)
+    (removed : removeLabels 5 riscvConfig 0 .ln [] (LabFilter.filterSkip (configuredLab code cfg bs).code) = some (code2,labs))
+    (guards : LabMachineInitGuards (fixtureMachineConfig (fixtureCodeStart code)) (configuredMachineState code bs)
+      (LabFilter.filterSkip (configuredLab code cfg bs).code) code2 labs 5 0 0xecc (configuredMachineAsm code bs)
+      (configuredLabMemory code bs) (configuredByteDomain bs) fixtureSharedByteDomain
+      (fun n => (((configuredLab code cfg bs).compileOracle n).1,
+        LabFilter.filterSkip ((configuredLab code cfg bs).compileOracle n).2)) [] [] []) :
+    ∃ filtered, LabExecutionLink filtered (configuredTargetLab code cfg bs (configuredMachineState code bs)) ∧
+      oracleTie (fixtureMachineConfig (fixtureCodeStart code)) (configuredMachineState code bs) filtered ∧
+      stateRel (fixtureMachineConfig (fixtureCodeStart code),code2,labs,fixtureCodeStart code) filtered
+        (configuredMachineAsm code bs) (configuredMachineState code bs) ∧
+      filtered.codeBuffer = ⟨0x800f0134,[],0xecc⟩ := by
+  let ctx := fullInitMachineContext_of_alignedFilteredLabInit (F := Unit)
+      countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset bs code
+      fixtureSavedRegs 0 (fixtureStackOracle cfg) (fixtureMachineConfig (fixtureCodeStart code)) (configuredMachineState code bs)
+      sourceFfi (configuredLab code cfg bs).code code2 labs
+      5 0 0xecc 0 (configuredMachineAsm code bs) (configuredLabMemory code bs) (configuredByteDomain bs) fixtureSharedByteDomain
+      (configuredLab code cfg bs).compileOracle [] [] [] rfl guards
+      (configuredCtorAssumptions code cfg bs bitmapFits code2 good (fixtureCodeBytes_eq code code2 labs cfg removed))
+  have labEq : ctx.lab = configuredTargetLab code cfg bs (configuredMachineState code bs) := by
+    change {makeInit (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi (configuredMachineAsm code bs) (configuredLabMemory code bs)
+      (fun a => configuredByteDomain bs a && holByteAligned a) (fun a => fixtureSharedByteDomain a && holByteAligned a)
+      (configuredMachineState code bs) (configuredLab code cfg bs).code
+      (LabToTarget.compile (fixtureMachineConfig (fixtureCodeStart code)).target.config)
+      ((fixtureMachineConfig (fixtureCodeStart code)).target.getPc (configuredMachineState code bs) +
+        BitVec.ofNat 64 (progToBytes code2).length) 0xecc (configuredLab code cfg bs).compileOracle with clock := 0} = _
+    rw [withClock_of_eq _ 0 (makeInit_clock _ _ _ _ _ _ _ _ _ _ _ _)]
+    exact configuredCtorLab_eq code cfg bs bitmapFits code2 (fixtureCodeBytes_eq code code2 labs cfg removed)
+  refine ⟨ctx.machineLab,?_,?_,?_,?_⟩
+  · rw [← labEq]
+    exact ctx.labRelation
+  · exact ctx.tie
+  · exact ctx.machineRel
+  · change (⟨fixtureCodeStart code + BitVec.ofNat 64 (progToBytes code2).length,[],0xecc⟩ : WordSemBuffer 64 8) = _
+    rw [← fixtureCodeBytes_eq code code2 labs cfg removed, fixtureCodeStart_add_length]
+
 noncomputable def fixtureMachineContext (code : List (Nat × HolProg 64)) (cfg : Config)
     (code2 : LabProgHOL 64) (labs : Spt (Spt Nat))
     (good : StackToLab.Proofs.GoodCode.goodCode 24 code)
