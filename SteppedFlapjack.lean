@@ -91,7 +91,6 @@ import SteppedFlapjack.Concrete.ScopePreservation
 import SteppedFlapjack.Concrete.CrepErrorLeaf
 import SteppedFlapjack.Concrete.ScalarParity
 import SteppedFlapjack.Concrete.CountedApplications
-import SteppedFlapjack.Concrete.CountedShape
 import SteppedFlapjack.Concrete.CountedScalar
 import SteppedFlapjack.Concrete.ScalarWords
 import SteppedFlapjack.PanToCrepSteps.CountedInvert
