@@ -12,12 +12,13 @@ open Flapjack.LoopSemStateFiniteExact Flapjack.WordSemStateFiniteExact
 open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.WordToWord
 open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 
-/-- A simplified table retains supported bodies when the original table does. -/
-theorem simpTable_globalSupported
+private theorem simpTable_lookup
     (source target : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
-    (rel : PanSimp.CodeRel source target) (factor : Nat) (table : SimpVisits.SimpTableSupported source factor) :
-    GlobalTableSupported target := by
-  intro name values body locals rsh targetFound
+    (rel : PanSimp.CodeRel source target) (name : MlS) (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (rsh : ShapeHOL)
+    (targetFound : lookupCodeHOLFinite target.lookup name values = some (body,locals,rsh)) :
+    ∃ original, lookupCodeHOLFinite source.lookup name values = some (original,locals,rsh) ∧
+      body = panSimpCompileHOL original := by
   have lookup := PanSimp.lookupCodeRel source target rel name values
   rw [targetFound] at lookup
   cases found : lookupCodeHOLFinite source.lookup name values with
@@ -28,30 +29,52 @@ theorem simpTable_globalSupported
     obtain ⟨bodyEq,localsEq,shapeEq⟩ := lookup
     subst locals
     subst rsh
-    obtain ⟨scope,program,originalEq,supported,_⟩ := table name values original originalLocals originalShape found
-    refine ⟨scope,panSimpProg program,?_,callSupported_panSimp supported⟩
-    rw [originalEq,callSupported_panSimp_hol supported] at bodyEq
-    exact bodyEq
+    exact ⟨original,rfl,bodyEq⟩
 
-/-- Global lowering preserves the run and visit count of a simplified call-aware body. -/
-private theorem callSupported_simplified_globalRun {scope : List VarName} {σ : Type}
+
+/-- A simplified table retains supported bodies when the original table does. -/
+theorem simpTable_globalSupported
+    (source target : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (rel : PanSimp.CodeRel source target) (factor : Nat) (table : SimpVisits.SimpTableSupported source factor) :
+    GlobalTableSupported target := by
+  intro name values body locals rsh targetFound
+  obtain ⟨original,found,bodyEq⟩ := simpTable_lookup source target rel name values body locals rsh targetFound
+  obtain ⟨scope,program,originalEq,supported,_⟩ := table name values original locals rsh found
+  refine ⟨scope,panSimpProg program,?_,callSupported_panSimp supported⟩
+  rw [originalEq,callSupported_panSimp_hol supported] at bodyEq
+  exact bodyEq
+
+/-- Simplification also preserves representability of supported table bodies. -/
+theorem simpTable_rangedSupported
+    (source target : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (rel : PanSimp.CodeRel source target)
+    (table : ∀ name values body locals rsh, lookupCodeHOLFinite source.lookup name values = some (body,locals,rsh) →
+      ∃ scope, ∃ program : Prog (RiscV.Word 64), body = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program) :
+    ∀ name values body locals rsh, lookupCodeHOLFinite target.lookup name values = some (body,locals,rsh) →
+      ∃ scope, ∃ program : Prog (RiscV.Word 64), body = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program := by
+  intro name values body locals rsh targetFound
+  obtain ⟨original,found,bodyEq⟩ := simpTable_lookup source target rel name values body locals rsh targetFound
+  obtain ⟨scope,program,originalEq,supported,ranged⟩ := table name values original locals rsh found
+  refine ⟨scope,panSimpProg program,?_,callSupported_panSimp supported,callSupported_panSimp_ranged supported ranged⟩
+  rw [originalEq,callSupported_panSimp_hol supported] at bodyEq
+  exact bodyEq
+
+/-- Global lowering preserves the run and visit count of a supported body. -/
+private theorem callSupported_globalRun {scope : List VarName} {σ : Type}
     {program : Prog (RiscV.Word 64)} (supported : CallSupportedIn scope program)
     (globals : PanGlobalsContextExact 64) (source sourceFinal target : PanSemStateFiniteExact 64 σ)
     (result : Option (PanSemResultExact 64)) (table : GlobalTableSupported source.code)
-    (run : source.evaluateHOLFiniteState (progToHOL (panSimpProg program)) = (result,sourceFinal))
+    (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal))
     (nonerror : result ≠ some .error) (rel : panGlobalsStateRelHOLExact true globals source target) :
-    ∃ targetFinal,
-      target.evaluateHOLFiniteState (progToHOL (panSimpProg program)) = (result,targetFinal) ∧
-      controlSteps (progToHOL (panSimpProg program)) target = controlSteps (progToHOL (panSimpProg program)) source ∧
+    ∃ targetFinal, target.evaluateHOLFiniteState (progToHOL program) = (result,targetFinal) ∧
+      controlSteps (progToHOL program) target = controlSteps (progToHOL program) source ∧
       targetFinal.ffi = sourceFinal.ffi := by
-  have shape := callSupported_panSimp supported
   obtain ⟨targetFinal,targetRun,postRel⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL
-    (progToHOL (panSimpProg program)) source result globals target sourceFinal ⟨rel,run,nonerror⟩
-  rw [callSupportedIn_globals_fixed shape globals] at targetRun
-  have visits := callSupported_globals_control shape globals source sourceFinal target result table run nonerror rel
+    (progToHOL program) source result globals target sourceFinal ⟨rel,run,nonerror⟩
+  rw [callSupportedIn_globals_fixed supported globals] at targetRun
+  have visits := callSupported_globals_control supported globals source sourceFinal target result table run nonerror rel
   rcases postRel with ⟨_,_,_,_,_,_,_,_,_,_,_,_,_,ffi,_,_⟩
   exact ⟨targetFinal,targetRun,visits,ffi.symm⟩
-
 
 /-- A counted source return reaches the simplified body and related function
   table within a concrete source-derived visit bound. -/
@@ -99,8 +122,8 @@ private theorem countedCalls_simplifiedVisits {scope : List VarName} {program : 
     refine ⟨sourceFinal,targetFinal,sourceRun,targetRun,?_,ffi,finalRel.2.2.2.2.2.2.2.2.2.2.1⟩
     exact cost.trans (Nat.add_le_add_right (Nat.mul_le_mul_left factor original) _)
 
-/-- A counted source return reaches the globally lowered body with a source-derived visit bound. -/
-theorem countedCalls_simplifiedGlobalVisits {scope : List VarName} {program : Prog (RiscV.Word 64)}
+/-- The source count bounds visits through simplification, function renaming and global lowering. -/
+theorem countedCalls_renamedGlobalVisits {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : CallSupportedIn scope program) {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
@@ -112,8 +135,11 @@ theorem countedCalls_simplifiedGlobalVisits {scope : List VarName} {program : Pr
     (targetCode : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
     (codeRel : PanSimp.CodeRel source.code targetCode) (factor : Nat) (positive : 1 ≤ factor)
     (table : SimpVisits.SimpTableSupported source.code factor)
+    (f g : MlS)
+    (rangedTable : ∀ name values body locals rsh, lookupCodeHOLFinite source.code.lookup name values = some (body,locals,rsh) →
+      ∃ scope, ∃ program : Prog (RiscV.Word 64), body = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program)
     (globals : PanGlobalsContextExact 64) (lower : PanSemStateFiniteExact 64 σ)
-    (globalRel : panGlobalsStateRelHOLExact true globals {source with code := targetCode} lower)
+    (globalRel : panGlobalsStateRelHOLExact true globals {source with code := fpermCodeHOL f g targetCode} lower)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ) (exnContracts : InfoMap Shape) (fuel count : Nat)
     (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))
@@ -129,19 +155,30 @@ theorem countedCalls_simplifiedGlobalVisits {scope : List VarName} {program : Pr
       source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word value))),sourceFinal) ∧
       ({source with code := targetCode} : PanSemStateFiniteExact 64 σ).evaluateHOLFiniteState
         (progToHOL (panSimpProg program)) = (some (.returned (.val (.word value))),simpFinal) ∧
-      lower.evaluateHOLFiniteState (progToHOL (panSimpProg program)) = (some (.returned (.val (.word value))),lowerFinal) ∧
-      controlSteps (progToHOL (panSimpProg program)) lower ≤
+      lower.evaluateHOLFiniteState (fpermHOL f g (progToHOL (panSimpProg program))) =
+        (some (.returned (.val (.word value))),lowerFinal) ∧
+      controlSteps (fpermHOL f g (progToHOL (panSimpProg program))) lower ≤
         factor * count + SimpVisits.hw (progToHOL (panSimpProg program)) ∧
       lowerFinal.ffi = sourceFinal.ffi ∧ FfiStateRel postFfi sourceFinal.ffi := by
   obtain ⟨sourceFinal,simpFinal,sourceRun,simpRun,bound,ffi,ffiRel⟩ := countedCalls_simplifiedVisits
     supported production source rel ranged words byteRanged codeRanged codeShape targetCode codeRel factor positive table
     context primitive handler exnContracts fuel count postLocals postGlobals postMemory postFfi value run budget
-  have supportedTable := simpTable_globalSupported source.code targetCode codeRel factor table
-  obtain ⟨lowerFinal,lowerRun,cost,lowerFfi⟩ := callSupported_simplified_globalRun supported globals
-    {source with code := targetCode} simpFinal lower (some (.returned (.val (.word value))))
-    supportedTable simpRun (by simp) globalRel
-  exact ⟨sourceFinal,simpFinal,lowerFinal,sourceRun,simpRun,lowerRun,by rw [cost]; exact bound,lowerFfi.trans ffi,ffiRel⟩
-
+  have simpShape := callSupported_panSimp supported
+  have simpRanged := callSupported_panSimp_ranged supported byteRanged
+  obtain ⟨renamed,renameEq,renameShape⟩ := callSupported_fperm_shape simpShape simpRanged f g
+  have simplifiedTable := simpTable_globalSupported source.code targetCode codeRel factor table
+  have renamedTable := fperm_globalTableSupported targetCode f g (simpTable_rangedSupported source.code targetCode codeRel rangedTable)
+  have renamedRun := evaluateFpermHOL f g (progToHOL (panSimpProg program)) {source with code := targetCode}
+    (some (.returned (.val (.word value)))) simpFinal simpRun
+  have renamedCost := callSupported_fperm_control simpShape f g {source with code := targetCode} simplifiedTable
+  rw [renameEq] at renamedRun renamedCost
+  obtain ⟨lowerFinal,lowerRun,cost,lowerFfi⟩ := callSupported_globalRun renameShape globals
+    {source with code := fpermCodeHOL f g targetCode} {simpFinal with code := fpermCodeHOL f g simpFinal.code}
+    lower (some (.returned (.val (.word value)))) renamedTable renamedRun (by simp) globalRel
+  refine ⟨sourceFinal,simpFinal,lowerFinal,sourceRun,simpRun,?_,?_,?_,ffiRel⟩
+  · simpa only [renameEq] using lowerRun
+  · rw [renameEq,cost,renamedCost]; exact bound
+  · exact lowerFfi.trans ffi
 
 /-- A call-aware counted source return composes with the actual declaration
 frontend, carrying the source count into the Crep visit bound. -/
