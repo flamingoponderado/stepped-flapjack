@@ -1,4 +1,5 @@
 import SteppedFlapjack.WordToStackSteps.WholeCallBudget
+import SteppedFlapjack.WordToStackSteps.ResourceSafeResult
 namespace SteppedFlapjack.WordToStackSteps
 open Flapjack Flapjack.WordToStackProofs Flapjack.WordToStackProofs.CompCorrect
 open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.StackLang
@@ -66,38 +67,6 @@ theorem wordStack_startCall {width : Nat} [NeZero width] {C F : Type}
   have bound := StackSteps.stackTable_clock_bound (.call none (.inl loc) none)
     {target with clock := target.clock + callTableBudget (.call none (some loc) [0] none) source} empty
   simpa [StackSteps.stackControlWeight] using bound
-/-- When the source stays within its stack limit, the compiler result and
-FFI state agree exactly. -/
-theorem compCorrectResult_noOverflow {width : Nat} [NeZero width] {C F : Type}
-    (ac : AsmConfigExact width) (k f frame : Nat)
-    (source post : WordSemStateFiniteExact width (Nat × C) F)
-    (target : StackSemStateFiniteExact width C F)
-    (result : Option (WordSemResult width)) (out : Option (StackSemResult width)) (lens : List Nat)
-    (relation : compCorrectResult ac k f frame source post target result out lens)
-    (bound : post.stackMax.getD (post.stackLimit+1) ≤ post.stackLimit) :
-    out = result.map compileResult ∧ target.ffi = post.ffi := by
-  by_cases mismatch : result.map compileResult ≠ out
-  · unfold compCorrectResult at relation
-    rw [if_pos mismatch] at relation
-    omega
-  · refine ⟨(not_ne_iff.mp mismatch).symm, ?_⟩
-    unfold compCorrectResult at relation
-    rw [if_neg mismatch] at relation
-    cases result with
-    | none => exact relation.2.2.2.1
-    | some r =>
-      cases r with
-      | result v vs => exact relation.1.2.2.2.1
-      | exception v payload =>
-        obtain ⟨ng,g,rel,_,_⟩ := relation
-        exact rel.2.2.2.1
-      | «break» l => exact relation.2.2.2.1
-      | «continue» l => exact relation.2.2.2.1
-      | timeOut => exact relation.1.symm
-      | notEnoughSpace => exact relation.1.symm
-      | finalFfi ev => exact relation.1.symm
-      | error => exact relation.1.symm
-
 /-- With a satisfied source stack limit, the actual Stack entry run has the
 same result and FFI state as the Word start call. -/
 theorem wordStack_startCall_exact {width : Nat} [NeZero width] {C F : Type}
@@ -119,9 +88,11 @@ theorem wordStack_startCall_exact {width : Nat} [NeZero width] {C F : Type}
   dsimp only
   obtain ⟨targetPost,out,stackRun,relation,visits⟩ :=
     wordStack_startCall ac k loc source post target result related safe noAllocCode empty run notError notTimeout
-  obtain ⟨resultEq,ffiEq⟩ := compCorrectResult_noOverflow ac k 0 0 source post
+  have resultEq := compCorrectResult_of_stack_safe ac k 0 0 source post
     {targetPost with clock := post.clock} result out [] relation stackBound
+  have ffiEq := compCorrectResult_ffi_of_match ac k 0 0 source post
+    {targetPost with clock := post.clock} result out [] relation resultEq
   subst out
-  exact ⟨targetPost,stackRun,ffiEq,visits⟩
+  exact ⟨targetPost,stackRun,ffiEq.symm,visits⟩
 
 end SteppedFlapjack.WordToStackSteps
