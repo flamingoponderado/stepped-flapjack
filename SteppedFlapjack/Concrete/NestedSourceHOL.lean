@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.NestedCalls
+import SteppedFlapjack.Concrete.NestedCrep
 import SteppedFlapjack.Concrete.Phase7SourceClock
 import SteppedFlapjack.PanToCrepSteps.WhileSteps
 import SteppedFlapjack.CrepToLoopSteps.CallFrontendShape
@@ -112,5 +113,32 @@ theorem nestedCall_frontendCode (ctxt : PanToCrepContextExact 64) : CallFrontend
         obtain ⟨rfl,rfl,rfl⟩ := found
         exact nestedCall_frontend _
       · simp at found
+
+theorem nestedCall_declaration_shapes :
+    ∀ entry ∈ functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")),
+      CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
+        (makeFuncsExactHOL (functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))))
+        (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
+        (getEidsFromDeclsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")))) entry.2.2.1 := by
+  intro entry member
+  rw [nestedCall_lowered_declarations] at member
+  simp only [functionsHOL,List.mem_cons,List.not_mem_nil,or_false] at member
+  rcases member with h | h | h | h <;> subst entry
+  · exact .seq (.base .skip) (.tail (by simp))
+  · simpa only [nestedCallEntry,progToHOL,expToHOL,shapeToHOL,List.map_nil] using nestedCall_frontend _
+  · exact .tail (by simp)
+  · exact .base (.ret (.const 7))
+
+theorem nestedCall_inline_selection_empty :
+    (functionsHOL ((compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")).filter inlinableHOL)).map Prod.fst = [] := by
+  rw [nestedCall_lowered_declarations]
+  rfl
+
+theorem nestedCall_generated_table_supported :
+    SteppedFlapjack.LoopLiveSteps.LoopTableSupported (sptFromAList (compileProgHOLExact Flapjack.Compiler.Encoders.RiscV.Target.riscvConfig.isa
+      (compileProgDeclsHOLW (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))))) := by
+  apply SteppedFlapjack.CrepToLoopSteps.callFrontend_declaration_loopTableSupported
+  · exact nestedCall_inline_selection_empty
+  · exact nestedCall_declaration_shapes
 
 end SteppedFlapjack.Concrete

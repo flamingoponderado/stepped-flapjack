@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.NestedCrep
+import SteppedFlapjack.Concrete.NestedSourceHOL
 import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
 import SteppedFlapjack.CrepToLoopSteps.ExecutableFrontend
 /-! The multi-function witness instantiates the whole-program Crep/Loop code relation. -/
@@ -16,9 +17,12 @@ theorem nestedCall_crep_codeWeight : SteppedFlapjack.CrepSteps.codeWeight nested
 
 private theorem nestedCall_crep_fixed (name : MlString) (params : List Nat) (body : CrepProgHOL 64)
     (h : (name,params,body) ∈ nestedCallCrepPrograms) : crepSimpProgHOL body = body := by
-  rw [nestedCallCrepPrograms,nestedCall_crep_code] at h
-  simp only [List.mem_cons,List.not_mem_nil,or_false] at h
-  rcases h with h | h | h | h <;> cases h <;> simp [crepSimpProgHOL,crepSimpExpHOL]
+  rw [nestedCallCrepPrograms,compileProgDeclsHOLW,nestedCall_inline_selection_empty,
+    CrepInlineRoute.compileInlTopHOLExact_nil] at h
+  obtain ⟨ctxt,p,eq,shape⟩ := callFrontend_declaration_sources _ nestedCall_declaration_shapes (name,params,body) h
+  simp only at eq
+  rw [eq]
+  exact callFrontend_simp_fixed shape
 
 /-- The generated Loop table has the compiler code relation for every Crep function. -/
 theorem nestedCall_loop_code_relation : crepToLoopCodeRelExact
@@ -52,36 +56,15 @@ theorem nestedCall_panCrep_code_relation : codeRelExactHOLW
   rw [compileProgDeclsHOLW,inlineNil,CrepInlineRoute.compileInlTopHOLExact_nil]
   exact relation
 
-set_option linter.unusedSimpArgs false in
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-private theorem nestedCall_raw_loop_shape (row : MlString × List Nat × CrepProgHOL 64) (h : row ∈ nestedCallCrepPrograms) :
-    SimpleLoopSequenceSource (compFuncHOLExact riscvConfig.isa (crepToLoopMakeFuncsExactExecutable nestedCallCrepPrograms) row.2.1 row.2.2) := by
-  rw [nestedCallCrepPrograms,nestedCall_crep_code] at h
-  simp only [List.mem_cons,List.not_mem_nil,or_false] at h
-  rcases h with h | h | h | h <;> subst row
-  all_goals simp [compFuncHOLExact,compileHOLExact,compileExpsHOLExact,compileExpHOLExact,
-    genTemps,loopNestedSeqHOL,mkCtxtExact,makeVmapExact,HolFiniteMapExact.lookup_update,
-    HolFiniteMapExact.lookup_updateEq,HolFiniteMapExact.lookup_updateListEq,FUPDATE,FUPDATE_HOL,FUPDATE_LIST_HOL,
-    List.mapM,List.mapM.loop,Option.bind, List.zipWith, List.nil_append, List.append_nil]
-  all_goals repeat' first
-    | apply SimpleLoopSequenceSource.seq
-    | apply SimpleLoopSequenceSource.tail
-    | apply SimpleLoopSequenceSource.returning
-    | apply SimpleLoopSequenceSource.branch
-    | exact LoopBranch.skip
-    | exact LoopBranch.assign _ _
-    | exact LoopBranch.ret _
-
 /-- The shared structural optimizer computes the original Loop compiler output
 for every function of the nested-call witness. -/
 theorem nestedCall_structuralLive_eq :
     compileProgWithStructuralLive riscvConfig.isa nestedCallCrepPrograms =
       compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms := by
-  apply compileProgWithStructuralLive_eq_of_shapes
-  · intro row member
-    exact nestedCall_crep_fixed row.1 row.2.1 row.2.2 member
-  · exact nestedCall_raw_loop_shape
+  rw [nestedCallCrepPrograms,compileProgDeclsHOLW,nestedCall_inline_selection_empty,
+    CrepInlineRoute.compileInlTopHOLExact_nil]
+  exact callFrontend_compileProgWithStructuralLive_eq _ _
+    (callFrontend_declaration_sources _ nestedCall_declaration_shapes)
 
 def nestedLoopLive1 : NumSet := sptInsert 1 () .ln
 

@@ -2,6 +2,7 @@ import SteppedFlapjack.PanToCrepSteps.WhileSteps
 import SteppedFlapjack.CrepToLoopSteps.ExecutableFrontend
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
 import SteppedFlapjack.LoopLiveSteps.TailEntryGlobalBound
+import Flapjack.Pancake.CrepInline.InlineRouteBridge
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.Pancake.PanLang
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.LoopLiveSteps
@@ -191,5 +192,36 @@ theorem callFrontend_compiled_loopTableSupported {width : Nat} [NeZero width]
   rw [sptLookup_sptFromAList] at lookup
   exact callFrontend_compileProg_loopShapes arch programs sources name params body
     (sptAListLookup_mem name _ (params,body) lookup)
+
+/-- Every function emitted by declaration compilation originates from a
+call-aware source body in the exact context used by the compiler. -/
+theorem callFrontend_declaration_sources {width : Nat} [NeZero width]
+    (declarations : List (DeclHOL width))
+    (shapes : ∀ entry ∈ functionsHOL declarations,
+      CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
+        (makeFuncsExactHOL (functionsHOL declarations))
+        (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
+        (getEidsFromDeclsHOL declarations)) entry.2.2.1) :
+    ∀ row ∈ compileToCrepExactHOLW declarations,
+      ∃ (ctxt : PanToCrepContextExact width) (p : ProgHOL width),
+        row.2.2 = compileProgExactHOLW ctxt p ∧ CallFrontend ctxt p := by
+  intro row member
+  simp only [compileToCrepExactHOLW,List.mem_map] at member
+  obtain ⟨entry,mem,rfl⟩ := member
+  exact ⟨_,_,rfl,shapes entry mem⟩
+
+/-- The actual post-inline compiler table has the call-aware Loop shape when
+no declarations request inlining. The condition is decidable from the source. -/
+theorem callFrontend_declaration_loopTableSupported {width : Nat} [NeZero width]
+    (arch : Flapjack.Compiler.Encoders.Asm.AsmArchitecture) (declarations : List (DeclHOL width))
+    (noInline : (functionsHOL (declarations.filter inlinableHOL)).map Prod.fst = [])
+    (shapes : ∀ entry ∈ functionsHOL declarations,
+      CallFrontend (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
+        (makeFuncsExactHOL (functionsHOL declarations))
+        (sizeOfShapeHOL (.comb (entry.2.1.map Prod.snd)) - 1)
+        (getEidsFromDeclsHOL declarations)) entry.2.2.1) :
+    LoopTableSupported (sptFromAList (compileProgHOLExact arch (compileProgDeclsHOLW declarations))) := by
+  rw [compileProgDeclsHOLW,noInline,CrepInlineRoute.compileInlTopHOLExact_nil]
+  exact callFrontend_compiled_loopTableSupported arch _ (callFrontend_declaration_sources declarations shapes)
 
 end SteppedFlapjack.CrepToLoopSteps

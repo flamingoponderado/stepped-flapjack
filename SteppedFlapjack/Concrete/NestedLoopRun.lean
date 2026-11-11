@@ -118,23 +118,9 @@ theorem nestedCall_loop_run :
 open SteppedFlapjack.LoopSteps SteppedFlapjack.LoopLiveSteps SteppedFlapjack.LoopToWordSteps SteppedFlapjack.CrepToLoopSteps
 
 private theorem nestedTable_supported : LoopTableSupported nestedLoopTable := by
-  intro loc params body found
-  rw [nestedLoopTable,sptLookup_sptFromAList] at found
-  have member := sptAListLookup_mem loc
-    [(64,([],nestedLoopCode64)),(65,([],nestedLoopCode65)),(66,([],nestedLoopCode66)),(67,([],nestedLoopCode67))]
-    (params,body) found
-  simp only [List.mem_cons,List.not_mem_nil,or_false] at member
-  rcases member with h | h | h | h <;> cases h
-  all_goals simp only [nestedLoopCode64,nestedLoopCode65,nestedLoopCode66,nestedLoopCode67]
-  all_goals repeat' first
-    | apply SimpleLoopSequenceSource.mark
-    | apply SimpleLoopSequenceSource.seq
-    | apply SimpleLoopSequenceSource.tail
-    | apply SimpleLoopSequenceSource.returningMarked
-    | apply SimpleLoopSequenceSource.branch
-    | exact LoopBranch.skip
-    | exact LoopBranch.assign _ _
-    | exact LoopBranch.ret _
+  unfold nestedLoopTable
+  rw [← nestedCall_loop_code,nestedCallCrepPrograms]
+  exact nestedCall_generated_table_supported
 
 /-- The actual nested-call entry is bounded by the general code-table theorem. -/
 theorem nestedCall_loop_steps_bound : steps nestedLoopCode64 nestedLoopState ≤ 122 := by
