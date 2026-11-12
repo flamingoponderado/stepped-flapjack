@@ -1,6 +1,6 @@
 import SteppedFlapjack.Concrete.CountedScalar
 namespace SteppedFlapjack.Concrete
-open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
+open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
 
 def GlobalHOLShapes (shapes : VarName → Option ShapeHOL)
     (globals : VarName → Option (PanValue (RiscV.Word 64))) : Prop :=
@@ -104,5 +104,118 @@ theorem globalRead_word {σ : Type} {shapes : VarName → Option ShapeHOL} {e : 
   | word w => exact ⟨w,rfl⟩
   | rStruct fields => simp [shapeOfHOLExact] at h
   | nStruct name fields => simp [shapeOfHOLExact] at h
+
+/-- Global-aware scalar expressions retain word-valued successful evaluations. -/
+inductive GlobalScalarExpression (shapes : VarName → Option ShapeHOL) (scope : List VarName) : Exp (RiscV.Word 64) → Prop
+  | local {e} : Scalar scope e → GlobalScalarExpression shapes scope e
+  | global {e} : GlobalRead shapes e .one → GlobalScalarExpression shapes scope e
+  | load {address} : GlobalScalarExpression shapes scope address → GlobalScalarExpression shapes scope (.load .one address)
+  | op (operator) {a b} : GlobalScalarExpression shapes scope a → GlobalScalarExpression shapes scope b → GlobalScalarExpression shapes scope (.op operator [a,b])
+  | cmp (operator) {a b} : GlobalScalarExpression shapes scope a → GlobalScalarExpression shapes scope b → GlobalScalarExpression shapes scope (.cmp operator a b)
+  | shift (operator) {a b} : GlobalScalarExpression shapes scope a → GlobalScalarExpression shapes scope b → GlobalScalarExpression shapes scope (.shift operator a b)
+
+theorem globalScalarExpression_word {σ : Type} {shapes : VarName → Option ShapeHOL} {scope : List VarName} {expression : Exp (RiscV.Word 64)}
+    (scalar : GlobalScalarExpression shapes scope expression) (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (words : WordLocals production.locals) (globals : GlobalHOLShapes shapes production.globals)
+    (value : PanValue (RiscV.Word 64)) (evaluated : evalPanSemStateExp production expression = some value) : ∃ word, value = .word word := by
+  rw [evalPanSemStateExp_64_eq_previous] at evaluated
+  induction scalar generalizing value with
+  | «local» h => apply scalar_eval_word h production words value; simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
+  | global h => apply globalRead_word h production globals value; simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
+  | @load address ha ih =>
+    simp only [evalPanValueExp] at evaluated
+    cases addressRun : evalPanValueExp production.structs production.locals production.globals production.memory
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord address
+        (some (panSemBitVec64MemoryAccess production)) with
+    | none => simp [addressRun] at evaluated
+    | some result =>
+      obtain ⟨addressWord,rfl⟩ := ih result addressRun
+      cases read : panValueFlatReadWord production.memory panSemBitVec64BytesInWord
+          (some (panSemBitVec64MemoryAccess production)) addressWord with
+      | none => simp [addressRun,panValueFlatLoad,isWfShape,panValueFlatLoadFuel,read] at evaluated
+      | some word =>
+        simp [addressRun,panValueFlatLoad,isWfShape,panValueFlatLoadFuel,read] at evaluated
+        subst value
+        exact ⟨word,rfl⟩
+  | @op operator a b ha hb iha ihb =>
+    simp only [evalPanValueExp] at evaluated
+    cases argsRun : evalPanValueExp.evalPanValueExps production.structs production.locals production.globals production.memory
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord [a,b]
+        (some (panSemBitVec64MemoryAccess production)) with
+    | none => simp [argsRun] at evaluated
+    | some values =>
+      cases projected : values.mapM panValueWordProjection with
+      | none => simp [argsRun,projected] at evaluated
+      | some nums =>
+        cases opRun : (panSemBitVec64MemoryAccess production).wordOp operator nums with
+        | none => simp [argsRun,projected,opRun] at evaluated
+        | some w =>
+          simp [argsRun,projected,opRun] at evaluated
+          subst value
+          exact ⟨w,rfl⟩
+  | @cmp operator a b ha hb iha ihb =>
+    simp only [evalPanValueExp] at evaluated
+    cases leftRun : evalPanValueExp production.structs production.locals production.globals production.memory
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord a
+        (some (panSemBitVec64MemoryAccess production)) with
+    | none => simp [leftRun] at evaluated
+    | some left =>
+      cases rightRun : evalPanValueExp production.structs production.locals production.globals production.memory
+          production.baseAddress production.topAddress panSemBitVec64BytesInWord b
+          (some (panSemBitVec64MemoryAccess production)) with
+      | none => simp [leftRun,rightRun] at evaluated
+      | some right =>
+        obtain ⟨leftWord,rfl⟩ := iha left leftRun
+        obtain ⟨rightWord,rfl⟩ := ihb right rightRun
+        simp [leftRun,rightRun] at evaluated
+        subst value
+        exact ⟨_,rfl⟩
+  | @shift operator a b ha hb iha ihb =>
+    simp only [evalPanValueExp] at evaluated
+    cases leftRun : evalPanValueExp production.structs production.locals production.globals production.memory
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord a
+        (some (panSemBitVec64MemoryAccess production)) with
+    | none => simp [leftRun] at evaluated
+    | some left =>
+      cases rightRun : evalPanValueExp production.structs production.locals production.globals production.memory
+          production.baseAddress production.topAddress panSemBitVec64BytesInWord b
+          (some (panSemBitVec64MemoryAccess production)) with
+      | none => simp [leftRun,rightRun] at evaluated
+      | some right =>
+        obtain ⟨leftWord,rfl⟩ := iha left leftRun
+        obtain ⟨rightWord,rfl⟩ := ihb right rightRun
+        cases shiftRun : (panSemBitVec64MemoryAccess production).shift operator leftWord rightWord with
+        | none => simp [leftRun,rightRun,shiftRun] at evaluated
+        | some word =>
+          simp [leftRun,rightRun,shiftRun] at evaluated
+          subst value
+          exact ⟨word,rfl⟩
+
+
+/-- Counted returns admit typed global scalar expressions. -/
+theorem counted_global_scalar_return_invert {σ : Type} {scope : List VarName} {shapes : VarName → Option ShapeHOL}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
+    [DecidablePred source.memaddrs]
+    (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
+    (words : WordLocals production.locals) (globals : GlobalHOLShapes shapes production.globals)
+    (expression : Exp (RiscV.Word 64)) (scalar : GlobalScalarExpression shapes scope expression) (exprRanged : ExpByteRanged expression)
+    (value : PanValue (RiscV.Word 64)) (postLocals : VarName → Option (PanValue (RiscV.Word 64)))
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel count : Nat)
+    (run : evalPanValueFfiProgSteps context primitive handler production.structs functions
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+      production.locals production.globals production.memory production.ffi (.return expression)
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
+        some (.returned postLocals production.globals production.memory production.ffi [value],count)) :
+    ∃ word, value = .word word ∧ postLocals = (fun _ => none) ∧
+      source.evaluateHOLFiniteState (.return (expToHOL expression)) =
+        (some (.returned (.val (.word word))),source.emptyLocalsHOLFinite) ∧
+      PanSemStateRelExec (panEmptyLocals production) source.emptyLocalsHOLFinite.toExact ∧
+      PanSemStateRelExecRanged (panEmptyLocals production) ∧
+      controlSteps (.return (expToHOL expression)) source ≤ count := by
+  exact counted_word_return_invert production source rel ranged expression
+    (fun value evaluated => globalScalarExpression_word scalar production words globals value evaluated)
+    exprRanged value postLocals context primitive handler functions fuel count run
 
 end SteppedFlapjack.Concrete

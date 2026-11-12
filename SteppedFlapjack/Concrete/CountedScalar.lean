@@ -35,12 +35,13 @@ theorem counted_scalar_initializer_invert {σ : Type} {scope : List VarName}
     · simp at run
 /-- A counted scalar return carries a word, clears locals, and has the
 corresponding HOL result and state. -/
-theorem counted_scalar_return_invert {σ : Type} {scope : List VarName}
+theorem counted_word_return_invert {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     [DecidablePred source.memaddrs]
     (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
-    (words : WordLocals production.locals)
-    (expression : Exp (RiscV.Word 64)) (scalar : Scalar scope expression) (exprRanged : ExpByteRanged expression)
+    (expression : Exp (RiscV.Word 64))
+    (wordResult : ∀ value, evalPanSemStateExp production expression = some value → ∃ word, value = .word word)
+    (exprRanged : ExpByteRanged expression)
     (value : PanValue (RiscV.Word 64)) (postLocals : VarName → Option (PanValue (RiscV.Word 64)))
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
@@ -74,7 +75,7 @@ theorem counted_scalar_return_invert {σ : Type} {scope : List VarName}
         obtain ⟨⟨localsEq,valueEq⟩,costEq⟩ := run
         have expressionRun : evalPanSemStateExp production expression = some result := by
           simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
-        obtain ⟨word,resultEq⟩ := scalar_eval_word scalar production words result expressionRun
+        obtain ⟨word,resultEq⟩ := wordResult result expressionRun
         have valueWord : value = .word word := valueEq.symm.trans resultEq
         subst postLocals
         have originalRun' : evalPanValueFfiProgSteps context primitive handler production.structs functions

@@ -311,15 +311,21 @@ theorem pair_assignment_bridge (body : ProgHOL 64) :
   · simpa only [expToHOL,List.map] using result.2.1
   · simpa [panValueExpStepCost,panValueExpStepCost.panValueExpsStepCost,expToHOL] using result.2.2.2.2
 
-/-- The typed global-read invariant applies to the concrete pair. -/
+/-- A concrete arithmetic expression using a global pair field is scalar. -/
 example (value : PanValue (RiscV.Word 64))
-    (run : evalPanSemStateExp globalStructInitial (.rField 1 (.var .global "pair")) = some value) :
+    (run : evalPanSemStateExp globalStructInitial (.op .add [.rField 1 (.var .global "pair"),.const 1]) = some value) :
     ∃ word, value = .word word := by
   let shapes : VarName → Option ShapeHOL := fun n => (globalStructInitial.globals n).map (fun v => shapeOfHOLExact (panValueToHOL v))
   have layout : shapes "pair" = some (.comb [.one,.one]) := by
     simp [shapes,globalStructInitial,updatePanValueMap,shapeOfHOLExact]
   have path : GlobalRead shapes (.rField 1 (.var .global "pair")) .one :=
     .field (.global "pair" _ (by decide) layout) 1 .one rfl
-  exact globalRead_word path globalStructInitial (by intro n hn; rfl) value run
+  have expression : GlobalScalarExpression shapes [] (.op .add [.rField 1 (.var .global "pair"),.const 1]) :=
+    .op .add (.global path) (.local (.const _))
+  apply globalScalarExpression_word expression globalStructInitial
+  · intro name v hv
+    simp [globalStructInitial,sourceProduction] at hv
+  · intro n hn; rfl
+  · exact run
 
 end SteppedFlapjack.Concrete
