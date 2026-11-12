@@ -59,11 +59,6 @@ theorem configuredByteDomain_one : configuredByteDomain [4] = fixtureByteDomain 
   apply Bool.eq_iff_iff.mpr
   simpa only [decide_eq_true_eq] using configuredLabDomain_one a
 
-/-- The word-addressed fixture heap and bitmap are aligned. -/
-theorem fixtureLabDomain_aligned (a : BitVec 64) (h : fixtureLabDomain a) : holByteAligned a = true := by
-  apply configuredLabDomain_aligned [4] a
-  simpa [configuredLabDomain, fixtureLabDomain, bitmapDomain_singleton] using h
-
 /-- Machine shared memory contains all bytes of each fixture shared word. -/
 noncomputable def fixtureSharedByteDomain : BitVec 64 → Bool :=
   byteClosure (fun a => decide (sharedAddress a))

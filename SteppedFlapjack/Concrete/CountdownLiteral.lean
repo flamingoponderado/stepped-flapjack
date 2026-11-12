@@ -48,15 +48,6 @@ theorem countdownTwoLoops_literal (n : Nat) :
   rw [twoLoops_exact _ _ _ _ (Ne.symm (entryName_fresh (naturalCountdownHOL n))), countdownCallee_literal]
   rfl
 
-/-- Loop-to-Word compilation of the generated countdown callee. -/
-theorem countdownCalleeWord_literal (x : BitVec 64) :
-    loopToWordCompFuncHOL 65 [] ((countdownLoopLiteral x 0).get ⟨1,by simp [countdownLoopLiteral]⟩).2.2 =
-      ((countdownWordLiteral x 0).get ⟨1,by simp [countdownWordLiteral]⟩).2.2 := by
-  have h := countdownLoopLiteral_toWord x 0
-  simp only [loopToWordCompileHOL,loopToWordCompileProgHOL,countdownLoopLiteral,countdownWordLiteral,
-    List.map_cons,List.map_nil] at h
-  exact (Prod.mk.inj (Prod.mk.inj (List.cons.inj (List.cons.inj h).2).1).2).2
-
 /-- The Phase 2 compiler emits this Word literal for every input word. -/
 theorem countdownWordPrograms_literal (n : Nat) :
     countdownWordPrograms n = countdownWordLiteral (BitVec.ofNat 64 n) 0 := by

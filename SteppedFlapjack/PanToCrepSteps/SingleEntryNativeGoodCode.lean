@@ -43,14 +43,4 @@ theorem nativeBitmaps_header (words : List (Nat × Nat × WordLangProgHOL (BitVe
     subst head
     rfl
 
-/-- Original compilation guarantees good Stack code for a singleton source. -/
-theorem singleEntry_nativeGoodCode (body : ProgHOL 64) (words : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
-    (compiled : panToWordCompileProgHOL riscvConfig.isa (singleEntryProgram (ofString "main") body) = words) :
-    StackToLab.Proofs.GoodCode.goodCode 24
-      (compileNative riscvConfig false (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).2.2.2 := by
-  have unique : ((functionsHOL (singleEntryProgram (ofString "main") body)).map Prod.fst).Nodup := by
-    simp [singleEntryProgram,functionsHOL]
-  have good := source_nativeGoodCode (singleEntryProgram (ofString "main") body) unique
-  rw [compiled] at good
-  exact good
 end SteppedFlapjack.PanToCrepSteps

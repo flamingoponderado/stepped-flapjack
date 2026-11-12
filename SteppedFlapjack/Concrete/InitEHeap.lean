@@ -90,12 +90,4 @@ theorem configuredStack_ambient (code : List (Nat × HolProg 64)) (cfg : LabToTa
     by simpa [ctx,configuredStackContext,configuredLab,fixtureLab] using ambient.2.1,
     by simpa [ctx,configuredStackContext,configuredLab,fixtureLab] using ambient.2.2⟩
 
-theorem fixtureStack_heapMemory (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) (a : BitVec 64)
-    (member : ordinaryAddress a) : (fixtureStack code cfg).memory a = .word (initialWord a) := by
-  have fits : 0xa0020018 + ([4] : List (BitVec 64)).length*8 ≤ sourceBase := by decide
-  have h := configuredStack_heapMemory code cfg [4] fits good a member
-  rw [configuredStack_one] at h
-  simpa [initialWordFor_one] using h
-
 end SteppedFlapjack.Concrete

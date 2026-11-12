@@ -27,34 +27,6 @@ theorem countdown_expressions_ranged (n : Nat) :
     ExpByteRanged (.op .sub [.var .local "x",.const 1] : Exp (RiscV.Word 64)) := by
   simp [ExpByteRanged,ListExpByteRanged]
 
-/-- The exact `6*n+9` count and the matching HOL run use no initialization
-hypotheses: the concrete state already satisfies them. -/
-theorem countdown_run (n : Nat) (range : n < 2^64)
-    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
-    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
-    ∃ result final,
-      evalPanValueFfiProgSteps context primitive handler (executableState (countdownHOL n)).structs []
-        (executableState (countdownHOL n)).baseAddress (executableState (countdownHOL n)).topAddress
-        panSemBitVec64BytesInWord (n+4) (executableState (countdownHOL n)).locals
-        (executableState (countdownHOL n)).globals (executableState (countdownHOL n)).memory
-        (executableState (countdownHOL n)).ffi (countdown n)
-        (memoryAccess := some (panSemBitVec64MemoryAccess (executableState (countdownHOL n)))) =
-          some (result,6*n+9) ∧
-      (exactState (countdownHOL n)).evaluateHOLFiniteState (countdownHOL n) =
-        (some (.returned (.val (.word 0))),final) ∧
-      controlSteps (countdownHOL n) (exactState (countdownHOL n)) ≤ 6*n+9 ∧
-      result = .returned (restorePanValueLocal (fun _ => none) "x"
-        ((executableState (countdownHOL n)).locals "x"))
-        (executableState (countdownHOL n)).globals (executableState (countdownHOL n)).memory
-        (executableState (countdownHOL n)).ffi [.word 0] := by
-  have run := counted_decl_countdown_return n (executableState (countdownHOL n)) (exactState (countdownHOL n))
-    (source_related _) (source_ranged _) "x" countdown_name_ranged range (by
-      change n ≤ 2^64
-      omega) 0 (mkCtxtExactHOL HolFiniteMapExact.empty HolFiniteMapExact.empty 0 HolFiniteMapExact.empty) context primitive handler [] 0
-  obtain ⟨result,final,exec,hol,bound,_,resultEq⟩ := run
-  exact ⟨result,final,by simpa [countdown] using exec,by simpa [countdownHOL] using hol,
-    by simpa [countdownHOL] using bound,resultEq⟩
-
 /-- The comparison conditional takes its first branch in six counted steps. -/
 theorem branching_run
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))

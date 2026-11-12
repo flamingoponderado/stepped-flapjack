@@ -32,11 +32,9 @@ import SteppedFlapjack.Concrete.FixtureCodeMemory
 import SteppedFlapjack.LabToTargetSteps.DomainAlignmentBridge
 import SteppedFlapjack.LabToTargetSteps.ByteClosure
 import SteppedFlapjack.LoopToWordSteps.FullInitMachineConstruct
-import SteppedFlapjack.Concrete.FixtureLabNumeric
-import SteppedFlapjack.Concrete.CountdownLabBounds
 import SteppedFlapjack.Concrete.FixtureTargetLab
-import SteppedFlapjack.Concrete.FixtureStackLab
 import SteppedFlapjack.StackToLabSteps.ExplicitSpan
+import SteppedFlapjack.Concrete.CountdownLabBounds
 import SteppedFlapjack.StackRemoveSteps.ExplicitFields
 import SteppedFlapjack.Concrete.CountdownStackBounds
 import SteppedFlapjack.Concrete.BranchingFrames

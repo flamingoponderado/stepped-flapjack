@@ -96,28 +96,4 @@ theorem configuredStack_stackLength (code : List (Nat × HolProg 64)) (cfg : Lab
   rw [fixture_init_limits] at length
   exact length
 
-/-- The actual initialized Stack state satisfies the native initializer relation. -/
-theorem fixtureStack_nativeInitOk (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
-    Flapjack.WordToStackProofs.InitializationStateRel.initStateOk riscvConfig
-      (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (fixtureStack code cfg) (fixtureWordOracle cfg) := by
-  have fits : 0xa0020018 + (4 :: ([] : List (BitVec 64))).length*8 ≤ sourceBase := by decide
-  have h := configuredStack_nativeInitOk code cfg [] fits good
-  rw [configuredStack_one,configuredWordOracle_one] at h
-  exact h
-
-theorem fixtureStack_code (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) :
-    (fixtureStack code cfg).code = sptFromAList code := by
-  unfold fixtureStack
-  rw [fullMakeInit_eq]
-  rfl
-
-theorem fixtureStack_bitmaps (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) :
-    (fixtureStack code cfg).bitmaps = [4] := by
-  unfold fixtureStack
-  rw [fullMakeInit_eq]
-  change (InitMake.makeInitAny _ _ _ _ _ _ _ _ _ _).bitmaps = [4]
-  rw [InitAny.makeInitAnyBitmaps]
-  simp
-
 end SteppedFlapjack.Concrete

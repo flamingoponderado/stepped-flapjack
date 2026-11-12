@@ -89,11 +89,10 @@ tick bound.
 `nested_initialized_machine` instantiates this composition with two call levels
 and a six-step source execution.
 
-`comparisonFixture_machine` and `branchingLoopFixture_machine` instantiate the
-call-aware theorem with concrete clocks `comparisonTicks` and
-`branchingLoopTicks`. Both `countdownFixture_machine` and
-`naturalCountdownFixture_machine` state the kernel-checked bound
-`44195828396580057600 * (6*n+9) + 59847410146165518348` machine ticks.
+The kernel-checked witness clocks are `8402039033998605948` ticks for the
+comparison program and `12798071459382541821948` ticks for the branching loop.
+Both `countdownFixture_machine` and `naturalCountdownFixture_machine` state the
+bound `44195828396580057600 * (6*n+9) + 59847410146165518348` machine ticks.
 
 This fragment and fixture do not yet cover init-e's full guest: globals, heap
 and shared-memory operations, exceptions, FFI, primitive behavior and host

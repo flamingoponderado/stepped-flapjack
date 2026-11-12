@@ -10,19 +10,6 @@ open SteppedFlapjack.PanToCrepSteps
 
 namespace SteppedFlapjack.Concrete
 
-/-- The optimized entry is a supported direct tail call. -/
-theorem countdownEntry_shape : RegTailShape countdownOptimizedEntry := by
-  apply RegTailShape.seq
-  · apply RegTailShape.branch; exact Branch.move 1 [(0,0)]
-  · exact RegTailShape.call 65 0
-
-theorem countdownEntry_noInstall : noInstallSubprogsHOL countdownOptimizedEntry = true := by rfl
-
-theorem countdownEntry_flat : flatExpConventions countdownOptimizedEntry = true := by rfl
-
-theorem countdownEntry_convention : postAllocConventionsHOL (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) countdownOptimizedEntry = true := by
-  with_unfolding_all rfl
-
 open Flapjack.WordToStackProofs Flapjack.WordToStackProofs.CompCorrect Flapjack.WordToStackProofs.InitializationStateRel
 open Flapjack.Compiler.Backend.WordToStack.Native Flapjack.Compiler.Backend.WordToWord
 open Flapjack.Compiler.Backend.WordToStack.Native.Initialization

@@ -55,13 +55,6 @@ theorem supported_panSimp_run {σ : Type} (program : Prog (RiscV.Word 64)) (supp
   rw [same,run] at independent
   exact independent
 
-/-- The actual declaration-level simplifier installs exactly the supported
-simplified singleton body used by the later compiler passes. -/
-theorem supported_panSimp_declarations (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program) :
-    panSimpDeclsHOL (declarations (progToHOL program)) =
-      declarations (progToHOL (panSimpProg program)) := by
-  simp [declarations,singleEntryProgram,panSimpDeclsHOL,(supported_panSimp program supported).2]
-
 /-- With the entire function table related by pan_simp, every non-error run
 of a call-aware body is preserved by the executable simplifier. -/
 theorem callSupported_panSimp_run {scope : List VarName} {program : Prog (RiscV.Word 64)}

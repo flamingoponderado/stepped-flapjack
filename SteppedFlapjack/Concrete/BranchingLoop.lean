@@ -61,8 +61,4 @@ theorem branchingLoop_simp_source :
     panSimpSourceState branchingLoop (exactState (progToHOL branchingLoop)) = exactState (progToHOL branchingLoop) := by
   simp [panSimpSourceState,branchingLoop_simp_program,exactState,singleEntrySourceTemplate]
 
-theorem branchingLoop_simp_declarations :
-    panSimpDeclsHOL (declarations (progToHOL branchingLoop)) = declarations (progToHOL branchingLoop) := by
-  simpa [branchingLoop_simp_program] using supported_panSimp_declarations branchingLoop branchingLoop_supported
-
 end SteppedFlapjack.Concrete

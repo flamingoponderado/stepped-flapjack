@@ -75,13 +75,6 @@ theorem configuredTargetLab_stack (code : List (Nat × HolProg 64)) (cfg : LabTo
   rw [fullMakeInit_eq,fullMakeInit_eq]
   rfl
 
-theorem fixtureTargetLab_stack (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (ms : RiscV.L3.riscv_state) :
- (fullMakeInit countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
-  [4] code (fixtureTargetLab code cfg ms) fixtureSavedRegs 0 (fixtureStackOracle cfg)).1 = fixtureStack code cfg := by
- have h := configuredTargetLab_stack code cfg [4] ms
- rw [configuredTargetLab_one, configuredStack_one] at h
- exact h
-
 private theorem fixtureSavedRegs_member (r : Nat) (h : fixtureSavedRegs r = true) : r ∈ countdownMachineConfig.calleeSavedRegs := by
  have r24 : StackNames.findNameSpt countdownRiscVBackend.stackConf.regNames 24 = 24 := by with_unfolding_all rfl
  have r25 : StackNames.findNameSpt countdownRiscVBackend.stackConf.regNames 25 = 25 := by with_unfolding_all rfl
@@ -102,11 +95,5 @@ theorem configuredTargetLab_assumptions (code : List (Nat × HolProg 64)) (cfg :
    exact targetIoRegsCalleeSaved (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms n r i (fixtureSavedRegs_member r saved)
  · intro r n saved
    exact targetCcRegsCalleeSaved (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms n r (fixtureSavedRegs_member r saved)
-
-theorem fixtureTargetLab_assumptions (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (ms : RiscV.L3.riscv_state)
- (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
- Assumptions countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
- [4] code (fixtureTargetLab code cfg ms) fixtureSavedRegs 0 (fixtureStackOracle cfg) := by
- apply configuredTargetLab_one code cfg ms ▸ configuredTargetLab_assumptions code cfg [4] ms (by decide) good
 
 end SteppedFlapjack.Concrete

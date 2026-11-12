@@ -10,23 +10,6 @@ open Flapjack.Compiler.Encoders.RiscV.Target SteppedFlapjack.PanToCrepSteps
 /-- Physical registers agree with the Lab fixture at all machine registers. -/
 def fixtureMachineRegs (r : BitVec 5) : BitVec 64 := fixtureAsm.regs r.toNat
 
-/-- Byte memory obtained from the fixture's loaded word-backed memory. -/
-noncomputable def fixtureMachineBytes (code : List (Nat × HolProg 64)) : BitVec 64 → BitVec 8 :=
-  countdownBytesOfWords (fixtureLoadedWords (fixtureCodeStart code) (fixtureCodeBytes code))
-
-/-- Concrete RISC-V state with compiled code and the original fixture registers. -/
-noncomputable def fixtureMachineState (code : List (Nat × HolProg 64)) : RiscV.L3.riscv_state :=
-  { countdownMachineState (fixtureMachineBytes code) fixtureMachineRegs with
-    c_PC := fun _ => fixtureCodeStart code }
-
-/-- Assembler state reading the exact same registers and bytes as the machine. -/
-noncomputable def fixtureMachineAsm (code : List (Nat × HolProg 64)) : AsmState 64 :=
-  { fixtureAsm with
-    mem := fixtureMachineBytes code
-    memDomain := (fixtureMachineConfig (fixtureCodeStart code)).progAddresses
-    pc := fixtureCodeStart code
-    align := 2 }
-
 /-- Loaded machine bytes for the exact compiler-provided bitmap list. -/
 noncomputable def configuredMachineBytes (code : List (Nat × HolProg 64)) (bs : List (BitVec 64)) : BitVec 64 → BitVec 8 :=
   countdownBytesOfWords (countdownWriteCode (fixtureCodeStart code) (fixtureCodeBytes code)

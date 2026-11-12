@@ -38,19 +38,6 @@ theorem byteClosure_aligned (P : BitVec 64 → Bool) (hP : ∀ a, P a = true →
   · rw [holByteAlign_of_aligned good64 a ((holByteAligned_iff_mod good64 a).1 h)]
     simp
 
-/-- The P5 fixture Lab (`makeInit` with aligned word domains D, S) is the
-double alignment of the machine-shaped Lab (`makeInit` with byte closures). -/
-theorem makeInit_byteClosure {C S Q F : Type}
-    (mc : MachineConfig 64 S Q) (ffi : HolFfiState F) (t : AsmState 64)
-    (m : BitVec 64 → WordLocW 64) (D Sh : BitVec 64 → Bool)
-    (hD : ∀ a, D a = true → holByteAligned a = true) (hS : ∀ a, Sh a = true → holByteAligned a = true)
-    (ms : S) (code : LabSem.LabProgHOL 64)
-    (comp : C → LabSem.LabProgHOL 64 → Option (List (BitVec 8) × C))
-    (cbpos : BitVec 64) (cbspace : Nat) (co : Nat → C × LabSem.LabProgHOL 64) :
-    alignSdm (alignDm (makeInit mc ffi t m (byteClosure D) (byteClosure Sh) ms code comp cbpos cbspace co)) =
-      makeInit mc ffi t m D Sh ms code comp cbpos cbspace co := by
-  simp only [alignSdm, alignDm, makeInit, byteClosure_aligned D hD, byteClosure_aligned Sh hS]
-
 /-- Transfer a halting run through shared-domain alignment (any clock). -/
 theorem halt_of_alignSdm {C F : Type} (s : LabSem.State 64 C F) (clock : Nat) (o : HolOutcome)
     (post : LabSem.State 64 C F)
