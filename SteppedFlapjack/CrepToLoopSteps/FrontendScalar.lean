@@ -17,9 +17,9 @@ theorem frontendScalar_compiled {width : Nat} [NeZero width]
   | baseAddr => exact ⟨.baseAddr,by simp [compileExpExactHOLW],.direct .baseAddr⟩
   | topAddr => exact ⟨.topAddr,by simp [compileExpExactHOLW],.direct .topAddr⟩
   | bytesInWord => exact ⟨.const (BitVec.ofNat width (width / 8)),by simp [compileExpExactHOLW],.direct (.const _)⟩
-  | fieldLoad index shapes inBounds address ih =>
+  | fieldPath shapes address path ih =>
     obtain ⟨compiled, eq, shape⟩ := ih
-    obtain ⟨offset, fieldEq⟩ := PanToCrepSteps.scalarShapeField_compiles ctxt index shapes _ compiled eq inBounds
+    obtain ⟨offset, fieldEq⟩ := PanToCrepSteps.scalarPathField_compiles ctxt shapes _ _ compiled eq path
     refine ⟨_,fieldEq,?_⟩
     split <;> rename_i h
     · exact .load shape

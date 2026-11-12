@@ -11,9 +11,9 @@ inductive GlobalScalar {width : Nat} [NeZero width]
   | local {e} : FrontendScalar ctxt e → GlobalScalar globals ctxt e
   | globalWord (name offset) : globals.globals.lookup name = some (.one,offset) →
       GlobalScalar globals ctxt (.var .global name)
-  | globalField (name offset index) (shapes : List ShapeHOL) : shapes[index]? = some .one →
+  | globalPath (name offset) (shapes : List ShapeHOL) {e} :
       globals.globals.lookup name = some (.comb shapes,offset) →
-      GlobalScalar globals ctxt (.rfield index (.var .global name))
+      FieldPath (.var .global name) (.comb shapes) e .one → GlobalScalar globals ctxt e
   | load {address} : GlobalScalar globals ctxt address → GlobalScalar globals ctxt (.load .one address)
   | op (operator) {a b} : GlobalScalar globals ctxt a → GlobalScalar globals ctxt b →
       GlobalScalar globals ctxt (.op operator [a,b])
@@ -22,6 +22,13 @@ inductive GlobalScalar {width : Nat} [NeZero width]
   | shift (operator) {a b} : GlobalScalar globals ctxt a → GlobalScalar globals ctxt b →
       GlobalScalar globals ctxt (.shift operator a b)
 
+theorem GlobalScalar.globalField {width : Nat} [NeZero width]
+    {globals : PanGlobalsContextExact width} {ctxt : PanToCrepContextExact width}
+    (name : MlString) (offset : BitVec width) (index : Nat) (shapes : List ShapeHOL)
+    (valid : shapes[index]? = some .one) (found : globals.globals.lookup name = some (.comb shapes,offset)) :
+    GlobalScalar globals ctxt (.rfield index (.var .global name)) :=
+  .globalPath name offset shapes found (.field .root index .one valid)
+
 /-- Global lowering maps every supported scalar to the existing frontend. -/
 theorem globalScalar_compiled {width : Nat} [NeZero width]
     {globals : PanGlobalsContextExact width} {ctxt : PanToCrepContextExact width} {e : ExpHOL width}
@@ -29,7 +36,10 @@ theorem globalScalar_compiled {width : Nat} [NeZero width]
   induction h with
   | «local» h => exact globalCompile_frontendScalar globals h
   | globalWord name offset found => exact globalCompile_globalWord globals ctxt name offset found
-  | globalField name offset index shapes valid found => exact globalCompile_globalField globals ctxt name offset index shapes valid found
+  | globalPath name offset shapes found path =>
+    have mapped := path.globalCompile globals
+    simp only [compileExpExactHOL,found] at mapped
+    exact FrontendScalar.fieldPath shapes (.op .sub .topAddr (.const offset)) mapped
   | load h ih => simpa [compileExpExactHOL] using FrontendScalar.load ih
   | op operator a b iha ihb => simpa [compileExpExactHOL,compileExpExactHOLList] using FrontendScalar.op operator iha ihb
   | cmp operator a b iha ihb => simpa [compileExpExactHOL] using FrontendScalar.cmp operator iha ihb
@@ -246,5 +256,11 @@ theorem globalCallFrontend_compiled {width : Nat} [NeZero width]
   | seq a b iha ihb => simpa only [compileProgExactHOL] using CallFrontend.seq iha ihb
   | ite e a b iha ihb => simpa only [compileProgExactHOL] using CallFrontend.ite (globalScalar_compiled e) iha ihb
   | «while» e body ih => simpa only [compileProgExactHOL] using CallFrontend.while (globalScalar_compiled e) ih
+
+/-- Nested scalar field paths are supported for concrete global layouts. -/
+example (globals : PanGlobalsContextExact 64) (ctxt : PanToCrepContextExact 64) (name : MlString) (offset : BitVec 64)
+    (found : globals.globals.lookup name = some (.comb [.comb [.one,.one],.one],offset)) :
+    GlobalScalar globals ctxt (.rfield 1 (.rfield 0 (.var .global name))) := by
+  exact .globalPath name offset [.comb [.one,.one],.one] found (.field (.field .root 0 (.comb [.one,.one]) rfl) 1 .one rfl)
 
 end SteppedFlapjack.PanToCrepSteps

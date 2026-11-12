@@ -71,6 +71,14 @@ theorem globalCompile_constant_initializer_example {width : Nat} [NeZero width]
   simp [compileDecsExactHOL]
 
 /-! Global initializers using the general frontend fragment. -/
+theorem FieldPath.globalCompile {width : Nat} [NeZero width]
+    (globals : PanGlobalsContextExact width) {root e : ExpHOL width} {rootShape shape : ShapeHOL}
+    (path : FieldPath root rootShape e shape) :
+    FieldPath (compileExpExactHOL globals root) rootShape (compileExpExactHOL globals e) shape := by
+  induction path with
+  | root => exact .root
+  | field path index shape found ih => simpa [compileExpExactHOL] using FieldPath.field ih index shape found
+
 theorem globalCompile_frontendScalar {width : Nat} [NeZero width]
     (globals : PanGlobalsContextExact width) {ctxt : PanToCrepContextExact width}
     {e : ExpHOL width} (scalar : FrontendScalar ctxt e) :
@@ -81,8 +89,10 @@ theorem globalCompile_frontendScalar {width : Nat} [NeZero width]
   | baseAddr => simpa [compileExpExactHOL] using (FrontendScalar.baseAddr (ctxt := ctxt))
   | topAddr => simpa [compileExpExactHOL] using (FrontendScalar.op (ctxt := ctxt) .sub .topAddr (.const _))
   | bytesInWord => simpa [compileExpExactHOL] using (FrontendScalar.bytesInWord (ctxt := ctxt))
-  | fieldLoad index shapes hi address ih =>
-    simpa [compileExpExactHOL] using FrontendScalar.fieldLoad index shapes hi ih
+  | fieldPath shapes address path ih =>
+    have mapped := path.globalCompile globals
+    simp only [compileExpExactHOL] at mapped
+    exact FrontendScalar.fieldPath shapes ih mapped
   | load address ih => simpa [compileExpExactHOL] using FrontendScalar.load ih
   | op op a b iha ihb => simpa [compileExpExactHOL,compileExpExactHOLList] using FrontendScalar.op op iha ihb
   | cmp op a b iha ihb => simpa [compileExpExactHOL] using FrontendScalar.cmp op iha ihb
@@ -168,13 +178,5 @@ theorem globalCompile_globalWord {width : Nat} [NeZero width]
     FrontendScalar ctxt (compileExpExactHOL globals (.var .global name)) := by
   simp only [compileExpExactHOL,found]
   exact .load (.op .sub .topAddr (.const offset))
-
-theorem globalCompile_globalField {width : Nat} [NeZero width]
-    (globals : PanGlobalsContextExact width) (ctxt : PanToCrepContextExact width)
-    (name : MlString) (offset : BitVec width) (index : Nat) (shapes : List ShapeHOL) (hi : shapes[index]? = some .one)
-    (found : globals.globals.lookup name = some (.comb shapes,offset)) :
-    FrontendScalar ctxt (compileExpExactHOL globals (.rfield index (.var .global name))) := by
-  simp only [compileExpExactHOL,found]
-  exact .fieldLoad index shapes hi (.op .sub .topAddr (.const offset))
 
 end SteppedFlapjack.PanToCrepSteps
