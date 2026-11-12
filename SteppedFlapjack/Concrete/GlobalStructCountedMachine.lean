@@ -5,98 +5,20 @@ import SteppedFlapjack.Concrete.GlobalNamedStruct
 import SteppedFlapjack.Concrete.GlobalStructInitializer
 /-! The initialized global-pair wrapper meets the counted machine theorem. -/
 namespace SteppedFlapjack.Concrete
-open Flapjack Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
-
-def pairEntryProduction : PanSemState (RiscV.Word 64) (FfiState Unit) :=
-  {globalStructProductionBase (progToHOL globalStructWitness) with
-    globals := updatePanValueMap (globalStructProductionBase (progToHOL globalStructWitness)).globals "pair" (.rStruct [.word 0,.word 0]), clock := 16}
-
-def pairEntrySource : PanSemStateFiniteExact 64 Unit :=
-  {setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) (globalStructExactBase (progToHOL globalStructWitness)) with clock := 16}
-
-theorem pairEntry_name : entryName (progToHOL globalStructWitness) = newMainNameHOL globalStructProgram := by
-  simp [entryName,singleEntryProgram,newMainNameHOL,globalStructProgram,globalStructDecl,functionsHOL]
-
-theorem pairEntry_rel : PanSemStateRelExec pairEntryProduction pairEntrySource.toExact := by
-  have h := globalStructInitial_related (progToHOL globalStructWitness)
-  rcases h with ⟨a,b,c,d,e,f,g,h,_,j,k,l,m⟩
-  exact ⟨a,b,c,d,e,f,g,h,rfl,j,k,l,m⟩
-
-theorem pairEntry_ranged : PanSemStateRelExecRanged pairEntryProduction := by
-  simpa [pairEntryProduction,PanSemStateRelExecRanged] using globalStructInitial_ranged (progToHOL globalStructWitness)
+open Flapjack Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.StackRemove Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
 
 set_option maxRecDepth 100000
 set_option maxHeartbeats 4000000
-theorem pairMainName : toStringOfBytes (newMainNameHOL globalStructProgram) = "main'" := by
-  simp [newMainNameHOL,globalStructProgram,globalStructDecl,functionsHOL,freshNameMlS,mlstrAppend,ofString,MlString.explode_implode,toStringOfBytes]
-theorem pairProductionCode : pairEntryProduction.code = [("main'",[],globalStructWitness,.one)] := by
-  simp only [pairEntryProduction,globalStructProductionBase,executableState,singleEntrySourceProduction]
-  rw [pairEntry_name, pairMainName]
-  have r : panLangEntryOfHOL ([],progToHOL globalStructWitness,ShapeHOL.one) = ([],globalStructWitness,Shape.one) := by
-    have h := panLangEntryOfHOL_panLangEntryToHOL ([],globalStructWitness,Shape.one)
-      (by simp [PanLangEntryByteRanged,ListParamByteRanged,globalStructWitness_ranged,ShapeByteRanged])
-    simpa only [panLangEntryToHOL,List.map,shapeToHOL] using h
-  exact congrArg (fun e => [("main'",e)]) r
-
-
-theorem pairEntry_words : WordLocals pairEntryProduction.locals := by
-  exact wordLocals_empty
-
-theorem pairEntry_shapes : GlobalHOLShapes pairShapeMap pairEntryProduction.globals := by
-  have eq : pairEntryProduction.globals = globalStructInitial.globals := by
-    rfl
-  rw [eq]
-  exact pair_shapes
-
-theorem pairEntry_codeRanged : ∀ name entry, panSemCodeLookup pairEntryProduction.code name = some entry → PanLangEntryByteRanged entry := by
-  intro name entry found
-  rw [pairProductionCode] at found
-  simp only [panSemCodeLookup,lookupInfo] at found
-  split at found
-  · simp only [Option.some.injEq] at found
-    subst entry
-    simp [PanLangEntryByteRanged,ListParamByteRanged,globalStructWitness_ranged,ShapeByteRanged]
-  · simp at found
-
-theorem pairEntry_codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode pairEntryProduction.code →
-    ∃ scope, GlobalCallSupportedIn pairShapeMap scope body := by
-  intro name params body member
-  rw [pairProductionCode] at member
-  simp only [countedFunctionsOfCode,List.map,List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at member
-  obtain ⟨rfl,rfl,rfl⟩ := member
-  exact ⟨[],pair_supported⟩
-
+theorem pairEntry_name : entryName (progToHOL globalStructWitness) = newMainNameHOL globalStructProgram := by
+  simp [entryName,singleEntryProgram,newMainNameHOL,globalStructProgram,globalStructDecl,functionsHOL]
 
 def pairEntryTarget : PanSemStateFiniteExact 64 Unit :=
   {globalStructTarget with clock := 16, code := (HolFiniteMapExact.empty.update (entryName (progToHOL globalStructWitness),([],compileProgExactHOL globalStructContext (progToHOL globalStructWitness),.one)))}
-
-private def pairInitializedEntries := functionsHOL (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram) globalStructProgram)
-private theorem pairInitializedEntries_eq : pairInitializedEntries = [(newMainNameHOL globalStructProgram,[],progToHOL globalStructWitness,ShapeHOL.one)] := by
-  simp only [pairInitializedEntries,globalStructProgram,globalStructDecl,fpermDecsHOL,functionsHOL,fpermName,if_true]
-  simp only [globalStructWitness,progToHOL,fpermHOL]
-private theorem pairInitializedSource_eq : installSourceFunctions globalStructHOL pairInitializedEntries = {pairEntrySource with clock := globalStructHOL.clock} := by
-  rw [pairInitializedEntries_eq]
-  simp [installSourceFunctions,globalStructHOL,globalStructBase,sourceTemplate,pairEntrySource,globalStructExactBase,exactState,singleEntrySourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.updateList,HolFiniteMapExact.update,FUPDATE_LIST, pairEntry_name]
-private theorem pairInitializedTarget_eq : installTargetFunctions globalStructTarget globalStructContext pairInitializedEntries = {pairEntryTarget with clock := globalStructTarget.clock} := by
-  rw [pairInitializedEntries_eq]
-  simp [installTargetFunctions,globalStructTarget,sourceTemplate,pairEntryTarget,HolFiniteMapExact.updateList,HolFiniteMapExact.update,FUPDATE_LIST,pairEntry_name]
-theorem pairEntry_globalRel : panGlobalsStateRelHOLExact true globalStructContext pairEntrySource pairEntryTarget := by
-  have rel := pairConstructedInitializer
-  change panGlobalsStateRelHOLExact true globalStructContext
-    (installSourceFunctions globalStructHOL pairInitializedEntries) (installTargetFunctions globalStructTarget globalStructContext pairInitializedEntries) at rel
-  rw [pairInitializedSource_eq,pairInitializedTarget_eq] at rel
-  simp only [panGlobalsStateRelHOLExact] at rel ⊢
-  rcases rel with ⟨a,b,c,d,e,_,g,h,i,j,k,l,m,n,o,p,q,r,t⟩
-  exact ⟨a,b,c,d,e,rfl,g,h,i,j,k,l,m,n,o,p,q,r,t⟩
-
 
 def pairCrepContext : PanToCrepContextExact 64 := mkCtxtExactHOL HolFiniteMapExact.empty
   (HolFiniteMapExact.empty.update (newMainNameHOL globalStructProgram,([],ShapeHOL.one))) 0 HolFiniteMapExact.empty
 
 def pairEntryCrep : CrepSemHOLState 64 Unit := concreteDeclCrepState pairEntryTarget globalStructCallPrograms
-
-theorem pairEntry_panCrepRel : panToCrepStateRelFiniteExact pairEntryTarget pairEntryCrep := by
-  exact concreteDecl_panCrep_stateRel pairEntryTarget globalStructCallPrograms rfl rfl
 
 theorem pairEntry_compiledBody : compileProgExactHOLW (ctxtFcExactHOL pairCrepContext.funcs pairCrepContext.eids [] [] [])
     (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) = globalStructActualBody := by
@@ -161,25 +83,6 @@ theorem pairEntry_sources : ∀ row ∈ globalSourcePrograms globalStructProgram
   rw [pairSourcePrograms]
   exact globalStruct_actualCode_sources
 
-theorem pairEntry_crepCode : pairEntryCrep.code = alistToFmapCodeExact (globalSourcePrograms globalStructProgram) := by
-  rw [pairSourcePrograms]
-  rfl
-
-theorem pairEntry_loopCode : crepToLoopCodeRelExact globalStructActualLoopContext pairEntryCrep.code
-    (sptFromAList (compileProgHOLExact riscvConfig.isa (globalSourcePrograms globalStructProgram))) := by
-  rw [pairSourcePrograms]
-  simpa [pairEntryCrep,globalStructCallCrep,globalStructActualLoopState,concreteDeclCrepState,concreteDeclLoopState] using globalStruct_actualCode_relation
-
-theorem pairEntry_loopEntry :
-    (64,[],optimiseHOL (compileHOLExact globalStructActualLoopContext .ln
-      (compileProgExactHOLW pairCrepContext (compileProgExactHOL globalStructContext (progToHOL pairWrapper))))) ∈
-      compileProgHOLExact riscvConfig.isa (globalSourcePrograms globalStructProgram) := by
-  rw [pairEntry_actualCompiled,pairSourcePrograms]
-  obtain ⟨tail,h⟩ := globalStruct_actualLoop_first
-  rw [h]
-  simp [globalStructActualEntryLoop,firstLoopName]
-
-
 open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Backend.WordToStack.Native
 open Flapjack.Compiler.Backend.WordDepth Flapjack.Compiler.Backend.WordDepth.Executable Flapjack.Compiler.Backend.BackendProps
 
@@ -223,86 +126,127 @@ theorem pairSourceFrames : globalSourceFrames globalStructProgram = globalStruct
   exact congrArg (fun words => sptMapi (fun _ (argc,body) => (compileProgNative riscvConfig false body argc
     (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1) (sptFromAList words)) pairSourceWords
 
-theorem pairEntry_exceptions : panToCrepExcpRelFiniteExact pairCrepContext.eids pairEntryTarget.eshapes := by
-  simpa [pairCrepContext,mkCtxtExactHOL,pairEntryTarget,globalStructTarget,sourceTemplate] using (empty_panCrep_exceptions (width := 64))
-
-theorem pairEntry_locals : panToCrepLocalsRelFiniteExact pairCrepContext pairEntryTarget.locals pairEntryCrep.locals := by
-  apply empty_panCrep_locals
+open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackSteps
+private def entries : List (MlS × List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL) := [(newMainNameHOL globalStructProgram,[],progToHOL globalStructWitness,ShapeHOL.one)]
+private def post := {globalStructHOL with clock := 9}
+private theorem template_eq : globalEntryTemplate globalStructProgram 8 = {globalStructTarget with clock := 9} := by
+  rw [globalEntryTemplate,pairSourceBitmaps]
+  have bm : globalStructNativeBitmaps = [4] := globalStruct_nativeBitmap
+  rw [bm]
   rfl
-
-theorem pairEntry_memory : ∀ address, pairEntryCrep.memaddrs address →
-    pairEntryCrep.memory address = (sourceTemplateFor (globalSourceBitmaps globalStructProgram).length).memory address := by
-  rw [pairSourceBitmaps]
-  have bs : globalStructNativeBitmaps = [4] := globalStruct_nativeBitmap
-  rw [bs]
-  intro address present
-  rfl
-
-
-private def pairEventSummary : Option (BitVec 64) × Nat × List FfiEvent :=
-  match evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
-      (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) pairEntryProduction.structs
-      (countedFunctionsOfCode pairEntryProduction.code) pairEntryProduction.baseAddress pairEntryProduction.topAddress
-      panSemBitVec64BytesInWord 10 pairEntryProduction.locals pairEntryProduction.globals pairEntryProduction.memory
-      pairEntryProduction.ffi pairWrapper (memoryAccess := some (panSemBitVec64MemoryAccess pairEntryProduction))
-      (contracts := some (countedContractsOfCode pairEntryProduction.code [])) with
-  | some (.returned _ _ _ ffi [.word w],n) => (some w,n,ffi.ioEvents)
-  | some (_,n) => (none,n,[])
-  | none => (none,0,[])
-
-private theorem pairEventSummary_eq : pairEventSummary = (some 8,16,[]) := by
-  simp only [pairEventSummary,pairProductionCode,pairWrapper,pairMainName]
+private theorem before_eq : beforeGlobals (globalEntryTarget globalStructProgram 8 globalStructContext entries) 16 2 = {globalStructBase with clock := 9} := by
+  have old := congrArg (fun s : PanSemStateFiniteExact 64 Unit => {s with clock := 9}) pairBefore_eq
+  simpa [globalEntryTarget,installTargetFunctions,beforeGlobals,template_eq,globalStructTarget,sourceTemplate,globalStructBase] using old
+private theorem declEval : @evaluateDeclsHOLFinite 64 Unit _
+    (beforeGlobals (globalEntryTarget globalStructProgram 8 globalStructContext entries)
+      (panBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL [globalStructDecl]).map sizeOfShapeHOL).sum)
+      ((decShapesHOL [globalStructDecl]).map sizeOfShapeHOL).sum)
+    (fun _ => Classical.propDecidable _) [globalStructDecl] = some post := by
+  change @evaluateDeclsHOLFinite 64 Unit _
+    (beforeGlobals (globalEntryTarget globalStructProgram 8 globalStructContext entries) 16 2)
+    (fun _ => Classical.propDecidable _) [globalStructDecl] = some post
+  have evalEq := congrArg (fun s : PanSemStateFiniteExact 64 Unit =>
+    @evaluateDeclsHOLFinite 64 Unit _ s (fun _ => Classical.propDecidable _) [globalStructDecl]) before_eq
+  rw [evalEq]
   with_unfolding_all rfl
+private def inits : List (ProgHOL 64) := (compileDecsExactHOL globalStructStart [globalStructDecl]).1
+private theorem compiled : compileDecsExactHOL
+    (beforeGlobalsContext (panBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL [globalStructDecl]).map sizeOfShapeHOL).sum)) [globalStructDecl] =
+    (inits,[],[],globalStructContext) := by
+  simp [inits,beforeGlobalsContext,globalStructStart,globalStructContext,globalStructDecl,decShapesHOL,
+    sizeOfShapeHOL,sizeOfShapesHOL,panBytesInWord,cakeBytesInWord,compileDecsExactHOL,compileDecsGlobalAddressExact_eq]
+private theorem initShape : ∀ sh n e, DeclHOL.decl sh n e ∈ [globalStructDecl] → FrontendValue pairCrepContext e := by
+  intro sh n e member
+  simp only [List.mem_cons,List.not_mem_nil,or_false] at member
+  cases member
+  apply FrontendValue.tuple
+  intro e member
+  simp only [List.mem_cons,List.not_mem_nil,or_false] at member
+  rcases member with rfl | rfl <;> exact .scalar (.const _)
+private theorem allocated : ∀ a, addresses ((globalEntryTemplate globalStructProgram 8).topAddr - panBytesInWord 64 *
+    BitVec.ofNat 64 ((decShapesHOL [globalStructDecl]).map sizeOfShapeHOL).sum)
+    ((decShapesHOL [globalStructDecl]).map sizeOfShapeHOL).sum a → (globalEntryTemplate globalStructProgram 8).memaddrs a := by
+  simpa [template_eq,globalStructDecl,decShapesHOL,sizeOfShapeHOL,sizeOfShapesHOL,cakeBytesInWord,panBytesInWord] using globalStructSlots_allocated
+private theorem panCode : codeRelExactHOLW pairCrepContext (globalEntryTarget globalStructProgram 8 globalStructContext entries).code
+    (globalEntryCrep globalStructProgram 8 globalStructContext entries).code := by
+  simpa [globalEntryTarget,installTargetFunctions,globalEntryCrep,concreteDeclCrepState,entries,pairEntryTarget,
+    pairEntryCrep,pairEntry_name,pairSourcePrograms,template_eq,HolFiniteMapExact.updateList,HolFiniteMapExact.update,FUPDATE_LIST] using pairEntry_panCodeRel
+private theorem compiledEntry : compileProgExactHOLW pairCrepContext
+    (.seq (nestedSeqHOL inits) (.call none (newMainNameHOL globalStructProgram) [])) = globalStructActualEntryCrep := by
+  rw [← pairEntry_actualCompiled,pairWrapper_lowered]
+  congr 2
+  simp [inits,globalStructDecl,globalStructStart,compileDecsExactHOL,compileDecsGlobalAddressExact_eq,
+    sizeOfShapeHOL,sizeOfShapesHOL,cakeBytesInWord,nestedSeqHOL,compileExpExactHOL,compileExpExactHOLList]
+private theorem firstRow : globalSourcePrograms globalStructProgram =
+    (ofString "main",[],compileProgExactHOLW pairCrepContext
+      (.seq (nestedSeqHOL inits) (.call none (newMainNameHOL globalStructProgram) []))) ::
+      [(newMainNameHOL globalStructProgram,[],globalStructActualBody)] := by
+  rw [compiledEntry,pairSourcePrograms,globalStruct_actualPrograms_eq]
+  rfl
+private theorem programsUnique : ((globalSourcePrograms globalStructProgram).map Prod.fst).Nodup := by
+  rw [pairSourcePrograms,globalStruct_actualPrograms_eq]
+  simp [newMainNameHOL,globalStructProgram,globalStructDecl,functionsHOL,freshNameMlS,mlstrAppend,ofString]
 
-
-theorem pairEntry_runEvents : ∃ locals globals memory ffi,
-    evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
-      (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) pairEntryProduction.structs
-      (countedFunctionsOfCode pairEntryProduction.code) pairEntryProduction.baseAddress pairEntryProduction.topAddress
-      panSemBitVec64BytesInWord 10 pairEntryProduction.locals pairEntryProduction.globals pairEntryProduction.memory
-      pairEntryProduction.ffi pairWrapper (memoryAccess := some (panSemBitVec64MemoryAccess pairEntryProduction))
-      (contracts := some (countedContractsOfCode pairEntryProduction.code [])) =
-    some (.returned locals globals memory ffi [.word 8],16) ∧ ffi.ioEvents = [] := by
-  have result := pairEventSummary_eq
-  unfold pairEventSummary at result
-  generalize h : evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
-      (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) pairEntryProduction.structs
-      (countedFunctionsOfCode pairEntryProduction.code) pairEntryProduction.baseAddress pairEntryProduction.topAddress
-      panSemBitVec64BytesInWord 10 pairEntryProduction.locals pairEntryProduction.globals pairEntryProduction.memory
-      pairEntryProduction.ffi pairWrapper (memoryAccess := some (panSemBitVec64MemoryAccess pairEntryProduction))
-      (contracts := some (countedContractsOfCode pairEntryProduction.code [])) = out at result
-  cases out with
-  | none => simp at result
-  | some pair =>
-    rcases pair with ⟨control,count⟩
-    cases control <;> simp_all
-    case returned locals globals memory ffi values =>
-      cases values <;> simp_all
-      case cons v rest =>
-        cases v <;> simp_all
-        case word word =>
-          cases rest <;> simp_all
-
-
-private instance : DecidablePred pairEntrySource.memaddrs := by
+private instance : DecidablePred post.memaddrs := by
   change DecidablePred globalStructSourceDomain
   infer_instance
-
-open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackSteps
-theorem pairGeneral_machine :
+private instance : DecidablePred post.shMemaddrs := by
+  change DecidablePred sharedAddress
+  infer_instance
+private theorem shapePair : globalEntryShapes post entries "pair" = some (.comb [.one,.one]) := by
+  simp [globalEntryShapes,globalEntrySource,installSourceFunctions,callEntryStateHOLFinite,post,globalStructHOL,setGlobalHOLFinite,
+    HolFiniteMapExact.lookup_update,FUPDATE,shapeOfHOLExact]
+private theorem supportedPair : Supported (globalEntryShapes post entries) globalStructWitness := by
+  constructor
+  · unfold globalStructWitness
+    refine .seq (.assignGlobalStruct "pair" [.one,.one] shapePair ?_) ?_
+    · intro e member
+      simp at member
+      rcases member with rfl | rfl <;> exact .scalar (.local (.const _))
+    · exact .ret (.global (.field (.global "pair" (.comb [.one,.one]) (by decide) shapePair) 1 .one rfl))
+  · exact globalStructWitness_ranged
+private theorem tablePair : GlobalSupportedEntries (globalEntryShapes post entries) entries := by
+  intro name params body ret found
+  simp only [entries,List.lookup] at found
+  split at found
+  · simp only [Option.some.injEq,Prod.mk.injEq] at found
+    obtain ⟨rfl,rfl,rfl⟩ := found
+    exact ⟨[],globalStructWitness,rfl,rfl,supportedPair.1,supportedPair.2⟩
+  · simp at found
+private theorem canonicalRun : evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
+    (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) (globalEntryProduction post entries).structs
+    (countedFunctionsOfCode (globalEntryProduction post entries).code)
+    (globalEntryProduction post entries).baseAddress (globalEntryProduction post entries).topAddress
+    panSemBitVec64BytesInWord 10 (globalEntryProduction post entries).locals (globalEntryProduction post entries).globals
+    (globalEntryProduction post entries).memory (globalEntryProduction post entries).ffi globalStructWitness
+    (memoryAccess := some (panSemBitVec64MemoryAccess (globalEntryProduction post entries)))
+    (contracts := some (countedContractsOfCode (globalEntryProduction post entries).code [])) =
+      some (.returned (globalEntryProduction post entries).locals
+        (updatePanValueMap (globalEntryProduction post entries).globals "pair" (.rStruct [.word 7,.word 8]))
+        (globalEntryProduction post entries).memory (globalEntryProduction post entries).ffi [.word 8],8) := by
+  with_unfolding_all rfl
+open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Backend.WordToStack.Native
+open Flapjack.Compiler.Backend.WordDepth Flapjack.Compiler.Backend.WordDepth.Executable Flapjack.Compiler.Backend.BackendProps
+open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackSteps
+noncomputable def pairUnifiedTicks : Nat :=
   let code := globalSourceCode globalStructProgram
   let bs := globalSourceBitmaps globalStructProgram
   let words := globalSourceWords globalStructProgram
-  let limit := globalProgramOptLimit globalStructContext pairCrepContext (progToHOL pairWrapper) pairEntryCrep
-    (globalSourcePrograms globalStructProgram) pairEntrySource.clock globalStructActualLoopContext globalStructActualLoopContext .ln
-  let allowance := (max 1 (wordCodeWeight (sptFromAList words)) + 1) * (6*limit+1) + 1
-  let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*limit+1 + allowance)
-  ∃ finalMachine finalFfi,
-    evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
-      (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
-        bs code (fixtureStackOracle (fixtureCompilerConfig code)) n) (configuredMachineState code bs) =
-        (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFfi.ioEvents := by
-  obtain ⟨loc,glob,mem,ffi,run,events⟩ := pairEntry_runEvents
+  let crep := globalEntryCrep globalStructProgram 8 globalStructContext entries
+  let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms globalStructProgram)) 0
+  let body := .seq (nestedSeqHOL inits) (.call none (newMainNameHOL globalStructProgram) [])
+  let visitLimit := 2*[globalStructDecl].length+(callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).clock+3
+  let opt := loweredProgramOptLimit pairCrepContext body crep (globalSourcePrograms globalStructProgram) visitLimit ctxt ctxt .ln
+  let allowance := (max 1 (wordCodeWeight (sptFromAList words)) + 1) * (6*opt+1) + 1
+  let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*opt+1 + allowance)
+  948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
+    bs code (fixtureStackOracle (fixtureCompilerConfig code)) n
+private theorem pairUnified_machine : ∃ finalMachine finalFfi compilerFinal,
+    Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig globalStructProgram =
+      some (fixtureCodeBytes (globalSourceCode globalStructProgram),globalSourceBitmaps globalStructProgram,compilerFinal) ∧
+    evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (globalSourceCode globalStructProgram))) sourceFfi
+      pairUnifiedTicks (configuredMachineState (globalSourceCode globalStructProgram) (globalSourceBitmaps globalStructProgram)) =
+      (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFfi.ioEvents := by
   have good : pancakeGoodCodeHOL globalStructProgram = true := by with_unfolding_all decide
   have bits : 0xa0020018 + (globalSourceBitmaps globalStructProgram).length*8 ≤ 0xa0410000 := by
     rw [pairSourceBitmaps]
@@ -322,44 +266,116 @@ theorem pairGeneral_machine :
         (sptFromAList (globalSourceWords globalStructProgram))))) (some 2097172) := by
     rw [pairSourceFrame,pairSourceFrames,pairSourceWords]
     exact globalStruct_nativeCapacity
-  have bound : 16 ≤ pairEntrySource.clock := by
-    change 16 ≤ 16
-    decide
-  obtain ⟨sourceFinal,machine,finalFfi,compilerFinal,compiled,machineRun,io,ffiRel⟩ :=
-    globalCountedSource_machine globalStructProgram globalStruct_sourceUnique good globalStructContext pairCrepContext
-      pairWrapper pairShapeMap pairWrapper_Supported pair_layout pairEntrySource pairEntryTarget pairEntryProduction 8
-      pairEntry_rel pairEntry_ranged pairEntry_words pairEntry_shapes pairEntry_codeRanged pairEntry_codeShape
-      (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) []
-      10 16 loc glob mem ffi run bound pairEntryCrep pairEntry_crepCode pairEntry_targetCode pairEntry_globalRel
-      pairEntry_panCrepRel pairEntry_panCodeRel pairEntry_exceptions pairEntry_locals pairEntry_sources
-      globalStructActualLoopContext globalStructActualLoopContext (by rfl) (by rfl) (by rfl) pairEntry_loopCode
-      (by change heapTop = heapBase + 2 * fixtureHeapLength; decide) (by rfl) (by rfl) (by rfl) (by rfl) (by rfl)
-      pairEntry_loopEntry bits safety facts capacity pairEntry_memory
+  have all := initializedGlobal_counted_machine globalStructProgram globalStruct_sourceUnique good 8 [globalStructDecl] post inits [] [] globalStructContext
+    entries (newMainNameHOL globalStructProgram) globalStructWitness supportedPair pairCrepContext 8
+    (by intro d hd; simp at hd; subst d; rfl) initShape declEval compiled allocated (by decide)
+    (by simp [entries]) tablePair
+    (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 10 8
+    (globalEntryProduction post entries).locals
+    (updatePanValueMap (globalEntryProduction post entries).globals "pair" (.rStruct [.word 7,.word 8]))
+    (globalEntryProduction post entries).memory (globalEntryProduction post entries).ffi canonicalRun (by decide)
+    panCode rfl rfl pairEntry_sources [(newMainNameHOL globalStructProgram,[],globalStructActualBody)] programsUnique firstRow
+    bits safety facts capacity
+  obtain ⟨sourceFinal,machine,ffi,compilerFinal,compiledOutput,machineRun,events,ffiRel⟩ := all
   have sourceEvents : sourceFinal.ffi.ioEvents = [] := by
     have h := ffiRel.2.1
-    rw [events] at h
+    simp only [globalEntryProduction,panSemExecStateOfHOLWithKeys,panSemStateOfExactWithKeys,sourceFfiState,sourceFfi,List.map_nil] at h
     cases heq : sourceFinal.ffi.ioEvents with
     | nil => rfl
     | cons e es => simp [heq,FfiEventListRel] at h
-  refine ⟨machine,finalFfi,?_,?_⟩
-  · exact machineRun
-  · simpa [sourceFfi,sourceEvents] using io
-theorem pairGeneral_namedSource :
-  let code := globalSourceCode globalStructProgram
-  let bs := globalSourceBitmaps globalStructProgram
-  let words := globalSourceWords globalStructProgram
-  let limit := globalProgramOptLimit globalStructContext pairCrepContext (progToHOL pairWrapper) pairEntryCrep
-    (globalSourcePrograms globalStructProgram) pairEntrySource.clock globalStructActualLoopContext globalStructActualLoopContext .ln
-  let allowance := (max 1 (wordCodeWeight (sptFromAList words)) + 1) * (6*limit+1) + 1
-  let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*limit+1 + allowance)
-  ∃ finalMachine finalFfi,
-    evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
-      (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
-        bs code (fixtureStackOracle (fixtureCompilerConfig code)) n) (configuredMachineState code bs) =
+  refine ⟨machine,ffi,compilerFinal,compiledOutput,machineRun,?_⟩
+  simpa [sourceFfi,sourceEvents] using events
+
+private theorem pairStatementWeight : CrepSteps.statementWeight globalStructActualEntryCrep = 12 := by
+  unfold globalStructActualEntryCrep globalStructActualInit
+  rw [globalStruct_actual_initializer_eq]
+  simp [CrepSteps.statementWeight,compileProgExactHOLW,compileStoreExactHOLW,compileExpExactHOLW,
+    compileExpExactHOLWList,sizeOfShapeHOL,sizeOfShapesHOL,nestedDecsHOL,globalStructCrepContext,mkCtxtExactHOL]
+  with_unfolding_all rfl
+private theorem pairTableWeight : CrepSteps.codeWeight globalStructCallPrograms = 12 := by
+  rw [globalStruct_actualPrograms_eq]
+  unfold globalStructActualBody
+  rw [globalStructWitness_lowering]
+  simp [CrepSteps.codeWeight,CrepSteps.statementWeight,globalStructActualInit,globalStruct_actual_initializer_eq,
+    compileProgExactHOLW,compileStoreExactHOLW,compileReturnExactHOLW,compileExpExactHOLW,compileExpExactHOLWList,
+    sizeOfShapeHOL,sizeOfShapesHOL,loadShapeBytesHOLW,nestedDecsHOL,globalStructCrepContext,mkCtxtExactHOL]
+  with_unfolding_all rfl
+private theorem pairSyntaxWeight : callSyntaxCost globalStructActualLoopContext globalStructActualEntryCrep = 31 := by
+  unfold globalStructActualEntryCrep globalStructActualInit
+  rw [globalStruct_actual_initializer_eq]
+  simp [compileProgExactHOLW,compileStoreExactHOLW,compileExpExactHOLW,compileExpExactHOLWList,
+    sizeOfShapeHOL,sizeOfShapesHOL,nestedDecsHOL,globalStructCrepContext,mkCtxtExactHOL]
+  with_unfolding_all rfl
+private theorem pairCallFactor : callClockFactor globalStructActualLoopContext (globalStructCallPrograms.map (fun row => (row.2.1,row.2.2))) 9 globalStructActualEntryCrep = 390 := by
+  rw [globalStruct_actualPrograms_eq]
+  unfold globalStructActualBody globalStructActualEntryCrep globalStructActualInit
+  rw [globalStruct_actual_initializer_eq,globalStructWitness_lowering]
+  simp [compileProgExactHOLW,compileStoreExactHOLW,compileReturnExactHOLW,compileExpExactHOLW,compileExpExactHOLWList,
+    sizeOfShapeHOL,sizeOfShapesHOL,loadShapeBytesHOLW,nestedDecsHOL,globalStructCrepContext,mkCtxtExactHOL]
+  with_unfolding_all rfl
+
+private theorem pairUnifiedOpt : loweredProgramOptLimit pairCrepContext
+    (.seq (nestedSeqHOL inits) (.call none (newMainNameHOL globalStructProgram) []))
+    (globalEntryCrep globalStructProgram 8 globalStructContext entries) (globalSourcePrograms globalStructProgram)
+    (2*[globalStructDecl].length+(callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).clock+3)
+    globalStructActualLoopContext globalStructActualLoopContext .ln = 501673918 := by
+  unfold loweredProgramOptLimit
+  rw [compiledEntry,pairSourcePrograms]
+  have sourceClock : (callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).clock = 8 := rfl
+  have crepClock : (globalEntryCrep globalStructProgram 8 globalStructContext entries).clock = 9 := rfl
+  simp only [sourceClock,crepClock,List.length_cons,List.length_nil]
+  rw [pairStatementWeight,pairTableWeight,pairCallFactor,pairSyntaxWeight,globalStruct_loopCodeWeight]
+  change loopVisitWeight (optimiseHOL globalStructActualEntryLoop) + max (loopVisitWeight (optimiseHOL globalStructActualEntryLoop)) (62+2) * (2 * (31 + max 31 (62+2) * (9 + 390 * (max 12 12 * 13 + 1)))) = 501673918
+  rw [globalStruct_loopEntryWeight]
+  decide
+open Flapjack.Compiler.Backend.StackLang Flapjack.Compiler.Backend.StackRemove
+open SteppedFlapjack.StackRemoveSteps.CompCorrect SteppedFlapjack.StackRemoveSteps SteppedFlapjack.StackAllocSteps
+open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics SteppedFlapjack.StackToLabSteps
+private theorem numericBackend (code : List (Nat × HolProg 64))
+    (factor : costFromFields riscvConfig.addrOffset 0 (.call none (.inl Flapjack.Compiler.Backend.BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf code)) [4] (fixtureStackOracle (fixtureCompilerConfig code)) = 1950) :
+    948 * stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset [4] code
+      (fixtureStackOracle (fixtureCompilerConfig code))
+      (1 + 31 * (6*501673918+1 + ((29+1)*(6*501673918+1)+1))) = 304799299979875449948 := by
+  have uniform : uniformFactor (width := 64) countdownRiscVBackend.dataConf = 19 := by decide +kernel
+  have init : loopOnlyCost 0 (initCode (StackToLab.isGenGc countdownRiscVBackend.dataConf.gcKind) (2^53-1) 24 : HolProg 64) = 361 := by decide +kernel
+  unfold fixtureStackOracle
+  rw [stackLabTickLimit_emptyOracle]
+  dsimp only
+  unfold fixtureStackOracle at factor
+  rw [factor,uniform,init]
+  simp [flattenStepFactor]
+private theorem numericFromInputs (code : List (Nat × HolProg 64)) (bs : List (BitVec 64)) (opt ww sw : Nat)
+    (bitmap : bs = [4]) (optEq : opt = 501673918) (wordEq : ww = 29) (stackEq : sw = 31)
+    (factor : costFromFields riscvConfig.addrOffset 0 (.call none (.inl Flapjack.Compiler.Backend.BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf code)) [4] (fixtureStackOracle (fixtureCompilerConfig code)) = 1950) :
+    948 * stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset bs code
+      (fixtureStackOracle (fixtureCompilerConfig code))
+      (1 + max 1 sw * (6*opt+1 + ((max 1 ww+1)*(6*opt+1)+1))) = 304799299979875449948 := by
+  subst bs; subst opt; subst ww; subst sw
+  exact numericBackend code factor
+theorem pairUnified_clock_numeric : pairUnifiedTicks = 304799299979875449948 := by
+  unfold pairUnifiedTicks
+  dsimp only
+  apply numericFromInputs
+  case bitmap => rw [pairSourceBitmaps]; exact globalStruct_nativeBitmap
+  case optEq =>
+    have contextEq : mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms globalStructProgram)) 0 = globalStructActualLoopContext := by
+      rw [pairSourcePrograms]
+      rfl
+    rw [contextEq]
+    exact pairUnifiedOpt
+  case wordEq => rw [pairSourceWords]; exact globalStruct_wordCodeWeight
+  case stackEq => rw [pairSourceCode]; exact globalStruct_stackCodeWeight
+  case factor => rw [pairSourceCode]; exact globalStruct_tickFactor _
+theorem pairGeneral_namedSource : ∃ finalMachine finalFfi,
+    evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (globalSourceCode globalStructProgram))) sourceFfi
+      pairUnifiedTicks (configuredMachineState (globalSourceCode globalStructProgram) (globalSourceBitmaps globalStructProgram)) =
         (.halt .success,finalMachine,finalFfi) ∧
-        semanticsDecls globalStructBase (ofString "main") namedGlobalStructProgram = .terminate .success finalFfi.ioEvents := by
-  obtain ⟨machine,ffi,run,events⟩ := pairGeneral_machine
+    semanticsDecls globalStructBase (ofString "main") namedGlobalStructProgram = .terminate .success finalFfi.ioEvents := by
+  obtain ⟨machine,ffi,_,_,run,events⟩ := pairUnified_machine
   refine ⟨machine,ffi,run,?_⟩
   rw [events]
   exact namedGlobalStruct_semantics
+
 end SteppedFlapjack.Concrete

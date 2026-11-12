@@ -89,16 +89,15 @@ tick bound.
 `nested_initialized_machine` instantiates this composition with two call levels
 and a six-step source execution.
 
-`SteppedFlapjack.Concrete.globalCountedSource_machine` extends the counted
-source-to-machine bridge to `Supported shapes program`, where `shapes` is a
-concrete map of global names to shapes. It admits global scalar reads and
-updates, nested struct literals and field paths, and heap stores of struct
-values. `GlobalLayout` connects the shape map to the compiler layout; the
-fragment and source function-table conditions are proved from this layout and
-the supported source table. Its explicit clock depends on the compiled code,
-fixture configuration and initial source clock. The theorem also requires
-relations between the source, lowered and Crep states, compiler-table
-conditions, and checkable machine encoding, safety and capacity conditions.
+`SteppedFlapjack.Concrete.initializedGlobal_counted_machine` connects a counted
+run of `Supported shapes program` to the initialized machine. The fragment
+admits global scalar reads and updates, nested struct literals and field paths,
+and heap stores of struct values. The initializer constructs related source and
+target states, and supported function declarations supply the frontend table.
+The explicit clock depends on the compiled code, fixture configuration and
+initial source clock. The theorem retains a Pancake-to-Crep code relation,
+compiled-body shape conditions, and checkable machine encoding, safety and
+capacity conditions.
 `beforeGlobals_initializedFunctions` derives the global state relation by
 running declaration initializers and installing matching function tables; the
 pair witness uses this construction. `globalInitializedEntry_return` includes
@@ -113,7 +112,7 @@ It returns `3` and has a kernel-checked bound of
 initializer and renamed entry call return the second field, and the compiled
 machine runs the bytes produced by the Pancake compiler and halts with the
 same I/O events as the named-struct source. Its clock
-is 374,713,592,693,268,806,748 ticks for the concrete code and a 16-step
+is 304,799,299,979,875,449,948 ticks for the concrete code and an eight-step
 initial source clock.
 `heapFixture_machine_numeric` carries a concrete heap store and load through the
 function-only composition with a kernel-checked bound of

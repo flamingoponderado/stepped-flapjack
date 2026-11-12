@@ -5,8 +5,6 @@ open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.
 open Flapjack.Compiler.Backend.StackRemove SteppedFlapjack.PanToCrepSteps
 set_option maxRecDepth 100000
 set_option maxHeartbeats 4000000
-private def pairBefore := beforeGlobals globalStructTarget 16 2
-private def pairAfter := setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) pairBefore
 private theorem domain_same (a : BitVec 64) :
     ordinaryAddress a ∧ ¬ addresses globalStructSourceTop 2 a ↔ globalStructSourceDomain a := by
   constructor
@@ -37,7 +35,7 @@ private theorem domain_same (a : BitVec 64) :
       exact ⟨1,by decide,by simp [bytesInWord]⟩
   · intro h
     exact ⟨h.1,globalStructSlots_disjoint a h⟩
-private theorem pairBefore_eq : beforeGlobals globalStructTarget 16 2 = globalStructBase := by
+theorem pairBefore_eq : beforeGlobals globalStructTarget 16 2 = globalStructBase := by
   have h : (fun a => ordinaryAddress a ∧ ¬ addresses globalStructSourceTop 2 a) = globalStructSourceDomain := by
     funext a
     exact propext (domain_same a)
@@ -45,12 +43,6 @@ private theorem pairBefore_eq : beforeGlobals globalStructTarget 16 2 = globalSt
   rw [h]
   rfl
 
-private theorem pairAfter_eq : pairAfter = globalStructHOL := by
-  unfold pairAfter pairBefore globalStructHOL
-  rw [pairBefore_eq]
-
-private theorem pairEval : @evaluateDeclsHOLFinite 64 Unit _ pairBefore (fun _a => Classical.propDecidable _) [globalStructDecl] = some pairAfter := by
-  with_unfolding_all rfl
 theorem globalStructSlots_allocated : ∀ a, addresses (globalStructTarget.topAddr - 16) 2 a → globalStructTarget.memaddrs a := by
   intro a ha
   rw [mem_addresses] at ha
@@ -63,42 +55,4 @@ theorem globalStructSlots_allocated : ∀ a, addresses (globalStructTarget.topAd
   · have eq : a = globalStructSourceTop + 8 := by simpa [globalStructTarget,globalStructSourceTop,sourceTemplate,bytesInWord] using heq
     subst a
     exact globalStructTarget_layout.2.2.1
-/-- The generic declaration initializer applies to the concrete pair layout. -/
-theorem pairConstructedInitializer :
-    panGlobalsStateRelHOLExact true globalStructContext
-      (installSourceFunctions globalStructHOL (functionsHOL (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram) globalStructProgram)))
-      (installTargetFunctions globalStructTarget globalStructContext (functionsHOL (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram) globalStructProgram))) := by
-  have compiled : compileDecsExactHOL globalStructStart [globalStructDecl] =
-    ((compileDecsExactHOL globalStructStart [globalStructDecl]).1,
-     (compileDecsExactHOL globalStructStart [globalStructDecl]).2.1,
-     (compileDecsExactHOL globalStructStart [globalStructDecl]).2.2.1,globalStructContext) := by
-    unfold globalStructContext
-    cases h : compileDecsExactHOL globalStructStart [globalStructDecl] with
-    | mk a b => cases b with | mk b c => cases c with | mk c d => rfl
-  have result := beforeGlobals_initializedFunctions globalStructTarget [globalStructDecl] pairAfter _ _ _ globalStructContext
-    (functionsHOL (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram) globalStructProgram))
-    (by rfl) globalStructTarget_layout.2.2.2.1 globalStructTarget_aligned (by right; rfl)
-    (by intro d hd; simp [globalStructDecl] at hd ⊢; subst d; rfl)
-    (by exact pairEval)
-    (by simpa [beforeGlobalsContext,globalStructStart,globalStructDecl,decShapesHOL,sizeOfShapeHOL,sizeOfShapesHOL,cakeBytesInWord,panBytesInWord] using compiled)
-    (by simpa [globalStructDecl,decShapesHOL,sizeOfShapeHOL,sizeOfShapesHOL,cakeBytesInWord,panBytesInWord] using globalStructSlots_allocated)
-    (by decide)
-  obtain ⟨final,run,rel,_,_,_,_⟩ := result
-  have initSame : nestedSeqHOL (compileDecsExactHOL globalStructStart [globalStructDecl]).1 =
-      nestedSeqHOL (compileDecsExactHOL globalStructStart
-        (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram) (resortDeclsHOL globalStructProgram))).1 := by
-    rw [globalStruct_actual_initializer_eq]
-    simp [globalStructStart,globalStructDecl,compileDecsExactHOL,compileDecsGlobalAddressExact_eq,
-      sizeOfShapeHOL,sizeOfShapesHOL,cakeBytesInWord,nestedSeqHOL,compileExpExactHOL,compileExpExactHOLList]
-  have same := globalStruct_initializer_run_clock globalStructTarget.clock
-  have targetRun : evaluateHOLFiniteState globalStructTarget
-      (nestedSeqHOL (compileDecsExactHOL globalStructStart [globalStructDecl]).1) = (none,globalStructTarget) := by
-    rw [initSame]
-    simpa only using same
-  change evaluateHOLFiniteState globalStructTarget
-    (nestedSeqHOL (compileDecsExactHOL globalStructStart [globalStructDecl]).1) = (none,final) at run
-  rw [run] at targetRun
-  cases targetRun
-  rw [pairAfter_eq] at rel
-  exact rel
 end SteppedFlapjack.Concrete
