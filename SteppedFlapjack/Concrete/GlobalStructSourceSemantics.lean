@@ -8,7 +8,7 @@ def globalStructDeclared : PanSemStateFiniteExact 64 Unit :=
 
 open SteppedFlapjack.PanToCrepSteps
 
-theorem globalStruct_sourceTable : GlobalSingleCallTable globalStructContext globalStructDeclared.code := by
+theorem globalStruct_sourceTable : GlobalCallTable globalStructContext globalStructDeclared.code := by
   intro name values body locals shape found
   have raw := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some globalStructDeclared.code.lookup name values body locals shape found
   by_cases eq : name = ofString "main"
@@ -18,7 +18,7 @@ theorem globalStruct_sourceTable : GlobalSingleCallTable globalStructContext glo
       simp [lookupCodeHOLExact,globalStructDeclared,globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,
         HolFiniteMapExact.lookup_update,FUPDATE] at raw
       obtain ⟨rfl,_,_⟩ := raw
-      exact ⟨globalStructCrepContext,globalStruct_sourceFrontend⟩
+      exact ⟨globalStructCrepContext,.base globalStruct_sourceFrontend⟩
     | cons v vs =>
       simp [lookupCodeHOLExact,globalStructDeclared,globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,
         HolFiniteMapExact.lookup_update,FUPDATE] at raw
@@ -26,7 +26,7 @@ theorem globalStruct_sourceTable : GlobalSingleCallTable globalStructContext glo
       HolFiniteMapExact.lookup_update,FUPDATE,HolFiniteMapExact.lookup_empty,Ne.symm eq] at raw
 
 /-- The real main call is accepted by the source call fragment. -/
-theorem globalStruct_sourceCall : GlobalSingleCall globalStructContext globalStructCrepContext
+theorem globalStruct_sourceCall : GlobalCallFrontend globalStructContext globalStructCrepContext
     (.call none (ofString "main") []) := by
   exact .tail (by simp)
 
