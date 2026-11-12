@@ -1164,9 +1164,9 @@ private theorem loopReturning_normal_run {width : Nat} [NeZero width] {F : Type}
 theorem call_zeroClock_sim {width : Nat} [NeZero width] {σ : Type}
     (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
     (ret : Option (List Nat)) (source : CrepSemHOLState width σ) (ctxt ref : CrepToLoopContextExact) (live : NumSet)
-    (name : MlString) (factor : Nat) (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (name : MlString) (factor offset : Nat) (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
     (zero : source.clock = 0) (syntaxBound : callSyntaxCost ref (.call (ret.map (fun ns => (ns,none))) name args) ≤ factor) :
-    BodySimulationAt (.call (ret.map (fun ns => (ns,none))) name args) ctxt live source (fun n => factor*(n+1)) tableOk := by
+    BodySimulationAt (.call (ret.map (fun ns => (ns,none))) name args) ctxt live source (fun n => factor*n+offset) tableOk := by
   intro sourceFinal result target run nonerror stateRel memRel globalsRel codeRel table localsRel
   obtain ⟨values,params,body,evaluated,found,arity,distinct,retDistinct,branch⟩ :=
     CrepSteps.nonerrorCall_reaches_callee ret name args source sourceFinal result run nonerror
@@ -1254,7 +1254,7 @@ theorem call_zeroClock_sim {width : Nat} [NeZero width] {σ : Type}
 theorem call_terminal_sim {width : Nat} [NeZero width] {σ : Type}
     (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
     (ret : Option (List Nat)) (source : CrepSemHOLState width σ) (ctxt ref : CrepToLoopContextExact) (live : NumSet)
-    (name : MlString) (factor : Nat) (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (name : MlString) (factor offset : Nat) (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
     (syntaxBound : callSyntaxCost ref (.call (ret.map (fun ns => (ns,none))) name args) ≤ factor)
     (tailOrTerminal : ret = none ∨ (evalCrepSemHOLProgExact source (.call (ret.map (fun ns => (ns,none))) name args)).1 ≠ none)
     (bodySim : ∀ values params body,
@@ -1263,10 +1263,10 @@ theorem call_terminal_sim {width : Nat} [NeZero width] {σ : Type}
       BodySimulationAt body (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
         (listToNumSetHOLExact (List.range params.length))
         (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)})
-        (fun n => factor*(n+1)) tableOk) :
-    BodySimulationAt (.call (ret.map (fun ns => (ns,none))) name args) ctxt live source (fun n => factor*(n+1)) tableOk := by
+        (fun n => factor*n+offset) tableOk) :
+    BodySimulationAt (.call (ret.map (fun ns => (ns,none))) name args) ctxt live source (fun n => factor*n+offset) tableOk := by
   by_cases zero : source.clock = 0
-  · exact call_zeroClock_sim args shape ret source ctxt ref live name factor tableOk zero syntaxBound
+  · exact call_zeroClock_sim args shape ret source ctxt ref live name factor offset tableOk zero syntaxBound
   · intro sourceFinal result target run nonerror stateRel memRel globalsRel codeRel table localsRel
     have only : ret = none ∨ result ≠ none := by simpa [run] using tailOrTerminal
     obtain ⟨values,params,body,evaluated,found,arity,distinct,retDistinct,branch⟩ :=
@@ -1444,7 +1444,7 @@ theorem call_terminal_sim {width : Nat} [NeZero width] {σ : Type}
 theorem call_returningNormal_sim {width : Nat} [NeZero width] {σ : Type}
     (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
     (names : List Nat) (source : CrepSemHOLState width σ) (ctxt ref : CrepToLoopContextExact) (live : NumSet)
-    (name : MlString) (factor : Nat) (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (name : MlString) (factor offset : Nat) (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
     (normal : (evalCrepSemHOLProgExact source (.call (some (names,none)) name args)).1 = none)
     (syntaxBound : callSyntaxCost ref (.call (some (names,none)) name args) ≤ factor)
     (bodySim : ∀ values params body,
@@ -1453,8 +1453,8 @@ theorem call_returningNormal_sim {width : Nat} [NeZero width] {σ : Type}
       BodySimulationAt body (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
         (listToNumSetHOLExact (List.range params.length))
         (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)})
-        (fun n => factor*(n+1)) tableOk) :
-    BodySimulationAt (.call (some (names,none)) name args) ctxt live source (fun n => factor*(n+1)) tableOk := by
+        (fun n => factor*n+offset) tableOk) :
+    BodySimulationAt (.call (some (names,none)) name args) ctxt live source (fun n => factor*n+offset) tableOk := by
   intro sourceFinal result target run nonerror stateRel memRel globalsRel codeRel table localsRel
   rw [run] at normal
   simp only at normal
@@ -1586,7 +1586,7 @@ theorem call_returningNormal_sim {width : Nat} [NeZero width] {σ : Type}
 theorem call_full_sim {width : Nat} [NeZero width] {σ : Type}
     (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
     (ret : Option (List Nat)) (source : CrepSemHOLState width σ) (ctxt ref : CrepToLoopContextExact) (live : NumSet)
-    (name : MlString) (factor : Nat) (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (name : MlString) (factor offset : Nat) (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
     (syntaxBound : callSyntaxCost ref (.call (ret.map (fun ns => (ns,none))) name args) ≤ factor)
     (bodySim : ∀ values params body,
       args.mapM (evalCrepSemHOLExp source) = some values → source.code.lookup name = some (params,body) →
@@ -1594,16 +1594,16 @@ theorem call_full_sim {width : Nat} [NeZero width] {σ : Type}
       BodySimulationAt body (ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length))
         (listToNumSetHOLExact (List.range params.length))
         (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)})
-        (fun n => factor*(n+1)) tableOk) :
-    BodySimulationAt (.call (ret.map (fun ns => (ns,none))) name args) ctxt live source (fun n => factor*(n+1)) tableOk := by
+        (fun n => factor*n+offset) tableOk) :
+    BodySimulationAt (.call (ret.map (fun ns => (ns,none))) name args) ctxt live source (fun n => factor*n+offset) tableOk := by
   cases ret with
-  | none => exact call_terminal_sim args shape none source ctxt ref live name factor tableOk syntaxBound (Or.inl rfl) bodySim
+  | none => exact call_terminal_sim args shape none source ctxt ref live name factor offset tableOk syntaxBound (Or.inl rfl) bodySim
   | some names =>
     cases h : (evalCrepSemHOLProgExact source (.call (some (names,none)) name args)).1 with
     | none =>
-      exact call_returningNormal_sim args shape names source ctxt ref live name factor tableOk h syntaxBound bodySim
+      exact call_returningNormal_sim args shape names source ctxt ref live name factor offset tableOk h syntaxBound bodySim
     | some result =>
-      apply call_terminal_sim args shape (some names) source ctxt ref live name factor tableOk syntaxBound
+      apply call_terminal_sim args shape (some names) source ctxt ref live name factor offset tableOk syntaxBound
       · right
         simp [h]
       · exact bodySim
@@ -1813,7 +1813,8 @@ theorem callWholeClock {σ : Type}
         dsimp [bf,callClockFactor,callSyntaxCost]
         nlinarith
       | call ret name args argsShape =>
-        apply call_full_sim args argsShape ret source ctxt ref live name _ tableOk ?_ ?_
+        simp only [Nat.mul_add,Nat.mul_one]
+        apply call_full_sim args argsShape ret source ctxt ref live name _ _ tableOk ?_ ?_
         · have pos := cost_pos ref (.call (ret.map (fun ns => (ns,none))) name args)
           have scale : 1 ≤ (callTableCost ref rows+3)^(source.clock+1) := by
             exact Nat.one_le_iff_ne_zero.mpr (Nat.ne_of_gt (Nat.pow_pos (by omega)))
@@ -1826,9 +1827,10 @@ theorem callWholeClock {σ : Type}
           let cc := ctxtFcExact ctxt.target ctxt.funcs params (List.range params.length)
           let ll := listToNumSetHOLExact (List.range params.length)
           have sim := ih body entry (Prod.Lex.left _ _ smaller) bodyShape entryCode cc ll
-          apply simAt_mono body cc ll entry tableOk _ _ ?_ sim
-          exact factor_call ref rows body (.call (ret.map (fun ns => (ns,none))) name args) params
+          have le := factor_call ref rows body (.call (ret.map (fun ns => (ns,none))) name args) params
             (cover name params body found) entry.clock source.clock smaller
+          have widened := simAt_mono body cc ll entry tableOk _ _ le sim
+          simpa [Nat.mul_add] using widened
   exact key _ p source rfl shape table cover
 
 /-- A completed source run is simulated at the concrete whole-table clock bound. -/
