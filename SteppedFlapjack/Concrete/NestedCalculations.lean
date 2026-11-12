@@ -111,6 +111,29 @@ private theorem row3_exact : coloredRow row3 cols3 =
     .seq (.move 1 [(0,0)]) (.seq (.inst (.const 2 (7 : BitVec 64)))
       (.seq (.move 0 [(2,2)]) (.return 0 [2]))) := by with_unfolding_all rfl
 
+open SteppedFlapjack.StackToLabSteps SteppedFlapjack.StackAllocSteps SteppedFlapjack.StackRemoveSteps.CompCorrect
+open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics Flapjack.Compiler.Backend.StackRemove
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+private theorem nested_costFactorTwo (cfg : LabToTarget.Config) :
+    costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf nestedCode)) [4,2] (fixtureStackOracle cfg) = 2919 := by
+  simp only [costFromFields,oracleBitmapBudget,Nat.add_zero,List.range_zero,List.flatMap_nil,maxListNat]
+  unfold nestedCode nestedNative
+  rw [nested_optimizedTable, row0_exact, row1_exact, row2_exact, row3_exact]
+  decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+private theorem nested_costFactorOne (cfg : LabToTarget.Config) :
+    costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf nestedCode)) [4] (fixtureStackOracle cfg) = 1950 := by
+  simp only [costFromFields,oracleBitmapBudget,Nat.add_zero,List.range_zero,List.flatMap_nil,maxListNat]
+  unfold nestedCode nestedNative
+  rw [nested_optimizedTable, row0_exact, row1_exact, row2_exact, row3_exact]
+  decide +kernel
+
 set_option maxHeartbeats 3000000 in
 theorem nested_callDepth : Flapjack.Compiler.Backend.WordDepth.Executable.fullCallGraphDepth
     nestedFrameSizes 64 (sptFromAList nestedOptimizedWords) = some 5 := by
@@ -150,22 +173,83 @@ theorem nested_compilerFacts : (fixtureRemoveLabels nestedCode).isSome = true �
     simp_rw [LabToTarget.progToBytesMap]
     with_unfolding_all decide
 
+open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps
+set_option linter.unusedSimpArgs false in
+private theorem nested_entryWeight : SimpVisits.hw (progToHOL (panSimpProg nestedCallEntry)) = 2 := by
+  simp [nestedCallEntry,panSimpProg,seqAssoc,retToTail,progToHOL,SimpVisits.hw]
+private theorem nested_tableWeight : SimpVisits.simpTableFactor (functionsHOL (nestedCallDeclarations.map declToHOL)) = 3 := by
+  simp [nestedCallDeclarations,nestedCallEntry,declToHOL,funDeclToHOL,functionsHOL,SimpVisits.simpTableFactor,
+    panSimpCompileHOL,seqAssocHOL,retToTailHOL,smartSeqHOL,progToHOL,SimpVisits.hw]
+
+private theorem nested_entryLimitValue : nestedSourceEntryLimit = 23 := by simp [nestedSourceEntryLimit, nested_entryWeight, nested_tableWeight]
+private theorem nested_crepLimitValue : nestedCrepLimit = 92 := by unfold nestedCrepLimit; rw [nested_entryLimitValue]
+private theorem nested_loopBudgetValue : nestedLoopBudget = 11718 := by
+  unfold nestedLoopBudget
+  rw [nested_crepLimitValue, nestedCallCrepPrograms, nestedCall_crep_code]
+  with_unfolding_all rfl
+private theorem nested_loopBoundValue : nestedLoopBound = 328305 := by
+  unfold nestedLoopBound
+  rw [nestedCall_loop_code, nested_loopBudgetValue]
+  with_unfolding_all rfl
+private theorem nested_optLoopBoundValue : nestedOptimizedLoopBound = 18385090 := by
+  unfold nestedOptimizedLoopBound
+  rw [nestedCall_loop_code, nested_loopBoundValue]
+  have generic (lab : Nat) : loopVisitWeight (optimiseHOL
+      (.seq .skip (.seq (.call none (some lab) [] none) .skip) : HolLoopProg 64)) = 10 := by
+    simp [optimiseHOL,loopCallCompHOL,Flapjack.compHOL,shrinkHOL,markAllHOL,loopVisitWeight]
+  have optimizedWeight : loopVisitWeight nestedOptimizedLoopBody = 10 := by
+    have bodyEq : nestedCrepBody = (.seq .skip (.call none (ofString "main'") []) : CrepProgHOL 64) := by
+      simp [nestedCrepBody,nestedPanContext,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList]
+    unfold nestedOptimizedLoopBody
+    rw [bodyEq]
+    simpa [compileHOLExact,compileExpsHOLExact,genTemps,loopNestedSeqHOL] using
+      generic (findLabExact nestedLoopContext (ofString "main'"))
+  rw [optimizedWeight]
+  with_unfolding_all decide
+
+private theorem nested_wordWeightValue : wordCodeWeight (sptFromAList nestedOptimizedWords) = 13 := by
+  rw [nested_optimizedTable, row0_exact,
+    row1_exact,
+    row2_exact,
+    row3_exact]
+  with_unfolding_all decide
+private theorem nested_stackWeightValue : stackCodeWeight (sptFromAList nestedCode) = 57 := by
+  unfold nestedCode nestedNative
+  rw [nested_optimizedTable, row0_exact,
+    row1_exact,
+    row2_exact,
+    row3_exact]
+  with_unfolding_all decide
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+private theorem nested_tick_closed (cfg : LabToTarget.Config) : (let allowance := (max 1 (wordCodeWeight (sptFromAList nestedOptimizedWords)) + 1) * (6*nestedOptimizedLoopBound+1) + 1
+    let n := 1 + max 1 (stackCodeWeight (sptFromAList nestedCode)) * (6*nestedOptimizedLoopBound+1 + allowance)
+    948 * stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
+      [4,2] nestedCode (fixtureStackOracle cfg) n) = 14876488042465206240 := by
+  have uniform : uniformFactor (width := 64) countdownRiscVBackend.dataConf = 19 := by decide +kernel
+  have init : loopOnlyCost 0 (initCode (StackToLab.isGenGc countdownRiscVBackend.dataConf.gcKind) (2^53-1) 24 : HolProg 64) = 361 := by decide +kernel
+  dsimp only
+  change 948 * stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
+    [4,2] nestedCode (fun _ => (cfg,[],[])) _ = _
+  rw [stackLabTickLimit_emptyOracle, nested_optLoopBoundValue, nested_wordWeightValue, nested_stackWeightValue]
+  dsimp only
+  have two := nested_costFactorTwo cfg
+  have one := nested_costFactorOne cfg
+  unfold fixtureStackOracle at two one
+  rw [two, one, uniform, init]
+  norm_num [flattenStepFactor]
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
 /-- The concrete nested-call machine run follows from compiler and layout checks;
 the Lab-to-machine relation is constructed from the initialized machine. -/
 theorem nested_initialized_machine :
-    let rawWords := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms)
-    let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig rawWords).2
-    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) * (6*nestedOptimizedLoopBound+1) + 1
-    let n := 1 + max 1 (stackCodeWeight (sptFromAList nestedCode)) * (6*nestedOptimizedLoopBound+1 + allowance)
     ∃ compilerFinal, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
       (nestedCallDeclarations.map declToHOL) = some (fixtureCodeBytes nestedCode,[4,2],compilerFinal) ∧
     ∃ finalMachine finalFfi,
       evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart nestedCode)) sourceFfi
-        (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
-          [4,2] nestedCode (fixtureStackOracle (fixtureCompilerConfig nestedCode)) n)
-        (configuredMachineState nestedCode [4,2]) = (.halt .success,finalMachine,finalFfi) ∧
+        14876488042465206240 (configuredMachineState nestedCode [4,2]) = (.halt .success,finalMachine,finalFfi) ∧
       finalFfi.ioEvents = sourceFfi.ioEvents ∧
       PanSemStateFiniteExact.semanticsDecls {sourceTemplateFor 2 with clock := 0} (ofString "main")
         (nestedCallDeclarations.map declToHOL) = .terminate .success finalFfi.ioEvents := by
@@ -244,7 +328,10 @@ theorem nested_initialized_machine :
     rw [entryEq, ← nestedCrepLimit, ← nestedLoopBudget, ← nestedLoopBound,
       ← nestedOptimizedLoopBody, ← nestedOptimizedLoopBound] at machineRun
     rw [nested_bitmaps] at machineRun
-    simpa only [nestedOptimizedWords,nestedRawWords] using machineRun
+    have tick := nested_tick_closed (fixtureCompilerConfig nestedCode)
+    dsimp only at tick
+    rw [tick] at machineRun
+    exact machineRun
   · simpa [source,n,nestedSourceState,sourceTemplateFor,sourceTemplate,nested_bitmaps] using semantics
 
 end SteppedFlapjack.Concrete
