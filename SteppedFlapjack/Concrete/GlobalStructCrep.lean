@@ -3,6 +3,7 @@ import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
 import Flapjack.Pancake.Proofs.PanToCrep.PcCompileCorrect.Assembly
 import SteppedFlapjack.CrepSteps.BranchStatic
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
+import SteppedFlapjack.PanToCrepSteps.GlobalInitializers
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
 open SteppedFlapjack.PanToCrepSteps
@@ -34,6 +35,35 @@ theorem globalStruct_frontend : FrontendProgram globalStructCrepContext
     simp only [List.mem_cons,List.not_mem_nil,or_false] at member
     rcases member with rfl | rfl <;> exact .const _
   · exact .ret globalStruct_field_frontend
+
+/-- Initializers of the declared pair use the general structured frontend for
+any starting global layout. -/
+theorem globalStruct_initializer_frontend (globals : PanGlobalsContextExact 64) :
+    FrontendProgram globalStructCrepContext
+      (nestedSeqHOL (compileDecsExactHOL globals globalStructProgram).1) := by
+  apply globalCompile_frontend_initializer_sequence
+  intro shape name value member
+  simp only [globalStructProgram,globalStructDecl,List.mem_cons,List.not_mem_nil,or_false,
+    DeclHOL.decl.injEq] at member
+  rcases member with ⟨rfl,rfl,rfl⟩ | impossible
+  · apply FrontendInitializer.flatStruct
+    intro e member
+    simp only [List.mem_cons,List.not_mem_nil,or_false] at member
+    rcases member with rfl | rfl <;> exact .const _
+  · cases impossible
+
+/-- The compiled declaration initializer has a code-derived visit bound and
+satisfies the Crep-to-Loop shape invariant. -/
+theorem globalStruct_initializer_compiled (globals : PanGlobalsContextExact 64)
+    (state : CrepSemHOLState 64 Unit) :
+    let program := compileProgExactHOLW globalStructCrepContext
+      (nestedSeqHOL (compileDecsExactHOL globals globalStructProgram).1)
+    SteppedFlapjack.CrepToLoopSteps.ScalarProgram program ∧
+      SteppedFlapjack.CrepSteps.steps program state ≤ SteppedFlapjack.CrepSteps.statementWeight program := by
+  have h := globalStruct_initializer_frontend globals
+  exact ⟨SteppedFlapjack.CrepToLoopSteps.frontend_scalar_program h,
+    SteppedFlapjack.CrepSteps.staticProgram_statementWeight
+      (frontendLoopFree_static h (globalCompile_initializers_noWhile globalStructProgram globals)) state⟩
 
 def globalStructCrepState : CrepSemHOLState 64 Unit := concreteDeclCrepState globalStructTarget []
 

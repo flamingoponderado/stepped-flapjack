@@ -1,4 +1,5 @@
 import SteppedFlapjack.PanToCrepSteps.GlobalShapes
+import SteppedFlapjack.PanToCrepSteps.FrontendProgram
 import Flapjack.Pancake.PanGlobals.CompileTopExact
 
 /-! Supported scalar global declarations yield supported generated stores. -/
@@ -68,5 +69,91 @@ theorem globalCompile_constant_initializer_example {width : Nat} [NeZero width]
   have h := globalCompile_scalar_initializer_sequence ctxt [.decl .one name (.const value)] scalar globals
   refine ⟨?_,h,branch_compile h⟩
   simp [compileDecsExactHOL]
+
+/-! Global initializers using the general frontend fragment. -/
+theorem globalCompile_frontendScalar {width : Nat} [NeZero width]
+    (globals : PanGlobalsContextExact width) {ctxt : PanToCrepContextExact width}
+    {e : ExpHOL width} (scalar : FrontendScalar ctxt e) :
+    FrontendScalar ctxt (compileExpExactHOL globals e) := by
+  induction scalar with
+  | const value => simpa [compileExpExactHOL] using (FrontendScalar.const (ctxt := ctxt) value)
+  | «local» name reg h => simpa [compileExpExactHOL] using (FrontendScalar.local name reg h)
+  | baseAddr => simpa [compileExpExactHOL] using (FrontendScalar.baseAddr (ctxt := ctxt))
+  | topAddr => simpa [compileExpExactHOL] using (FrontendScalar.op (ctxt := ctxt) .sub .topAddr (.const _))
+  | bytesInWord => simpa [compileExpExactHOL] using (FrontendScalar.bytesInWord (ctxt := ctxt))
+  | fieldLoad index count hi address ih =>
+    simpa [compileExpExactHOL] using FrontendScalar.fieldLoad index count hi ih
+  | load address ih => simpa [compileExpExactHOL] using FrontendScalar.load ih
+  | op op a b iha ihb => simpa [compileExpExactHOL,compileExpExactHOLList] using FrontendScalar.op op iha ihb
+  | cmp op a b iha ihb => simpa [compileExpExactHOL] using FrontendScalar.cmp op iha ihb
+  | shift op a b iha ihb => simpa [compileExpExactHOL] using FrontendScalar.shift op iha ihb
+
+theorem globalCompile_flatInitializer {width : Nat} [NeZero width]
+    (globals : PanGlobalsContextExact width) {ctxt : PanToCrepContextExact width}
+    (fields : List (ExpHOL width)) (hs : ∀ e ∈ fields, FrontendScalar ctxt e) :
+    ∀ e ∈ compileExpExactHOLList globals fields, FrontendScalar ctxt e := by
+  induction fields with
+  | nil => simp [compileExpExactHOLList]
+  | cons e es ih =>
+    intro x hx
+    simp only [compileExpExactHOLList,List.mem_cons] at hx
+    rcases hx with rfl | hx
+    · exact globalCompile_frontendScalar globals (hs e (by simp))
+    · exact ih (fun y hy => hs y (by simp [hy])) x hx
+
+
+inductive FrontendInitializer {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width) : ExpHOL width → Prop
+  | scalar {e} : FrontendScalar ctxt e → FrontendInitializer ctxt e
+  | flatStruct {fields} : (∀ e ∈ fields, FrontendScalar ctxt e) → FrontendInitializer ctxt (.rstruct fields)
+
+theorem globalCompile_frontend_initializers {width : Nat} [NeZero width]
+    (ctxt : PanToCrepContextExact width) (declarations : List (DeclHOL width))
+    (shape : ∀ sh name value, DeclHOL.decl sh name value ∈ declarations → FrontendInitializer ctxt value)
+    (globals : PanGlobalsContextExact width) :
+    ∀ initializer ∈ (compileDecsExactHOL globals declarations).1, FrontendProgram ctxt initializer := by
+  induction declarations generalizing globals with
+  | nil => simp [compileDecsExactHOL]
+  | cons d ds ih =>
+    have tailShape : ∀ sh name value, DeclHOL.decl sh name value ∈ ds → FrontendInitializer ctxt value := by
+      intro sh name value h
+      exact shape sh name value (by simp [h])
+    cases d with
+    | function fn => simpa only [compileDecsExactHOL] using ih tailShape globals
+    | exnDecl name sh => simpa only [compileDecsExactHOL] using ih tailShape globals
+    | name name fields => simpa only [compileDecsExactHOL] using ih tailShape globals
+    | decl sh name value =>
+      have hv := shape sh name value (by simp)
+      simp only [compileDecsExactHOL]
+      intro initializer member
+      simp only [List.mem_cons] at member
+      rcases member with rfl | member
+      · cases hv with
+        | scalar h => exact .store (.op .sub .topAddr (.const _)) (globalCompile_frontendScalar globals h)
+        | flatStruct h =>
+          simp only [compileExpExactHOL]
+          exact .storeStruct (.op .sub .topAddr (.const _)) (globalCompile_flatInitializer globals _ h)
+      · exact ih tailShape _ initializer member
+
+theorem globalCompile_frontend_initializer_sequence {width : Nat} [NeZero width]
+    (ctxt : PanToCrepContextExact width) (declarations : List (DeclHOL width))
+    (shape : ∀ sh name value, DeclHOL.decl sh name value ∈ declarations → FrontendInitializer ctxt value)
+    (globals : PanGlobalsContextExact width) :
+    FrontendProgram ctxt (nestedSeqHOL (compileDecsExactHOL globals declarations).1) := by
+  have hs := globalCompile_frontend_initializers ctxt declarations shape globals
+  generalize (compileDecsExactHOL globals declarations).1 = inits at hs ⊢
+  induction inits with
+  | nil => simpa [nestedSeqHOL] using (FrontendProgram.skip (ctxt := ctxt))
+  | cons p ps ih =>
+    simp only [nestedSeqHOL]
+    exact .seq (hs p (by simp)) (ih (by intro q h; exact hs q (by simp [h])))
+
+/-- Global initialization consists only of stores, so it introduces no loops. -/
+theorem globalCompile_initializers_noWhile {width : Nat} [NeZero width]
+    (declarations : List (DeclHOL width)) (globals : PanGlobalsContextExact width) :
+    noWhile (nestedSeqHOL (compileDecsExactHOL globals declarations).1) = true := by
+  induction declarations generalizing globals with
+  | nil => simp [compileDecsExactHOL,noWhile]
+  | cons decl decls ih =>
+    cases decl <;> simp [compileDecsExactHOL,noWhile,ih]
 
 end SteppedFlapjack.PanToCrepSteps
