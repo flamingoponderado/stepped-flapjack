@@ -136,6 +136,13 @@ private theorem countdownZeroLabFactor (cfg : LabToTarget.Config) :
   rw [countdown_optimized_literal]
   decide +kernel
 
+/-- The static Lab cost of the countdown native table is independent of its literal. -/
+theorem countdown_nativeFactor (n : Nat) (cfg : LabToTarget.Config) :
+    costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf (countdownNativeStackCode n))) [4]
+      (coracle1 (fixtureStackOracle cfg)) = 1950 := by
+  exact (actualFactor n cfg).trans (countdownZeroLabFactor cfg)
+
 /-- The initialized countdown Lab clock is a numeric affine function of the
 source count. -/
 theorem countdownLabTick_closed (n : Nat) (cfg : LabToTarget.Config) :

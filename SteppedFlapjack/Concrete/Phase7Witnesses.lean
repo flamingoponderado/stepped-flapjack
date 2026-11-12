@@ -15,6 +15,19 @@ open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.WordToWord Flapjack.Com
 open Flapjack.Compiler.Encoders.RiscV.Target
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps SteppedFlapjack.WordToStackSteps
 
+open SteppedFlapjack.LoopLiveSteps
+
+private theorem entrySyntaxWeight (ctx : CrepToLoopContextExact) (name : MlString) :
+    callSyntaxCost ctx (.seq .skip (.call none name []) : CrepProgHOL 64) = 5 := by
+  simp [callSyntaxCost,callArgumentsCost,compileExpsHOLExact,loopNestedSeqHOL,LoopSteps.structuralWeight]
+
+private theorem entryOptimizedWeight (ctx : CrepToLoopContextExact) (name : MlString) :
+    loopVisitWeight (optimiseHOL (compileHOLExact ctx .ln (.seq .skip (.call none name []) : CrepProgHOL 64))) = 10 := by
+  have generic (lab : Nat) : loopVisitWeight (optimiseHOL
+      (.seq .skip (.seq (.call none (some lab) [] none) .skip) : HolLoopProg 64)) = 10 := by
+    simp [optimiseHOL,loopCallCompHOL,Flapjack.compHOL,shrinkHOL,markAllHOL,loopVisitWeight]
+  simpa [compileHOLExact,compileExpsHOLExact,genTemps,loopNestedSeqHOL] using generic (findLabExact ctx name)
+
 def comparisonSourceFunctions : List (FunDeclOf 64) := [⟨"main",false,false,[],branching,.one⟩]
 private def comparisonProduction := functionSourceProduction comparisonSourceFunctions 1 6
 private theorem comparison_sourceRun (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
@@ -521,11 +534,145 @@ def countdownOptimized (n : Nat) := (compileWith Flapjack.RegAlloc.regAllocExecu
     (compileProgDeclsHOLW (compileTopExactHOL ((countdownSimpFunctions n).map DeclHOL.function) (ofString "main")))))).2
 def countdownNative (n : Nat) := compileNative riscvConfig false (countdownOptimized n)
 
+private theorem countdownOptimized_literal (n : Nat) :
+    countdownOptimized n = countdownOptimizedLiteral (BitVec.ofNat 64 n) := by
+  have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
+    funext a b c d e f g
+    exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
+  unfold countdownOptimized
+  change (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig (countdownRaw n)).2 = _
+  rw [countdown_rawEq, countdown_wordsGeneral, compileWith_eq_compile _ allocator, phase3WordConfig_eq,
+    countdown_optimized_literal]
+
+private theorem countdownNative_literal (n : Nat) : (countdownNative n).2.2.2 = countdownNativeStackCode n := by
+  unfold countdownNative countdownNativeStackCode
+  rw [countdownOptimized_literal, countdown_optimized_literal]
+
+private theorem countdownNative_bitmap (n : Nat) : (countdownNative n).1 = [4] := by
+  unfold countdownNative countdownOptimized
+  change (compileNative riscvConfig false (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig (countdownRaw n)).2).1 = _
+  rw [countdown_nativeRawEq, supported_native_bitmap (countdown n) (countdown_supported n)]
+
+private theorem countdownLiteral_syntaxTableWeight (ctx : CrepToLoopContextExact) (name : MlString) (n : Nat) :
+    callTableCost ctx ((twoPrograms (ofString "main") name (naturalCountdownCrepBody (BitVec.ofNat 64 n))).map (fun row => (row.2.1,row.2.2))) = 28 := by
+  simp [callTableCost,twoPrograms,callSyntaxCost,callExpressionCost,callArgumentsCost,naturalCountdownCrepBody,
+    compileExpHOLExact,compileExpsHOLExact,loopNestedSeqHOL,LoopSteps.structuralWeight]
+
+private theorem countdownLiteral_sourceCodeWeight (name : MlString) (n : Nat) :
+    CrepSteps.codeWeight (twoPrograms (ofString "main") name (naturalCountdownCrepBody (BitVec.ofNat 64 n))) = 8 := by
+  simp [CrepSteps.codeWeight,CrepSteps.statementWeight,twoPrograms,naturalCountdownCrepBody]
+
+private theorem countdownLiteral_rate (ctx : CrepToLoopContextExact) (name : MlString) (n clock : Nat) :
+    callClockFactor ctx ((twoPrograms (ofString "main") name (naturalCountdownCrepBody (BitVec.ofNat 64 n))).map (fun row => (row.2.1,row.2.2)))
+      clock (.seq .skip (.call none name [])) = 216 := by
+  simp [callClockFactor,entrySyntaxWeight,countdownLiteral_syntaxTableWeight]
+
+private theorem countdownLiteral_programs (n : Nat) : crepPrograms (naturalCountdownHOL n) =
+    twoPrograms (ofString "main") (entryName (naturalCountdownHOL n)) (naturalCountdownCrepBody (BitVec.ofNat 64 n)) := by
+  rw [natural_countdown_crep_code]
+  rfl
+
+private theorem countdown_sourceTableWeight (n : Nat) :
+    SimpVisits.simpTableFactor (functionsHOL ((countdownHOLFunctions n).map DeclHOL.function)) = 6 := by
+  simp [countdownHOLFunctions,countdownSourceFunctions,funDeclToHOL,functionsHOL,SimpVisits.simpTableFactor,
+    panSimpCompileHOL,seqAssocHOL,retToTailHOL,smartSeqHOL,seqCallRetHOL,progToHOL,expToHOL,shapeToHOL,SimpVisits.hw,
+    countdown,countdownBody]
+
+private theorem countdown_sourceBodyWeight (n : Nat) :
+    SimpVisits.hw (progToHOL (panSimpProg (countdown n))) = 5 := by
+  rw [countdown_simp_program]
+  simp [naturalCountdown,countdownBody,progToHOL,expToHOL,shapeToHOL,SimpVisits.hw]
+
+private theorem countdown_compiledPrograms (n : Nat) :
+    compileProgDeclsHOLW (compileTopExactHOL ((countdownSimpFunctions n).map DeclHOL.function) (ofString "main")) =
+      crepPrograms (naturalCountdownHOL n) := by
+  rw [countdown_simpDeclarations,countdown_simp_program]
+  rfl
+
+private theorem countdown_mainName (n : Nat) :
+    newMainNameHOL ((countdownSimpFunctions n).map DeclHOL.function) = entryName (naturalCountdownHOL n) := by
+  rw [countdown_simpDeclarations,countdown_simp_program]
+  rfl
+
+private theorem countdownLiteral_wordWeight (n : Nat) :
+    wordCodeWeight (sptFromAList (countdownOptimizedLiteral (BitVec.ofNat 64 n))) = 32 := by
+  simp [countdownOptimizedLiteral,wordCodeWeight,wordControlWeight,sptFromAList,sptInsert,sptToAList,sptFoldi]
+
+private theorem countdownLiteral_stackWeight (n : Nat) :
+    stackCodeWeight (sptFromAList (countdownNativeStackCode n)) = 34 := by
+  rw [countdown_nativeShape]
+  simp [SteppedFlapjack.Phase6.prefixCode,SteppedFlapjack.Phase6.P,stackCodeWeight,stackControlWeight,sptFromAList,sptInsert,sptToAList,sptFoldi]
+  with_unfolding_all decide
+
 -- The compiler declarations retain the width proof synthesized for the first
 -- witness; normalize it once before matching the polymorphic compiler theorem.
+
+open Flapjack.Compiler.Encoders.Asm
+private theorem countdownLiteral_bodyWeight (arch : AsmArchitecture) (n : Nat) :
+  let ctxt := witnessLoopContext arch (naturalCountdownHOL n)
+  let c := ctxtFcExact ctxt.target ctxt.funcs [] []
+  loopVisitWeight (optimiseScalar (compileHOLExact c .ln (naturalCountdownCrepBody (BitVec.ofNat 64 n)))) = 52 := by
+  simp only [witnessLoopContext,ctxtFcExact,mkCtxtExact,makeVmapExact,HolFiniteMapExact.updateListEq,
+    naturalCountdownCrepBody,compileHOLExact,compileExpHOLExact,compileExpsHOLExact,
+    genTemps,List.length_cons,List.length_nil,List.range_succ,List.range_zero,List.map_cons,List.map_nil,
+    List.append_nil,List.nil_append,List.zipWith_cons_cons,List.zipWith_nil_left,Nat.add_zero]
+  simp [optimiseScalar, scalarDepth, shrinkScalar, scalarFixedpoint, shrinkBranch,
+    markAllHOL, loopVisitWeight, varsOfExpHOL, varsOfExpListHOL, loopNestedSeqHOL, FUPDATE_HOL,
+    HolFiniteMapExact.updateEq, HolFiniteMapExact.empty, sptInsert, sptUnion, sptInter, sptSize, sptLookup, sptListInsert, sptDelete, sptOel, sptMkBN]
+private theorem countdownLiteral_loopWeight (n : Nat) (source : CrepSemHOLState 64 Unit) :
+  loopCodeWeight (concreteDeclLoopState riscvConfig.isa source (crepPrograms (naturalCountdownHOL n))).code = 52 := by
+  change loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa (crepPrograms (naturalCountdownHOL n)))) = 52
+  rw [natural_countdown_crep_code]
+  change loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa (twoPrograms (ofString "main") (entryName (naturalCountdownHOL n)) (phase3CountdownCrepBody n)))) = 52
+  rw [← twoLoopPrograms_eq riscvConfig.isa (ofString "main") (entryName (naturalCountdownHOL n)) (phase3CountdownCrepBody n) (naturalCountdown_scalar n),
+    twoLoops_exact riscvConfig.isa (ofString "main") (entryName (naturalCountdownHOL n)) (phase3CountdownCrepBody n) (Ne.symm (entryName_fresh (naturalCountdownHOL n)))]
+  have callee : loopVisitWeight (twoCallee riscvConfig.isa (ofString "main") (entryName (naturalCountdownHOL n)) (phase3CountdownCrepBody n)) = 52 := by
+    have h := countdownLiteral_bodyWeight riscvConfig.isa n
+    simpa [witnessLoopContext,natural_countdown_crep_code,ctxtFcExact,mkCtxtExact,makeVmapExact,twoCallee,phase3CountdownCrepBody,twoPrograms,HolFiniteMapExact.updateListEq,HolFiniteMapExact.updateList,FUPDATE_LIST,FUPDATE_LIST_HOL] using h
+  simp [loopCodeWeight,sptFromAList,sptInsert,sptToAList,sptFoldi,branchingLoopEntry,loopVisitWeight,callee]
+
+
+private theorem countdownLiteral_compiledLoopWeight (n : Nat) :
+    loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa
+      (twoPrograms (ofString "main") (entryName (naturalCountdownHOL n)) (naturalCountdownCrepBody (BitVec.ofNat 64 n))))) = 52 := by
+  have h := countdownLiteral_loopWeight n (concreteDeclCrepState (countdownSource n) [])
+  change loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa (crepPrograms (naturalCountdownHOL n)))) = 52 at h
+  rw [countdownLiteral_programs] at h
+  exact h
+
 set_option linter.auxLemma false in
 private theorem witnessWidthProof : comparisonHOLFunctions._proof_1 = @Nat.instNeZeroSucc 63 :=
   Subsingleton.elim _ _
+
+open SteppedFlapjack.StackToLabSteps SteppedFlapjack.StackAllocSteps SteppedFlapjack.StackRemoveSteps.CompCorrect
+open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics Flapjack.Compiler.Backend.StackRemove
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+private theorem countdown_ticks_numeric (n : Nat) : countdownTicks n =
+    44195828396580057600 * (6*n+9) + 59847410146165518348 := by
+  have uniform : uniformFactor (width := 64) countdownRiscVBackend.dataConf = 19 := by decide +kernel
+  have init : loopOnlyCost 0 (initCode (StackToLab.isGenGc countdownRiscVBackend.dataConf.gcKind) (2^53-1) 24 : HolProg 64) = 361 := by decide +kernel
+  have sourceClock : (countdownSource n).clock = 6*n+9 := by rfl
+  unfold countdownTicks callPipelineTicks
+  dsimp only
+  unfold fixtureStackOracle
+  rw [stackLabTickLimit_emptyOracle]
+  dsimp only
+  rw [← countdownOptimized, ← countdownNative, countdownNative_bitmap, countdownNative_literal]
+  have factor := countdown_nativeFactor n (fixtureCompilerConfig (countdownNativeStackCode n))
+  change costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
+    (sptFromAList (code1 countdownRiscVBackend.dataConf (countdownNativeStackCode n))) [4]
+    (fun _ => (fixtureCompilerConfig (countdownNativeStackCode n),[],[])) = 1950 at factor
+  rw [factor, uniform, init, countdownOptimized_literal, countdownLiteral_wordWeight, countdownLiteral_stackWeight]
+  rw [countdown_compiledPrograms, countdown_mainName, countdownLiteral_programs]
+  simp only [compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,List.flatMap_nil]
+  rw [entryOptimizedWeight, entrySyntaxWeight, countdownLiteral_rate, countdownLiteral_sourceCodeWeight,
+    countdown_sourceTableWeight, countdown_sourceBodyWeight]
+  simp only [concreteDeclLoopState, concreteDeclCrepState, noGlobalsLoweredPreCall]
+  rw [countdownLiteral_compiledLoopWeight, sourceClock]
+  simp [CrepSteps.statementWeight, flattenStepFactor]
+  ring
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 200000 in
@@ -534,7 +681,8 @@ theorem countdownFixture_machine (n : Nat) (range : n < 2^64) :
     ∃ compilerFinal, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
       ((countdownHOLFunctions n).map DeclHOL.function) = some (fixtureCodeBytes (countdownNative n).2.2.2,(countdownNative n).1,compilerFinal) ∧
     ∃ machine ffi, evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (countdownNative n).2.2.2)) sourceFfi
-      (countdownTicks n) (configuredMachineState (countdownNative n).2.2.2 (countdownNative n).1) = (.halt .success,machine,ffi) ∧
+      (44195828396580057600 * (6*n+9) + 59847410146165518348)
+      (configuredMachineState (countdownNative n).2.2.2 (countdownNative n).1) = (.halt .success,machine,ffi) ∧
       ffi.ioEvents = sourceFfi.ioEvents ∧
       Flapjack.PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
         ((countdownHOLFunctions n).map DeclHOL.function) = .terminate .success ffi.ioEvents := by
@@ -591,7 +739,8 @@ theorem countdownFixture_machine (n : Nat) (range : n < 2^64) :
   · unfold countdownNative countdownOptimized
     rw [witnessWidthProof]
     exact compiled
-  · dsimp only [countdownTicks,countdownNative,countdownOptimized]
+  · rw [← countdown_ticks_numeric n]
+    dsimp only [countdownTicks,countdownNative,countdownOptimized]
     rw [witnessWidthProof]
     exact machineRun
   · simpa [countdownSource,functionSourceExact,sourceTemplateFor_one,sourceTemplate] using semantics
@@ -699,6 +848,77 @@ def naturalCountdownOptimized (n : Nat) := (compileWith Flapjack.RegAlloc.regAll
     (compileProgDeclsHOLW (compileTopExactHOL ((naturalCountdownSimpFunctions n).map DeclHOL.function) (ofString "main")))))).2
 def naturalCountdownNative (n : Nat) := compileNative riscvConfig false (naturalCountdownOptimized n)
 
+private theorem naturalCountdownOptimized_literal (n : Nat) :
+    naturalCountdownOptimized n = countdownOptimizedLiteral (BitVec.ofNat 64 n) := by
+  have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
+    funext a b c d e f g
+    exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
+  unfold naturalCountdownOptimized
+  change (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig (naturalCountdownRaw n)).2 = _
+  rw [naturalCountdown_rawEq, naturalCountdown_wordsGeneral, compileWith_eq_compile _ allocator, phase3WordConfig_eq,
+    countdown_optimized_literal]
+
+private theorem naturalCountdownNative_literal (n : Nat) : (naturalCountdownNative n).2.2.2 = countdownNativeStackCode n := by
+  unfold naturalCountdownNative countdownNativeStackCode
+  rw [naturalCountdownOptimized_literal, countdown_optimized_literal]
+
+private theorem naturalCountdownNative_bitmap (n : Nat) : (naturalCountdownNative n).1 = [4] := by
+  unfold naturalCountdownNative naturalCountdownOptimized
+  change (compileNative riscvConfig false (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig (naturalCountdownRaw n)).2).1 = _
+  rw [naturalCountdown_nativeRawEq, supported_native_bitmap (naturalCountdown n) (naturalCountdown_supported n)]
+
+private theorem naturalCountdown_sourceTableWeight (n : Nat) :
+    SimpVisits.simpTableFactor (functionsHOL ((naturalCountdownHOLFunctions n).map DeclHOL.function)) = 6 := by
+  simp [naturalCountdownHOLFunctions,naturalCountdownSourceFunctions,funDeclToHOL,functionsHOL,SimpVisits.simpTableFactor,
+    panSimpCompileHOL,seqAssocHOL,retToTailHOL,smartSeqHOL,seqCallRetHOL,progToHOL,expToHOL,shapeToHOL,SimpVisits.hw,
+    naturalCountdown,countdownBody]
+
+private theorem naturalCountdown_simpFixed (n : Nat) : panSimpProg (naturalCountdown n) = naturalCountdown n := by
+  simp [panSimpProg,retToTail,seqAssoc,smartSeq,seqCallRet,naturalCountdown,countdownBody]
+
+private theorem naturalCountdown_sourceBodyWeight (n : Nat) :
+    SimpVisits.hw (progToHOL (panSimpProg (naturalCountdown n))) = 5 := by
+  rw [naturalCountdown_simpFixed]
+  simp [naturalCountdown,countdownBody,progToHOL,expToHOL,shapeToHOL,SimpVisits.hw]
+
+private theorem naturalCountdown_compiledPrograms (n : Nat) :
+    compileProgDeclsHOLW (compileTopExactHOL ((naturalCountdownSimpFunctions n).map DeclHOL.function) (ofString "main")) =
+      crepPrograms (naturalCountdownHOL n) := by
+  rw [naturalCountdown_simpDeclarations,naturalCountdown_simpFixed]
+  rfl
+
+private theorem naturalCountdown_mainName (n : Nat) :
+    newMainNameHOL ((naturalCountdownSimpFunctions n).map DeclHOL.function) = entryName (naturalCountdownHOL n) := by
+  rw [naturalCountdown_simpDeclarations,naturalCountdown_simpFixed]
+  rfl
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+private theorem naturalCountdown_ticks_numeric (n : Nat) : naturalCountdownTicks n =
+    44195828396580057600 * (6*n+7) + 59847410146165518348 := by
+  have uniform : uniformFactor (width := 64) countdownRiscVBackend.dataConf = 19 := by decide +kernel
+  have init : loopOnlyCost 0 (initCode (StackToLab.isGenGc countdownRiscVBackend.dataConf.gcKind) (2^53-1) 24 : HolProg 64) = 361 := by decide +kernel
+  have sourceClock : (naturalCountdownSource n).clock = 6*n+7 := by rfl
+  unfold naturalCountdownTicks callPipelineTicks
+  dsimp only
+  unfold fixtureStackOracle
+  rw [stackLabTickLimit_emptyOracle]
+  dsimp only
+  rw [← naturalCountdownOptimized, ← naturalCountdownNative, naturalCountdownNative_bitmap, naturalCountdownNative_literal]
+  have factor := countdown_nativeFactor n (fixtureCompilerConfig (countdownNativeStackCode n))
+  change costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
+    (sptFromAList (code1 countdownRiscVBackend.dataConf (countdownNativeStackCode n))) [4]
+    (fun _ => (fixtureCompilerConfig (countdownNativeStackCode n),[],[])) = 1950 at factor
+  rw [factor, uniform, init, naturalCountdownOptimized_literal, countdownLiteral_wordWeight, countdownLiteral_stackWeight]
+  rw [naturalCountdown_compiledPrograms, naturalCountdown_mainName, countdownLiteral_programs]
+  simp only [compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,List.flatMap_nil]
+  rw [entryOptimizedWeight, entrySyntaxWeight, countdownLiteral_rate, countdownLiteral_sourceCodeWeight,
+    naturalCountdown_sourceTableWeight, naturalCountdown_sourceBodyWeight]
+  simp only [concreteDeclLoopState, concreteDeclCrepState, noGlobalsLoweredPreCall]
+  rw [countdownLiteral_compiledLoopWeight, sourceClock]
+  simp [CrepSteps.statementWeight, flattenStepFactor]
+  ring
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 200000 in
 /-- The natural countdown reaches the initialized machine through the call-aware theorem. -/
@@ -706,7 +926,8 @@ theorem naturalCountdownFixture_machine (n : Nat) (range : n < 2^64) :
     ∃ compilerFinal, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
       ((naturalCountdownHOLFunctions n).map DeclHOL.function) = some (fixtureCodeBytes (naturalCountdownNative n).2.2.2,(naturalCountdownNative n).1,compilerFinal) ∧
     ∃ machine ffi, evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (naturalCountdownNative n).2.2.2)) sourceFfi
-      (naturalCountdownTicks n) (configuredMachineState (naturalCountdownNative n).2.2.2 (naturalCountdownNative n).1) = (.halt .success,machine,ffi) ∧
+      (44195828396580057600 * (6*n+9) + 59847410146165518348)
+      (configuredMachineState (naturalCountdownNative n).2.2.2 (naturalCountdownNative n).1) = (.halt .success,machine,ffi) ∧
       ffi.ioEvents = sourceFfi.ioEvents ∧
       Flapjack.PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
         ((naturalCountdownHOLFunctions n).map DeclHOL.function) = .terminate .success ffi.ioEvents := by
@@ -763,9 +984,21 @@ theorem naturalCountdownFixture_machine (n : Nat) (range : n < 2^64) :
   · unfold naturalCountdownNative naturalCountdownOptimized
     rw [witnessWidthProof]
     exact compiled
-  · dsimp only [naturalCountdownTicks,naturalCountdownNative,naturalCountdownOptimized]
-    rw [witnessWidthProof]
-    exact machineRun
+  · have exactRun : evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (naturalCountdownNative n).2.2.2)) sourceFfi
+        (naturalCountdownTicks n) (configuredMachineState (naturalCountdownNative n).2.2.2 (naturalCountdownNative n).1) =
+          (.halt .success,machine,ffi) := by
+      dsimp only [naturalCountdownTicks,naturalCountdownNative,naturalCountdownOptimized]
+      rw [witnessWidthProof]
+      exact machineRun
+    rw [naturalCountdown_ticks_numeric] at exactRun
+    have padded := evaluateTargetAddClock (fixtureMachineConfig (fixtureCodeStart (naturalCountdownNative n).2.2.2)) sourceFfi
+      (44195828396580057600 * (6*n+7) + 59847410146165518348)
+      (configuredMachineState (naturalCountdownNative n).2.2.2 (naturalCountdownNative n).1)
+      (2*44195828396580057600) (.halt .success) machine ffi exactRun (by simp)
+    have clockEq : 44195828396580057600 * (6*n+7) + 59847410146165518348 + 2*44195828396580057600 =
+        44195828396580057600 * (6*n+9) + 59847410146165518348 := by ring
+    rw [clockEq] at padded
+    exact padded
   · simpa [naturalCountdownSource,functionSourceExact,sourceTemplateFor_one,sourceTemplate] using semantics
 
 end SteppedFlapjack.Concrete

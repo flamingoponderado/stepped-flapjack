@@ -91,9 +91,9 @@ and a six-step source execution.
 
 `comparisonFixture_machine` and `branchingLoopFixture_machine` instantiate the
 call-aware theorem with concrete clocks `comparisonTicks` and
-`branchingLoopTicks`. `countdownFixture_machine` also uses the call-aware
-theorem with its concrete clock `countdownTicks`, and
-`naturalCountdownFixture_machine` uses `naturalCountdownTicks`.
+`branchingLoopTicks`. Both `countdownFixture_machine` and
+`naturalCountdownFixture_machine` state the kernel-checked bound
+`44195828396580057600 * (6*n+9) + 59847410146165518348` machine ticks.
 
 This fragment and fixture do not yet cover init-e's full guest: globals, heap
 and shared-memory operations, exceptions, FFI, primitive behavior and host
