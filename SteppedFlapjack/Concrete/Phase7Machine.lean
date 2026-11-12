@@ -98,7 +98,7 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
     let opt := optimiseHOL (compileHOLExact ctxt .ln crep)
     let optFactor := max (loopVisitWeight opt) (loopCodeWeight loop.code+2)
     let optLimit := loopVisitWeight opt + optFactor * (2 * loopLimit)
-    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*optLimit+2)
+    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) * (6*optLimit+1) + 1
     let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*optLimit+1 + allowance)
     ∃ (sourceFinal : PanSemStateFiniteExact 64 Unit), ∃ finalMachine finalFfi compilerFinal,
       Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig

@@ -7,7 +7,7 @@ open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Backend.WordToStack.Native
 open Flapjack.WordToStackProofs.CallReturnHandler
 /-- Restore a normal caller while preserving the continuation allowance. -/
-theorem budgetHandlerNormalContinuation {width : Nat} [NeZero width] {C F : Type}
+theorem rateHandlerNormalContinuation {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (k frame payload : Nat)
     (source sourcePost bodyPost : WordSemStateFiniteExact width (Nat × C) F)
     (originalTarget target : StackSemStateFiniteExact width C F) (lens : List Nat)
@@ -18,9 +18,9 @@ theorem budgetHandlerNormalContinuation {width : Nat} [NeZero width] {C F : Type
     (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
     (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
     (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (cost reserve : Nat)
+    (rate cost reserve : Nat)
     (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac retCode t cost)
+      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate cost retCode t)
     (conventions : postAllocConventionsHOL k
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) = true)
@@ -57,10 +57,10 @@ theorem budgetHandlerNormalContinuation {width : Nat} [NeZero width] {C F : Type
       StackSemEvaluate.evaluate
         (copyRetNative false true (k,frame,payload) values
           (popHandlerNative false (k,frame,payload) compiled),
-          {target with clock := target.clock + cost + reserve}) = (targetResult,targetPost) ∧
+          {target with clock := target.clock + rate*bodyPost.clock + cost + reserve}) = (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
       (targetResult = some (.halt (.word 2)) ∨
-        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + cost + reserve)) ∧
+        ((rate+1)*sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + rate*bodyPost.clock + cost + reserve)) ∧
       compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
   have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
   obtain ⟨gc,rest,popped,sourceFrame,keys,tailKeys,handlerEq,poppedEq,popRun,domain,
@@ -117,9 +117,12 @@ theorem budgetHandlerNormalContinuation {width : Nat} [NeZero width] {C F : Type
     retBudget _ smaller safeTransfer k frame payload sourcePost restored result bs bsPost n nPost compiled lens
       ⟨sourceContinuation,notError,notTimeout,restoredRelation,retConventions,retFlat,compilation,
         lengthBound,restoredBitmapBound,restoredBitmapPrefix,restoredLabels,retMax⟩ reserve
+  have contClock : (WordSemStateFiniteExact.setVars values returnedValues popped).clock = bodyPost.clock := by
+    simpa only [WordSemStateFiniteExact.setVars] using poppedClock
+  rw [contClock] at continuationRun accounting
   have sourceHandler : (WordSemStateFiniteExact.setVars values returnedValues popped).handler =
       source.handler := by rw [poppedEq]; rfl
-  have boosted := Compiler.Backend.StackProps.evaluateAddClock (cost + reserve)
+  have boosted := Compiler.Backend.StackProps.evaluateAddClock (rate*bodyPost.clock + cost + reserve)
     (copyRetNative false true (k,frame,payload) values
       (popHandlerNative false (k,frame,payload) .skip)) target none restored ⟨restoreRun,by simp⟩
   refine ⟨targetPost,targetResult,?_,enough,accounting,?_⟩
@@ -135,8 +138,10 @@ theorem budgetHandlerNormalContinuation {width : Nat} [NeZero width] {C F : Type
 
 
 
+
+
 /-- Enter an exception handler with a concrete continuation allowance. -/
-theorem budgetHandlerExceptionContinuation {width : Nat} [NeZero width] {C F : Type}
+theorem rateHandlerExceptionContinuation {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (k frame payload : Nat)
     (source sourcePost bodyPost : WordSemStateFiniteExact width (Nat × C) F)
     (originalTarget target : StackSemStateFiniteExact width C F) (lens : List Nat)
@@ -147,9 +152,9 @@ theorem budgetHandlerExceptionContinuation {width : Nat} [NeZero width] {C F : T
     (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
     (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
     (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (cost reserve : Nat)
+    (rate cost reserve : Nat)
     (handlerBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac handlerCode t cost)
+      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate cost handlerCode t)
     (conventions : postAllocConventionsHOL k
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) = true)
@@ -185,10 +190,10 @@ theorem budgetHandlerExceptionContinuation {width : Nat} [NeZero width] {C F : T
     ∃ targetPost targetResult,
       StackSemEvaluate.evaluate
         (compiled,
-          {target with clock := target.clock + cost + reserve}) = (targetResult,targetPost) ∧
+          {target with clock := target.clock + rate*bodyPost.clock + cost + reserve}) = (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
       (targetResult = some (.halt (.word 2)) ∨
-        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + cost + reserve)) ∧
+        ((rate+1)*sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + rate*bodyPost.clock + cost + reserve)) ∧
       compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
   have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
   obtain ⟨valid,domain,sourceContinuation,continuationIH⟩ := sourceHandlerExceptionContinuation
@@ -228,6 +233,7 @@ theorem budgetHandlerExceptionContinuation {width : Nat} [NeZero width] {C F : T
     handlerBudget _ smaller safeTransfer k frame payload sourcePost target result bs bsPost n nPost compiled lens
       ⟨sourceContinuation,notError,notTimeout,restoredRelation,handlerConventions,handlerFlat,compilation,
         lengthBound,bitmapBound,bitmapPrefix,labels,handlerMax⟩ reserve
+  simp only [WordSemStateFiniteExact.setVar] at continuationRun accounting
   refine ⟨targetPost,targetResult,continuationRun,enough,accounting,?_⟩
   unfold compCorrectResult at conclusion ⊢
   change bodyPost.handler = source.handler at handlerEq
@@ -236,8 +242,10 @@ theorem budgetHandlerExceptionContinuation {width : Nat} [NeZero width] {C F : T
 
 
 
+
+
 /-- Enter and run a handler call’s callee with explicit clock slack. -/
-theorem budgetHandlerCalleeBody {width : Nat} [NeZero width] {C F : Type}
+theorem rateHandlerCalleeBody {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (k f frame : Nat)
     (values : List Nat) (names : WordLangCutsetsHOL)
     (retCode : WordLangProgHOL (BitVec width)) (l1 l2 : Nat)
@@ -275,11 +283,11 @@ theorem budgetHandlerCalleeBody {width : Nat} [NeZero width] {C F : Type}
       (WordSemStateFiniteExact.callEnv args1 ss
         (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
           (WordSemStateFiniteExact.decClock source))) = (bodyResult,bodyPost))
-    (cost reserve : Nat)
-    (bodyBudget : BudgetSimulation ac prog
+    (rate cost reserve : Nat)
+    (bodyBudget : RateSimulation ac rate cost prog
       (WordSemStateFiniteExact.callEnv args1 ss
         (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
-          (WordSemStateFiniteExact.decClock source))) cost) :
+          (WordSemStateFiniteExact.decClock source)))) :
     ∃ (destinationTarget saved header moved entry targetPost : StackSemStateFiniteExact width C F)
       (calleeCode body : HolProg width) (calleeSize calleeFrame : Nat)
       (targetResult : Option (StackSemResult width)),
@@ -294,15 +302,15 @@ theorem budgetHandlerCalleeBody {width : Nat} [NeZero width] {C F : Type}
       StackSemEvaluate.evaluate (.stackAlloc (calleeSize-(args1.length-k)),
         StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved)) =
           (none,entry) ∧
-      StackSemEvaluate.evaluate (body,{entry with clock := entry.clock + cost + reserve}) =
+      StackSemEvaluate.evaluate (body,{entry with clock := entry.clock + rate*(source.clock-1) + cost + reserve}) =
         (targetResult,targetPost) ∧
       StackSemEvaluate.evaluate
         (calleeCode,{StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved) with
-          clock := (StackSemStateOps.decClock moved).clock + cost + reserve}) =
+          clock := (StackSemStateOps.decClock moved).clock + rate*(source.clock-1) + cost + reserve}) =
         (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
       (targetResult = some (.halt (.word 2)) ∨
-        (bodyPost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ bodyPost.clock + cost + reserve)) ∧
+        ((rate+1)*bodyPost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ bodyPost.clock + rate*(source.clock-1) + cost + reserve)) ∧
       compCorrectResult ac k calleeSize calleeFrame
         (WordSemStateFiniteExact.callEnv args1 ss
           (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
@@ -384,11 +392,12 @@ theorem budgetHandlerCalleeBody {width : Nat} [NeZero width] {C F : Type}
       calleeIndex calleeIndexPost body (frame :: lens)
       ⟨bodyRun,bodyNotError,bodyNotTimeout,entryRelation,bodyConventions,bodyFlat,bodyCompile,
         calleeBitmapLength,entryBitmapBound,entryBitmapPrefix,bodyLabels,bodyMaximum⟩ reserve
+  simp only [WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.pushEnv_clock,WordSemStateFiniteExact.decClock] at execution accounting
   have calleeExecution : StackSemEvaluate.evaluate
       (calleeCode,{StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved) with
-        clock := (StackSemStateOps.decClock moved).clock + cost + reserve}) =
+        clock := (StackSemStateOps.decClock moved).clock + rate*(source.clock-1) + cost + reserve}) =
       (targetResult,targetPost) := by
-    have boosted := Compiler.Backend.StackProps.evaluateAddClock (cost + reserve)
+    have boosted := Compiler.Backend.StackProps.evaluateAddClock (rate*(source.clock-1)+cost+reserve)
       (.stackAlloc (calleeSize-(args1.length-k)))
       (StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved))
       none entry ⟨allocateRun,by simp⟩
@@ -403,198 +412,9 @@ theorem budgetHandlerCalleeBody {width : Nat} [NeZero width] {C F : Type}
 
 
 
-/-- Dispatch a normal return with explicit callee and continuation allowances. -/
-theorem budgetNormalHandlerCallFromCallee {width : Nat} [NeZero width] {C F : Type}
-    (ac : AsmConfigExact width) (k frame payload : Nat)
-    (source sourcePost bodyPost : WordSemStateFiniteExact width (Nat × C) F)
-    (originalTarget target : StackSemStateFiniteExact width C F) (lens : List Nat)
-    (prior : stateRel ac k frame payload source originalTarget lens 0)
-    (values : List Nat) (names : WordLangCutsetsHOL)
-    (retCode handlerCode : WordLangProgHOL (BitVec width))
-    (l1 l2 h1 h2 handlerVar : Nat) (dest : Option Nat) (args : List Nat)
-    (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
-    (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
-    (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (cost reserve : Nat)
-    (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac retCode t cost)
-    (conventions : postAllocConventionsHOL k
-      (.call (some (values,names,retCode,l1,l2)) dest args
-        (some (handlerVar,handlerCode,h1,h2))) = true)
-    (flat : flatExpConventions
-      (.call (some (values,names,retCode,l1,l2)) dest args
-        (some (handlerVar,handlerCode,h1,h2))) = true)
-    (maximum : maxVarHOL
-      (.call (some (values,names,retCode,l1,l2)) dest args
-        (some (handlerVar,handlerCode,h1,h2))) < 2*payload+2*k)
-    (nonzero : source.clock ≠ 0) (result : Option (WordSemResult width))
-    (wholeRun : WordSemStateFiniteExact.evaluate
-      (.call (some (values,names,retCode,l1,l2)) dest args
-        (some (handlerVar,handlerCode,h1,h2))) source = (result,sourcePost))
-    (notError : result ≠ some .error) (notTimeout : result ≠ some .timeOut)
-    (location : WordLocW width) (returnedValues : List (WordLocW width))
-    (bodyRun : WordSemStateFiniteExact.evaluate prog
-      (WordSemStateFiniteExact.callEnv args1 ss
-        (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
-          (WordSemStateFiniteExact.decClock source))) =
-      (some (.result location returnedValues),bodyPost))
-    (calleeSize calleeFrame : Nat)
-    (bodyConclusion : compCorrectResult ac k calleeSize calleeFrame
-      (WordSemStateFiniteExact.callEnv args1 ss
-        (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
-          (WordSemStateFiniteExact.decClock source))) bodyPost target
-      (some (.result location returnedValues)) (some (.result location)) (payload::lens))
-    (moved : StackSemStateFiniteExact width C F) (destination : Sum Nat Nat)
-    (calleeCode handlerTarget : HolProg width) (bodyExtra : Nat)
-    (found : StackSemControl.findCode destination (moved.regs.eraseEq 0) moved.code = some calleeCode)
-    (movedNonzero : moved.clock ≠ 0)
-    (calleeRun : StackSemEvaluate.evaluate
-      (calleeCode,{StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved) with
-        clock := (StackSemStateOps.decClock moved).clock+bodyExtra}) =
-      (some (.result location),target))
-    (bs bsPost : AppList (BitVec width)) (n nPost : Nat) (compiled : HolProg width)
-    (compilation : compNative ac false retCode (bs,n) (k,frame,payload) = (compiled,(bsPost,nPost)))
-    (lengthBound : (appListAppend bs).length ≤ n)
-    (bitmapBound : n-(appListAppend bs).length ≤ target.bitmaps.length)
-    (bitmapPrefix : (appListAppend bsPost).IsPrefix (target.bitmaps.drop (n-(appListAppend bs).length)))
-    (labels : ∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact target.code loc) :
-    ∃ targetPost targetResult,
-      StackSemEvaluate.evaluate
-        (.call (some (.seq .skip (copyRetNative false true (k,frame,payload) values
-          (popHandlerNative false (k,frame,payload) compiled)),0,l1,l2))
-          destination (some (handlerTarget,h1,h2)),
-          {moved with clock := moved.clock+bodyExtra+(cost+reserve)}) =
-        (targetResult,targetPost) ∧
-      reserve ≤ targetPost.clock ∧
-      (targetResult = some (.halt (.word 2)) ∨
-        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + cost + reserve)) ∧
-      compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
-  have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
-  obtain ⟨gc,rest,popped,sourceFrame,keys,tailKeys,handlerEq,poppedEq,popRun,domain,
-    valid,sourceContinuation,continuationIH⟩ := sourceHandlerReturningContinuation
-    ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source sourcePost bodyPost
-    result xs args1 prog ss envs location returnedValues guards ih nonzero wholeRun notError bodyRun
-  have locationEq : location = .loc l1 l2 := by
-    by_contra different
-    exact valid (Or.inl different)
-  obtain ⟨targetPost,targetResult,continuationRun,enough,accounting,conclusion⟩ :=
-    budgetHandlerNormalContinuation ac k frame payload source sourcePost bodyPost originalTarget target
-      lens prior values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1 prog ss envs
-      guards cost reserve retBudget conventions flat maximum nonzero result wholeRun notError notTimeout location returnedValues
-      bodyRun calleeSize calleeFrame bodyConclusion bs bsPost n nPost compiled compilation lengthBound
-      bitmapBound bitmapPrefix labels
-  have normalRun : StackSemEvaluate.evaluate
-      (calleeCode,{StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved) with
-        clock := (StackSemStateOps.decClock moved).clock+bodyExtra}) =
-      (some (.result (.loc l1 l2)),target) := by
-    simpa only [locationEq] using calleeRun
-  have skipped : StackSemEvaluate.evaluate
-      (.seq .skip (copyRetNative false true (k,frame,payload) values
-        (popHandlerNative false (k,frame,payload) compiled)),
-        {target with clock := target.clock+cost+reserve}) = (targetResult,targetPost) := by
-    rw [CallReturnEval.seq_skip_left]
-    exact continuationRun
-  refine ⟨targetPost,targetResult, ?_, enough, accounting, conclusion⟩
-  simpa [Nat.add_assoc] using returningHandlerCallNormalRun moved target targetPost l1 l2 h1 h2 bodyExtra (cost+reserve)
-      destination calleeCode (.seq .skip (copyRetNative false true (k,frame,payload) values
-        (popHandlerNative false (k,frame,payload) compiled))) handlerTarget targetResult
-      found movedNonzero normalRun (by simpa only [Nat.add_assoc] using skipped)
-
-
-
-
-/-- Dispatch an exception with explicit callee and handler allowances. -/
-theorem budgetExceptionHandlerCallFromCallee {width : Nat} [NeZero width] {C F : Type}
-    (ac : AsmConfigExact width) (k frame payload : Nat)
-    (source sourcePost bodyPost : WordSemStateFiniteExact width (Nat × C) F)
-    (originalTarget target : StackSemStateFiniteExact width C F) (lens : List Nat)
-    (prior : stateRel ac k frame payload source originalTarget lens 0)
-    (values : List Nat) (names : WordLangCutsetsHOL)
-    (retCode handlerCode : WordLangProgHOL (BitVec width))
-    (l1 l2 h1 h2 handlerVar : Nat) (dest : Option Nat) (args : List Nat)
-    (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
-    (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
-    (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (cost reserve : Nat)
-    (handlerBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac handlerCode t cost)
-    (conventions : postAllocConventionsHOL k
-      (.call (some (values,names,retCode,l1,l2)) dest args
-        (some (handlerVar,handlerCode,h1,h2))) = true)
-    (flat : flatExpConventions
-      (.call (some (values,names,retCode,l1,l2)) dest args
-        (some (handlerVar,handlerCode,h1,h2))) = true)
-    (maximum : maxVarHOL
-      (.call (some (values,names,retCode,l1,l2)) dest args
-        (some (handlerVar,handlerCode,h1,h2))) < 2*payload+2*k)
-    (nonzero : source.clock ≠ 0) (result : Option (WordSemResult width))
-    (wholeRun : WordSemStateFiniteExact.evaluate
-      (.call (some (values,names,retCode,l1,l2)) dest args
-        (some (handlerVar,handlerCode,h1,h2))) source = (result,sourcePost))
-    (notError : result ≠ some .error) (notTimeout : result ≠ some .timeOut)
-    (location value : WordLocW width)
-    (bodyRun : WordSemStateFiniteExact.evaluate prog
-      (WordSemStateFiniteExact.callEnv args1 ss
-        (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
-          (WordSemStateFiniteExact.decClock source))) =
-      (some (.exception location value),bodyPost))
-    (calleeSize calleeFrame : Nat)
-    (bodyConclusion : compCorrectResult ac k calleeSize calleeFrame
-      (WordSemStateFiniteExact.callEnv args1 ss
-        (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
-          (WordSemStateFiniteExact.decClock source))) bodyPost target
-      (some (.exception location value)) (some (.exception location)) (payload::lens))
-    (moved : StackSemStateFiniteExact width C F) (destination : Sum Nat Nat)
-    (calleeCode continuationTarget : HolProg width) (bodyExtra : Nat)
-    (found : StackSemControl.findCode destination (moved.regs.eraseEq 0) moved.code = some calleeCode)
-    (movedNonzero : moved.clock ≠ 0)
-    (calleeRun : StackSemEvaluate.evaluate
-      (calleeCode,{StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved) with
-        clock := (StackSemStateOps.decClock moved).clock+bodyExtra}) =
-      (some (.exception location),target))
-    (bs bsPost : AppList (BitVec width)) (n nPost : Nat) (compiled : HolProg width)
-    (compilation : compNative ac false handlerCode (bs,n) (k,frame,payload) = (compiled,(bsPost,nPost)))
-    (lengthBound : (appListAppend bs).length ≤ n)
-    (bitmapBound : n-(appListAppend bs).length ≤ target.bitmaps.length)
-    (bitmapPrefix : (appListAppend bsPost).IsPrefix (target.bitmaps.drop (n-(appListAppend bs).length)))
-    (labels : ∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact target.code loc) :
-    ∃ targetPost targetResult,
-      StackSemEvaluate.evaluate
-        (.call (some (continuationTarget,0,l1,l2)) destination (some (compiled,h1,h2)),
-          {moved with clock := moved.clock+bodyExtra+(cost+reserve)}) = (targetResult,targetPost) ∧
-      reserve ≤ targetPost.clock ∧
-      (targetResult = some (.halt (.word 2)) ∨
-        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + cost + reserve)) ∧
-      compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
-  have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
-  obtain ⟨valid,domain,sourceContinuation,continuationIH⟩ := sourceHandlerExceptionContinuation
-    ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source sourcePost bodyPost
-    result xs args1 prog ss envs location value guards ih nonzero wholeRun notError bodyRun
-  have locationEq : location = .loc h1 h2 := by
-    by_contra different
-    exact valid different
-  obtain ⟨targetPost,targetResult,handlerRun,enough,accounting,conclusion⟩ :=
-    budgetHandlerExceptionContinuation ac k frame payload source sourcePost bodyPost originalTarget target
-      lens prior values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1 prog ss envs
-      guards cost reserve handlerBudget conventions flat maximum nonzero result wholeRun notError notTimeout location value
-      bodyRun calleeSize calleeFrame bodyConclusion bs bsPost n nPost compiled compilation lengthBound
-      bitmapBound bitmapPrefix labels
-  have exceptionRun : StackSemEvaluate.evaluate
-      (calleeCode,{StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved) with
-        clock := (StackSemStateOps.decClock moved).clock+bodyExtra}) =
-      (some (.exception (.loc h1 h2)),target) := by
-    simpa only [locationEq] using calleeRun
-  refine ⟨targetPost,targetResult, ?_, enough, accounting, conclusion⟩
-  simpa [Nat.add_assoc] using returningHandlerCallExceptionRun moved target targetPost l1 l2 h1 h2 bodyExtra (cost+reserve)
-      destination calleeCode continuationTarget compiled targetResult found movedNonzero exceptionRun
-      (by simpa only [Nat.add_assoc] using handlerRun)
-
-
-
-
 
 /-- The caller continuation consumes allowance left by the callee. -/
-theorem budgetNormalHandlerCallWithReserve {width : Nat} [NeZero width] {C F : Type}
+theorem rateNormalHandlerCallWithReserve {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (k frame payload : Nat)
     (source sourcePost bodyPost : WordSemStateFiniteExact width (Nat × C) F)
     (originalTarget target : StackSemStateFiniteExact width C F) (lens : List Nat)
@@ -605,9 +425,9 @@ theorem budgetNormalHandlerCallWithReserve {width : Nat} [NeZero width] {C F : T
     (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
     (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
     (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (cost reserve : Nat)
+    (rate cost reserve : Nat)
     (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac retCode t cost)
+      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate cost retCode t)
     (conventions : postAllocConventionsHOL k
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) = true)
@@ -636,7 +456,7 @@ theorem budgetNormalHandlerCallWithReserve {width : Nat} [NeZero width] {C F : T
       (some (.result location returnedValues)) (some (.result location)) (payload::lens))
     (moved : StackSemStateFiniteExact width C F) (destination : Sum Nat Nat)
     (calleeCode handlerTarget : HolProg width) (bodyExtra : Nat)
-    (enough : bodyPost.clock + cost + reserve ≤ target.clock)
+    (enough : bodyPost.clock + rate*bodyPost.clock + cost + reserve ≤ target.clock)
     (bounded : target.clock ≤ bodyPost.clock + bodyExtra)
     (found : StackSemControl.findCode destination (moved.regs.eraseEq 0) moved.code = some calleeCode)
     (movedNonzero : moved.clock ≠ 0)
@@ -659,7 +479,7 @@ theorem budgetNormalHandlerCallWithReserve {width : Nat} [NeZero width] {C F : T
         (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
       (targetResult = some (.halt (.word 2)) ∨
-        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + bodyExtra)) ∧
+        ((rate+1)*sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + bodyExtra)) ∧
       compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
   have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
   obtain ⟨gc,rest,popped,sourceFrame,keys,tailKeys,handlerEq,poppedEq,popRun,domain,
@@ -669,15 +489,15 @@ theorem budgetNormalHandlerCallWithReserve {width : Nat} [NeZero width] {C F : T
   have locationEq : location = .loc l1 l2 := by
     by_contra different
     exact valid (Or.inl different)
-  let remaining := target.clock - bodyPost.clock - cost
+  let remaining := target.clock - bodyPost.clock - rate*bodyPost.clock - cost
   have remainingLower : reserve ≤ remaining := by dsimp [remaining]; omega
-  have remainingUpper : cost + remaining ≤ bodyExtra := by dsimp [remaining]; omega
-  have clockEq : bodyPost.clock + cost + remaining = target.clock := by dsimp [remaining]; omega
+  have remainingUpper : rate*bodyPost.clock + cost + remaining ≤ bodyExtra := by dsimp [remaining]; omega
+  have clockEq : bodyPost.clock + rate*bodyPost.clock + cost + remaining = target.clock := by dsimp [remaining]; omega
   obtain ⟨targetPost,targetResult,continuationRun,postEnough,accounting,conclusion⟩ :=
-    budgetHandlerNormalContinuation ac k frame payload source sourcePost bodyPost originalTarget
+    rateHandlerNormalContinuation ac k frame payload source sourcePost bodyPost originalTarget
       {target with clock := bodyPost.clock}
       lens prior values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1 prog ss envs
-      guards cost remaining retBudget conventions flat maximum nonzero result wholeRun notError notTimeout location returnedValues
+      guards rate cost remaining retBudget conventions flat maximum nonzero result wholeRun notError notTimeout location returnedValues
       bodyRun calleeSize calleeFrame bodyConclusion bs bsPost n nPost compiled compilation lengthBound
       bitmapBound bitmapPrefix labels
   have normalRun : StackSemEvaluate.evaluate
@@ -705,8 +525,10 @@ theorem budgetNormalHandlerCallWithReserve {width : Nat} [NeZero width] {C F : T
 
 
 
+
+
 /-- The exception handler consumes allowance left by the callee. -/
-theorem budgetExceptionHandlerCallWithReserve {width : Nat} [NeZero width] {C F : Type}
+theorem rateExceptionHandlerCallWithReserve {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (k frame payload : Nat)
     (source sourcePost bodyPost : WordSemStateFiniteExact width (Nat × C) F)
     (originalTarget target : StackSemStateFiniteExact width C F) (lens : List Nat)
@@ -717,9 +539,9 @@ theorem budgetExceptionHandlerCallWithReserve {width : Nat} [NeZero width] {C F 
     (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
     (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
     (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (cost reserve : Nat)
+    (rate cost reserve : Nat)
     (handlerBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac handlerCode t cost)
+      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate cost handlerCode t)
     (conventions : postAllocConventionsHOL k
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) = true)
@@ -748,7 +570,7 @@ theorem budgetExceptionHandlerCallWithReserve {width : Nat} [NeZero width] {C F 
       (some (.exception location value)) (some (.exception location)) (payload::lens))
     (moved : StackSemStateFiniteExact width C F) (destination : Sum Nat Nat)
     (calleeCode continuationTarget : HolProg width) (bodyExtra : Nat)
-    (enough : bodyPost.clock + cost + reserve ≤ target.clock)
+    (enough : bodyPost.clock + rate*bodyPost.clock + cost + reserve ≤ target.clock)
     (bounded : target.clock ≤ bodyPost.clock + bodyExtra)
     (found : StackSemControl.findCode destination (moved.regs.eraseEq 0) moved.code = some calleeCode)
     (movedNonzero : moved.clock ≠ 0)
@@ -768,7 +590,7 @@ theorem budgetExceptionHandlerCallWithReserve {width : Nat} [NeZero width] {C F 
           {moved with clock := moved.clock+bodyExtra}) = (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
       (targetResult = some (.halt (.word 2)) ∨
-        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + bodyExtra)) ∧
+        ((rate+1)*sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + bodyExtra)) ∧
       compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
   have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
   obtain ⟨valid,domain,sourceContinuation,continuationIH⟩ := sourceHandlerExceptionContinuation
@@ -777,15 +599,15 @@ theorem budgetExceptionHandlerCallWithReserve {width : Nat} [NeZero width] {C F 
   have locationEq : location = .loc h1 h2 := by
     by_contra different
     exact valid different
-  let remaining := target.clock - bodyPost.clock - cost
+  let remaining := target.clock - bodyPost.clock - rate*bodyPost.clock - cost
   have remainingLower : reserve ≤ remaining := by dsimp [remaining]; omega
-  have remainingUpper : cost + remaining ≤ bodyExtra := by dsimp [remaining]; omega
-  have clockEq : bodyPost.clock + cost + remaining = target.clock := by dsimp [remaining]; omega
+  have remainingUpper : rate*bodyPost.clock + cost + remaining ≤ bodyExtra := by dsimp [remaining]; omega
+  have clockEq : bodyPost.clock + rate*bodyPost.clock + cost + remaining = target.clock := by dsimp [remaining]; omega
   obtain ⟨targetPost,targetResult,handlerRun,postEnough,accounting,conclusion⟩ :=
-    budgetHandlerExceptionContinuation ac k frame payload source sourcePost bodyPost originalTarget
+    rateHandlerExceptionContinuation ac k frame payload source sourcePost bodyPost originalTarget
       {target with clock := bodyPost.clock}
       lens prior values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1 prog ss envs
-      guards cost remaining handlerBudget conventions flat maximum nonzero result wholeRun notError notTimeout location value
+      guards rate cost remaining handlerBudget conventions flat maximum nonzero result wholeRun notError notTimeout location value
       bodyRun calleeSize calleeFrame bodyConclusion bs bsPost n nPost compiled compilation lengthBound
       bitmapBound bitmapPrefix labels
   have exceptionRun : StackSemEvaluate.evaluate
@@ -807,8 +629,9 @@ theorem budgetExceptionHandlerCallWithReserve {width : Nat} [NeZero width] {C F 
 
 
 
+
 /-- Compose the compiled caller setup with a normal return and its reserved continuation. -/
-theorem budgetNormalCompiledHandlerCallFromHistory {width : Nat} [NeZero width] {C F : Type}
+theorem rateNormalCompiledHandlerCallFromHistory {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (k frame payload : Nat)
     (source sourcePost bodyPost : WordSemStateFiniteExact width (Nat × C) F)
     (originalTarget target : StackSemStateFiniteExact width C F) (lens : List Nat)
@@ -819,9 +642,9 @@ theorem budgetNormalCompiledHandlerCallFromHistory {width : Nat} [NeZero width] 
     (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
     (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
     (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (cost reserve : Nat)
+    (rate cost reserve : Nat)
     (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac retCode t cost)
+      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate cost retCode t)
     (conventions : postAllocConventionsHOL k
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) = true)
@@ -850,7 +673,7 @@ theorem budgetNormalCompiledHandlerCallFromHistory {width : Nat} [NeZero width] 
       (some (.result location returnedValues)) (some (.result location)) (payload::lens))
     (moved : StackSemStateFiniteExact width C F) (destination : Sum Nat Nat)
     (calleeCode : HolProg width) (bodyExtra : Nat)
-    (enough : bodyPost.clock + cost + reserve ≤ target.clock)
+    (enough : bodyPost.clock + rate*bodyPost.clock + cost + reserve ≤ target.clock)
     (bounded : target.clock ≤ bodyPost.clock + bodyExtra)
     (found : StackSemControl.findCode destination (moved.regs.eraseEq 0) moved.code = some calleeCode)
     (calleeRun : StackSemEvaluate.evaluate
@@ -884,7 +707,7 @@ theorem budgetNormalCompiledHandlerCallFromHistory {width : Nat} [NeZero width] 
         (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
       (targetResult = some (.halt (.word 2)) ∨
-        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + bodyExtra)) ∧
+        ((rate+1)*sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + bodyExtra)) ∧
       compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
   have free := completeHandlerPreludeClockFree (C := C) (F := F) k frame payload h1 h2 dest args names
     (bs,n) (savedBs,savedIndex) destinationCode savedCode destination destinationCompile savedCompile
@@ -917,9 +740,9 @@ theorem budgetNormalCompiledHandlerCallFromHistory {width : Nat} [NeZero width] 
     exact LocationLabels.locCheckSubset originalTarget.code target.code growth.2 loc
       (continuationLabels loc member)
   obtain ⟨targetPost,targetResult,callRun,postEnough,accounting,conclusion⟩ :=
-    budgetNormalHandlerCallWithReserve ac k frame payload source sourcePost bodyPost originalTarget target
+    rateNormalHandlerCallWithReserve ac k frame payload source sourcePost bodyPost originalTarget target
       lens prior values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1 prog ss envs
-      guards cost reserve retBudget conventions flat maximum nonzero result wholeRun notError notTimeout location returnedValues
+      guards rate cost reserve retBudget conventions flat maximum nonzero result wholeRun notError notTimeout location returnedValues
       bodyRun calleeSize calleeFrame bodyConclusion moved destination calleeCode handlerTarget bodyExtra enough bounded found movedNonzero calleeRun
       savedBs retBs savedIndex retIndex returnCode returnCompile
       continuationLength (continuationBound.trans growth.1.length_le)
@@ -934,8 +757,10 @@ theorem budgetNormalCompiledHandlerCallFromHistory {width : Nat} [NeZero width] 
 
 
 
+
+
 /-- Compose the compiled caller setup with an exception and its reserved handler. -/
-theorem budgetExceptionCompiledHandlerCallFromHistory {width : Nat} [NeZero width] {C F : Type}
+theorem rateExceptionCompiledHandlerCallFromHistory {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (k frame payload : Nat)
     (source sourcePost bodyPost : WordSemStateFiniteExact width (Nat × C) F)
     (originalTarget target : StackSemStateFiniteExact width C F) (lens : List Nat)
@@ -946,9 +771,9 @@ theorem budgetExceptionCompiledHandlerCallFromHistory {width : Nat} [NeZero widt
     (xs args1 : List (WordLocW width)) (prog : WordLangProgHOL (BitVec width))
     (ss : Option Nat) (envs : Spt (WordLocW width) × Spt (WordLocW width))
     (guards : CallReturning.SourceGuards values names retCode l1 l2 dest args source xs args1 prog ss envs)
-    (cost reserve : Nat)
+    (rate cost reserve : Nat)
     (handlerBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
-      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac handlerCode t cost)
+      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate cost handlerCode t)
     (conventions : postAllocConventionsHOL k
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) = true)
@@ -977,7 +802,7 @@ theorem budgetExceptionCompiledHandlerCallFromHistory {width : Nat} [NeZero widt
       (some (.exception location value)) (some (.exception location)) (payload::lens))
     (moved : StackSemStateFiniteExact width C F) (destination : Sum Nat Nat)
     (calleeCode : HolProg width) (bodyExtra : Nat)
-    (enough : bodyPost.clock + cost + reserve ≤ target.clock)
+    (enough : bodyPost.clock + rate*bodyPost.clock + cost + reserve ≤ target.clock)
     (bounded : target.clock ≤ bodyPost.clock + bodyExtra)
     (found : StackSemControl.findCode destination (moved.regs.eraseEq 0) moved.code = some calleeCode)
     (calleeRun : StackSemEvaluate.evaluate
@@ -1011,7 +836,7 @@ theorem budgetExceptionCompiledHandlerCallFromHistory {width : Nat} [NeZero widt
         (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
       (targetResult = some (.halt (.word 2)) ∨
-        (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + bodyExtra)) ∧
+        ((rate+1)*sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + bodyExtra)) ∧
       compCorrectResult ac k frame payload source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens := by
   have free := completeHandlerPreludeClockFree (C := C) (F := F) k frame payload h1 h2 dest args names
     (bs,n) (savedBs,savedIndex) destinationCode savedCode destination destinationCompile savedCompile
@@ -1044,9 +869,9 @@ theorem budgetExceptionCompiledHandlerCallFromHistory {width : Nat} [NeZero widt
     exact LocationLabels.locCheckSubset originalTarget.code target.code growth.2 loc
       (continuationLabels loc member)
   obtain ⟨targetPost,targetResult,callRun,postEnough,accounting,conclusion⟩ :=
-    budgetExceptionHandlerCallWithReserve ac k frame payload source sourcePost bodyPost originalTarget target
+    rateExceptionHandlerCallWithReserve ac k frame payload source sourcePost bodyPost originalTarget target
       lens prior values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1 prog ss envs
-      guards cost reserve handlerBudget conventions flat maximum nonzero result wholeRun notError notTimeout location value
+      guards rate cost reserve handlerBudget conventions flat maximum nonzero result wholeRun notError notTimeout location value
       bodyRun calleeSize calleeFrame bodyConclusion moved destination calleeCode (.seq .skip (copyRetNative false true (k,frame,payload) values
         (popHandlerNative false (k,frame,payload) returnCode))) bodyExtra enough bounded found movedNonzero calleeRun
       retBs handlerBs retIndex handlerIndex handlerTarget handlerCompile
@@ -1058,6 +883,7 @@ theorem budgetExceptionCompiledHandlerCallFromHistory {width : Nat} [NeZero widt
       returnCode handlerTarget compiled destination originalTarget moved targetPost
       (bodyExtra) targetResult destinationCompile savedCompile returnCompile handlerCompile
       compilation preludeRun callRun,postEnough,accounting,conclusion⟩
+
 
 
 
@@ -1124,7 +950,7 @@ theorem budgetTerminalHandlerCallFromCallee {width : Nat} [NeZero width] {C F : 
 
 /-- A fitting handler call composes the callee and continuation allowances,
 including normal, exceptional, and terminal outcomes. -/
-theorem budgetSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
+theorem rateSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (k frame payload : Nat)
     (values : List Nat) (names : WordLangCutsetsHOL)
     (retCode : WordLangProgHOL (BitVec width)) (l1 l2 : Nat)
@@ -1174,16 +1000,17 @@ theorem budgetSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
       (WordSemStateFiniteExact.callEnv args1 ss
         (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
           (WordSemStateFiniteExact.decClock source))) = (bodyResult,bodyPost))
-    (bodyCost contCost reserve : Nat)
-    (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac retCode t contCost)
-    (handlerBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac handlerCode t contCost)
-    (bodyBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac prog t bodyCost) :
+    (rate extra bodyCost contCost reserve : Nat)
+    (bodyFits : bodyCost ≤ rate+extra)
+    (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate contCost retCode t)
+    (handlerBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate contCost handlerCode t)
+    (bodyBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate bodyCost prog t) :
     ∃ targetFinal targetResult,
-      StackSemEvaluate.evaluate (compiled,{target with clock := target.clock + bodyCost + contCost + reserve}) =
+      StackSemEvaluate.evaluate (compiled,{target with clock := target.clock + rate*source.clock + extra + contCost + reserve}) =
         (targetResult,targetFinal) ∧
       reserve ≤ targetFinal.clock ∧
       (targetResult = some (.halt (.word 2)) ∨
-        (sourcePost.clock + reserve ≤ targetFinal.clock ∧ targetFinal.clock ≤ sourcePost.clock + bodyCost + contCost + reserve)) ∧
+        ((rate+1)*sourcePost.clock + reserve ≤ targetFinal.clock ∧ targetFinal.clock ≤ sourcePost.clock + rate*source.clock + extra + contCost + reserve)) ∧
       compCorrectResult ac k frame payload source sourcePost {targetFinal with clock := sourcePost.clock} result targetResult lens := by
   have returnPrefix := compImpIsPrefix ac false retCode (savedBitmaps,savedIndex) (k,frame,payload)
     returnCode (retBs,retIndex) returnCompile
@@ -1214,14 +1041,22 @@ theorem budgetSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
   obtain ⟨destinationTarget,saved,header,moved,entry,calleeTarget,calleeCode,body,
     calleeSize,calleeFrame,targetResult,destinationRun,savedRun,pushRun,argumentsRun,
     found,calleeShape,allocationRun,bodyTargetRun,calleeRun,calleeEnough,calleeAccounting,bodyConclusion⟩ :=
-    budgetHandlerCalleeBody ac k frame payload values names retCode l1 l2 dest args handlerVar h1 h2
+    rateHandlerCalleeBody ac k frame payload values names retCode l1 l2 dest args handlerVar h1 h2
       handlerCode source sourcePost bodyPost result bodyResult target lens xs args1 prog ss envs bs
       savedBitmaps n savedIndex destinationCode savedCode destination guards related conventions maximum
       destinationCompile savedCompile bitmapLength bitmapBound savedPrefix room handlerLocation space
-      nonzero wholeExecution notError notTimeout bodyRun bodyCost (contCost + reserve)
+      nonzero wholeExecution notError notTimeout bodyRun rate bodyCost (rate+extra-bodyCost+contCost+reserve)
       (bodyBudget _ calleeSmaller calleeSafe)
-  let bodyExtra : Nat := bodyCost + (contCost + reserve)
+  let bodyExtra : Nat := rate*(source.clock-1)+bodyCost+(rate+extra-bodyCost+contCost+reserve)
   have calleeRun0 := calleeRun
+  have creditEq : bodyExtra = rate*source.clock+extra+contCost+reserve := by
+    have pred : source.clock-1+1 = source.clock := by omega
+    have mul : rate*(source.clock-1)+rate = rate*source.clock := by
+      calc
+        _ = rate*(source.clock-1+1) := by simp [Nat.mul_add]
+        _ = _ := by rw [pred]
+    dsimp [bodyExtra]
+    omega
   have calleeRun : StackSemEvaluate.evaluate
       (calleeCode,{StackSemStateOps.setVar 0 (.loc l1 l2) (StackSemStateOps.decClock moved) with
         clock := (StackSemStateOps.decClock moved).clock+bodyExtra}) = (targetResult,calleeTarget) := by
@@ -1253,11 +1088,11 @@ theorem budgetSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
       (terminal : targetResult = some .timeOut ∨ (∃ value, targetResult = some (.halt value)) ∨
         ∃ event, targetResult = some (.finalFFI event)) :
       ∃ targetFinal finalResult,
-        StackSemEvaluate.evaluate (compiled,{target with clock := target.clock + bodyCost + contCost + reserve}) =
+        StackSemEvaluate.evaluate (compiled,{target with clock := target.clock + rate*source.clock + extra + contCost + reserve}) =
           (finalResult,targetFinal) ∧
         reserve ≤ targetFinal.clock ∧
         (finalResult = some (.halt (.word 2)) ∨
-          (sourcePost.clock + reserve ≤ targetFinal.clock ∧ targetFinal.clock ≤ sourcePost.clock + bodyCost + contCost + reserve)) ∧
+          ((rate+1)*sourcePost.clock + reserve ≤ targetFinal.clock ∧ targetFinal.clock ≤ sourcePost.clock + rate*source.clock + extra + contCost + reserve)) ∧
         compCorrectResult ac k frame payload source sourcePost {targetFinal with clock := sourcePost.clock} result finalResult lens := by
     obtain ⟨callRun,conclusion⟩ := budgetTerminalHandlerCallFromCallee ac k frame payload calleeSize calleeFrame
       values names retCode handlerCode l1 l2 handlerVar h1 h2 dest args source sourcePost bodyPost
@@ -1266,7 +1101,7 @@ theorem budgetSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
         (popHandlerNative false (k,frame,payload) returnCode))) handlerTarget guards related nonzero
       wholeExecution bodyRun found movedNonzero calleeRun bodyConclusion terminal
     refine ⟨calleeTarget,targetResult, ?_, by omega, ?_, conclusion⟩
-    · simpa [bodyExtra,Nat.add_assoc] using completeHandlerCallFromPrelude ac k frame payload values names retCode handlerCode l1 l2 handlerVar
+    · simpa [creditEq,Nat.add_assoc] using completeHandlerCallFromPrelude ac k frame payload values names retCode handlerCode l1 l2 handlerVar
         h1 h2 dest args bs savedBitmaps retBs handlerBs n savedIndex retIndex handlerIndex destinationCode
         savedCode returnCode handlerTarget compiled destination target moved calleeTarget bodyExtra targetResult
         destinationCompile savedCompile returnCompile handlerCompile compilation preludeRun callRun
@@ -1290,26 +1125,28 @@ theorem budgetSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
         simpa only [Option.map_some,compileResult] using matching.symm
       subst targetResult
       have ⟨lower,upper⟩ := calleeAccounting.resolve_left (by simp [compileResult])
-      have assembled := budgetNormalCompiledHandlerCallFromHistory ac k frame payload source sourcePost bodyPost target
+      simp only [Nat.add_mul,Nat.one_mul] at lower
+      have assembled := rateNormalCompiledHandlerCallFromHistory ac k frame payload source sourcePost bodyPost target
         calleeTarget lens related values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1
-        prog ss envs guards contCost reserve retBudget conventions flat maximum nonzero result wholeExecution notError notTimeout
+        prog ss envs guards rate contCost reserve retBudget conventions flat maximum nonzero result wholeExecution notError notTimeout
         location returned bodyRun calleeSize calleeFrame bodyConclusion moved destination calleeCode
         bodyExtra (by omega) (by dsimp [bodyExtra]; omega) found calleeRun bs savedBitmaps retBs handlerBs n savedIndex retIndex handlerIndex
         destinationCode savedCode returnCode handlerTarget compiled destinationCompile savedCompile
         returnCompile handlerCompile compilation bitmapLength bitmapBound bitmapPrefix labels preludeRun
-      simpa [bodyExtra,Nat.add_assoc] using assembled
+      simpa [creditEq,Nat.add_assoc] using assembled
     · have targetEq : targetResult = some (.exception location) := by
         simpa only [Option.map_some,compileResult] using matching.symm
       subst targetResult
       have ⟨lower,upper⟩ := calleeAccounting.resolve_left (by simp [compileResult])
-      have assembled := budgetExceptionCompiledHandlerCallFromHistory ac k frame payload source sourcePost bodyPost target
+      simp only [Nat.add_mul,Nat.one_mul] at lower
+      have assembled := rateExceptionCompiledHandlerCallFromHistory ac k frame payload source sourcePost bodyPost target
         calleeTarget lens related values names retCode handlerCode l1 l2 h1 h2 handlerVar dest args xs args1
-        prog ss envs guards contCost reserve handlerBudget conventions flat maximum nonzero result wholeExecution notError notTimeout
+        prog ss envs guards rate contCost reserve handlerBudget conventions flat maximum nonzero result wholeExecution notError notTimeout
         location value bodyRun calleeSize calleeFrame bodyConclusion moved destination calleeCode
         bodyExtra (by omega) (by dsimp [bodyExtra]; omega) found calleeRun bs savedBitmaps retBs handlerBs n savedIndex retIndex handlerIndex
         destinationCode savedCode returnCode handlerTarget compiled destinationCompile savedCompile
         returnCompile handlerCompile compilation bitmapLength bitmapBound bitmapPrefix labels preludeRun
-      simpa [bodyExtra,Nat.add_assoc] using assembled
+      simpa [creditEq,Nat.add_assoc] using assembled
     · apply finishTerminal
       left
       simpa only [timeout,Option.map_some,compileResult] using matching.symm
@@ -1328,8 +1165,9 @@ theorem budgetSuccessfulHandlerCall {width : Nat} [NeZero width] {C F : Type}
 
 
 
+
 /-- Guarded handler calls preserve explicit budgets in every resource case. -/
-theorem budgetHandlerCallWithGuards {width : Nat} [NeZero width] {C F : Type}
+theorem rateHandlerCallWithGuards {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (k frame payload : Nat)
     (values : List Nat) (names : WordLangCutsetsHOL)
     (retCode : WordLangProgHOL (BitVec width)) (l1 l2 : Nat)
@@ -1371,16 +1209,17 @@ theorem budgetHandlerCallWithGuards {width : Nat} [NeZero width] {C F : Type}
       (.call (some (values,names,retCode,l1,l2)) dest args
         (some (handlerVar,handlerCode,h1,h2))) source = (result,sourcePost))
     (notError : result ≠ some .error) (notTimeout : result ≠ some .timeOut)
-    (bodyCost contCost reserve : Nat)
-    (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac retCode t contCost)
-    (handlerBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac handlerCode t contCost)
-    (bodyBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac prog t bodyCost) :
+    (rate extra bodyCost contCost reserve : Nat)
+    (bodyFits : bodyCost ≤ rate+extra)
+    (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate contCost retCode t)
+    (handlerBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate contCost handlerCode t)
+    (bodyBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate bodyCost prog t) :
     ∃ targetFinal targetResult,
-      StackSemEvaluate.evaluate (compiled,{target with clock := target.clock + bodyCost + contCost + reserve}) =
+      StackSemEvaluate.evaluate (compiled,{target with clock := target.clock + rate*source.clock + extra + contCost + reserve}) =
         (targetResult,targetFinal) ∧
       reserve ≤ targetFinal.clock ∧
       (targetResult = some (.halt (.word 2)) ∨
-        (sourcePost.clock + reserve ≤ targetFinal.clock ∧ targetFinal.clock ≤ sourcePost.clock + bodyCost + contCost + reserve)) ∧
+        ((rate+1)*sourcePost.clock + reserve ≤ targetFinal.clock ∧ targetFinal.clock ≤ sourcePost.clock + rate*source.clock + extra + contCost + reserve)) ∧
       compCorrectResult ac k frame payload source sourcePost {targetFinal with clock := sourcePost.clock} result targetResult lens := by
   by_cases room : 3 ≤ target.stackSpace
   · by_cases arguments : Compiler.Backend.WordToStack.stackArgCount destination (args.length+1) k ≤
@@ -1397,19 +1236,19 @@ theorem budgetHandlerCallWithGuards {width : Nat} [NeZero width] {C F : Type}
             (WordSemStateFiniteExact.callEnv args1 ss
               (WordSemStateFiniteExact.pushEnv envs (some (handlerVar,handlerCode,h1,h2))
                 (WordSemStateFiniteExact.decClock source))) with ⟨bodyResult,bodyPost⟩
-          exact budgetSuccessfulHandlerCall ac k frame payload values names retCode l1 l2 dest args
+          exact rateSuccessfulHandlerCall ac k frame payload values names retCode l1 l2 dest args
             handlerVar h1 h2 handlerCode source sourcePost bodyPost result bodyResult target lens xs args1
             prog ss envs bs savedBitmaps retBs handlerBs n savedIndex retIndex handlerIndex destinationCode
             savedCode returnCode handlerTarget compiled destination guards related conventions flat maximum
             destinationCompile savedCompile returnCompile handlerCompile compilation bitmapLength bitmapBound
-            bitmapPrefix labels room calleeSpace zero wholeExecution notError notTimeout bodyRun bodyCost contCost reserve retBudget handlerBudget bodyBudget
+            bitmapPrefix labels room calleeSpace zero wholeExecution notError notTimeout bodyRun rate extra bodyCost contCost reserve bodyFits retBudget handlerBudget bodyBudget
         · obtain ⟨targetPost,run,contract⟩ := compiledHandlerCalleeAllocationFailure ac k frame payload values names retCode l1 l2 dest args handlerVar h1 h2
             handlerCode source sourcePost result target lens xs args1 prog ss envs bs savedBitmaps retBs
             n savedIndex retIndex destinationCode savedCode returnCode destination guards related conventions
             maximum destinationCompile savedCompile returnCompile handlerBs handlerIndex handlerTarget compiled
             handlerCompile compilation wholeExecution bitmapLength bitmapBound bitmapPrefix labels
             room arguments zero (by omega)
-          obtain ⟨final,actual,enough,relation⟩ := resourceWithReserve ac k frame payload source sourcePost target targetPost result compiled lens (bodyCost+contCost) reserve run contract
+          obtain ⟨final,actual,enough,relation⟩ := resourceWithReserve ac k frame payload source sourcePost target targetPost result compiled lens (rate*source.clock+extra+contCost) reserve run contract
           exact ⟨final,some (.halt (.word 2)),by simpa [Nat.add_assoc] using actual,enough,Or.inl rfl,relation⟩
     · obtain ⟨targetPost,run,contract⟩ := compiledHandlerArgumentsFailure ac k frame payload values names retCode l1 l2 dest args handlerVar h1 h2
         handlerCode source sourcePost result target lens xs args1 prog ss envs bs savedBitmaps retBs
@@ -1417,33 +1256,36 @@ theorem budgetHandlerCallWithGuards {width : Nat} [NeZero width] {C F : Type}
         maximum destinationCompile savedCompile returnCompile handlerBs handlerIndex handlerTarget compiled
         handlerCompile compilation wholeExecution bitmapLength bitmapBound bitmapPrefix labels
         room (by omega)
-      obtain ⟨final,actual,enough,relation⟩ := resourceWithReserve ac k frame payload source sourcePost target targetPost result compiled lens (bodyCost+contCost) reserve run contract
+      obtain ⟨final,actual,enough,relation⟩ := resourceWithReserve ac k frame payload source sourcePost target targetPost result compiled lens (rate*source.clock+extra+contCost) reserve run contract
       exact ⟨final,some (.halt (.word 2)),by simpa [Nat.add_assoc] using actual,enough,Or.inl rfl,relation⟩
   · obtain ⟨targetPost,run,contract⟩ := compiledHandlerHeaderFailure ac k frame payload values names retCode l1 l2 dest args handlerVar h1 h2
       handlerCode source sourcePost result target lens xs args1 prog ss envs bs savedBitmaps retBs
       n savedIndex retIndex destinationCode savedCode returnCode destination guards related conventions
       maximum destinationCompile savedCompile returnCompile handlerBs handlerIndex handlerTarget compiled
       handlerCompile compilation wholeExecution bitmapLength bitmapBound bitmapPrefix (by omega)
-    obtain ⟨final,actual,enough,relation⟩ := resourceWithReserve ac k frame payload source sourcePost target targetPost result compiled lens (bodyCost+contCost) reserve run contract
+    obtain ⟨final,actual,enough,relation⟩ := resourceWithReserve ac k frame payload source sourcePost target targetPost result compiled lens (rate*source.clock+extra+contCost) reserve run contract
     exact ⟨final,some (.halt (.word 2)),by simpa [Nat.add_assoc] using actual,enough,Or.inl rfl,relation⟩
 
 
 
 
+
+
 /-- The handler-call induction step composes explicit subexecution budgets. -/
-theorem budgetReturningHandlerCase {width : Nat} [NeZero width] {C F : Type}
+theorem rateReturningHandlerCase {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (values : List Nat) (names : WordLangCutsetsHOL)
     (retCode : WordLangProgHOL (BitVec width)) (l1 l2 : Nat)
     (dest : Option Nat) (args : List Nat)
     (handlerVar h1 h2 : Nat) (handlerCode : WordLangProgHOL (BitVec width))
     (source : WordSemStateFiniteExact width (Nat × C) F)
-    (bodyCost contCost : Nat)
-    (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac retCode t contCost)
-    (handlerBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac handlerCode t contCost)
+    (rate extra bodyCost contCost : Nat)
+    (bodyFits : bodyCost ≤ rate+extra)
+    (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate contCost retCode t)
+    (handlerBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate contCost handlerCode t)
     (codeBudget : ∀ loc arity p, sptLookup loc source.code = some (arity,p) →
-      ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac p t bodyCost) :
-    BudgetSimulation ac (.call (some (values,names,retCode,l1,l2)) dest args
-      (some (handlerVar,handlerCode,h1,h2))) source (bodyCost + contCost) := by
+      ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac rate bodyCost p t) :
+    RateSimulation ac rate (extra+contCost) (.call (some (values,names,retCode,l1,l2)) dest args
+      (some (handlerVar,handlerCode,h1,h2))) source := by
   intro k f frame sourcePost target result bs bsPost n nPost compiled lens facts reserve
   obtain ⟨execution,notError,notTimeout,related,conventions,flat,compilation,lengthBound,bitmapBound,
     bitmapPrefix,labels,maximum⟩ := facts
@@ -1463,14 +1305,47 @@ theorem budgetReturningHandlerCase {width : Nat} [NeZero width] {C F : Type}
   simp only [compNative,destinationCompile,savedCompile,returnCompile,handlerCompile,
     Bool.false_eq_true,if_false,Prod.mk.injEq] at shape
   obtain ⟨_,rfl,rfl⟩ := shape
-  simpa only [Nat.add_assoc] using budgetHandlerCallWithGuards ac k f frame values names retCode l1 l2 dest args
+  simpa only [Nat.add_assoc] using rateHandlerCallWithGuards ac k f frame values names retCode l1 l2 dest args
     handlerVar h1 h2 handlerCode source sourcePost result target lens xs args1 prog ss envs bs
     savedBitmaps retBs handlerBs n savedIndex retIndex handlerIndex destinationCode savedCode
     returnCode handlerTarget compiled destination guards related conventions flat maximum
     destinationCompile savedCompile returnCompile handlerCompile compilation lengthBound bitmapBound
-    bitmapPrefix labels execution notError notTimeout bodyCost contCost reserve retBudget handlerBudget bodyBudget
+    bitmapPrefix labels execution notError notTimeout rate extra bodyCost contCost reserve bodyFits retBudget handlerBudget bodyBudget
 
 
+
+
+
+theorem budgetReturningHandlerCase {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (values : List Nat) (names : WordLangCutsetsHOL)
+    (retCode : WordLangProgHOL (BitVec width)) (l1 l2 : Nat)
+    (dest : Option Nat) (args : List Nat)
+    (handlerVar h1 h2 : Nat) (handlerCode : WordLangProgHOL (BitVec width))
+    (source : WordSemStateFiniteExact width (Nat × C) F)
+    (bodyCost contCost : Nat)
+    (retBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac retCode t contCost)
+    (handlerBudget : ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac handlerCode t contCost)
+    (codeBudget : ∀ loc arity p, sptLookup loc source.code = some (arity,p) →
+      ∀ t : WordSemStateFiniteExact width (Nat × C) F, t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → BudgetSimulation ac p t bodyCost) :
+    BudgetSimulation ac (.call (some (values,names,retCode,l1,l2)) dest args
+      (some (handlerVar,handlerCode,h1,h2))) source (bodyCost + contCost) := by
+  have retRate : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
+      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac 0 contCost retCode t := by
+    intro t smaller transfer
+    exact budget_to_rate ac 0 contCost retCode t (retBudget t smaller transfer)
+  have handlerRate : ∀ t : WordSemStateFiniteExact width (Nat × C) F,
+      t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac 0 contCost handlerCode t := by
+    intro t smaller transfer
+    exact budget_to_rate ac 0 contCost handlerCode t (handlerBudget t smaller transfer)
+  have codeRate : ∀ loc arity p, sptLookup loc source.code = some (arity,p) →
+      ∀ t : WordSemStateFiniteExact width (Nat × C) F,
+        t.clock < source.clock → (safeWordCode source → safeWordCode t ∧ t.code = source.code) → RateSimulation ac 0 bodyCost p t := by
+    intro loc arity p found t smaller transfer
+    exact budget_to_rate ac 0 bodyCost p t (codeBudget loc arity p found t smaller transfer)
+  have sim := rateReturningHandlerCase ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode
+    source 0 bodyCost bodyCost contCost (by omega) retRate handlerRate codeRate
+  simpa using rate_to_fixed_budget ac 0 (bodyCost+contCost)
+    (.call (some (values,names,retCode,l1,l2)) dest args (some (handlerVar,handlerCode,h1,h2))) source sim
 
 
 end SteppedFlapjack.WordToStackSteps

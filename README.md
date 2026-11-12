@@ -104,8 +104,8 @@ It also requires that the compiler select no functions for inlining and that
 the source heap headers use the bitmap count computed by the compiler. These
 conditions and the fixed fixture layout are gaps relative to init-e's actual
 initialization and guest.
-The current call-aware Word-to-Stack bound is exponential in the source-derived
-bound, so the linear bound required by the roadmap remains to be proved.
+The call-aware Word-to-Stack allowance is linear in the source-derived clock;
+the affine form of the complete machine bound remains to be established.
 `nested_initialized_machine` instantiates this composition with two call levels
 and a six-step source execution.
 

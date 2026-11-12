@@ -79,6 +79,19 @@ theorem budget_to_rate {width : Nat} [NeZero width] {C F : Type}
         simp only [Nat.add_mul,Nat.one_mul]
         omega
       · omega
+theorem rateMono {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (rate : Nat) (p : WordLangProgHOL (BitVec width))
+    (source : WordSemStateFiniteExact width (Nat × C) F) (old new : Nat)
+    (h : RateSimulation ac rate old p source) (le : old ≤ new) : RateSimulation ac rate new p source := by
+  intro k f frame post target res bs bsPost n nPost compiled lens premises reserve
+  obtain ⟨targetPost, out, run, enough, accounting, relation⟩ :=
+    h k f frame post target res bs bsPost n nPost compiled lens premises (new - old + reserve)
+  have eq : target.clock + rate * source.clock + old + (new - old + reserve) = target.clock + rate * source.clock + new + reserve := by omega
+  refine ⟨targetPost, out, by simpa only [eq] using run, by omega, ?_, relation⟩
+  rcases accounting with limit | enough
+  · exact Or.inl limit
+  · right; omega
+
 theorem rate_to_fixed_budget {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (rate extra : Nat) (p : WordLangProgHOL (BitVec width))
     (s : WordSemStateFiniteExact width (Nat × C) F) (sim : RateSimulation ac rate extra p s) :

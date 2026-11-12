@@ -104,7 +104,7 @@ theorem functionOnly_configured_machine
     let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
     let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
     let native := compileNative riscvConfig false optimized
-    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*limit+2)
+    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) * (6*limit+1) + 1
     let n := 1 + max 1 (stackCodeWeight (sptFromAList native.2.2.2)) * (6*limit+1 + allowance)
     ∃ finalMachine finalFfi,
       evaluateTargetHOL mc sourceFfi (LabToTargetSteps.labTickBound 4 labCode filtered.codeBuffer *
@@ -180,9 +180,9 @@ theorem functionOnly_configured_machine
     pc mc labCode labs asm machine hmc (by simpa [bs,native,code,words,raw,programs,compileWith_eq_compile _ allocator] using link) tie rel
   have allowanceEq : callTableBudget (.call none (some 64) [0] none) source =
       (max 1 (wordCodeWeight (sptFromAList (compileWith Flapjack.RegAlloc.regAllocExecutable
-        phase3WordConfig riscvConfig raw).2)) + 1) ^ (6*limit+2) := by
+        phase3WordConfig riscvConfig raw).2)) + 1) * (6*limit+1) + 1 := by
     rw [compileWith_eq_compile _ allocator]
-    simp [callTableBudget,fixedTableBudget,wordControlWeight,source,configuredWord,
+    simp [callTableBudget,wordControlWeight,source,configuredWord,
       Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit,words]
   simp only [loc] at machineRun
   rw [allowanceEq] at machineRun
@@ -235,7 +235,7 @@ theorem functionOnly_initialized_machine
     let native := compileNative riscvConfig false optimized
     let code := native.2.2.2
     let bitmaps := native.1
-    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*limit+2)
+    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) * (6*limit+1) + 1
     let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*limit+1 + allowance)
     ∃ finalMachine finalFfi,
       evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
