@@ -53,7 +53,12 @@ theorem globalScalar_list_compiled {width : Nat} [NeZero width]
 inductive GlobalFrontend {width : Nat} [NeZero width] (globals : PanGlobalsContextExact width) :
     PanToCrepContextExact width → ProgHOL width → Prop
   | skip {ctxt} : GlobalFrontend globals ctxt .skip
+  | break {ctxt} : GlobalFrontend globals ctxt .break
+  | continue {ctxt} : GlobalFrontend globals ctxt .continue
+  | tick {ctxt} : GlobalFrontend globals ctxt .tick
   | store {ctxt a v} : GlobalScalar globals ctxt a → GlobalScalar globals ctxt v → GlobalFrontend globals ctxt (.store a v)
+  | storeStruct {ctxt a fields} : GlobalScalar globals ctxt a →
+      (∀ e ∈ fields, GlobalScalar globals ctxt e) → GlobalFrontend globals ctxt (.store a (.rstruct fields))
   | assignLocal {ctxt name e} (reg : Nat) : ctxt.vars.lookup name = some (.one,[reg]) →
       GlobalScalar globals ctxt e → GlobalFrontend globals ctxt (.assign .local name e)
   | assignGlobal {ctxt name offset e} : globals.globals.lookup name = some (.one,offset) →
@@ -76,7 +81,13 @@ theorem globalFrontend_compiled {width : Nat} [NeZero width]
     (h : GlobalFrontend globals ctxt p) : FrontendProgram ctxt (compileProgExactHOL globals p) := by
   induction h with
   | skip => simpa only [compileProgExactHOL] using (FrontendProgram.skip (ctxt := _))
+  | «break» => simpa only [compileProgExactHOL] using (FrontendProgram.break (ctxt := _))
+  | «continue» => simpa only [compileProgExactHOL] using (FrontendProgram.continue (ctxt := _))
+  | tick => simpa only [compileProgExactHOL] using (FrontendProgram.tick (ctxt := _))
   | store a v => simpa only [compileProgExactHOL] using FrontendProgram.store (globalScalar_compiled a) (globalScalar_compiled v)
+  | storeStruct a fields =>
+    simpa only [compileProgExactHOL,compileExpExactHOL] using
+      FrontendProgram.storeStruct (globalScalar_compiled a) (globalScalar_list_compiled _ fields)
   | assignLocal reg found e => simpa only [compileProgExactHOL] using FrontendProgram.assign reg found (globalScalar_compiled e)
   | assignGlobal found e =>
     simp only [compileProgExactHOL,found]
@@ -89,6 +100,24 @@ theorem globalFrontend_compiled {width : Nat} [NeZero width]
   | ite e a b iha ihb => simpa only [compileProgExactHOL] using FrontendProgram.ite (globalScalar_compiled e) iha ihb
   | «while» e body ih => simpa only [compileProgExactHOL] using FrontendProgram.while (globalScalar_compiled e) ih
   | ret e => simpa only [compileProgExactHOL] using FrontendProgram.ret (globalScalar_compiled e)
+/-- Every existing frontend program is admitted by the global-aware fragment. -/
+theorem GlobalFrontend.of_frontend {width : Nat} [NeZero width]
+    (globals : PanGlobalsContextExact width) {ctxt : PanToCrepContextExact width} {p : ProgHOL width}
+    (h : FrontendProgram ctxt p) : GlobalFrontend globals ctxt p := by
+  induction h with
+  | skip => exact .skip
+  | «break» => exact .break
+  | «continue» => exact .continue
+  | tick => exact .tick
+  | store a v => exact .store (.local a) (.local v)
+  | storeStruct a fields => exact .storeStruct (.local a) (by intro e member; exact .local (fields e member))
+  | assign reg found e => exact .assignLocal reg found (.local e)
+  | decl e body ih => exact .decl (.local e) ih
+  | seq a b iha ihb => exact .seq iha ihb
+  | ite e a b iha ihb => exact .ite (.local e) iha ihb
+  | «while» e body ih => exact .while (.local e) ih
+  | ret e => exact .ret (.local e)
+
 /-- Globals lowering preserves absence of loops for this fragment. -/
 theorem globalFrontend_noWhile {width : Nat} [NeZero width]
     {globals : PanGlobalsContextExact width} {ctxt : PanToCrepContextExact width} {p : ProgHOL width}
@@ -155,6 +184,19 @@ inductive GlobalCallFrontend {width : Nat} [NeZero width] (globals : PanGlobalsC
       GlobalCallFrontend globals ctxt b → GlobalCallFrontend globals ctxt (.ite e a b)
   | while {ctxt e body} : GlobalScalar globals ctxt e → GlobalCallFrontend globals ctxt body →
       GlobalCallFrontend globals ctxt (.while e body)
+
+/-- Existing call-aware frontend programs are included. -/
+theorem GlobalCallFrontend.of_frontend {width : Nat} [NeZero width]
+    (globals : PanGlobalsContextExact width) {ctxt : PanToCrepContextExact width} {p : ProgHOL width}
+    (h : CallFrontend ctxt p) : GlobalCallFrontend globals ctxt p := by
+  induction h with
+  | base h => exact .base (GlobalFrontend.of_frontend globals h)
+  | tail args => exact .tail (by intro e member; exact .local (args e member))
+  | decCall args body ih => exact .decCall (by intro e member; exact .local (args e member)) ih
+  | decl e body ih => exact .decl (.local e) ih
+  | seq a b iha ihb => exact .seq iha ihb
+  | ite e a b iha ihb => exact .ite (.local e) iha ihb
+  | «while» e body ih => exact .while (.local e) ih
 
 /-- Global lowering produces the existing call-aware frontend shape. -/
 theorem globalCallFrontend_compiled {width : Nat} [NeZero width]
