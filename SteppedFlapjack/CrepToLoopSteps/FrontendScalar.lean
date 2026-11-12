@@ -17,6 +17,9 @@ theorem frontendScalar_compiled {width : Nat} [NeZero width]
   | baseAddr => exact ⟨.baseAddr,by simp [compileExpExactHOLW],.direct .baseAddr⟩
   | topAddr => exact ⟨.topAddr,by simp [compileExpExactHOLW],.direct .topAddr⟩
   | bytesInWord => exact ⟨.const (BitVec.ofNat width (width / 8)),by simp [compileExpExactHOLW],.direct (.const _)⟩
+  | load address ih =>
+    obtain ⟨compiled, eq, shape⟩ := ih
+    exact ⟨.load compiled,by simp [compileExpExactHOLW,eq,sizeOfShapeHOL,loadShapeBytesHOLW],.load shape⟩
   | op operator a b iha ihb =>
     obtain ⟨ca,ea,ha⟩ := iha
     obtain ⟨cb,eb,hb⟩ := ihb

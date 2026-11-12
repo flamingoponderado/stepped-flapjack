@@ -13,7 +13,7 @@ open Flapjack.Pancake.PanStructs.CompileShapeExact
 
 theorem scalar_structs_fixed {scope : List VarName} {e : Exp (RiscV.Word 64)}
     (scalar : Scalar scope e) (ctxt : ContextExact) : compileExpExact ctxt (expToHOL e) = expToHOL e := by
-  induction scalar <;> simp_all [expToHOL,compileExpExact,compileExpsExact]
+  induction scalar <;> simp_all [expToHOL,compileExpExact,compileExpsExact,shapeToHOL,compileShapeExact]
 
 theorem supported_structs_fixed {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : SupportedIn scope program) (ctxt : ContextExact) :

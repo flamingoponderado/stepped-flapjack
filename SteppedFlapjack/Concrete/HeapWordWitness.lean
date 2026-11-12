@@ -7,6 +7,27 @@ import Flapjack.Pancake.Semantics.CrepRuntimeTarget
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang SteppedFlapjack.PanToCrepSteps
 
+/-- Read a word from ordinary heap memory. -/
+def heapWordLoad : Prog (RiscV.Word 64) :=
+  .return (.load .one (.const 0xa1000100))
+
+/-- The load is accepted by the public source fragment. -/
+theorem heapWordLoad_supported : Supported heapWordLoad := by
+  refine ⟨.base (.ret (.load (.const _))), ?_⟩
+  simp [heapWordLoad,ProgByteRanged,ExpByteRanged,ShapeByteRanged]
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+/-- The initialized heap contains zero at the selected address. -/
+theorem heapWordLoad_run :
+    evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
+      (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] []
+      sourceProduction.baseAddress sourceProduction.topAddress 8 10
+      sourceProduction.locals sourceProduction.globals sourceProduction.memory sourceProduction.ffi heapWordLoad
+      (memoryAccess := some (panSemBitVec64MemoryAccess sourceProduction)) (contracts := none) =
+        some (.returned sourceProduction.locals sourceProduction.globals sourceProduction.memory sourceProduction.ffi [.word 0], 3) := by
+  with_unfolding_all rfl
+
 /-- Store seven in the initialized heap and return the word read back. -/
 def heapWordWitness : Prog (RiscV.Word 64) :=
   .seq (.store (.const 0xa1000100) (.const 7))

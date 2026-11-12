@@ -21,6 +21,7 @@ theorem scalar_frontend_shape {scope : List VarName} {ctxt : PanToCrepContextExa
   | «local» name member =>
     obtain ⟨reg,found⟩ := relation name member
     simpa [expToHOL] using (FrontendScalar.local (ofString name) reg found)
+  | load address ih => simpa [expToHOL,shapeToHOL] using (FrontendScalar.load ih)
   | op op a b iha ihb => simpa [expToHOL] using (FrontendScalar.op op iha ihb)
   | cmp op a b iha ihb => simpa [expToHOL] using (FrontendScalar.cmp op iha ihb)
   | shift op a b iha ihb => simpa [expToHOL] using (FrontendScalar.shift op iha ihb)

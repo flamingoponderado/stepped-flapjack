@@ -70,6 +70,21 @@ theorem scalar_eval_word {scope : List VarName} {expression : Exp (RiscV.Word 64
   | «local» name member =>
     simp only [evalPanValueExp] at evaluated
     exact words name value evaluated
+  | @load address ha ih =>
+    simp only [evalPanValueExp] at evaluated
+    cases addressRun : evalPanValueExp production.structs production.locals production.globals production.memory
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord address
+        (some (panSemBitVec64MemoryAccess production)) with
+    | none => simp [addressRun] at evaluated
+    | some result =>
+      obtain ⟨addressWord,rfl⟩ := ih result addressRun
+      cases read : panValueFlatReadWord production.memory panSemBitVec64BytesInWord
+          (some (panSemBitVec64MemoryAccess production)) addressWord with
+      | none => simp [addressRun,panValueFlatLoad,isWfShape,panValueFlatLoadFuel,read] at evaluated
+      | some word =>
+        simp [addressRun,panValueFlatLoad,isWfShape,panValueFlatLoadFuel,read] at evaluated
+        subst value
+        exact ⟨word,rfl⟩
   | @op operator a b ha hb iha ihb =>
     simp only [evalPanValueExp] at evaluated
     cases argsRun : evalPanValueExp.evalPanValueExps production.structs production.locals production.globals production.memory

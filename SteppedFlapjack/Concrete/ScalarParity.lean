@@ -12,7 +12,8 @@ def ScalarLocalsRel {σ : Type} (scope : List VarName) (ctxt : PanToCrepContextE
 theorem scalar_compile_eval_all {σ : Type} {scope : List VarName} {expression : Exp (RiscV.Word 64)}
     (scalar : Scalar scope expression) (ctxt : PanToCrepContextExact 64)
     (source : PanSemStateFiniteExact 64 σ) (target : CrepSemHOLState 64 σ)
-    (locals : ScalarLocalsRel scope ctxt source target) :
+    (locals : ScalarLocalsRel scope ctxt source target)
+    (stateRel : panToCrepStateRelFiniteExact source target) :
     ∃ compiled, compileExpExactHOLW ctxt (expToHOL expression) = ([compiled],.one) ∧
       @evalHOLExact 64 σ _ source.toExact (fun a => Classical.propDecidable (source.memaddrs a)) (expToHOL expression) =
         Option.map ValueHOL.val (evalCrepSemHOLExp target compiled) := by
@@ -22,6 +23,19 @@ theorem scalar_compile_eval_all {σ : Type} {scope : List VarName} {expression :
     obtain ⟨reg,found,values⟩ := locals name member
     refine ⟨.var reg,by simp [expToHOL,compileExpExactHOLW,found],?_⟩
     simpa [expToHOL,evalHOLExact,evalCrepSemHOLExp,lookupKvarHOLExact] using values
+  | load address ih =>
+    obtain ⟨compiled, comp, eval⟩ := ih
+    refine ⟨.load compiled, by simp [expToHOL,shapeToHOL,compileExpExactHOLW,comp,sizeOfShapeHOL,loadShapeBytesHOLW], ?_⟩
+    simp only [expToHOL,shapeToHOL,evalHOLExact,isWfShapeExactHOL,if_true,evalCrepSemHOLExp]
+    rw [eval]
+    cases result : evalCrepSemHOLExp target compiled with
+    | none => simp
+    | some word =>
+      cases word with
+      | word word =>
+        simp only [Option.map_some,memLoadHOLExact,stateRel.1]
+        rw [show source.memaddrs word = target.memaddrs word from congrFun stateRel.2.1 word]
+        by_cases h : target.memaddrs word <;> simp [h]
   | op operator a b iha ihb =>
     obtain ⟨ca,compa,vala⟩ := iha
     obtain ⟨cb,compb,valb⟩ := ihb
@@ -51,11 +65,12 @@ theorem scalar_compile_error {σ : Type} {scope : List VarName} {expression : Ex
     (scalar : Scalar scope expression) (ctxt : PanToCrepContextExact 64)
     (source : PanSemStateFiniteExact 64 σ) (target : CrepSemHOLState 64 σ)
     (locals : ScalarLocalsRel scope ctxt source target)
+    (stateRel : panToCrepStateRelFiniteExact source target)
     (failed : @evalHOLExact 64 σ _ source.toExact (fun a => Classical.propDecidable (source.memaddrs a))
       (expToHOL expression) = none) :
     ∃ compiled, compileExpExactHOLW ctxt (expToHOL expression) = ([compiled],.one) ∧
       evalCrepSemHOLExp target compiled = none := by
-  obtain ⟨compiled,compiledEq,evalEq⟩ := scalar_compile_eval_all scalar ctxt source target locals
+  obtain ⟨compiled,compiledEq,evalEq⟩ := scalar_compile_eval_all scalar ctxt source target locals stateRel
   rw [failed] at evalEq
   refine ⟨compiled,compiledEq,?_⟩
   cases h : evalCrepSemHOLExp target compiled with
@@ -241,14 +256,13 @@ theorem ScalarLocalsRel.of_existing {σ : Type} {scope : List VarName} {ctxt : P
   refine ⟨reg,found,?_⟩
   simp [sourceFound,targetValue]
 
-example {σ : Type} (ctxt : PanToCrepContextExact 64) (source : PanSemStateFiniteExact 64 σ)
+example {σ : Type} (ctxt : PanToCrepContextExact 64) (_source : PanSemStateFiniteExact 64 σ)
     (target : CrepSemHOLState 64 σ) :
     ∃ compiled, compileExpExactHOLW ctxt (expToHOL (.shift .lsl (.const 1) (.const 64) : Exp (RiscV.Word 64))) =
       ([compiled],.one) ∧ evalCrepSemHOLExp target compiled = none := by
-  apply scalar_compile_error (scope := []) (.shift .lsl (.const _) (.const _)) ctxt source target
-  · intro name member
-    simp at member
-  · simp [expToHOL,evalHOLExact,wordShiftHOL]
+  refine ⟨.shift .lsl (.const 1) (.const 64), ?_, ?_⟩
+  · simp [expToHOL,compileExpExactHOLW]
+  · simp [evalCrepSemHOLExp,wordShiftHOL]
 /-- A successful scalar expression in a present scope has a word result. -/
 theorem scalar_hol_word {σ : Type} {scope : List VarName} {expression : Exp (RiscV.Word 64)}
     (scalar : Scalar scope expression) (source : PanSemStateFiniteExact 64 σ)
@@ -262,6 +276,11 @@ theorem scalar_hol_word {σ : Type} {scope : List VarName} {expression : Exp (Ri
     simp [expToHOL,evalHOLExact,found] at evaluated
     subst value
     exact ⟨word,rfl⟩
+  | load address ih =>
+    simp only [expToHOL,shapeToHOL,evalHOLExact,isWfShapeExactHOL,if_true] at evaluated
+    split at evaluated <;> simp_all [memLoadHOLExact]
+    all_goals rcases evaluated with ⟨_, rfl⟩
+    all_goals cases source.memory _ with | word w => exact ⟨w,rfl⟩
   | op operator a b iha ihb =>
     simp only [expToHOL,List.map_cons,List.map_nil,evalHOLExact] at evaluated
     split at evaluated <;> simp_all

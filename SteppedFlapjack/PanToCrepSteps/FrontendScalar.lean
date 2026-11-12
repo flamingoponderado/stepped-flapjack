@@ -13,6 +13,7 @@ inductive FrontendScalar {width : Nat} [NeZero width] (ctxt : PanToCrepContextEx
   | baseAddr : FrontendScalar ctxt .baseAddr
   | topAddr : FrontendScalar ctxt .topAddr
   | bytesInWord : FrontendScalar ctxt .bytesInWord
+  | load {address} : FrontendScalar ctxt address → FrontendScalar ctxt (.load .one address)
   | op (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.op operator [a,b])
   | cmp (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.cmp operator a b)
   | shift (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.shift operator a b)
@@ -38,7 +39,9 @@ theorem frontendScalar_localised {width : Nat} [NeZero width] {ctxt : PanToCrepC
 theorem frontendScalar_everyLocal {width : Nat} [NeZero width] {ctxt : PanToCrepContextExact width}
     {e : ExpHOL width} (shape : FrontendScalar ctxt e) : everyExpHOL localisedExpHOL e = true := by
   induction shape <;> simp_all [localisedExpHOL,everyExpHOL,everyExpListHOL]
-  all_goals constructor <;> (simpa [localisedExpHOL] using frontendScalar_localised (by assumption))
+  all_goals first
+    | exact frontendScalar_localised (by assumption)
+    | constructor <;> (simpa [localisedExpHOL] using frontendScalar_localised (by assumption))
 
 theorem frontendArguments_localised {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width)
     (args : List (ExpHOL width)) (shape : ∀ e ∈ args, FrontendScalar ctxt e) :
@@ -58,6 +61,9 @@ theorem frontendScalar_compile {width : Nat} [NeZero width] {ctxt : PanToCrepCon
   | baseAddr => exact ⟨.baseAddr,by simp [compileExpExactHOLW]⟩
   | topAddr => exact ⟨.topAddr,by simp [compileExpExactHOLW]⟩
   | bytesInWord => exact ⟨.const (BitVec.ofNat width (width / 8)),by simp [compileExpExactHOLW]⟩
+  | load address ih =>
+    obtain ⟨compiled, hc⟩ := ih
+    exact ⟨.load compiled, by simp [compileExpExactHOLW, hc, sizeOfShapeHOL, loadShapeBytesHOLW]⟩
   | op op ha hb iha ihb =>
     obtain ⟨a,ca⟩ := iha
     obtain ⟨b,cb⟩ := ihb

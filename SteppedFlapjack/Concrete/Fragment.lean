@@ -8,6 +8,7 @@ open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 inductive Scalar (scope : List VarName) : Exp (RiscV.Word 64) → Prop
   | const (value) : Scalar scope (.const value)
   | local (name) : name ∈ scope → Scalar scope (.var .local name)
+  | load {address} : Scalar scope address → Scalar scope (.load .one address)
   | op (operator) {a b} : Scalar scope a → Scalar scope b → Scalar scope (.op operator [a,b])
   | cmp (operator) {a b} : Scalar scope a → Scalar scope b → Scalar scope (.cmp operator a b)
   | shift (operator) {a b} : Scalar scope a → Scalar scope b → Scalar scope (.shift operator a b)

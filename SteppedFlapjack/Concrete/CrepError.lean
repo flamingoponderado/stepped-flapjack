@@ -59,7 +59,7 @@ private theorem errorReturn {scope : List VarName} {expression : Exp (RiscV.Word
   · exact (Prod.mk.inj run).2.symm
   · split at run <;> simp_all
  subst sourceFinal
- have pair := scalar_return_hol_error scalar ctxt source target rel (by simpa [progToHOL] using run)
+ have pair := scalar_return_hol_error scalar ctxt source target rel stateRel (by simpa [progToHOL] using run)
  refine ⟨target,?_,?_⟩
  · simpa [progToHOL] using pair.1
  · rw [show progToHOL (.return expression) = .return (expToHOL expression) from by simp [progToHOL]]
@@ -81,7 +81,7 @@ private theorem errorAssign {scope : List VarName} (name : VarName) (member : na
   · exact (Prod.mk.inj run).2.symm
   · split at run <;> simp_all
  subst sourceFinal
- obtain ⟨after,targetRun,bound⟩ := scalar_assign_hol_error scalar ctxt source target rel maxBound name member (by simpa [progToHOL] using run)
+ obtain ⟨after,targetRun,bound⟩ := scalar_assign_hol_error scalar ctxt source target rel stateRel maxBound name member (by simpa [progToHOL] using run)
  refine ⟨after,?_,?_⟩
  · simpa [progToHOL] using targetRun
  · rw [show progToHOL (.assign .local name expression) = .assign .local (ofString name) (expToHOL expression) from by simp [progToHOL]]
@@ -136,14 +136,14 @@ private theorem errorIte {scope : List VarName} {condition : Exp (RiscV.Word 64)
  (scalar : Scalar scope condition) (aError : ErrorBridge scope a) (bError : ErrorBridge scope b) : ErrorBridge scope (.ite condition a b) := by
  intro σ ctxt source sourceFinal target registered present stateRel codeRel excpRel localsRel run
  have rel := ScalarLocalsRel.of_existing registered present localsRel
- obtain ⟨ce,compiled,evalEq⟩ := scalar_compile_eval_all scalar ctxt source target rel
+ obtain ⟨ce,compiled,evalEq⟩ := scalar_compile_eval_all scalar ctxt source target rel stateRel
  have comp : compileProgExactHOLW ctxt (.ite (expToHOL condition) (progToHOL a) (progToHOL b)) =
    .ite ce (compileProgExactHOLW ctxt (progToHOL a)) (compileProgExactHOLW ctxt (progToHOL b)) := by
   simp [compileProgExactHOLW,compileIfExactHOLW,compiled]
  have sourceCount := controlSteps_ite (expToHOL condition) (progToHOL a) (progToHOL b) source
  cases evaluated : @evalHOLExact 64 σ _ source.toExact (fun v => Classical.propDecidable (source.memaddrs v)) (expToHOL condition) with
  | none =>
-   obtain ⟨targetRun,bound⟩ := scalar_ite_crep_error scalar ctxt source target rel evaluated (progToHOL a) (progToHOL b)
+   obtain ⟨targetRun,bound⟩ := scalar_ite_crep_error scalar ctxt source target rel stateRel evaluated (progToHOL a) (progToHOL b)
    refine ⟨target,?_,?_⟩
    · simpa [progToHOL] using targetRun
    · simp only [progToHOL,bound,sourceCount,evaluated]
@@ -185,13 +185,13 @@ private theorem errorDecl {scope : List VarName} (name : VarName) {initializer :
  (scalar : Scalar scope initializer) (bodyError : ErrorBridge (name :: scope) body) : ErrorBridge scope (.dec name .one initializer body) := by
  intro σ ctxt source sourceFinal target registered present stateRel codeRel excpRel localsRel run
  have rel := ScalarLocalsRel.of_existing registered present localsRel
- obtain ⟨ce,compiled,evalEq⟩ := scalar_compile_eval_all scalar ctxt source target rel
+ obtain ⟨ce,compiled,evalEq⟩ := scalar_compile_eval_all scalar ctxt source target rel stateRel
  have comp : compileProgExactHOLW ctxt (.dec (ofString name) .one (expToHOL initializer) (progToHOL body)) =
    .dec (ctxt.vmax+1) ce (compileProgExactHOLW (scalarDeclContext ctxt (ofString name)) (progToHOL body)) := by
   simp [compileProgExactHOLW,compileDecExactHOLW,compiled,nestedDecsHOL,scalarDeclContext]
  cases evaluated : @evalHOLExact 64 σ _ source.toExact (fun v => Classical.propDecidable (source.memaddrs v)) (expToHOL initializer) with
  | none =>
-   obtain ⟨targetRun,bound⟩ := scalar_decl_crep_error scalar ctxt source target rel evaluated (ofString name) (progToHOL body)
+   obtain ⟨targetRun,bound⟩ := scalar_decl_crep_error scalar ctxt source target rel stateRel evaluated (ofString name) (progToHOL body)
    refine ⟨target,?_,?_⟩
    · simpa [progToHOL,shapeToHOL] using targetRun
    · simp only [progToHOL,shapeToHOL,bound]
@@ -259,14 +259,14 @@ private theorem errorWhile {scope : List VarName} {condition : Exp (RiscV.Word 6
  induction hc : source.clock using Nat.strongRecOn generalizing source sourceFinal target with
  | _ clock ih =>
   have rel := ScalarLocalsRel.of_existing registered present localsRel
-  obtain ⟨ce,compiled,evalEq⟩ := scalar_compile_eval_all scalar ctxt source target rel
+  obtain ⟨ce,compiled,evalEq⟩ := scalar_compile_eval_all scalar ctxt source target rel stateRel
   have comp : compileProgExactHOLW ctxt (.while (expToHOL condition) (progToHOL body)) =
     .while ce (compileProgExactHOLW ctxt (progToHOL body)) := by
     simp [compileProgExactHOLW,compileWhileExactHOLW,compiled]
   have sourceCount := controlSteps_while (expToHOL condition) (progToHOL body) source
   cases evaluated : @evalHOLExact 64 σ _ source.toExact (fun v => Classical.propDecidable (source.memaddrs v)) (expToHOL condition) with
   | none =>
-    obtain ⟨targetRun,bound⟩ := scalar_while_crep_error scalar ctxt source target rel evaluated (progToHOL body)
+    obtain ⟨targetRun,bound⟩ := scalar_while_crep_error scalar ctxt source target rel stateRel evaluated (progToHOL body)
     refine ⟨target,targetRun,?_⟩
     simp only [bound,sourceCount,evaluated]
     rw [comp]
