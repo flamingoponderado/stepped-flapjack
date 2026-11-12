@@ -208,16 +208,13 @@ theorem nested_initialized_machine :
     (functionsHOL (nestedCallDeclarations.map declToHOL)) (by rfl)
     nestedHOLFunctions (by simp [nestedHOLFunctions,nestedSourceFunctions,nestedCallEntry,funDeclToHOL,progToHOL,expToHOL,shapeToHOL])
     (by simpa only [nestedHOLDeclarations] using unique)
-    (by simp [nestedHOLFunctions,isWfShapeExactHOL])
-    nestedHOLFunctions (by simp [nestedHOLFunctions,nestedCallEntry,progToHOL,expToHOL,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL]) (ofString "main")
+    nestedHOLFunctions (by simp [nestedHOLFunctions,nestedCallEntry,progToHOL,expToHOL,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL]) (ofString "main") rfl
     (by simpa only [nestedHOLDeclarations] using sourceCode)
     (by rw [nestedHOLDeclarations]; simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,nestedCallEntry,panSimpProg,retToTail,seqAssoc,smartSeq,progToHOL,expToHOL,shapeToHOL])
     (by simp [source,nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,FUPDATE,ofString])
-    (by simpa only [nestedHOLDeclarations] using unique)
     (by simpa only [nestedHOLDeclarations] using nestedCall_inline_selection_empty)
     (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 8 6
     _ _ _ _ 7 (by simpa [production,panSemBitVec64MemoryAccess] using sourceRun) (by rfl)
-    (by simpa [nestedHOLDeclarations,nestedRawWords,nestedCallCrepPrograms] using nested_panToWord)
     (by simpa only [nestedHOLDeclarations] using sourceGood)
     (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,nestedBitmaps] using nested_bitmapFits)
     (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,nestedCode] using nested_nativeSafe)

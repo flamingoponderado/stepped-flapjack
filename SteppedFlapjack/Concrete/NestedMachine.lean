@@ -59,27 +59,15 @@ def nestedFrameSizes : Spt Nat :=
     (compileProgNative riscvConfig false body argc (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1)
     (sptFromAList nestedOptimizedWords)
 
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-theorem nested_simp_declarations :
-    panSimpDeclsHOL (nestedCallDeclarations.map declToHOL) = nestedCallDeclarations.map declToHOL := by
-  simp [nestedCallDeclarations,nestedCallEntry,declToHOL,funDeclToHOL,progToHOL,expToHOL,shapeToHOL,
-    panSimpDeclsHOL,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL]
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-theorem nested_struct_declarations :
-    Pancake.PanStructs.CompileShapeExact.compileTopExact (nestedCallDeclarations.map declToHOL) =
-      nestedCallDeclarations.map declToHOL := by
-  simp [nestedCallDeclarations,nestedCallEntry,declToHOL,funDeclToHOL,progToHOL,expToHOL,shapeToHOL,
-    Pancake.PanStructs.CompileShapeExact.compileTopExact,Pancake.PanStructs.CompileShapeExact.compileDeclsExact,
-    Pancake.PanStructs.CompileShapeExact.compileProgExact,Pancake.PanStructs.CompileShapeExact.compileShapeExact,
-    Pancake.PanStructs.CompileShapeExact.compileExpExact,Pancake.PanStructs.CompileShapeExact.compileExpsExact]
-
 theorem nested_panToWord :
     panToWordCompileProgHOL riscvConfig.isa (nestedCallDeclarations.map declToHOL) = nestedRawWords := by
-  simp only [panToWordCompileProgHOL,nested_simp_declarations,nested_struct_declarations]
-  rfl
+  have funcs : nestedHOLFunctions = nestedSourceFunctions.map funDeclToHOL := by
+    simp [nestedHOLFunctions,nestedSourceFunctions,nestedCallEntry,funDeclToHOL,progToHOL,expToHOL,shapeToHOL]
+  have fixed : nestedHOLFunctions.map (fun f => {f with body := panSimpCompileHOL f.body}) = nestedHOLFunctions := by
+    simp [nestedHOLFunctions,nestedCallEntry,progToHOL,expToHOL,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL]
+  have result := call_panToWord nestedSourceFunctions nested_table_supported
+  rw [← funcs,fixed,nestedHOLDeclarations] at result
+  exact result
 
 /-- The actual source compiler output satisfies the Stack code contract. -/
 theorem nested_nativeGoodCode : StackToLab.Proofs.GoodCode.goodCode 24

@@ -4,6 +4,7 @@ import SteppedFlapjack.Concrete.Phase7SourceClock
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.PanSemStateFiniteExact
 open SteppedFlapjack.PanToCrepSteps
+open Flapjack.Pancake.PanStructs.CompileShapeExact Flapjack.Compiler.Encoders.RiscV.Target
 
 /-- Byte-representable function names have the same executable and HOL lookup. -/
 theorem function_table_lookup (fs : List (FunDeclOf 64))
@@ -158,5 +159,87 @@ theorem original_function_shapes (fs : List (FunDeclOf 64)) (supported : Functio
   obtain ⟨ranged,shape,params,_⟩ := supported f hf
   have paramEq := scalarParams_toHOL f.params params
   exact ⟨f.params.map Prod.fst,f.body,paramEq,rfl,shape,ranged.2.2.1⟩
+
+/-- Scalar function shapes are well formed in the empty struct context. -/
+theorem table_wellFormed (fs : List (FunDeclOf 64)) (supported : FunctionTableSupported fs) :
+    (fs.map funDeclToHOL).all (fun f => f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
+      isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true := by
+  simp only [List.all_eq_true, List.mem_map]
+  intro f hf
+  obtain ⟨g,hg,rfl⟩ := hf
+  obtain ⟨_,_,params,ret⟩ := supported g hg
+  simp only [funDeclToHOL]
+  simp only [List.all_eq_true, List.mem_map, Bool.and_eq_true]
+  constructor
+  · intro p hp
+    obtain ⟨p,hp,rfl⟩ := hp
+    simp [paramToHOL,params p hp,shapeToHOL]
+  · simp [ret,shapeToHOL]
+
+/-- Struct lowering fixes supported call-aware function tables. -/
+private theorem scalar_list_fixed {scope : List VarName} (args : List (Exp (RiscV.Word 64)))
+    (scalar : ∀ e ∈ args, Scalar scope e) (ctxt : ContextExact) :
+    compileExpsExact ctxt (args.map expToHOL) = args.map expToHOL := by
+  induction args with
+  | nil => simp [compileExpsExact]
+  | cons e es ih =>
+    simp [compileExpsExact, scalar_structs_fixed (scalar e (by simp)) ctxt,
+      ih (fun e he => scalar e (by simp [he]))]
+
+theorem call_structs_fixed {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) (ctxt : ContextExact) :
+    compileProgExact ctxt (progToHOL program) = progToHOL program := by
+  induction supported generalizing ctxt with
+  | base h => exact supported_structs_fixed h ctxt
+  | tail name args scalar => simp [progToHOL,compileProgExact,scalar_list_fixed args scalar ctxt]
+  | call dest name args scalar cont ih => simp [progToHOL,shapeToHOL,compileProgExact,compileShapeExact,scalar_list_fixed args scalar ctxt,ih]
+  | decl name scalar body ih => simp [progToHOL,shapeToHOL,compileProgExact,compileShapeExact,scalar_structs_fixed scalar ctxt,ih]
+  | seq a b iha ihb => simp [progToHOL,compileProgExact,iha,ihb]
+  | ite scalar a b iha ihb => simp [progToHOL,compileProgExact,scalar_structs_fixed scalar ctxt,iha,ihb]
+  | «while» scalar body ih => simp [progToHOL,compileProgExact,scalar_structs_fixed scalar ctxt,ih]
+
+theorem call_structs_declarations (fs : List (FunDeclOf 64)) (supported : FunctionTableSupported fs)
+    (ctxt : ContextExact) :
+    let simplified := (fs.map funDeclToHOL).map (fun f => {f with body := panSimpCompileHOL f.body})
+    compileDeclsExact ctxt (simplified.map DeclHOL.function) = (simplified.map DeclHOL.function,ctxt) := by
+  induction fs with
+  | nil => rfl
+  | cons f fs ih =>
+    have h := supported f (by simp)
+    have hs : FunctionTableSupported fs := fun g hg => supported g (by simp [hg])
+    obtain ⟨_,shape,params,ret⟩ := h
+    have pEq : (f.params.map paramToHOL).map (fun p => (p.1,compileShapeExact ctxt.structs p.2)) =
+        f.params.map paramToHOL := by
+      simp only [List.map_map]
+      apply List.map_congr_left
+      intro p hp
+      simp [paramToHOL,params p hp,shapeToHOL,compileShapeExact]
+    have body := call_structs_fixed (callSupported_panSimp shape) {ctxt with locals := f.params.map paramToHOL}
+    rw [← callSupported_panSimp_hol shape] at body
+    simp only [List.map_cons,compileDeclsExact, ih hs, funDeclToHOL]
+    simp [pEq,ret,shapeToHOL,compileShapeExact,body]
+
+theorem call_structs_top (fs : List (FunDeclOf 64)) (supported : FunctionTableSupported fs) :
+    let simplified := (fs.map funDeclToHOL).map (fun f => {f with body := panSimpCompileHOL f.body})
+    compileTopExact (simplified.map DeclHOL.function) = simplified.map DeclHOL.function := by
+  let simplified := (fs.map funDeclToHOL).map (fun f => {f with body := panSimpCompileHOL f.body})
+  let ctxt : ContextExact := {structs := [], locals := [], globals := []}
+  have names : getNamesExact ctxt (simplified.map DeclHOL.function) = ctxt := by
+    clear supported
+    induction simplified with
+    | nil => rfl
+    | cons f fs ih => simpa [getNamesExact] using ih
+  change (compileDeclsExact (getNamesExact ctxt (simplified.map DeclHOL.function)) (simplified.map DeclHOL.function)).1 = _
+  rw [names,call_structs_declarations fs supported ctxt]
+
+theorem call_panToWord (fs : List (FunDeclOf 64)) (supported : FunctionTableSupported fs) :
+    panToWordCompileProgHOL riscvConfig.isa ((fs.map funDeclToHOL).map DeclHOL.function) =
+      loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa
+        (compileProgDeclsHOLW (compileTopExactHOL ((((fs.map funDeclToHOL).map
+          (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function)) (ofString "main")))) := by
+  unfold panToWordCompileProgHOL
+  rw [simpFunctions]
+  dsimp only
+  rw [call_structs_top fs supported]
 
 end SteppedFlapjack.Concrete

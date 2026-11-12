@@ -9,11 +9,11 @@ open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.LabToTarget Flapjack.Co
 open SteppedFlapjack.PanToCrepSteps
 open Flapjack.Pancake.PanStructs.CompileShapeExact
 
-private theorem scalar_structs_fixed {scope : List VarName} {e : Exp (RiscV.Word 64)}
+theorem scalar_structs_fixed {scope : List VarName} {e : Exp (RiscV.Word 64)}
     (scalar : Scalar scope e) (ctxt : ContextExact) : compileExpExact ctxt (expToHOL e) = expToHOL e := by
   induction scalar <;> simp_all [expToHOL,compileExpExact,compileExpsExact]
 
-private theorem supported_structs_fixed {scope : List VarName} {program : Prog (RiscV.Word 64)}
+theorem supported_structs_fixed {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : SupportedIn scope program) (ctxt : ContextExact) :
     compileProgExact ctxt (progToHOL program) = progToHOL program := by
   induction supported generalizing ctxt <;> simp_all [progToHOL,shapeToHOL,compileProgExact,compileShapeExact]

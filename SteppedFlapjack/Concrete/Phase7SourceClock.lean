@@ -243,7 +243,7 @@ theorem source_function_declarations_compiler_code {width : Nat} {σ : Type} [Ne
   rw [function_fold_code,emptyCode,updateList_reverse_nodup _ unique] at init
   exact init
 
-private theorem simpFunctions {width : Nat} [NeZero width] (fs : List (FunDeclHOL width)) :
+theorem simpFunctions {width : Nat} [NeZero width] (fs : List (FunDeclHOL width)) :
     panSimpDeclsHOL (fs.map DeclHOL.function) =
       (fs.map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function := by
   induction fs with
@@ -302,6 +302,14 @@ theorem callSupported_initialized_simp_run {scope : List VarName} {program : Pro
       PanSimp.stateRel sourceFinal targetFinal targetFinal.code := by
   exact callSupported_panSimp_run supported _ sourceFinal _ result run nonerror
     (source_simp_function_table state functions empty wf)
+/-- Simplification leaves the function names unchanged. -/
+theorem simp_function_names {width : Nat} [NeZero width] (fs : List (FunDeclHOL width)) :
+    (functionsHOL ((fs.map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function)).map Prod.fst =
+      (functionsHOL (fs.map DeclHOL.function)).map Prod.fst := by
+  induction fs with
+  | nil => rfl
+  | cons f fs ih => simpa [functionsHOL,List.map_map] using congrArg (List.cons f.name) ih
+
 /-- Simplified function tables have the compiler relation, derived from their original declarations. -/
 theorem source_simp_function_code {width : Nat} {σ : Type} [NeZero width]
     (state : PanSemStateFiniteExact width σ) (fs : List (FunDeclHOL width))
@@ -315,13 +323,8 @@ theorem source_simp_function_code {width : Nat} {σ : Type} [NeZero width]
   have h := (source_simp_function_table state fs empty wf).2
   rw [function_fold_code, function_fold_code, empty] at h
   have unique' : ((functionsHOL ((fs.map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function)).map Prod.fst).Nodup := by
-    have eq : (functionsHOL ((fs.map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function)).map Prod.fst =
-      (functionsHOL (fs.map DeclHOL.function)).map Prod.fst := by
-      clear wf unique h
-      induction fs with
-      | nil => rfl
-      | cons f fs ih => simpa [functionsHOL,List.map_map] using congrArg (List.cons f.name) ih
-    rw [eq]; exact unique
+    rw [simp_function_names]
+    exact unique
   rw [updateList_reverse_nodup _ unique, updateList_reverse_nodup _ unique'] at h
   exact h
 end SteppedFlapjack.Concrete

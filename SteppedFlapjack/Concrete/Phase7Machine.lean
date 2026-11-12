@@ -28,14 +28,12 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
     (originalFs : List (FunDeclHOL 64))
     (originalFunctions : originalFs = sourceFs.map funDeclToHOL)
     (originalUnique : ((functionsHOL (originalFs.map DeclHOL.function)).map Prod.fst).Nodup)
-    (originalWellFormed : originalFs.all (fun f => f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
-      isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true)
     (fs : List (FunDeclHOL 64))
     (simplifiedFs : fs = originalFs.map (fun f => {f with body := panSimpCompileHOL f.body})) (start : MlS)
+    (startMain : start = ofString "main")
     (targetTable : targetCode = HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)
     (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],progToHOL (panSimpProg program),.one))
     (mainFound : source.code.lookup start = some ([],progToHOL program,.one))
-    (unique : ((functionsHOL (fs.map DeclHOL.function)).map Prod.fst).Nodup)
     (noInline : (functionsHOL ((compileTopExactHOL (fs.map DeclHOL.function) start).filter inlinableHOL)).map Prod.fst = [])
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (exnContracts : InfoMap Shape) (fuel count : Nat)
@@ -48,8 +46,6 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
       (contracts := some (countedContractsOfCode production.code exnContracts)) =
         some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
     (budget : count ≤ source.clock)
-    (rawEq : panToWordCompileProgHOL riscvConfig.isa (originalFs.map DeclHOL.function) =
-      loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start))))
     (sourceGood : pancakeGoodCodeHOL (originalFs.map DeclHOL.function) = true)
     (bitmapFits : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
       let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
@@ -110,6 +106,17 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
             (.halt .success,finalMachine,finalFfi) ∧
       finalFfi.ioEvents = sourceFinal.ffi.ioEvents ∧ FfiStateRel postFfi sourceFinal.ffi ∧
       semanticsDecls baseState start (originalFs.map DeclHOL.function) = .terminate .success finalFfi.ioEvents := by
+  have rawEq : panToWordCompileProgHOL riscvConfig.isa (originalFs.map DeclHOL.function) =
+      loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start))) := by
+    rw [originalFunctions,simplifiedFs,originalFunctions,startMain]
+    exact call_panToWord sourceFs tableSupported
+  have originalWellFormed : originalFs.all (fun f => f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
+      isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true := by
+    rw [originalFunctions]
+    exact table_wellFormed sourceFs tableSupported
+  have unique : ((functionsHOL (fs.map DeclHOL.function)).map Prod.fst).Nodup := by
+    rw [simplifiedFs,simp_function_names]
+    exact originalUnique
   have sourceCode : source.code = HolFiniteMapExact.empty.updateList entries.reverse := by
     rw [sourceInit,sourceEntries]
     rfl
