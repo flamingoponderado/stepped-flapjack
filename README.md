@@ -63,37 +63,13 @@ Pancake → Crep → Loop → Word passes → Stack → Lab → RISC-V.
 
 ## Source-to-machine bound
 
-`SteppedFlapjack.Concrete.supported_counted_machine` composes the spans for a
-`CallFreeSupported` singleton Pancake program. Given a returning run of
-`evalPanValueFfiProgSteps` with at most `n` steps, the theorem proves that the
-original Pancake compiler emits the bytes loaded into the fixture's RISC-V
-machine and that the machine halts successfully within
+`SteppedFlapjack.Concrete.countedCalls_initializedMachine` composes the spans
+from a counted Pancake source return to a successfully halting initialized
+RISC-V machine. It proves the emitted compiler bytes and bitmaps, source
+semantics, and matching I/O events at an explicit machine clock.
 
-```text
-supportedMachineFactor program * n + supportedMachineOffset program
-```
-
-machine ticks. Both constants depend on the generated code and the fixed
-backend configuration; `supportedMachineTicks_affine` proves this formula for
-the composed clock. The factor combines the Lab factor 948 with the
-flattening, Lab, uniform, native call-sequence, Word, Loop and Crep costs.
-The result also states that `semanticsDecls` on the
-original declarations, starting with an empty code table and clock zero,
-terminates successfully with the machine's final I/O events.
-
-`CallFreeSupported` covers a parameter-free function with scoped scalar locals,
-scalar expressions, declarations, sequencing, conditionals, loops and word
-returns. Names must be representable as HOL byte strings. The
-counted source run uses the init-e-shaped fixture state in `Concrete.SourceState`;
-its memory, FFI and layout are fixed by that fixture. The theorem additionally
-requires concrete checks on the generated native code: its callee frame fits
-the initialized stack, its Stack instructions are FFI- and shared-operation
-free, label removal succeeds, and the emitted bytes fit the aligned code
-buffer. It derives the compiler's bitmap and good-code conditions. These checks
-refer to the program and configuration and can be discharged for a concrete
-program; they do not quantify over a machine tick bound.
-
-`Supported` also admits ordinary and tail calls. For function-only programs,
+`Supported` admits ordinary and tail calls as well as scalar declarations,
+sequencing, conditionals, loops, and word returns. For function-only programs,
 `FunctionTableSupported` requires scalar parameters and return shapes, scoped
 call-aware bodies, and byte-representable names. `countedCalls_initializedMachine`
 uses those declarations and a counted source return to derive the actual
@@ -115,8 +91,8 @@ and a six-step source execution.
 `comparisonFixture_machine` and `branchingLoopFixture_machine` instantiate the
 call-aware theorem with concrete clocks `comparisonTicks` and
 `branchingLoopTicks`. `countdownFixture_machine` also uses the call-aware
-theorem with its concrete clock `countdownTicks`. The natural countdown fixture
-still uses the earlier call-free theorem.
+theorem with its concrete clock `countdownTicks`, and
+`naturalCountdownFixture_machine` uses `naturalCountdownTicks`.
 
 This fragment and fixture do not yet cover init-e's full guest: globals, heap
 and shared-memory operations, exceptions, FFI, primitive behavior and host
