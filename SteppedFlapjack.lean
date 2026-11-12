@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.GlobalStructWitness
 import SteppedFlapjack.Concrete.HeapWordWitness
 import SteppedFlapjack.WordToStackSteps.ClockSlack
 import SteppedFlapjack.WordToStackSteps.BudgetSimulation
@@ -488,6 +489,7 @@ The step-counted structured Pancake source semantics, split out of Flapjack in
 phase 4 of flapjack#1251:
 
 - `SteppedFlapjack.Concrete.HeapWordWitness`: a seven-step source witness for an aligned heap word store and load.
+- `SteppedFlapjack.Concrete.GlobalStructWitness`: a concrete global-pair source and HOL witness.
 - `SteppedFlapjack.CrepToLoopSteps.ScalarPrefix`:
   generalized scalar compilation prefixes and explicit structural Loop visit bounds;
 - `SteppedFlapjack.PanValueExpCounted`, `SteppedFlapjack.PanExpressionEvaluator`:
