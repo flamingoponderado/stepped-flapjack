@@ -52,63 +52,6 @@ private theorem functionOnly_hasWordEntry (fs : List (FunDeclHOL 64)) (start : M
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
-/-- A generated, initialized Word return reaches RISC-V at a concrete bound. -/
-theorem functionOnly_configured_machine
-    (fs : List (FunDeclHOL 64)) (start : MlS) (body : ProgHOL 64)
-    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],body,.one))
-    (noInline : (functionsHOL ((compileTopExactHOL (fs.map DeclHOL.function) start).filter inlinableHOL)).map Prod.fst = [])
-    (pan : List (DeclHOL 64)) (unique : ((functionsHOL pan).map Prod.fst).Nodup)
-    (rawEq : panToWordCompileProgHOL riscvConfig.isa pan =
-      loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start))))
-    (cfg : LabToTarget.Config) (limit : Nat) (value : BitVec 64)
-    (fits : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
-      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
-      let bitmaps := (compileNative riscvConfig false optimized).1
-      0xa0020018 + bitmaps.length*8 ≤ sourceBase)
-    (capacity : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
-      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
-      let entry := ((sptLookup 64 (sptFromAList optimized)).getD (1,.skip)).2
-      let frame := (compileProgNative riscvConfig false entry 1 (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1
-      let frames := sptMapi (fun _ (argc,body) => (compileProgNative riscvConfig false body argc
-        (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1) (sptFromAList optimized)
-      optionLe (optionMap₂ max (some (max 1 (1+frame)))
-        (optionMap₂ (· + ·) (some 1) (fullCallGraphDepth frames 64 (sptFromAList optimized)))) (some 2097172))
-    (wordPost : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) Unit)
-    (run : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
-      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
-      let native := compileNative riscvConfig false optimized
-      let code := native.2.2.2
-      let bs := native.1
-      WordSemStateFiniteExact.evaluate (.call none (some 64) [0] none)
-        {(configuredWord code optimized cfg bs) with clock := 6*limit+1} =
-          (some (.result (.loc 1 0) [.word value]),wordPost))
-    (filtered : LabSem.State 64 LabToTarget.Config Unit)
-    (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
-    (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
-    (hmc : mc.target = riscvTarget)
-    (link : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
-      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
-      let native := compileNative riscvConfig false optimized
-      LabToTargetSteps.LabExecutionLink filtered (configuredTargetLab native.2.2.2 cfg native.1 machine))
-    (tie : LabToTarget.oracleTie mc machine filtered)
-    (rel : LabToTarget.stateRel (mc,labCode,labs,pc) filtered asm machine) :
-    let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
-    let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
-    let native := compileNative riscvConfig false optimized
-    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) * (6*limit+1) + 1
-    let n := 1 + max 1 (stackCodeWeight (sptFromAList native.2.2.2)) * (6*limit+1 + allowance)
-    ∃ finalMachine finalFfi,
-      evaluateTargetHOL mc sourceFfi (LabToTargetSteps.labTickBound 4 labCode filtered.codeBuffer *
-        StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
-          native.1 native.2.2.2 (fixtureStackOracle cfg) n) machine =
-            (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = wordPost.ffi.ioEvents := by
-  let programs := compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)
-  obtain ⟨entryBody,entryMember⟩ := functionOnly_hasWordEntry fs start body found noInline
-  exact generated_configured_machine programs entryBody entryMember pan unique rawEq cfg limit value fits capacity
-    wordPost run filtered pc mc labCode labs asm machine hmc link tie rel
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
 theorem functionOnly_initialized_machine
     (fs : List (FunDeclHOL 64)) (start : MlS) (body : ProgHOL 64)
     (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],body,.one))

@@ -68,8 +68,8 @@ from a counted Pancake source return to a successfully halting initialized
 RISC-V machine. It proves the emitted compiler bytes and bitmaps, source
 semantics, and matching I/O events at an explicit machine clock.
 
-`Supported` admits ordinary and tail calls as well as scalar declarations,
-sequencing, conditionals, loops, and word returns. For function-only programs,
+`ScalarSupported` admits ordinary and tail calls, scalar declarations, word
+loads and stores, sequencing, conditionals, loops, and word returns. For function-only programs,
 `FunctionTableSupported` requires scalar parameters and return shapes, scoped
 call-aware bodies, and byte-representable names. `countedCalls_initializedMachine`
 uses those declarations and a counted source return to derive the actual
@@ -89,13 +89,30 @@ tick bound.
 `nested_initialized_machine` instantiates this composition with two call levels
 and a six-step source execution.
 
+`SteppedFlapjack.Concrete.globalCountedSource_machine` extends the counted
+source-to-machine bridge to `Supported shapes program`, where `shapes` is a
+concrete map of global names to shapes. It admits global scalar reads and
+updates, nested struct literals and field paths, and heap stores of struct
+values. `GlobalLayout` connects the shape map to the compiler layout; the
+fragment and source function-table conditions are proved from this layout and
+the supported source table. Its explicit clock depends on the compiled code,
+fixture configuration and initial source clock. The theorem also requires
+relations between the source, lowered and Crep states, compiler-table
+conditions, and checkable machine encoding, safety and capacity conditions.
+The pair witness satisfies the supported fragment and layout, but has not yet
+instantiated every condition of this general theorem.
+
+The current fragment has scalar locals, parameters and return values. The
+fixture reserves globals below the init-e heap endpoint; it does not yet cover
+the complete init-e initialization or guest.
+
 The kernel-checked witness clocks are `8402039033998605948` ticks for the
 comparison program and `12798071459382541821948` ticks for the branching loop.
 Both `countdownFixture_machine` and `naturalCountdownFixture_machine` state the
 bound `44195828396580057600 * (6*n+9) + 59847410146165518348` machine ticks.
 
-This fragment and fixture do not yet cover init-e's full guest: globals, heap
-and shared-memory operations, exceptions, FFI, primitive behavior and host
+This fragment and fixture do not yet cover init-e's full guest: shared-memory
+operations, exceptions, FFI, primitive behavior and host
 input are part of the widening work in the
 [roadmap](https://github.com/flamingoponderado/stepped-flapjack/issues/19).
 The eventual theorem must apply to init-e's `Guest.Software.guestAst` and
