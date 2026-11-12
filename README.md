@@ -127,7 +127,7 @@ the complete init-e initialization or guest.
 The kernel-checked witness clocks are `2587607680003341948` ticks for the
 comparison program and `1720804472507697866748` ticks for the branching loop.
 Both `countdownFixture_machine` and `naturalCountdownFixture_machine` state the
-bound `44195828396580057600 * (6*n+9) + 59847410146165518348` machine ticks.
+bound `7369523319287001600 * (6*n+9) + 23021105068872462348` machine ticks.
 
 This fragment and fixture do not yet cover init-e's full guest: shared-memory
 operations, exceptions, FFI, primitive behavior and host
