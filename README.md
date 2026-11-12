@@ -102,7 +102,8 @@ conditions, and checkable machine encoding, safety and capacity conditions.
 `pairGeneral_namedSource` instantiates these conditions for a global pair: its
 initializer and renamed entry call return the second field, and the compiled
 machine halts with the same I/O events as the named-struct source. Its clock
-is an explicit expression over the concrete code and initial configuration.
+is 374,713,592,693,268,806,748 ticks for the concrete code and a 16-step
+initial source clock.
 `heapFixture_machine` carries a concrete heap store and load through the
 function-only composition with an explicit clock expression.
 

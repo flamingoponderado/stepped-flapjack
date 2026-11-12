@@ -1,25 +1,28 @@
 import SteppedFlapjack.Concrete.GlobalStructEntry
 import SteppedFlapjack.Concrete.GlobalCountedMachine
-import SteppedFlapjack.Concrete.GlobalStructMachine
+import SteppedFlapjack.Concrete.GlobalStructConfiguredWord
+import SteppedFlapjack.Concrete.GlobalNamedStruct
 /-! The initialized global-pair wrapper meets the counted machine theorem. -/
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
 
 def pairEntryProduction : PanSemState (RiscV.Word 64) (FfiState Unit) :=
   {globalStructProductionBase (progToHOL globalStructWitness) with
-    globals := updatePanValueMap (globalStructProductionBase (progToHOL globalStructWitness)).globals "pair" (.rStruct [.word 0,.word 0])}
+    globals := updatePanValueMap (globalStructProductionBase (progToHOL globalStructWitness)).globals "pair" (.rStruct [.word 0,.word 0]), clock := 16}
 
 def pairEntrySource : PanSemStateFiniteExact 64 Unit :=
-  setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) (globalStructExactBase (progToHOL globalStructWitness))
+  {setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) (globalStructExactBase (progToHOL globalStructWitness)) with clock := 16}
 
 theorem pairEntry_name : entryName (progToHOL globalStructWitness) = newMainNameHOL globalStructProgram := by
   simp [entryName,singleEntryProgram,newMainNameHOL,globalStructProgram,globalStructDecl,functionsHOL]
 
-theorem pairEntry_rel : PanSemStateRelExec pairEntryProduction pairEntrySource.toExact :=
-  globalStructInitial_related (progToHOL globalStructWitness)
+theorem pairEntry_rel : PanSemStateRelExec pairEntryProduction pairEntrySource.toExact := by
+  have h := globalStructInitial_related (progToHOL globalStructWitness)
+  rcases h with ⟨a,b,c,d,e,f,g,h,_,j,k,l,m⟩
+  exact ⟨a,b,c,d,e,f,g,h,rfl,j,k,l,m⟩
 
-theorem pairEntry_ranged : PanSemStateRelExecRanged pairEntryProduction :=
-  globalStructInitial_ranged (progToHOL globalStructWitness)
+theorem pairEntry_ranged : PanSemStateRelExecRanged pairEntryProduction := by
+  simpa [pairEntryProduction,PanSemStateRelExecRanged] using globalStructInitial_ranged (progToHOL globalStructWitness)
 
 set_option maxRecDepth 100000
 set_option maxHeartbeats 4000000
@@ -64,13 +67,13 @@ theorem pairEntry_codeShape : ∀ name params body, (name,params,body) ∈ count
 
 
 def pairEntryTarget : PanSemStateFiniteExact 64 Unit :=
-  {globalStructTarget with code := (HolFiniteMapExact.empty.update (entryName (progToHOL globalStructWitness),([],compileProgExactHOL globalStructContext (progToHOL globalStructWitness),.one)))}
+  {globalStructTarget with clock := 16, code := (HolFiniteMapExact.empty.update (entryName (progToHOL globalStructWitness),([],compileProgExactHOL globalStructContext (progToHOL globalStructWitness),.one)))}
 
 theorem pairEntry_globalRel : panGlobalsStateRelHOLExact true globalStructContext pairEntrySource pairEntryTarget := by
-  have h := globalStruct_stateRel
+  have h := globalStruct_stateRel_clock 16
   simp only [panGlobalsStateRelHOLExact] at h ⊢
   rcases h with ⟨a,b,c,d,e,f,g,i,j,k,l,m,n,o,_,rest⟩
-  refine ⟨a,b,c,d,e,f,g,i,j,k,l,m,n,o,?_,rest⟩
+  refine ⟨a,b,c,d,e,by rfl,g,i,j,k,l,m,n,o,?_,rest⟩
   intro name params body ret found
   simp only [pairEntrySource,globalStructExactBase,exactState,singleEntrySourceTemplate,setGlobalHOLFinite,
     HolFiniteMapExact.lookup_update,FUPDATE] at found
@@ -181,6 +184,14 @@ theorem pairRawWords : globalSourceRaw globalStructProgram = globalStructActualW
 theorem pairAllocator : compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig
     (globalSourceRaw globalStructProgram) = compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig globalStructActualWordPrograms := by
   exact congrArg (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig) pairRawWords
+
+/-- The named source compiles to the same raw Word table used by the witness. -/
+theorem pairNamed_rawWords : panToWordCompileProgHOL riscvConfig.isa namedGlobalStructProgram =
+    globalSourceRaw globalStructProgram := by
+  rw [pairRawWords]
+  unfold panToWordCompileProgHOL globalStructActualWordPrograms globalStructCallPrograms
+  dsimp only
+  rw [namedGlobalStruct_pipeline]
 
 theorem pairSourceWords : globalSourceWords globalStructProgram = globalStructOptimizedWords := by
   exact congrArg Prod.snd pairAllocator
@@ -306,7 +317,7 @@ theorem pairGeneral_machine :
     rw [pairSourceFrame,pairSourceFrames,pairSourceWords]
     exact globalStruct_nativeCapacity
   have bound : 16 ≤ pairEntrySource.clock := by
-    change 16 ≤ 2^64
+    change 16 ≤ 16
     decide
   obtain ⟨sourceFinal,machine,finalFfi,machineRun,io,ffiRel⟩ :=
     globalCountedSource_machine globalStructProgram globalStruct_sourceUnique good globalStructContext pairCrepContext

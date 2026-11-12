@@ -159,6 +159,22 @@ private theorem literal_correct : compileProgHOLExact riscvConfig.isa globalStru
   simp [List.range_succ,List.range_zero,Function.comp_def,nestedDecsHOL,storesHOL,crepNestedSeqHOL,
     globalStructCrepContext,mkCtxtExactHOL,compFieldHOL,sizeOfShapeHOL]
   with_unfolding_all rfl
+open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.CrepToLoopSteps
+/-- The concrete optimized Loop table has a computable structural weight. -/
+theorem globalStruct_loopCodeWeight :
+    loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa globalStructCallPrograms)) = 62 := by
+  rw [literal_correct]
+  decide +kernel
+
+/-- The concrete optimized Loop entry has a computable visit weight. -/
+theorem globalStruct_loopEntryWeight : loopVisitWeight (optimiseHOL globalStructActualEntryLoop) = 62 := by
+  obtain ⟨tail, table⟩ := globalStruct_actualLoop_first
+  rw [literal_correct] at table
+  have first := congrArg (fun (rows : List (Nat × List Nat × HolLoopProg 64)) => rows[0]?) table
+  simp only [literal,List.getElem?_cons,↓reduceIte,Option.some.injEq,Prod.mk.injEq] at first
+  rw [← first.2.2]
+  decide +kernel
+
 open Flapjack.RegAlloc Flapjack.RiscV.CakeRegAlloc Flapjack.Compiler.Backend.WordToWord
 open Flapjack.Compiler.Backend SteppedFlapjack.PanToCrepSteps
 
@@ -333,5 +349,26 @@ theorem globalStruct_nativeCompilerFacts : (fixtureRemoveLabels globalStructNati
     rw [globalStruct_optimizedTable,row0_exact,row1_exact]
     simp_rw [LabToTarget.progToBytesMap]
     with_unfolding_all decide
+
+open Flapjack.Compiler.Backend.StackLang
+open SteppedFlapjack.StackRemoveSteps.CompCorrect SteppedFlapjack.StackRemoveSteps
+open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics SteppedFlapjack.StackToLabSteps
+theorem globalStruct_tickFactor (cfg : Flapjack.Compiler.Backend.LabToTarget.Config) :
+    costFromFields riscvConfig.addrOffset 0 (.call none (.inl Flapjack.Compiler.Backend.BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf globalStructNativeCode)) [4] (fixtureStackOracle cfg) = 1950 := by
+  simp only [costFromFields,oracleBitmapBudget,Nat.add_zero,List.range_zero,List.flatMap_nil,maxListNat]
+  unfold globalStructNativeCode
+  rw [globalStruct_optimizedTable,row0_exact,row1_exact]
+  decide +kernel
+
+
+open SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackSteps
+theorem globalStruct_wordCodeWeight : wordCodeWeight (sptFromAList globalStructOptimizedWords) = 29 := by
+  rw [globalStruct_optimizedTable,row0_exact,row1_exact]
+  decide +kernel
+theorem globalStruct_stackCodeWeight : stackCodeWeight (sptFromAList globalStructNativeCode) = 31 := by
+  unfold globalStructNativeCode
+  rw [globalStruct_optimizedTable,row0_exact,row1_exact]
+  decide +kernel
 
 end SteppedFlapjack.Concrete

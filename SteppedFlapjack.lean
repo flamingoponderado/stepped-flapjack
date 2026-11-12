@@ -1,9 +1,9 @@
+import SteppedFlapjack.Concrete.GlobalStructClock
 import SteppedFlapjack.Concrete.GlobalStructCountedMachine
 import SteppedFlapjack.Concrete.GlobalCountedMachine
 import SteppedFlapjack.Concrete.GlobalConfiguredWord
 import SteppedFlapjack.LoopToWordSteps.GlobalFrontendSpan
 import SteppedFlapjack.CrepToLoopSteps.GlobalFrontendSpan
-import SteppedFlapjack.Concrete.GlobalStructMachine
 import SteppedFlapjack.Concrete.GlobalStructConfiguredWord
 import SteppedFlapjack.Concrete.GlobalStructNativeFacts
 import SteppedFlapjack.Concrete.GlobalStructActualWord
