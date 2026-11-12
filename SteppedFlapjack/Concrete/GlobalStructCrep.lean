@@ -3,7 +3,7 @@ import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
 import Flapjack.Pancake.Proofs.PanToCrep.PcCompileCorrect.Assembly
 import SteppedFlapjack.CrepSteps.BranchStatic
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
-import SteppedFlapjack.PanToCrepSteps.GlobalFrontend
+import SteppedFlapjack.PanToCrepSteps.GlobalFrontendControl
 import SteppedFlapjack.PanToCrepSteps.GlobalNoInline
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
@@ -29,6 +29,17 @@ theorem globalStruct_sourceFrontend : GlobalFrontend globalStructContext globalS
       simp [expToHOL] at member
       rcases member with rfl | rfl <;> exact .local (.const _)
   · exact .ret (.globalField (ofString "pair") 16 1 2 (by decide) globalStruct_pairLookup)
+
+/-- The generic global-control theorem gives the concrete source visit bound. -/
+theorem globalStruct_source_visits (clock : Nat) :
+    controlSteps (progToHOL globalStructWitness) {globalStructHOL with clock := clock} ≤ 3 := by
+  obtain ⟨post,run,_⟩ := globalStruct_source_run_clock clock
+  have same := globalFrontend_controlSteps globalStruct_sourceFrontend {globalStructHOL with clock := clock} post
+    {globalStructTarget with clock := clock}
+    (some (.returned (.val (.word 8)))) run (by simp) (globalStruct_stateRel_clock clock)
+  rw [← same,globalStructWitness_lowering,controlSteps_seq]
+  simp only [controlSteps.eq_def]
+  split <;> simp
 
 /-- The actual globals pass lowers the source fragment to the shared frontend. -/
 theorem globalStruct_frontend : FrontendProgram globalStructCrepContext

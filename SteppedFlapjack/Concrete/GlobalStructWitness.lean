@@ -245,14 +245,6 @@ theorem globalStruct_stateRel : panGlobalsStateRelHOLExact true globalStructCont
     exact globalStructTarget_aligned
   · right; rfl
 
-/-- The lowered structured store and return use at most three HOL visits. -/
-theorem globalStruct_lowered_visits :
-    SteppedFlapjack.PanToCrepSteps.controlSteps
-      (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) globalStructTarget ≤ 3 := by
-  rw [globalStructWitness_lowering,SteppedFlapjack.PanToCrepSteps.controlSteps_seq]
-  simp only [SteppedFlapjack.PanToCrepSteps.controlSteps.eq_def]
-  split <;> simp
-
 /-- The actual global-lowering theorem carries the concrete pair program to
 its structured heap implementation, with the resulting states related. -/
 theorem globalStruct_lowered_run :
@@ -287,15 +279,5 @@ theorem globalStruct_source_run_clock (clock : Nat) : ∃ final,
       globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,setKvarHOLFinite,isValidValueHOLFinite,
       lookupKvarHOLExact,FUPDATE,shapeOfHOLExact,shapeEqHOL,shapeEqHOL.shapeEqListHOL,emptyLocalsHOLFinite]
 
-theorem globalStruct_lowered_run_clock (clock : Nat) : ∃ post,
-    ({globalStructTarget with clock := clock}).evaluateHOLFiniteState
-      (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) =
-        (some (.returned (.val (.word (8 : BitVec 64)))),post) ∧ post.ffi = sourceFfi := by
-  obtain ⟨sourcePost,sourceRun,sourceFfiEq⟩ := globalStruct_source_run_clock clock
-  obtain ⟨targetPost,targetRun,relation⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL
-    (progToHOL globalStructWitness) {globalStructHOL with clock := clock} (some (.returned (.val (.word (8 : BitVec 64)))))
-    globalStructContext {globalStructTarget with clock := clock} sourcePost ⟨globalStruct_stateRel_clock clock,sourceRun,by simp⟩
-  rcases relation with ⟨_,_,_,_,_,_,_,_,_,_,_,_,_,ffi,_⟩
-  exact ⟨targetPost,targetRun,ffi.symm.trans sourceFfiEq⟩
 
 end SteppedFlapjack.Concrete

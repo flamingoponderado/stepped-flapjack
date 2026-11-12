@@ -50,7 +50,7 @@ theorem globalStruct_crep_callee_run (post : CrepSemHOLState 64 Unit)
     ∃ final, evalCrepSemHOLProgExact (decClockCrepSemHOL {post with locals := HolFiniteMapExact.empty})
       (compileProgExactHOLW globalStructCrepContext (compileProgExactHOL globalStructContext (progToHOL globalStructWitness))) =
         (some (.return [.word 8]),final) ∧ final.ffi = sourceFfi := by
-  obtain ⟨targetPost,targetRun,targetFfi⟩ := globalStruct_lowered_run_clock 0
+  obtain ⟨sourcePost,sourceRun,sourceFfiEq⟩ := globalStruct_source_run_clock 0
   let called := decClockCrepSemHOL {post with locals := HolFiniteMapExact.empty}
   have sr : panToCrepStateRelFiniteExact {globalStructTarget with clock := 0} called := by
     rcases relation with ⟨mem,dom,sh,structs,globals,clk,be,ffi,base,top⟩
@@ -65,14 +65,17 @@ theorem globalStruct_crep_callee_run (post : CrepSemHOLState 64 Unit)
   have lr : panToCrepLocalsRelFiniteExact globalStructCrepContext ({globalStructTarget with clock := 0}).locals called.locals := by
     apply empty_panCrep_locals
     rfl
-  obtain ⟨res,final,crepRun,postRel,_,_,resultRel⟩ := pcCompileCorrect
-    (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) {globalStructTarget with clock := 0}
-    (some (.returned (.val (.word (8 : BitVec 64))))) targetPost called globalStructCrepContext
-    ⟨targetRun,by simp,sr,cr,er,lr,frontendProgram_localised globalStruct_frontend⟩
+  obtain ⟨targetPost,res,final,targetRun,globalFinal,crepRun,postRel,resultRel,_⟩ :=
+    globalFrontend_correct_with_steps globalStructContext globalStructCrepContext (progToHOL globalStructWitness)
+      globalStruct_sourceFrontend {globalStructHOL with clock := 0} sourcePost {globalStructTarget with clock := 0}
+      (some (.returned (.val (.word (8 : BitVec 64))))) called 3 sourceRun (by simp) (globalStruct_source_visits 0)
+      (globalStruct_stateRel_clock 0) sr cr er lr
   have eq : res = some (.return [.word 8]) := by simpa [pcCompileCorrectResultRel,flattenHOL] using resultRel
   subst res
-  rcases postRel with ⟨_,_,_,_,_,_,_,ffi,_,_⟩
-  exact ⟨final,by simpa [called,flattenHOL] using crepRun,ffi.symm.trans targetFfi⟩
+  rcases globalFinal with ⟨_,_,_,_,_,_,_,_,_,_,_,_,_,sourceTargetFfi,_⟩
+  rcases postRel with ⟨_,_,_,_,_,_,_,targetCrepFfi,_,_⟩
+  exact ⟨final,by simpa [called,flattenHOL] using crepRun,
+    targetCrepFfi.symm.trans (sourceTargetFfi.symm.trans sourceFfiEq)⟩
 
 
 theorem globalStruct_actualTail_run : ∃ post final,
