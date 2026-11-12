@@ -56,7 +56,7 @@ theorem sequence_clock_at {width : Nat} [NeZero width] {σ : Type}
     (first : BodySimulationAt a ctxt live source (fun n => af*(n+1)) tableOk)
     (second : ∀ middle, evalCrepSemHOLProgExact source a = (none,middle) →
       BodySimulationAt b ctxt live middle (fun n => bf*(n+1)) tableOk) :
-    BodySimulationAt (.seq a b) ctxt live source (fun n => (af+bf)*(n+1)) tableOk := by
+    BodySimulationAt (.seq a b) ctxt live source (fun n => (max af bf)*(n+1)) tableOk := by
   intro sourceFinal result target run nonerror stateRel memRel globalsRel codeRel tableGood localsRel
   have seqRun := run
   rw [evalCrepSemHOLProgExact_seq_holShape] at seqRun
@@ -95,6 +95,8 @@ theorem sequence_clock_at {width : Nat} [NeZero width] {σ : Type}
     · rw [compileHOLExact,evaluate_seq,firstLift]
       exact secondRun
     · simp only at sourceCount
+      have ha := Nat.le_max_left af bf
+      have hb := Nat.le_max_right af bf
       nlinarith
   | some r =>
     simp only [Option.some_ne_none,if_false,Prod.mk.injEq] at seqRun
@@ -106,6 +108,8 @@ theorem sequence_clock_at {width : Nat} [NeZero width] {σ : Type}
       | none => exact (targetSome h).elim
       | some v => rfl
     · simp only at sourceCount
+      have ha := Nat.le_max_left af bf
+      have hb := Nat.le_max_right af bf
       nlinarith
 
 /-- Compose extra-clock bounds without converting them to visit bounds. -/
@@ -121,8 +125,11 @@ theorem scalarSequence_clock {width : Nat} [NeZero width] {σ : Type}
       BodySimulationAt b ctxt live middle (fun n => bf*(n+1)) (fun _ => True) := by
     intro middle _
     exact BodySimulation.at b ctxt live (fun n => bf*(n+1)) middle (fun _ => True) second
-  exact sequence_clock_at a b ctxt live source af bf (fun _ => True) firstAt secondAt
-    sourceFinal result target run nonerror stateRel memRel globalsRel codeRel trivial localsRel
+  obtain ⟨extra,out,post,ev,hs,hm,hg,hc,hr,hl,bound⟩ :=
+    sequence_clock_at a b ctxt live source af bf (fun _ => True) firstAt secondAt
+      sourceFinal result target run nonerror stateRel memRel globalsRel codeRel trivial localsRel
+  exact ⟨extra,out,post,ev,hs,hm,hg,hc,hr,hl,bound.trans
+    (Nat.mul_le_mul_right _ (max_le (by omega) (by omega)))⟩
 
 theorem clockSimulation_mono {width : Nat} [NeZero width] {σ : Type}
     (p : CrepProgHOL width) (ctxt : CrepToLoopContextExact) (live : NumSet) (a b : Nat)
@@ -141,8 +148,8 @@ theorem scalarIte_clock {width : Nat} [NeZero width] {σ : Type}
     (yesBound : BodySimulationAt yes ctxt live source (fun n => yesFactor*(n+1)) tableOk)
     (noBound : BodySimulationAt no ctxt live source (fun n => noFactor*(n+1)) tableOk) :
     BodySimulationAt (.ite condition yes no) ctxt live source
-      (fun n => (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) +
-        max yesFactor noFactor+1)*(n+1)) tableOk := by
+      (fun n => max (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live condition).1) + 1)
+        (max yesFactor noFactor) * (n+1)) tableOk := by
   classical
   intro sourceFinal result target run nonerror stateRel memRel globalsRel codeRel tableGood localsRel
   let p := CrepProgHOL.ite condition yes no
@@ -254,8 +261,10 @@ theorem scalarIte_clock {width : Nat} [NeZero width] {σ : Type}
             (none,{post with locals := sptInter post.locals live}) := by
           change evaluate (compileHOLExact ctxt live p) _ = _
           rw [hcomp,evaluate_nested_seq_append_none np _ _ _ (prefixLift (ck'+1)),htail,branchLift',cut]
-        have extraBound : ck+(ck'+1) ≤ (prefixSize+factor+1)*(CrepSteps.steps p source+1) := by
+        have extraBound : ck+(ck'+1) ≤ (max (prefixSize+1) factor)*(CrepSteps.steps p source+1) := by
           rw [chosenCount] at branchExtra
+          have hp := Nat.le_max_left (prefixSize+1) factor
+          have hb := Nat.le_max_right (prefixSize+1) factor
           nlinarith
         refine ⟨ck+(ck'+1),none,{post with locals := sptInter post.locals live},targetRun,hs,hm,hg,hc,rfl,?_,?_⟩
         · exact condition_locals_rel_inter ctxt live sourceFinal.locals post.locals hl
@@ -271,8 +280,10 @@ theorem scalarIte_clock {width : Nat} [NeZero width] {σ : Type}
           cases h : resultToLoop (some r) with
           | none => exact (mapped h).elim
           | some v => rfl
-        have extraBound : ck+ck' ≤ (prefixSize+factor+1)*(CrepSteps.steps p source+1) := by
+        have extraBound : ck+ck' ≤ (max (prefixSize+1) factor)*(CrepSteps.steps p source+1) := by
           rw [chosenCount] at branchExtra
+          have hp := Nat.le_max_left (prefixSize+1) factor
+          have hb := Nat.le_max_right (prefixSize+1) factor
           nlinarith
         refine ⟨ck+ck',resultToLoop (some r),post,targetRun,hs,hm,hg,hc,rfl,hl,?_⟩
         simpa [p,prefixSize,factor,compiled] using extraBound
@@ -288,7 +299,7 @@ theorem scalarDecl_clock {width : Nat} [NeZero width] {σ : Type}
       (sptInsert (compileExpHOLExact ctxt (ctxt.vmax+1) live init).2.2.1 () live)
       (CrepSemHOLState.setVar name value source) (fun n => bodyFactor*(n+1)) tableOk) :
     BodySimulationAt (.dec name init body) ctxt live source
-      (fun n => (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1) + bodyFactor)*(n+1)) tableOk := by
+      (fun n => max (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live init).1)) bodyFactor * (n+1)) tableOk := by
   intro sourceFinal result target run nonerror stateRel memRel globalsRel codeRel tableGood localsRel
   let p := CrepProgHOL.dec name init body
   let code := compileHOLExact ctxt live p
@@ -388,6 +399,14 @@ theorem scalarDecl_clock {width : Nat} [NeZero width] {σ : Type}
     have bcount : CrepSteps.steps body sourceBody ≤ CrepSteps.steps p source := by
       dsimp [p,sourceBody,CrepSemHOLState.setVar] at *
       omega
+    have stepEq : CrepSteps.steps body sourceBody + 1 = CrepSteps.steps p source := by
+      dsimp [p,sourceBody,CrepSemHOLState.setVar] at *
+      omega
+    dsimp only
+    rw [prefixEq]
+    change ck + extra ≤ max prefixSize bodyFactor * (CrepSteps.steps p source + 1)
+    have hprefix := Nat.le_max_left prefixSize bodyFactor
+    have hbody := Nat.le_max_right prefixSize bodyFactor
     nlinarith
 
 /-- Loop-free compiler execution requires at most its structural visit weight

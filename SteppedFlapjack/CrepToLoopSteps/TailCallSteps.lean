@@ -1713,8 +1713,7 @@ theorem callWholeClock {σ : Type}
         rw [eq]
         have scale : 1 ≤ (callTableCost ref rows+3)^(source.clock+1) := by
           exact Nat.one_le_iff_ne_zero.mpr (Nat.ne_of_gt (Nat.pow_pos (by omega)))
-        dsimp [bf,callClockFactor,callSyntaxCost]
-        nlinarith
+        apply max_le <;> dsimp [bf,callClockFactor,callSyntaxCost] <;> nlinarith
       | @seq a b ha hb =>
         let af := callClockFactor ref rows source.clock a
         let bf := callClockFactor ref rows source.clock b
@@ -1751,9 +1750,12 @@ theorem callWholeClock {σ : Type}
         have maxBound : max af bf ≤ af+bf := max_le (by omega) (by omega)
         have scale : 1 ≤ (callTableCost ref rows+3)^(source.clock+1) := by
           exact Nat.one_le_iff_ne_zero.mpr (Nat.ne_of_gt (Nat.pow_pos (by omega)))
-        dsimp [af,bf,callClockFactor,callSyntaxCost] at maxBound ⊢
-        simp only [Nat.mul_add]
-        nlinarith
+        apply max_le
+        · dsimp [callClockFactor,callSyntaxCost]
+          nlinarith
+        · dsimp [af,bf,callClockFactor,callSyntaxCost] at maxBound ⊢
+          simp only [Nat.mul_add]
+          nlinarith
       | @loop e body he hb =>
         let bf := callClockFactor ref rows source.clock body
         have child : ∀ entry : CrepSemHOLState width σ, entry.clock < source.clock → entry.code = source.code →
