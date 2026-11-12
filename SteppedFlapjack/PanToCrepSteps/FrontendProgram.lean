@@ -13,6 +13,8 @@ inductive FrontendProgram {width : Nat} [NeZero width] : PanToCrepContextExact w
   | break {ctxt} : FrontendProgram ctxt .break
   | continue {ctxt} : FrontendProgram ctxt .continue
   | tick {ctxt} : FrontendProgram ctxt .tick
+  | storeStruct {ctxt a fields} : FrontendScalar ctxt a →
+      (∀ e ∈ fields, FrontendScalar ctxt e) → FrontendProgram ctxt (.store a (.rstruct fields))
   | store {ctxt a v} : FrontendScalar ctxt a → FrontendScalar ctxt v → FrontendProgram ctxt (.store a v)
   | assign {ctxt name e} (reg : Nat) : ctxt.vars.lookup name = some (.one,[reg]) →
       FrontendScalar ctxt e → FrontendProgram ctxt (.assign .local name e)
@@ -27,8 +29,19 @@ inductive FrontendProgram {width : Nat} [NeZero width] : PanToCrepContextExact w
 /-- Frontend programs contain no global-variable references. -/
 theorem frontendProgram_localised {width : Nat} [NeZero width] {ctxt : PanToCrepContextExact width}
     {p : ProgHOL width} (shape : FrontendProgram ctxt p) : localisedProgHOL p = true := by
-  induction shape <;> simp_all [localisedProgHOL] <;>
-    aesop (add safe frontendScalar_localised)
+  induction shape
+  case storeStruct ha hf =>
+    rename_i ctxt a fields
+    simp only [localisedProgHOL,Bool.and_eq_true]
+    refine ⟨frontendScalar_localised ha, ?_⟩
+    simp only [localisedExpHOL,everyExpHOL,Bool.true_and]
+    induction fields with
+    | nil => rfl
+    | cons e es ih =>
+      simp only [everyExpListHOL,Bool.and_eq_true]
+      exact ⟨frontendScalar_localised (hf e (by simp)),
+        ih (fun x hx => hf x (by simp [hx]))⟩
+  all_goals simp_all [localisedProgHOL] <;> aesop (add safe frontendScalar_localised)
 
 /-- The previously established loop-free frontend shape is a subset of the
 generalized shape. Its direct-expression guarantees are retained separately. -/
@@ -44,6 +57,30 @@ theorem frontendProgram_of_branch {width : Nat} [NeZero width] {ctxt : PanToCrep
   | store a v => exact .store (frontendScalar_of_direct a) (frontendScalar_of_direct v)
   | seq a b iha ihb => exact .seq iha ihb
   | ite e a b iha ihb => exact .ite (frontendScalar_of_direct e) iha ihb
+
+private theorem nestedDecs_static {width : Nat} [NeZero width] (names : List Nat)
+    (values : List (CrepExpHOL width)) {body : CrepProgHOL width} (h : StaticProgram body) :
+    StaticProgram (nestedDecsHOL names values body) := by
+  induction names generalizing values with
+  | nil =>
+    cases values with
+    | nil => exact h
+    | cons value values => exact .leaf _ rfl
+  | cons name names ih =>
+    cases values with
+    | nil => exact .leaf _ rfl
+    | cons value values => exact .dec _ _ (ih values)
+
+private theorem nestedStores_static {width : Nat} [NeZero width] (address : CrepExpHOL width)
+    (values : List (CrepExpHOL width)) (offset : BitVec width) :
+    StaticProgram (crepNestedSeqHOL (storesHOL address values offset)) := by
+  induction values generalizing offset with
+  | nil => exact .leaf _ rfl
+  | cons value values ih =>
+    simp only [storesHOL,crepNestedSeqHOL]
+    exact .seq (.leaf _ rfl) (ih _)
+
+
 
 /-- Detect loops within the constructors of the frontend fragment. -/
 def noWhile {width : Nat} [NeZero width] : ProgHOL width → Bool
@@ -63,6 +100,13 @@ theorem frontendLoopFree_static {width : Nat} [NeZero width] {ctxt : PanToCrepCo
   | «break» => simpa [compileProgExactHOLW] using (StaticProgram.leaf (.break 0 : CrepProgHOL width) rfl)
   | «continue» => simpa [compileProgExactHOLW] using (StaticProgram.leaf (.continue 0 : CrepProgHOL width) rfl)
   | tick => simpa [compileProgExactHOLW] using (StaticProgram.leaf (.tick : CrepProgHOL width) rfl)
+  | @storeStruct ctxt a fields ha hf =>
+    obtain ⟨address,ca⟩ := frontendScalar_compile ha
+    obtain ⟨values,_,cv⟩ := flatStruct_compile ctxt fields hf
+    simp only [compileProgExactHOLW,compileStoreExactHOLW,ca,cv,sizeOfShapeHOL,flatShapeSize,
+      bne_self_eq_false, Bool.false_eq_true, if_false]
+    apply nestedDecs_static
+    apply nestedStores_static
   | @store ctxt a v ha hv =>
     obtain ⟨address,ca⟩ := frontendScalar_compile ha
     obtain ⟨value,cv⟩ := frontendScalar_compile hv

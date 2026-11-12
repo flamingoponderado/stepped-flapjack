@@ -2,7 +2,7 @@ import SteppedFlapjack.Concrete.GlobalStructWitness
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
 import Flapjack.Pancake.Proofs.PanToCrep.PcCompileCorrect.Assembly
 import SteppedFlapjack.CrepSteps.BranchStatic
-import SteppedFlapjack.CrepToLoopSteps.FrontendScalar
+import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
 open SteppedFlapjack.PanToCrepSteps
@@ -23,18 +23,26 @@ theorem globalStruct_field_compiled : ∃ (expression : CrepExpHOL 64),
         ([expression],.one) ∧ SteppedFlapjack.CrepToLoopSteps.CompiledScalar expression :=
   SteppedFlapjack.CrepToLoopSteps.frontendScalar_compiled globalStruct_field_frontend
 
+/-- Global lowering produces a program in the shared structured-store and
+field-load frontend fragment. -/
+theorem globalStruct_frontend : FrontendProgram globalStructCrepContext
+    (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) := by
+  rw [globalStructWitness_lowering]
+  apply FrontendProgram.seq
+  · apply FrontendProgram.storeStruct (.op .sub .topAddr (.const 16))
+    intro e member
+    simp only [List.mem_cons,List.not_mem_nil,or_false] at member
+    rcases member with rfl | rfl <;> exact .const _
+  · exact .ret globalStruct_field_frontend
+
 def globalStructCrepState : CrepSemHOLState 64 Unit := concreteDeclCrepState globalStructTarget []
 
 
 theorem globalStruct_crep_static : SteppedFlapjack.CrepSteps.StaticProgram
     (compileProgExactHOLW globalStructCrepContext (compileProgExactHOL globalStructContext (progToHOL globalStructWitness))) := by
+  apply frontendLoopFree_static globalStruct_frontend
   rw [globalStructWitness_lowering]
-  simp only [compileProgExactHOLW,compileStoreExactHOLW,compileReturnExactHOLW,compileExpExactHOLW,
-    compileExpExactHOLWList,sizeOfShapeHOL,sizeOfShapesHOL,loadShapeBytesHOLW,
-    nestedDecsHOL]
-  repeat' first | apply SteppedFlapjack.CrepSteps.StaticProgram.seq
-                | apply SteppedFlapjack.CrepSteps.StaticProgram.dec
-                | exact SteppedFlapjack.CrepSteps.StaticProgram.leaf _ rfl
+  rfl
 
 theorem globalStruct_crep_visits : SteppedFlapjack.CrepSteps.steps
     (compileProgExactHOLW globalStructCrepContext (compileProgExactHOL globalStructContext (progToHOL globalStructWitness))) globalStructCrepState ≤ 10 := by

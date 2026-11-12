@@ -9,6 +9,55 @@ open Flapjack Flapjack.Pancake.PanLang
 open SteppedFlapjack.PanToCrepSteps
 
 
+theorem frontendScalars_compiled {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width)
+    (expressions : List (ExpHOL width)) (shape : ∀ e ∈ expressions, SteppedFlapjack.PanToCrepSteps.FrontendScalar ctxt e) :
+    ∃ (values : List (CrepExpHOL width)), values.length = expressions.length ∧
+      compileExpExactHOLWList ctxt expressions = values.map (fun value => ([value], .one)) ∧
+      ∀ value ∈ values, CompiledScalar value := by
+  induction expressions with
+  | nil => exact ⟨[],rfl,by simp [compileExpExactHOLWList],by simp⟩
+  | cons expression rest ih =>
+    obtain ⟨value,hv,hshape⟩ := frontendScalar_compiled (shape expression (by simp))
+    obtain ⟨values,hl,he,hs⟩ := ih (fun e he => shape e (by simp [he]))
+    refine ⟨value :: values, by simp [hl], ?_, ?_⟩
+    · simp [compileExpExactHOLWList,hv,he]
+    · intro v hv
+      simp only [List.mem_cons] at hv
+      rcases hv with rfl | hv
+      · exact hshape
+      · exact hs v hv
+
+theorem nestedDecs_scalar {width : Nat} [NeZero width] (names : List Nat)
+    (values : List (CrepExpHOL width)) {body : CrepProgHOL width} (h : ScalarProgram body)
+    (hs : ∀ value ∈ values, CompiledScalar value) :
+    ScalarProgram (nestedDecsHOL names values body) := by
+  induction names generalizing values with
+  | nil =>
+    cases values with
+    | nil => exact h
+    | cons value values => exact .skip
+  | cons name names ih =>
+    cases values with
+    | nil => exact .skip
+    | cons value values =>
+      exact .dec _ (hs value (by simp)) (ih values (fun v hv => hs v (by simp [hv])))
+
+theorem nestedStores_scalar {width : Nat} [NeZero width] (address : Nat)
+    (names : List Nat) (offset : BitVec width) :
+    ScalarProgram (crepNestedSeqHOL (storesHOL (.var address) (names.map CrepExpHOL.var) offset)) := by
+  induction names generalizing offset with
+  | nil => exact .skip
+  | cons name names ih =>
+    simp only [List.map_cons,storesHOL,crepNestedSeqHOL]
+    apply ScalarProgram.seq
+    · apply ScalarProgram.store
+      · split
+        · exact .direct (.var _)
+        · exact .op .add (.direct (.var _)) (.direct (.const _))
+      · exact .direct (.var _)
+    · exact ih _
+
+
 theorem frontend_scalar_program {width : Nat} [NeZero width] {ctxt : PanToCrepContextExact width} {p : ProgHOL width}
     (shape : FrontendProgram ctxt p) : ScalarProgram (compileProgExactHOLW ctxt p) := by
   induction shape with
@@ -16,6 +65,24 @@ theorem frontend_scalar_program {width : Nat} [NeZero width] {ctxt : PanToCrepCo
   | «break» => simpa [compileProgExactHOLW] using (ScalarProgram.break 0 : ScalarProgram (.break 0 : CrepProgHOL width))
   | «continue» => simpa [compileProgExactHOLW] using (ScalarProgram.continue 0 : ScalarProgram (.continue 0 : CrepProgHOL width))
   | tick => simpa [compileProgExactHOLW] using (ScalarProgram.tick : ScalarProgram (.tick : CrepProgHOL width))
+  | @storeStruct ctxt a fields ha hf =>
+    obtain ⟨address,ca,sa⟩ := frontendScalar_compiled ha
+    obtain ⟨values,hlen,cv,sv⟩ := frontendScalars_compiled ctxt fields hf
+    have flat : (values.map (fun value => ([value], ShapeHOL.one))).flatMap Prod.fst = values := by
+      clear hlen cv sv hf fields ca sa address
+      induction values <;> simp_all
+    have compiled : compileExpExactHOLW ctxt (.rstruct fields) =
+        (values,.comb (List.replicate values.length .one)) := by
+      simp [compileExpExactHOLW,cv,List.map_map,Function.comp_def,flat]
+    simp only [compileProgExactHOLW,compileStoreExactHOLW,ca,compiled,sizeOfShapeHOL,flatShapeSize,
+      bne_self_eq_false, Bool.false_eq_true, if_false]
+    apply nestedDecs_scalar
+    · exact nestedStores_scalar _ _ _
+    · intro value member
+      simp only [List.mem_cons] at member
+      rcases member with rfl | member
+      · exact sa
+      · exact sv value member
   | @store ctxt a v ha hv =>
     obtain ⟨address,ca,sa⟩ := frontendScalar_compiled ha
     obtain ⟨value,cv,sv⟩ := frontendScalar_compiled hv

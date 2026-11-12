@@ -8,14 +8,8 @@ open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapj
 def globalStructCrepProgram : CrepProgHOL 64 :=
   compileProgExactHOLW globalStructCrepContext (compileProgExactHOL globalStructContext (progToHOL globalStructWitness))
 
-theorem globalStruct_scalar_program : ScalarProgram globalStructCrepProgram := by
-  unfold globalStructCrepProgram
-  rw [globalStructWitness_lowering]
-  simp only [compileProgExactHOLW,compileStoreExactHOLW,compileReturnExactHOLW,compileExpExactHOLW,
-    compileExpExactHOLWList,sizeOfShapeHOL,sizeOfShapesHOL,loadShapeBytesHOLW,
-    nestedDecsHOL]
-  repeat' first | apply ScalarProgram.seq | apply ScalarProgram.dec | apply ScalarProgram.store
-                | apply ScalarProgram.ret | apply ScalarProgram.skip | apply CompiledScalar.direct | constructor
+theorem globalStruct_scalar_program : ScalarProgram globalStructCrepProgram :=
+  frontend_scalar_program globalStruct_frontend
 
 def globalStructLoopContext : CrepToLoopContextExact :=
   mkCtxtExact riscvConfig.isa HolFiniteMapExact.empty HolFiniteMapExact.empty 0

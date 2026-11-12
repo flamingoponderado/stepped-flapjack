@@ -658,7 +658,7 @@ theorem callSupported_panSimp_controlSteps {scope : List VarName} {σ : Type}
 private theorem frontend_hw {width : Nat} [NeZero width] {context : PanToCrepContextExact width} {p : ProgHOL width}
     (shape : FrontendProgram context p) : hw p ≤ CrepSteps.statementWeight (compileProgExactHOLW context p) := by
   induction shape with
-  | skip | «break» | «continue» | tick | store | assign | ret =>
+  | skip | «break» | «continue» | tick | store | storeStruct | assign | ret =>
     simpa [hw] using CrepSteps.statementWeight_pos (compileProgExactHOLW _ _)
   | @decl ctxt name e body he hb ih =>
     obtain ⟨value,compiled⟩ := frontendDecl_compile ctxt name e body he
