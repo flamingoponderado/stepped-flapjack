@@ -471,8 +471,7 @@ theorem initializedGlobal_counted_machine
       ((decShapesHOL decs).map sizeOfShapeHOL).sum a → (globalEntryTemplate pan clock).memaddrs a)
     (sizeBound : (panBytesInWord 64).toNat * ((decShapesHOL decs).map sizeOfShapeHOL).sum < 2 ^ 64)
     (found : entries.lookup name = some ([],progToHOL program,.one))
-    (sourceTableSupported : ∀ name params body ret, entries.lookup name = some (params,body,ret) →
-      ∃ scope, GlobalCallSupportedIn (globalEntryShapes post entries) scope (progOfHOL body))
+    (supportedEntries : GlobalSupportedEntries (globalEntryShapes post entries) entries)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (exceptions : InfoMap Shape)
     (fuel count : Nat) (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))
@@ -484,18 +483,15 @@ theorem initializedGlobal_counted_machine
       (contracts := some (countedContractsOfCode (globalEntryProduction post entries).code exceptions)) =
         some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
     (budget : count ≤ (callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).clock)
-    (targetTable : CallFrontendCode panCtxt (globalEntryTarget pan clock globals entries).code)
     (panCodeRel : codeRelExactHOLW panCtxt (globalEntryTarget pan clock globals entries).code
       (globalEntryCrep pan clock globals entries).code)
     (varsEmpty : panCtxt.vars = HolFiniteMapExact.empty) (exceptionsEmpty : panCtxt.eids = HolFiniteMapExact.empty)
     (sources : ∀ row ∈ globalSourcePrograms pan, ∃ (ctx : PanToCrepContextExact 64) (q : ProgHOL 64),
       row.2.2 = compileProgExactHOLW ctx q ∧ CallFrontend ctx q)
-    (codeRel : let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms pan)) 0
-      crepToLoopCodeRelExact ctxt (globalEntryCrep pan clock globals entries).code
-        (sptFromAList (compileProgHOLExact riscvConfig.isa (globalSourcePrograms pan))))
-    (entry : let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms pan)) 0
-      let body := compileProgExactHOLW panCtxt (.seq (nestedSeqHOL initializers) (.call none name []))
-      (64,[],optimiseHOL (compileHOLExact ctxt .ln body)) ∈ compileProgHOLExact riscvConfig.isa (globalSourcePrograms pan))
+    (rest : List (MlS × List Nat × CrepProgHOL 64))
+    (programsUnique : ((globalSourcePrograms pan).map Prod.fst).Nodup)
+    (first : globalSourcePrograms pan = (ofString "main",[],
+      compileProgExactHOLW panCtxt (.seq (nestedSeqHOL initializers) (.call none name []))) :: rest)
     (bitmapFits : 0xa0020018 + (globalSourceBitmaps pan).length*8 ≤ 0xa0410000)
     (safe : fixtureStackSafe (globalSourceCode pan) = true)
     (facts : (fixtureRemoveLabels (globalSourceCode pan)).isSome = true ∧
@@ -538,7 +534,36 @@ theorem initializedGlobal_counted_machine
   have localsWord := globalEntryProduction_localsWord post entries
   have globalShapes := globalEntryProduction_shapes post entries (globalEntryShapes post entries) (by intros; rfl)
   have codeRanged := globalEntryProduction_codeRanged post entries
+  have sourceTableSupported := supported_source_table (globalEntryShapes post entries) entries supportedEntries
   have codeShape := globalEntryProduction_codeShape post entries (globalEntryShapes post entries) sourceTableSupported
+  have targetTable := target_table_from_supported (globalEntryShapes post entries) globals layout
+    (globalEntryTemplate pan clock) panCtxt entries supportedEntries
+  let body := compileProgExactHOLW panCtxt (.seq (nestedSeqHOL initializers) (.call none name []))
+  have bodyMember : (ofString "main",[],body) ∈ globalSourcePrograms pan := by rw [first]; simp [body]
+  have bodyFixed : crepSimpProgHOL body = body := by
+    obtain ⟨ctx,q,eq,shape⟩ := sources (ofString "main",[],body) bodyMember
+    change body = compileProgExactHOLW ctx q at eq
+    rw [eq]
+    exact callFrontend_simp_fixed shape
+  have codeRel : let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms pan)) 0
+      crepToLoopCodeRelExact ctxt (globalEntryCrep pan clock globals entries).code
+        (sptFromAList (compileProgHOLExact riscvConfig.isa (globalSourcePrograms pan))) := by
+    apply wholeCrep_fixed_executable_codeRel _ _ (ofString "main") body
+    · exact programsUnique
+    · rw [first]; simp [holAlookup,body]
+    · intro n ps b mem
+      obtain ⟨ctx,q,eq,shape⟩ := sources (n,ps,b) mem
+      simp only at eq
+      rw [eq]
+      exact callFrontend_simp_fixed shape
+  have entry : let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms pan)) 0
+      (64,[],optimiseHOL (compileHOLExact ctxt .ln body)) ∈ compileProgHOLExact riscvConfig.isa (globalSourcePrograms pan) := by
+    dsimp only
+    have result := firstCrep_loopEntry riscvConfig.isa (ofString "main") body rest bodyFixed
+    rw [← first] at result
+    obtain ⟨tail,eq⟩ := result
+    rw [eq]
+    simp [firstLoopName]
   exact initializedGlobal_counted_machine_fromRel pan unique sourceGood clock decs post initializers funs exns globals entries name
     program (globalEntryShapes post entries) supported layout panCtxt (globalEntryProduction post entries) value
     onlyDecls initializerShape eval compiled allocated sizeBound found relExec ranged localsWord globalShapes codeRanged codeShape

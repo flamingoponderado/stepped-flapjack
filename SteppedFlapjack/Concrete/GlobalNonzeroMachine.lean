@@ -133,33 +133,6 @@ private theorem entryFixed : crepSimpProgHOL entryBody = entryBody := by
   change entryBody = compileProgExactHOLW ctx q at eq
   rw [eq]
   exact callFrontend_simp_fixed shape
-private theorem loopCodeRel : let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms nonzeroScalarProgram)) 0
-    crepToLoopCodeRelExact ctxt (globalEntryCrep nonzeroScalarProgram 2 globals entries).code
-      (sptFromAList (compileProgHOLExact riscvConfig.isa (globalSourcePrograms nonzeroScalarProgram))) := by
-  apply wholeCrep_fixed_executable_codeRel _ _ (ofString "main") entryBody
-  · rw [nonzeroScalar_crep]
-    decide
-  · rw [nonzeroScalar_crep]
-    with_unfolding_all rfl
-  · intro name params body member
-    obtain ⟨ctx,q,eq,shape⟩ := nonzeroScalar_sources (name,params,body) member
-    simp only at eq
-    rw [eq]
-    exact callFrontend_simp_fixed shape
-private theorem loopEntry : let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms nonzeroScalarProgram)) 0
-    let body := compileProgExactHOLW panCtxt (.seq (nestedSeqHOL inits) (.call none (ofString funName) []))
-    (64,[],optimiseHOL (compileHOLExact ctxt .ln body)) ∈ compileProgHOLExact riscvConfig.isa (globalSourcePrograms nonzeroScalarProgram) := by
-  dsimp only
-  rw [compiledEntry]
-  have first : globalSourcePrograms nonzeroScalarProgram = (ofString "main",[],entryBody) :: [nonzeroScalarCrep[1]'(by decide)] := by
-    rw [nonzeroScalar_crep]
-    with_unfolding_all rfl
-  have result := firstCrep_loopEntry riscvConfig.isa (ofString "main") entryBody [nonzeroScalarCrep[1]'(by decide)] entryFixed
-  rw [← first] at result
-  obtain ⟨tail,eq⟩ := result
-  rw [eq]
-  simp [firstLoopName]
-
 private instance : DecidablePred post.memaddrs := by
   have h := congrArg (fun (s : PanSemStateFiniteExact 64 Unit) => s.memaddrs) sourceEq
   change post.memaddrs = domain at h
@@ -176,16 +149,13 @@ private theorem canonicalShapeX : globalEntryShapes post entries "x" = some .one
 private theorem canonicalSupported : Supported (globalEntryShapes post entries) prog := by
   refine ⟨.ret (.global (.global "x" .one (by decide) canonicalShapeX)), ?_⟩
   simp [prog,ProgByteRanged,ExpByteRanged]
-private theorem canonicalTable : ∀ name params body ret, entries.lookup name = some (params,body,ret) →
-    ∃ scope, GlobalCallSupportedIn (globalEntryShapes post entries) scope (progOfHOL body) := by
+private theorem canonicalTable : GlobalSupportedEntries (globalEntryShapes post entries) entries := by
   intro name params body ret found
   simp only [entries,List.lookup] at found
   split at found
   · simp only [Option.some.injEq,Prod.mk.injEq] at found
     obtain ⟨rfl,rfl,rfl⟩ := found
-    refine ⟨[],?_⟩
-    rw [progOfHOL_progToHOL prog supported.2]
-    exact canonicalSupported.1
+    exact ⟨[],prog,rfl,rfl,canonicalSupported.1,canonicalSupported.2⟩
   · simp at found
 private theorem canonicalRun : evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
     (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) (globalEntryProduction post entries).structs
@@ -235,7 +205,9 @@ private theorem nonzeroScalar_machine : ∃ finalMachine finalFfi compilerFinal,
     (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 5 2
     (globalEntryProduction post entries).locals (globalEntryProduction post entries).globals
     (globalEntryProduction post entries).memory (globalEntryProduction post entries).ffi canonicalRun budget
-    targetTable panCode rfl rfl nonzeroScalar_sources loopCodeRel loopEntry bitmapFits
+    panCode rfl rfl nonzeroScalar_sources [nonzeroScalarCrep[1]'(by decide)]
+    (by rw [nonzeroScalar_crep]; decide)
+    (by rw [compiledEntry,nonzeroScalar_crep]; with_unfolding_all rfl) bitmapFits
     nonzeroScalar_safe nonzeroScalar_facts nonzeroScalar_capacity
   obtain ⟨sourceFinal,machine,ffi,compilerFinal,compiledOutput,machineRun,events,ffiRel⟩ := all
   have sourceEvents : sourceFinal.ffi.ioEvents = [] := by
