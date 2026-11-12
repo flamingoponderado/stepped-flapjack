@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.CountedScalar
+import SteppedFlapjack.PanToCrepSteps.CountedGlobalAssign
 import Flapjack.Pancake.Semantics.PanSem.TotalEvalRanged
 import Flapjack.Pancake.Semantics.PanSem.TotalEvalCallBridge
 namespace SteppedFlapjack.Concrete
@@ -444,6 +445,60 @@ private theorem assignBridge {scope : List VarName} (name : VarName) {expression
         obtain ⟨hol,visits⟩ := counted_assign_error production source rel ranged name nameRanged expression exprRanged
           context primitive handler functions (fuel+1) (panValueExpStepCost expression+1) originalRun
         exact errorLeaf production source rel ranged words (.assign .local name expression) (panValueExpStepCost expression+1)
+          (by simpa [progToHOL] using hol) (by simpa [progToHOL] using visits)
+
+private theorem globalAssignBridge (name : VarName) (expression : Exp (RiscV.Word 64)) {invariant : PanSemCodeMap (RiscV.Word 64) → List (FunName × List VarName × Prog (RiscV.Word 64)) → Prop} {contracts : Option PanValueCallContracts} {limit : Nat} : Bridge invariant contracts limit (.assign .global name expression) := by
+  intro σ production source dec rel ranged words byteRanged context primitive handler functions fuel count result run budget fuelBound codeOk
+  have nameRanged : NameRanged name := by simpa [ProgByteRanged] using byteRanged.1
+  have exprRanged : ExpByteRanged expression := by simpa [ProgByteRanged] using byteRanged.2
+  cases fuel with
+  | zero => simp [evalPanValueFfiProgSteps] at run
+  | succ fuel =>
+    have originalRun : evalPanValueFfiProgSteps context primitive handler production.structs functions
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord (fuel+1)
+        production.locals production.globals production.memory production.ffi (.assign .global name expression)
+        (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (result,count) := by
+      simpa only [evalPanValueFfiProgSteps] using run
+    simp only [evalPanValueFfiProgSteps,panValueAssignGlobalResult,evalPanValueExpCounted] at run
+    cases evaluated : evalPanValueExp production.structs production.locals production.globals production.memory
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord expression
+        (memoryAccess := some (panSemBitVec64MemoryAccess production)) with
+    | none =>
+      simp only [evaluated,Option.map_none,Option.some.injEq,Prod.mk.injEq] at run
+      obtain ⟨rfl,rfl⟩ := run
+      obtain ⟨hol,visits⟩ := counted_assign_global_error production source rel ranged name nameRanged expression exprRanged
+        context primitive handler functions (fuel+1) 0 originalRun
+      exact errorLeaf production source rel ranged words (.assign .global name expression) 0 (by simpa [progToHOL] using hol)
+        (by simpa [progToHOL] using visits)
+    | some value =>
+      simp only [evaluated,Option.map_some] at run
+      split at run
+      · simp only [Option.some.injEq,Prod.mk.injEq] at run
+        obtain ⟨rfl,rfl⟩ := run
+        have expressionRun : evalPanSemStateExp production expression = some value := by
+          simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
+        have vranged := evalPanSemStateExp_byteRanged production ranged expression exprRanged value expressionRun
+        have parity := panValueAssignmentValid_eq_isValidValueHOLFinite production source rel ranged .global name nameRanged value vranged
+        have valid : isValidValueHOLFinite source .global (ofString name) (panValueToHOL value) = true := by
+          rw [← parity]
+          assumption
+        obtain ⟨_,hol,finalRel,finalRanged,bound⟩ := counted_assign_global production source rel ranged
+          name nameRanged expression exprRanged value expressionRun valid context primitive handler functions fuel
+        let final := setGlobalHOLFinite (ofString name) (panValueToHOL value) source
+        have clockEq : source.clock = production.clock := rel.2.2.2.2.2.2.2.2.1
+        refine ⟨none,final,?_,?_,?_,?_⟩
+        · simpa [progToHOL,final] using hol
+        · apply CountedOutcome.normal
+          · simpa [final,setGlobalHOLFinite,clockEq] using finalRel
+          · simpa [final,setGlobalHOLFinite,clockEq] using finalRanged
+          · exact words
+        · simpa [progToHOL,final,countedErrorBonus] using bound
+        · simp [final,setGlobalHOLFinite]
+      · simp only [Option.some.injEq,Prod.mk.injEq] at run
+        obtain ⟨rfl,rfl⟩ := run
+        obtain ⟨hol,visits⟩ := counted_assign_global_error production source rel ranged name nameRanged expression exprRanged
+          context primitive handler functions (fuel+1) (panValueExpStepCost expression+1) originalRun
+        exact errorLeaf production source rel ranged words (.assign .global name expression) (panValueExpStepCost expression+1)
           (by simpa [progToHOL] using hol) (by simpa [progToHOL] using visits)
 
 private theorem iteBridge {scope : List VarName} {condition : Exp (RiscV.Word 64)} {a b : Prog (RiscV.Word 64)}
@@ -1685,11 +1740,44 @@ private theorem supportedBridge {invariant : PanSemCodeMap (RiscV.Word 64) → L
     | «while» scalar body => exact whileBridge scalar (ih body)
     | ret scalar => exact returnBridge scalar
 
+/-- Counted programs may update globals with arbitrary byte-ranged expressions;
+other computations retain the existing scalar-local discipline. -/
+inductive GlobalCallSupportedIn : List VarName → Prog (RiscV.Word 64) → Prop
+  | base {scope program} : SupportedIn scope program → GlobalCallSupportedIn scope program
+  | assignGlobal {scope} (name : VarName) (expression : Exp (RiscV.Word 64)) :
+      GlobalCallSupportedIn scope (.assign .global name expression)
+  | tail {scope} (name) (args) : (∀ e ∈ args, Scalar scope e) → GlobalCallSupportedIn scope (.call none name args)
+  | call {scope} (dest name) (args) {cont} : (∀ e ∈ args, Scalar scope e) →
+      GlobalCallSupportedIn (dest :: scope) cont → GlobalCallSupportedIn scope (.decCall dest .one name args cont)
+  | decl {scope} (name) {e body} : Scalar scope e → GlobalCallSupportedIn (name :: scope) body →
+      GlobalCallSupportedIn scope (.dec name .one e body)
+  | seq {scope a b} : GlobalCallSupportedIn scope a → GlobalCallSupportedIn scope b → GlobalCallSupportedIn scope (.seq a b)
+  | ite {scope e a b} : Scalar scope e → GlobalCallSupportedIn scope a → GlobalCallSupportedIn scope b → GlobalCallSupportedIn scope (.ite e a b)
+  | while {scope e body} : Scalar scope e → GlobalCallSupportedIn scope body → GlobalCallSupportedIn scope (.while e body)
+
+/-- A nested struct global update can precede a scalar return in the counted fragment. -/
+example : GlobalCallSupportedIn []
+    (.seq (.assign .global "pair" (.rStruct [.rStruct [.const 1,.const 2],.const 3]))
+      (.return (.const 0))) := by
+  exact .seq (.assignGlobal _ _) (.base (.ret (.const _)))
+
+/-- Existing call-aware programs remain supported by the global-aware induction. -/
+theorem CallSupportedIn.toGlobal {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (h : CallSupportedIn scope program) : GlobalCallSupportedIn scope program := by
+  induction h with
+  | base h => exact .base h
+  | tail name args h => exact .tail name args h
+  | call dest name args h cont ih => exact .call dest name args h ih
+  | decl name scalar body ih => exact .decl name scalar ih
+  | seq a b iha ihb => exact .seq iha ihb
+  | ite scalar a b iha ihb => exact .ite scalar iha ihb
+  | «while» scalar body ih => exact .while scalar ih
+
 private def CallCodeInvariant (contracts : Option PanValueCallContracts)
     (code : PanSemCodeMap (RiscV.Word 64)) (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) : Prop :=
   (∃ exceptions, functions = countedFunctionsOfCode code ∧ contracts = some (countedContractsOfCode code exceptions) ∧
     ∀ name entry, panSemCodeLookup code name = some entry → PanLangEntryByteRanged entry) ∧
-  ∀ name params body, (name,params,body) ∈ functions → ∃ scope, CallSupportedIn scope body
+  ∀ name params body, (name,params,body) ∈ functions → ∃ scope, GlobalCallSupportedIn scope body
 
 private theorem callTarget_mem (structs : StructContext) (contracts : Option PanValueCallContracts)
     (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (name : FunName)
@@ -1714,7 +1802,7 @@ private theorem callTarget_mem (structs : StructContext) (contracts : Option Pan
 
 private theorem supportedCallsBridge (contracts : Option PanValueCallContracts) (limit : Nat)
     {scope : List VarName} {program : Prog (RiscV.Word 64)}
-    (supported : CallSupportedIn scope program) : Bridge (CallCodeInvariant contracts) contracts limit program := by
+    (supported : GlobalCallSupportedIn scope program) : Bridge (CallCodeInvariant contracts) contracts limit program := by
   induction limit generalizing scope program with
   | zero =>
     intro σ production source dec rel ranged words byteRanged context primitive handler functions fuel count result run budget fuelBound codeOk
@@ -1736,6 +1824,7 @@ private theorem supportedCallsBridge (contracts : Option PanValueCallContracts) 
       obtain ⟨scope,supported⟩ := invariant.2 name params body member
       exact ih supported
     cases supported with
+    | assignGlobal name expression => exact @globalAssignBridge name expression (CallCodeInvariant contracts) contracts (limit+1)
     | base h => exact @supportedBridge (CallCodeInvariant contracts) contracts (limit+1) _ _ h
     | tail name args h => exact @tailCallBridge _ name args h (CallCodeInvariant contracts) contracts limit coherent callee
     | call dest name args h cont => exact @decCallBridge _ dest name args _ h (CallCodeInvariant contracts) contracts limit coherent callee (ih cont)
@@ -1743,6 +1832,35 @@ private theorem supportedCallsBridge (contracts : Option PanValueCallContracts) 
     | seq a b => exact @seqBridge _ _ (CallCodeInvariant contracts) contracts limit (ih a) (ih b)
     | ite scalar a b => exact @iteBridge _ _ _ _ scalar (CallCodeInvariant contracts) contracts limit (ih a) (ih b)
     | «while» scalar body => exact @whileBridge _ _ _ scalar (CallCodeInvariant contracts) contracts limit (ih body)
+
+/-- A counted run over a global-aware function table agrees with the HOL source
+execution and has an explicit control-visit bound. -/
+theorem globalSupportedCalls_counted_source {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : GlobalCallSupportedIn scope program) {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
+    [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
+    (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
+    (byteRanged : ProgByteRanged program)
+    (codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry)
+    (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
+      ∃ scope, GlobalCallSupportedIn scope body)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ) (exceptions : InfoMap Shape) (fuel count : Nat)
+    (result : PanValueFfiControlResult (RiscV.Word 64) σ)
+    (run : evalPanValueFfiProgSteps context primitive handler production.structs (countedFunctionsOfCode production.code)
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+      production.locals production.globals production.memory production.ffi program
+      (memoryAccess := some (panSemBitVec64MemoryAccess production))
+      (contracts := some (countedContractsOfCode production.code exceptions)) = some (result,count))
+    (budget : count ≤ source.clock) :
+    ∃ holResult sourceFinal, source.evaluateHOLFiniteState (progToHOL program) = (holResult,sourceFinal) ∧
+      CountedOutcome production result holResult sourceFinal ∧
+      controlSteps (progToHOL program) source ≤ count + countedErrorBonus result ∧ source.clock ≤ sourceFinal.clock + count := by
+  let contracts := some (countedContractsOfCode production.code exceptions)
+  have codeOk : CallCodeInvariant contracts production.code (countedFunctionsOfCode production.code) :=
+    ⟨⟨exceptions,rfl,rfl,codeRanged⟩,codeShape⟩
+  exact supportedCallsBridge contracts fuel supported production source rel ranged words byteRanged
+    context primitive handler (countedFunctionsOfCode production.code) fuel count result run budget (by rfl) codeOk
 
 /-- A counted run over a call-aware function table agrees with the HOL source
 execution and has an explicit control-visit bound. -/
@@ -1767,11 +1885,14 @@ theorem supportedCalls_counted_source {scope : List VarName} {program : Prog (Ri
     ∃ holResult sourceFinal, source.evaluateHOLFiniteState (progToHOL program) = (holResult,sourceFinal) ∧
       CountedOutcome production result holResult sourceFinal ∧
       controlSteps (progToHOL program) source ≤ count + countedErrorBonus result ∧ source.clock ≤ sourceFinal.clock + count := by
-  let contracts := some (countedContractsOfCode production.code exceptions)
-  have codeOk : CallCodeInvariant contracts production.code (countedFunctionsOfCode production.code) :=
-    ⟨⟨exceptions,rfl,rfl,codeRanged⟩,codeShape⟩
-  exact supportedCallsBridge contracts fuel supported production source rel ranged words byteRanged
-    context primitive handler (countedFunctionsOfCode production.code) fuel count result run budget (by rfl) codeOk
+  have codeShapeGlobal : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
+      ∃ scope, GlobalCallSupportedIn scope body := by
+    intro name params body member
+    obtain ⟨scope, h⟩ := codeShape name params body member
+    exact ⟨scope,h.toGlobal⟩
+  exact globalSupportedCalls_counted_source supported.toGlobal production source rel ranged words byteRanged codeRanged
+    codeShapeGlobal context primitive handler exceptions fuel count result run budget
+
 
 /-- A counted run of a supported body is a corresponding HOL run when the
 source clock covers its explicitly given count. Clock consumption is bounded

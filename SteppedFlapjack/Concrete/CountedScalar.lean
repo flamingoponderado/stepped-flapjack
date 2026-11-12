@@ -243,4 +243,58 @@ theorem counted_assign_error {σ : Type}
         · rw [evaluateHOLFiniteState_assign,exactSome]
           simp [invalidExact]
         · rw [controlSteps.eq_def]; rfl
+/-- An erroneous global assignment agrees with the HOL evaluator and visits one statement. -/
+theorem counted_assign_global_error {σ : Type}
+    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
+    [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
+    (ranged : PanSemStateRelExecRanged production) (name : VarName) (nameRanged : NameRanged name)
+    (expression : Exp (RiscV.Word 64)) (exprRanged : ExpByteRanged expression)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) (fuel count : Nat)
+    (run : evalPanValueFfiProgSteps context primitive handler production.structs functions
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+      production.locals production.globals production.memory production.ffi (.assign .global name expression)
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) =
+        some (.error production.locals production.globals production.memory production.ffi,count)) :
+    source.evaluateHOLFiniteState (.assign .global (ofString name) (expToHOL expression)) = (some .error,source) ∧
+      controlSteps (.assign .global (ofString name) (expToHOL expression)) source = 1 := by
+  cases fuel with
+  | zero => simp [evalPanValueFfiProgSteps] at run
+  | succ fuel =>
+    simp only [evalPanValueFfiProgSteps,panValueAssignGlobalResult,evalPanValueExpCounted] at run
+    cases evaluated : evalPanValueExp production.structs production.locals production.globals production.memory
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord expression
+        (memoryAccess := some (panSemBitVec64MemoryAccess production)) with
+    | none =>
+      have evalNone : evalPanSemStateExp production expression = none := by
+        simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
+      have exactNone := source_expression_error production source rel ranged expression exprRanged evalNone
+      constructor
+      · rw [evaluateHOLFiniteState_assign,exactNone]
+      · rw [controlSteps.eq_def]; rfl
+    | some value =>
+      have evalSome : evalPanSemStateExp production expression = some value := by
+        simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
+      simp only [evaluated,Option.map_some] at run
+      split at run
+      · simp at run
+      · rename_i invalid
+        have rangedValue := evalPanSemStateExp_byteRanged production ranged expression exprRanged value evalSome
+        have agree := evalPanSemStateExp_agree production source rel ranged expression exprRanged
+        have exactSome : @evalHOLExact 64 σ _ source.toExact
+            (fun address => Classical.propDecidable (source.memaddrs address)) (expToHOL expression) =
+              some (panValueToHOL value) := by
+          rw [evalHOLFinite_eq_classical,← agree,evalSome]
+          rfl
+        have parity := panValueAssignmentValid_eq_isValidValueHOLFinite production source rel ranged .global name nameRanged value rangedValue
+        have invalidExact : isValidValueHOLFinite source .global (ofString name) (panValueToHOL value) = false := by
+          rw [← parity]
+          exact Bool.eq_false_iff.mpr invalid
+        rw [isValidValueHOLFinite_eq] at invalidExact
+        constructor
+        · rw [evaluateHOLFiniteState_assign,exactSome]
+          simp [invalidExact]
+        · rw [controlSteps.eq_def]; rfl
+
 end SteppedFlapjack.Concrete
