@@ -105,10 +105,6 @@ private theorem firstRow : globalSourcePrograms heapSourceProgram =
       [(name,[],supportedCallee (progToHOL heapWordWitness))] := by
   rw [tableEq]
   simp [twoPrograms,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,nestedSeqHOL]
-private theorem unique : ((globalSourcePrograms heapSourceProgram).map Prod.fst).Nodup := by
-  rw [tableEq]
-  have fresh : ofString "main" ≠ name := Ne.symm (entryName_fresh (progToHOL heapWordWitness))
-  simp [twoPrograms,fresh]
 private theorem sources : ∀ row ∈ globalSourcePrograms heapSourceProgram, ∃ (c : PanToCrepContextExact 64) (p : ProgHOL 64),
     row.2.2 = compileProgExactHOLW c p ∧ CallFrontend c p := by
   intro row member
@@ -220,7 +216,7 @@ private theorem machine : ∃ finalMachine finalFfi compilerFinal,
     (globalEntryProduction post entries).locals (globalEntryProduction post entries).globals
     (updatePanValueMemory (globalEntryProduction post entries).memory 0xa1000100 (.word 7))
     (globalEntryProduction post entries).ffi canonicalRun (by decide)
-    panCode varsEmpty exceptionsEmpty sources [(name,[],supportedCallee (progToHOL heapWordWitness))] unique firstRow
+    panCode varsEmpty exceptionsEmpty sources [(name,[],supportedCallee (progToHOL heapWordWitness))] firstRow
     bits safety facts capacity
   obtain ⟨sourceFinal,machine,ffi,compilerFinal,compiledOutput,machineRun,events,ffiRel⟩ := all
   have sourceEvents : sourceFinal.ffi.ioEvents = [] := by

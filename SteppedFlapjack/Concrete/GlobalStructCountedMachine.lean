@@ -183,10 +183,6 @@ private theorem firstRow : globalSourcePrograms globalStructProgram =
       [(newMainNameHOL globalStructProgram,[],globalStructActualBody)] := by
   rw [compiledEntry,pairSourcePrograms,globalStruct_actualPrograms_eq]
   rfl
-private theorem programsUnique : ((globalSourcePrograms globalStructProgram).map Prod.fst).Nodup := by
-  rw [pairSourcePrograms,globalStruct_actualPrograms_eq]
-  simp [newMainNameHOL,globalStructProgram,globalStructDecl,functionsHOL,freshNameMlS,mlstrAppend,ofString]
-
 private instance : DecidablePred post.memaddrs := by
   change DecidablePred globalStructSourceDomain
   infer_instance
@@ -274,7 +270,7 @@ private theorem pairUnified_machine : ∃ finalMachine finalFfi compilerFinal,
     (globalEntryProduction post entries).locals
     (updatePanValueMap (globalEntryProduction post entries).globals "pair" (.rStruct [.word 7,.word 8]))
     (globalEntryProduction post entries).memory (globalEntryProduction post entries).ffi canonicalRun (by decide)
-    panCode rfl rfl pairEntry_sources [(newMainNameHOL globalStructProgram,[],globalStructActualBody)] programsUnique firstRow
+    panCode rfl rfl pairEntry_sources [(newMainNameHOL globalStructProgram,[],globalStructActualBody)] firstRow
     bits safety facts capacity
   obtain ⟨sourceFinal,machine,ffi,compilerFinal,compiledOutput,machineRun,events,ffiRel⟩ := all
   have sourceEvents : sourceFinal.ffi.ioEvents = [] := by

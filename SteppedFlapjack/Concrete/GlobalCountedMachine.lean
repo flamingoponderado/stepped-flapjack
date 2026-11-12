@@ -5,6 +5,7 @@ import SteppedFlapjack.PanToCrepSteps.GlobalInitializedEntry
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.LoopSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend
+open Flapjack.Pancake.PanStructs.CompileShapeExact
 open Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Backend.WordToStack.Native Flapjack.Compiler.Backend.StackRemove
 open Flapjack.Compiler.Backend.WordDepth Flapjack.Compiler.Backend.WordDepth.Executable
 open Flapjack.Compiler.Backend.BackendProps
@@ -304,6 +305,14 @@ private theorem initializedGlobal_counted_machine_fromRel
         bitmapFits safe facts capacity
     exact ⟨sourceFinal,machine,finalFfi,compilerFinal,compiledOutput,machineRun,events,rel.2.2.2.2.2.2.2.2.2.2.1⟩
 
+private theorem generatedPrograms_unique (pan : List (DeclHOL 64))
+    (unique : ((functionsHOL pan).map Prod.fst).Nodup) : ((globalSourcePrograms pan).map Prod.fst).Nodup := by
+  unfold globalSourcePrograms
+  apply panToCrepFirstCompileProgAllDistinctExact
+  apply allDistinctCompileTopHOL
+  rw [functionNamesStructsCompileTopHOL,functionNamesCompileProgHOL]
+  exact unique
+
 /-- Machine tick bound calculated from source declarations, initialization and code. -/
 noncomputable def initializedGlobalTicks
     (pan : List (DeclHOL 64)) (clock : Nat) (decs : List (DeclHOL 64))
@@ -366,7 +375,6 @@ theorem initializedGlobal_counted_machine
     (sources : ∀ row ∈ globalSourcePrograms pan, ∃ (ctx : PanToCrepContextExact 64) (q : ProgHOL 64),
       row.2.2 = compileProgExactHOLW ctx q ∧ CallFrontend ctx q)
     (rest : List (MlS × List Nat × CrepProgHOL 64))
-    (programsUnique : ((globalSourcePrograms pan).map Prod.fst).Nodup)
     (first : globalSourcePrograms pan = (ofString "main",[],
       compileProgExactHOLW panCtxt (.seq (nestedSeqHOL initializers) (.call none name []))) :: rest)
     (bitmapFits : 0xa0020018 + (globalSourceBitmaps pan).length*8 ≤ 0xa0410000)
@@ -416,7 +424,7 @@ theorem initializedGlobal_counted_machine
       crepToLoopCodeRelExact ctxt (globalEntryCrep pan clock globals entries).code
         (sptFromAList (compileProgHOLExact riscvConfig.isa (globalSourcePrograms pan))) := by
     apply wholeCrep_fixed_executable_codeRel _ _ (ofString "main") body
-    · exact programsUnique
+    · exact generatedPrograms_unique pan unique
     · rw [first]; simp [holAlookup,body]
     · intro n ps b mem
       obtain ⟨ctx,q,eq,shape⟩ := sources (n,ps,b) mem

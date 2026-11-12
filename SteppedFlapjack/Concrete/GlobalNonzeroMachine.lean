@@ -207,7 +207,6 @@ private theorem nonzeroScalar_machine : ∃ finalMachine finalFfi compilerFinal,
     (globalEntryProduction post entries).locals (globalEntryProduction post entries).globals
     (globalEntryProduction post entries).memory (globalEntryProduction post entries).ffi canonicalRun budget
     panCode rfl rfl nonzeroScalar_sources [nonzeroScalarCrep[1]'(by decide)]
-    (by rw [nonzeroScalar_crep]; decide)
     (by rw [compiledEntry,nonzeroScalar_crep]; with_unfolding_all rfl) bitmapFits
     nonzeroScalar_safe nonzeroScalar_facts nonzeroScalar_capacity
   obtain ⟨sourceFinal,machine,ffi,compilerFinal,compiledOutput,machineRun,events,ffiRel⟩ := all
