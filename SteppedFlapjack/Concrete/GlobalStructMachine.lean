@@ -1,5 +1,6 @@
 import SteppedFlapjack.Concrete.GlobalStructConfiguredWord
-open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
+import SteppedFlapjack.Concrete.GlobalNamedStruct
+open Flapjack Flapjack.PanSemStateFiniteExact Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.WordToWord
 open Flapjack.WordToStackProofs Flapjack.Compiler.Backend.WordToStack.Native
 open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInit
@@ -35,7 +36,8 @@ private theorem configuredMachine (cfg : LabToTarget.Config)
     ∃ finalMachine finalFfi,
       evaluateTargetHOL mc sourceFfi (LabToTargetSteps.labTickBound 4 labCode filtered.codeBuffer *
         StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
-          bs code (fixtureStackOracle cfg) n) machine = (.halt .success,finalMachine,finalFfi) := by
+          bs code (fixtureStackOracle cfg) n) machine = (.halt .success,finalMachine,finalFfi) ∧
+      finalFfi.ioEvents = sourceFfi.ioEvents := by
   let raw := globalStructActualWordPrograms
   let words := globalStructOptimizedWords
   let code := globalStructNativeCode
@@ -50,7 +52,7 @@ private theorem configuredMachine (cfg : LabToTarget.Config)
   let wordPost := (WordSemStateFiniteExact.evaluate call source).2
   have run : WordSemStateFiniteExact.evaluate call source = (some (.result (.loc 1 0) [.word 8]),wordPost) := by
     apply Prod.ext
-    · exact globalStruct_configuredWordRun cfg
+    · exact (globalStruct_configuredWordRun cfg).1
     · rfl
   have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
     funext a b c d e f g
@@ -106,7 +108,8 @@ private theorem configuredMachine (cfg : LabToTarget.Config)
       Flapjack.Compiler.Backend.WordToStack.Native.Initialization.makeInit,words]
   simp only [loc] at machineRun
   rw [allowanceEq] at machineRun
-  refine ⟨finalMachine,finalFfi,?_⟩
+  have wordFfi : wordPost.ffi = sourceFfi := (globalStruct_configuredWordRun cfg).2
+  refine ⟨finalMachine,finalFfi,?_,(by simpa [wordFfi] using events)⟩
   simpa [configuredTargetLab_shape,configuredLab,fixtureLab,source,words,raw,bs,code,limit] using machineRun
 theorem globalStruct_actualMachine :
     let code := globalStructNativeCode
@@ -119,7 +122,7 @@ theorem globalStruct_actualMachine :
       evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
         (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
           bs code (fixtureStackOracle (fixtureCompilerConfig code)) n) (configuredMachineState code bs) =
-            (.halt .success,finalMachine,finalFfi) := by
+            (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFfi.ioEvents := by
   let code := globalStructNativeCode
   let bs := globalStructNativeBitmaps
   let cfg := fixtureCompilerConfig code
@@ -147,5 +150,33 @@ theorem globalStruct_actualMachine :
     (configuredMachineState code bs) rfl link tie rel
   simp only [buffer,fixtureLabMachineFactor code facts.2.1] at result
   exact result
+
+/-- The native witness uses the actual Word compilation of the named source. -/
+theorem namedGlobalStruct_rawWords :
+    panToWordCompileProgHOL riscvConfig.isa namedGlobalStructProgram = globalStructActualWordPrograms := by
+  unfold panToWordCompileProgHOL globalStructActualWordPrograms globalStructCallPrograms
+  dsimp only
+  rw [namedGlobalStruct_pipeline]
+
+/-- The named-struct source and its actual RISC-V compilation terminate with
+    the same I/O events at an explicit bound derived from the generated code. -/
+theorem namedGlobalStruct_source_machine :
+    let code := globalStructNativeCode
+    let bs := globalStructNativeBitmaps
+    let words := globalStructOptimizedWords
+    let limit := globalStructActualOptimizedLimit
+    let allowance := (max 1 (wordCodeWeight (sptFromAList words)) + 1) * (6*limit+1) + 1
+    let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*limit+1 + allowance)
+    ∃ finalMachine finalFfi,
+      evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
+        (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
+          bs code (fixtureStackOracle (fixtureCompilerConfig code)) n) (configuredMachineState code bs) =
+            (.halt .success,finalMachine,finalFfi) ∧
+      semanticsDecls globalStructBase (ofString "main") namedGlobalStructProgram =
+        .terminate .success finalFfi.ioEvents := by
+  obtain ⟨machine,ffi,run,events⟩ := globalStruct_actualMachine
+  refine ⟨machine,ffi,run,?_⟩
+  rw [events]
+  exact namedGlobalStruct_semantics
 
 end SteppedFlapjack.Concrete

@@ -47,9 +47,10 @@ theorem globalStruct_actualWord_run_withMemory {C : Type} (template : WordSemSta
       WordSteps.steps (.call none (some firstLoopName) [0] none)
         {starter with clock := 6*globalStructActualOptimizedLimit+1, code := sptFromAList (Flapjack.Compiler.Backend.WordToWord.compile phase3WordConfig riscvConfig globalStructActualWordPrograms).2} ≤
         1 + max 1 (wordCodeWeight (sptFromAList (compileWith Flapjack.RegAlloc.regAllocExecutable
-          phase3WordConfig riscvConfig globalStructActualWordPrograms).2)) * (6*globalStructActualOptimizedLimit+1) := by
+          phase3WordConfig riscvConfig globalStructActualWordPrograms).2)) * (6*globalStructActualOptimizedLimit+1) ∧
+      final.2.ffi = sourceFfi := by
   classical
-  obtain ⟨crepPost,loopPost,crepRun,loopRun,loopBound⟩ := globalStruct_actualOptimizedLoop_run_withMemory memory memoryRel
+  obtain ⟨crepPost,loopPost,crepRun,loopRun,loopBound,loopFfi⟩ := globalStruct_actualOptimizedLoop_run_withMemory memory memoryRel
   have relations := phase3Starter_relations riscvConfig.isa globalStructActualClockedCrep globalStructCallPrograms
     template fixtureHeapLength firstLoopName frame memory globalStruct_actualWord_heap
   have localFacts := phase3Starter_locals riscvConfig.isa globalStructActualClockedCrep globalStructCallPrograms
@@ -85,9 +86,9 @@ theorem globalStruct_actualWord_run_withMemory {C : Type} (template : WordSemSta
       by simpa [globalStructActualWordContext] using localFacts.1,
       localFacts.2.1,Or.inr rfl,by decide,
       by simpa [globalStructActualWordContext] using localFacts.2.2⟩ (.return _) loopBound
-  obtain ⟨wordPost,wordResult,resultRel,success,_,steps⟩ := run
+  obtain ⟨wordPost,wordResult,resultRel,success,wordFfi,steps⟩ := run
   have resultEq : wordResult = some (.result (.loc 1 0) [.word 8]) := resultRel.2.1
-  exact ⟨success.trans resultEq,steps⟩
+  exact ⟨success.trans resultEq,steps,wordFfi.trans loopFfi⟩
 
 
 /-- The actual global entry reaches optimized Word with a code-derived bound. -/
@@ -99,7 +100,8 @@ theorem globalStruct_actualWord_run {C : Type} (template : WordSemStateFiniteExa
       WordSteps.steps (.call none (some firstLoopName) [0] none)
         {starter with clock := 6*globalStructActualOptimizedLimit+1, code := sptFromAList (Flapjack.Compiler.Backend.WordToWord.compile phase3WordConfig riscvConfig globalStructActualWordPrograms).2} ≤
         1 + max 1 (wordCodeWeight (sptFromAList (compileWith Flapjack.RegAlloc.regAllocExecutable
-          phase3WordConfig riscvConfig globalStructActualWordPrograms).2)) * (6*globalStructActualOptimizedLimit+1) := by
+          phase3WordConfig riscvConfig globalStructActualWordPrograms).2)) * (6*globalStructActualOptimizedLimit+1) ∧
+      final.2.ffi = sourceFfi := by
   have relations := concreteDecl_crepLoop_relations riscvConfig.isa globalStructCallCrep globalStructCallPrograms rfl
   have h := globalStruct_actualWord_run_withMemory template frame globalStructActualLoopState.memory (by
     simpa [globalStructActualLoopState] using relations.2.1)

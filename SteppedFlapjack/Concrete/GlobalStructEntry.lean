@@ -49,8 +49,8 @@ theorem globalStruct_crep_callee_run (post : CrepSemHOLState 64 Unit)
     (relation : panToCrepStateRelFiniteExact globalStructCallPan post) :
     ∃ final, evalCrepSemHOLProgExact (decClockCrepSemHOL {post with locals := HolFiniteMapExact.empty})
       (compileProgExactHOLW globalStructCrepContext (compileProgExactHOL globalStructContext (progToHOL globalStructWitness))) =
-        (some (.return [.word 8]),final) := by
-  obtain ⟨targetPost,targetRun⟩ := globalStruct_lowered_run_clock 0
+        (some (.return [.word 8]),final) ∧ final.ffi = sourceFfi := by
+  obtain ⟨targetPost,targetRun,targetFfi⟩ := globalStruct_lowered_run_clock 0
   let called := decClockCrepSemHOL {post with locals := HolFiniteMapExact.empty}
   have sr : panToCrepStateRelFiniteExact {globalStructTarget with clock := 0} called := by
     rcases relation with ⟨mem,dom,sh,structs,globals,clk,be,ffi,base,top⟩
@@ -65,13 +65,14 @@ theorem globalStruct_crep_callee_run (post : CrepSemHOLState 64 Unit)
   have lr : panToCrepLocalsRelFiniteExact globalStructCrepContext ({globalStructTarget with clock := 0}).locals called.locals := by
     apply empty_panCrep_locals
     rfl
-  obtain ⟨res,final,crepRun,_,_,_,resultRel⟩ := pcCompileCorrect
+  obtain ⟨res,final,crepRun,postRel,_,_,resultRel⟩ := pcCompileCorrect
     (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) {globalStructTarget with clock := 0}
     (some (.returned (.val (.word (8 : BitVec 64))))) targetPost called globalStructCrepContext
     ⟨targetRun,by simp,sr,cr,er,lr,frontendProgram_localised globalStruct_frontend⟩
   have eq : res = some (.return [.word 8]) := by simpa [pcCompileCorrectResultRel,flattenHOL] using resultRel
   subst res
-  exact ⟨final,by simpa [called,flattenHOL] using crepRun⟩
+  rcases postRel with ⟨_,_,_,_,_,_,_,ffi,_,_⟩
+  exact ⟨final,by simpa [called,flattenHOL] using crepRun,ffi.symm.trans targetFfi⟩
 
 
 theorem globalStruct_actualTail_run : ∃ post final,
@@ -80,9 +81,9 @@ theorem globalStruct_actualTail_run : ∃ post final,
         (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram) (resortDeclsHOL globalStructProgram))).1)) = (none,post) ∧
     evalCrepSemHOLProgExact post (.call none (newMainNameHOL globalStructProgram) []) =
       (some (.return [.word 8]),final) ∧
-    panToCrepStateRelFiniteExact globalStructCallPan post ∧ post.code = globalStructCallCrep.code := by
+    panToCrepStateRelFiniteExact globalStructCallPan post ∧ post.code = globalStructCallCrep.code ∧ final.ffi = sourceFfi := by
   obtain ⟨post,initRun,relation,codeEq⟩ := globalStruct_crep_initializer_run
-  obtain ⟨final,bodyRun⟩ := globalStruct_crep_callee_run post relation
+  obtain ⟨final,bodyRun,finalFfi⟩ := globalStruct_crep_callee_run post relation
   have found : post.code.lookup (newMainNameHOL globalStructProgram) = some
       ([],compileProgExactHOLW globalStructCrepContext (compileProgExactHOL globalStructContext (progToHOL globalStructWitness))) := by
     rw [codeEq]
@@ -91,7 +92,7 @@ theorem globalStruct_actualTail_run : ∃ post final,
     have h := relation.2.2.2.2.2.1
     simp [globalStructCallPan] at h
     omega
-  refine ⟨post,CrepSemHOLState.emptyLocals final,initRun,?_,relation,codeEq⟩
+  refine ⟨post,CrepSemHOLState.emptyLocals final,initRun,?_,relation,codeEq,finalFfi⟩
   have bodyRun' : evalCrepSemHOLProgExact {decClockCrepSemHOL post with locals := HolFiniteMapExact.empty}
       (compileProgExactHOLW globalStructCrepContext (compileProgExactHOL globalStructContext (progToHOL globalStructWitness))) =
       (some (.return [.word 8]),final) := by simpa [decClockCrepSemHOL] using bodyRun
@@ -115,8 +116,8 @@ def globalStructActualEntryLimit : Nat :=
 theorem globalStruct_actualEntry_run : ∃ (h : 0 < globalStructCallPrograms.length), ∃ (final : CrepSemHOLState 64 Unit),
     evalCrepSemHOLProgExact globalStructCallCrep (globalStructCallPrograms[0]'h).2.2 =
       (some (.return [.word 8]),final) ∧
-    SteppedFlapjack.CrepSteps.steps (globalStructCallPrograms[0]'h).2.2 globalStructCallCrep ≤ globalStructActualEntryLimit := by
-  obtain ⟨post,final,initRun,callRun,relation,codeEq⟩ := globalStruct_actualTail_run
+    SteppedFlapjack.CrepSteps.steps (globalStructCallPrograms[0]'h).2.2 globalStructCallCrep ≤ globalStructActualEntryLimit ∧ final.ffi = sourceFfi := by
+  obtain ⟨post,final,initRun,callRun,relation,codeEq,finalFfi⟩ := globalStruct_actualTail_run
   obtain ⟨h,entry⟩ := globalStruct_actualCrep_entry
   have ctxtEq : let lowered := compileTopExactHOL globalStructProgram (ofString "main")
       let ctxt := mkCtxtExactHOL (panToCrepMakeVmapHOLExact []) (makeFuncsExactHOL (functionsHOL lowered))
@@ -147,7 +148,7 @@ theorem globalStruct_actualEntry_run : ∃ (h : 0 < globalStructCallPrograms.len
     apply frontendLoopFree_static globalStruct_frontend
     rw [globalStructWitness_lowering]
     rfl
-  refine ⟨h,final,?_,?_⟩
+  refine ⟨h,final,?_,?_,finalFfi⟩
   · rw [entryEq,evalCrepSemHOLProgExact_seq_holShape]
     simp only [initRun,callRun,↓reduceIte]
   · rw [entryEq,SteppedFlapjack.CrepSteps.steps_seq]

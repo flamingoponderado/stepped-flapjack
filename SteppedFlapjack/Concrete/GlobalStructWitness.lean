@@ -279,9 +279,9 @@ set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
 theorem globalStruct_source_run_clock (clock : Nat) : ∃ final,
     ({globalStructHOL with clock := clock}).evaluateHOLFiniteState (progToHOL globalStructWitness) =
-      (some (.returned (.val (.word (8 : BitVec 64)))),final) := by
+      (some (.returned (.val (.word (8 : BitVec 64)))),final) ∧ final.ffi = sourceFfi := by
   refine ⟨(setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 7,.word 8]))
-    {globalStructHOL with clock := clock}).emptyLocalsHOLFinite,?_⟩
+    {globalStructHOL with clock := clock}).emptyLocalsHOLFinite,?_,rfl⟩
   simp [globalStructWitness,progToHOL,expToHOL,evaluateHOLFiniteState_seq_line780,
       evaluateHOLFiniteState_assign,evaluateHOLFiniteState_return,evalHOLExact,evalListHOLExact,
       globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,setKvarHOLFinite,isValidValueHOLFinite,
@@ -290,11 +290,12 @@ theorem globalStruct_source_run_clock (clock : Nat) : ∃ final,
 theorem globalStruct_lowered_run_clock (clock : Nat) : ∃ post,
     ({globalStructTarget with clock := clock}).evaluateHOLFiniteState
       (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) =
-        (some (.returned (.val (.word (8 : BitVec 64)))),post) := by
-  obtain ⟨sourcePost,sourceRun⟩ := globalStruct_source_run_clock clock
-  obtain ⟨targetPost,targetRun,_⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL
+        (some (.returned (.val (.word (8 : BitVec 64)))),post) ∧ post.ffi = sourceFfi := by
+  obtain ⟨sourcePost,sourceRun,sourceFfiEq⟩ := globalStruct_source_run_clock clock
+  obtain ⟨targetPost,targetRun,relation⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL
     (progToHOL globalStructWitness) {globalStructHOL with clock := clock} (some (.returned (.val (.word (8 : BitVec 64)))))
     globalStructContext {globalStructTarget with clock := clock} sourcePost ⟨globalStruct_stateRel_clock clock,sourceRun,by simp⟩
-  exact ⟨targetPost,targetRun⟩
+  rcases relation with ⟨_,_,_,_,_,_,_,_,_,_,_,_,_,ffi,_⟩
+  exact ⟨targetPost,targetRun,ffi.symm.trans sourceFfiEq⟩
 
 end SteppedFlapjack.Concrete

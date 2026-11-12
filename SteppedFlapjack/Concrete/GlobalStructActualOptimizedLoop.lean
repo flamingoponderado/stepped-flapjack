@@ -44,8 +44,8 @@ theorem globalStruct_actualOptimizedLoop_run_withMemory (memory : BitVec 64 → 
       {globalStructActualLoopState with memory := memory, clock := globalStructActualLoopState.clock+globalStructActualLoopClock} =
         (some (.result [.word 8]),loopPost) ∧
     SteppedFlapjack.LoopSteps.steps globalStructActualOptimizedLoop
-      {globalStructActualLoopState with memory := memory, clock := globalStructActualLoopState.clock+globalStructActualLoopClock} ≤ globalStructActualOptimizedLimit := by
-  obtain ⟨crepPost,loopPost,crepRun,loopRun,loopBound⟩ := globalStruct_actualLoop_run_withMemory memory memoryRel
+      {globalStructActualLoopState with memory := memory, clock := globalStructActualLoopState.clock+globalStructActualLoopClock} ≤ globalStructActualOptimizedLimit ∧ loopPost.ffi = sourceFfi := by
+  obtain ⟨crepPost,loopPost,crepRun,loopRun,loopBound,loopFfi⟩ := globalStruct_actualLoop_run_withMemory memory memoryRel
   have shape : SimpleLoopSequenceSource globalStructActualEntryLoop := by
     unfold globalStructActualEntryLoop globalStructActualEntryCrep
     rw [← globalStruct_actualPan_compiled]
@@ -57,7 +57,7 @@ theorem globalStruct_actualOptimizedLoop_run_withMemory (memory : BitVec 64 → 
     {globalStructActualLoopState with memory := memory, clock := globalStructActualLoopState.clock+globalStructActualLoopClock}
     loopPost (some (.result [.word 8])) (by simpa using table) (by simpa [globalStructActualOptimizedLoop] using Nat.le_trans weight (by omega))
     (by simpa [globalStructActualEntryLoop,globalStructActualEntryCrep] using loopRun) (.return _)
-  refine ⟨crepPost,loopPost,by simpa [globalStructActualEntryCrep] using crepRun,?_,?_⟩
+  refine ⟨crepPost,loopPost,by simpa [globalStructActualEntryCrep] using crepRun,?_,?_,loopFfi⟩
   · simpa [globalStructActualOptimizedLoop] using bound.1
   · have code : globalStructActualLoopState.code = sptFromAList (compileProgHOLExact riscvConfig.isa globalStructCallPrograms) := rfl
     simp only [code] at bound
@@ -75,7 +75,7 @@ theorem globalStruct_actualOptimizedLoop_run : ∃ crepPost loopPost,
       {globalStructActualLoopState with clock := globalStructActualLoopState.clock+globalStructActualLoopClock} =
         (some (.result [.word 8]),loopPost) ∧
     SteppedFlapjack.LoopSteps.steps globalStructActualOptimizedLoop
-      {globalStructActualLoopState with clock := globalStructActualLoopState.clock+globalStructActualLoopClock} ≤ globalStructActualOptimizedLimit := by
+      {globalStructActualLoopState with clock := globalStructActualLoopState.clock+globalStructActualLoopClock} ≤ globalStructActualOptimizedLimit ∧ loopPost.ffi = sourceFfi := by
   have relations := concreteDecl_crepLoop_relations riscvConfig.isa globalStructCallCrep globalStructCallPrograms rfl
   have h := globalStruct_actualOptimizedLoop_run_withMemory globalStructActualLoopState.memory (by
     simpa [globalStructActualLoopState] using relations.2.1)

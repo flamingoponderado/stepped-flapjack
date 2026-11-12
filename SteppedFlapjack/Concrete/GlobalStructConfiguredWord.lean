@@ -41,10 +41,13 @@ theorem globalStruct_frameLookup (cfg : LabToTarget.Config) :
 theorem globalStruct_configuredWordRun (cfg : LabToTarget.Config) :
     (WordSemStateFiniteExact.evaluate (.call none (some firstLoopName) [0] none)
       {(configuredWord globalStructNativeCode globalStructOptimizedWords cfg globalStructNativeBitmaps) with clock := 6*globalStructActualOptimizedLimit+1}).1 =
-      some (.result (.loc 1 0) [.word 8]) := by
+      some (.result (.loc 1 0) [.word 8]) ∧
+    (WordSemStateFiniteExact.evaluate (.call none (some firstLoopName) [0] none)
+      {(configuredWord globalStructNativeCode globalStructOptimizedWords cfg globalStructNativeBitmaps) with clock := 6*globalStructActualOptimizedLimit+1}).2.ffi = sourceFfi := by
   let template := configuredWord globalStructNativeCode globalStructOptimizedWords cfg globalStructNativeBitmaps
   let memory := (configuredStack globalStructNativeCode cfg globalStructNativeBitmaps).memory
-  have h := (globalStruct_actualWord_run_withMemory template globalStructNativeEntryFrame memory (globalStruct_nativeMemoryRel cfg)).1
+  have hraw := globalStruct_actualWord_run_withMemory template globalStructNativeEntryFrame memory (globalStruct_nativeMemoryRel cfg)
+  have h := And.intro hraw.1 hraw.2.2
   have starter := configuredStarter_general globalStructActualClockedCrep
     (by simp [globalStructActualClockedCrep,globalStructCallCrep,concreteDeclCrepState,globalStructCallPan,globalStructTarget,sourceTemplate])
     (by simp [globalStructActualClockedCrep,globalStructCallCrep,concreteDeclCrepState,globalStructCallPan,globalStructTarget,sourceTemplate])
@@ -59,7 +62,7 @@ theorem globalStruct_configuredWordRun (cfg : LabToTarget.Config) :
   have codeEq : template.code = sptFromAList (compile phase3WordConfig riscvConfig globalStructActualWordPrograms).2 := by
     simp [template,configuredWord,makeInit,globalStructOptimizedWords,compileWith_eq_compile _ allocator]
   rw [← codeEq] at h
-  change (WordSemStateFiniteExact.evaluate _ {(phase3Starter riscvConfig.isa globalStructActualClockedCrep globalStructCallPrograms template fixtureHeapLength firstLoopName globalStructNativeEntryFrame) with memory := memory, clock := 6*globalStructActualOptimizedLimit+1, code := template.code}).1 = _ at h
+  simp only [globalStructActualWordStarterWithMemory,globalStructActualWordStarter] at h
   rw [show firstLoopName = 64 by rfl] at h
   rw [starter] at h
   exact h
