@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.GlobalNamedStruct
 import SteppedFlapjack.Concrete.GlobalStructSourceSemantics
 import SteppedFlapjack.Concrete.GlobalStructWordAllocated
 import SteppedFlapjack.Concrete.GlobalStructWordOptimized
@@ -498,6 +499,7 @@ phase 4 of flapjack#1251:
 - `SteppedFlapjack.Concrete.HeapWordWitness`: a seven-step source witness for an aligned heap word store and load.
 - `SteppedFlapjack.Concrete.GlobalStructWitness`: a concrete global-pair source, HOL, and globals-lowering witness.
 - `SteppedFlapjack.Concrete.GlobalStructSourceSemantics`: initialization and termination of the full source declaration.
+- `SteppedFlapjack.Concrete.GlobalNamedStruct`: a named source struct and its actual struct-compiler lowering.
 - `SteppedFlapjack.Concrete.GlobalStructCrep`: the same witness through Crep with a concrete visit bound.
 - `SteppedFlapjack.Concrete.GlobalStructLoop`: the witness through optimized Loop with code-derived bounds.
 - `SteppedFlapjack.Concrete.GlobalStructWord`: the same witness through Loop-to-Word with an explicit bound.
