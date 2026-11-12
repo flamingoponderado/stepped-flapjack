@@ -31,7 +31,6 @@ import SteppedFlapjack.Concrete.FixtureMachineState
 import SteppedFlapjack.Concrete.FixtureByteDomain
 import SteppedFlapjack.Concrete.FixtureCodeMemory
 import SteppedFlapjack.LabToTargetSteps.InitializedRiscV
-import SteppedFlapjack.Concrete.BranchingLabBounds
 import SteppedFlapjack.Concrete.FixtureLabNumeric
 import SteppedFlapjack.Concrete.CountdownLabBounds
 import SteppedFlapjack.Concrete.FixtureTargetLab
@@ -76,7 +75,6 @@ import SteppedFlapjack.Concrete.CountdownSsaLiteral
 import SteppedFlapjack.Concrete.CountdownDeadLiteral
 import SteppedFlapjack.Concrete.CountdownAllocationLiteral
 import SteppedFlapjack.Concrete.CountdownOptimized
-import SteppedFlapjack.Concrete.FixedWordBounds
 import SteppedFlapjack.Concrete.BranchingWordSpan
 import SteppedFlapjack.Concrete.ComparisonWordSpan
 import SteppedFlapjack.Concrete.BranchEntryLoop
