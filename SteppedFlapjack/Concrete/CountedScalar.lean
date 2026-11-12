@@ -5,12 +5,11 @@ open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.
 
 /-- A successful counted scalar initializer supplies the HOL value and its
 exact expression cost; scalar locals remain word-valued. -/
-theorem counted_scalar_initializer_invert {σ : Type} {scope : List VarName}
+theorem counted_scalar_initializer_invert {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     [DecidablePred source.memaddrs]
     (rel : PanSemStateRelExec production source.toExact) (ranged : PanSemStateRelExecRanged production)
-    (words : WordLocals production.locals)
-    (initializer : Exp (RiscV.Word 64)) (scalar : Scalar scope initializer) (exprRanged : ExpByteRanged initializer)
+    (initializer : Exp (RiscV.Word 64)) (wordResult : ∀ value, evalPanSemStateExp production initializer = some value → ∃ word, value = .word word) (exprRanged : ExpByteRanged initializer)
     (value : PanValue (RiscV.Word 64)) (cost : Nat)
     (run : panValueDecAccepted production.structs production.baseAddress production.topAddress panSemBitVec64BytesInWord
       production.locals production.globals production.memory initializer
@@ -30,7 +29,7 @@ theorem counted_scalar_initializer_invert {σ : Type} {scope : List VarName}
       obtain ⟨rfl,rfl⟩ := run
       have expressionRun : evalPanSemStateExp production initializer = some result := by
         simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
-      obtain ⟨word,rfl⟩ := scalar_eval_word scalar production words result expressionRun
+      obtain ⟨word,rfl⟩ := wordResult result expressionRun
       exact ⟨word,rfl,rfl,(counted_condition_word production source rel ranged initializer exprRanged word expressionRun).2⟩
     · simp at run
 /-- A counted scalar return carries a word, clears locals, and has the
@@ -143,11 +142,11 @@ theorem counted_scalar_return_error {σ : Type} {scope : List VarName}
       simp [evaluated] at run
 
 /-- A failed scalar condition also fails in the HOL source evaluator. -/
-theorem counted_scalar_condition_error {σ : Type} {scope : List VarName}
+theorem counted_scalar_condition_error {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
-    (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
-    (expression : Exp (RiscV.Word 64)) (scalar : Scalar scope expression) (exprRanged : ExpByteRanged expression)
+    (ranged : PanSemStateRelExecRanged production)
+    (expression : Exp (RiscV.Word 64)) (wordResult : ∀ value, evalPanSemStateExp production expression = some value → ∃ word, value = .word word) (exprRanged : ExpByteRanged expression)
     (failed : panValueIteCondition production.structs production.baseAddress production.topAddress panSemBitVec64BytesInWord
       production.locals production.globals production.memory expression (some (panSemBitVec64MemoryAccess production)) = none) :
     @evalHOLExact 64 σ _ source.toExact (fun address => Classical.propDecidable (source.memaddrs address))
@@ -162,16 +161,16 @@ theorem counted_scalar_condition_error {σ : Type} {scope : List VarName}
     | some value =>
       have expressionRun : evalPanSemStateExp production expression = some value := by
         simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
-      obtain ⟨word,rfl⟩ := scalar_eval_word scalar production words value expressionRun
+      obtain ⟨word,rfl⟩ := wordResult value expressionRun
       simp [evaluated] at failed
   exact source_expression_error production source rel ranged expression exprRanged none
 
 /-- A rejected scalar declaration initializer also fails in the HOL source evaluator. -/
-theorem counted_scalar_initializer_error {σ : Type} {scope : List VarName}
+theorem counted_scalar_initializer_error {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
-    (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
-    (expression : Exp (RiscV.Word 64)) (scalar : Scalar scope expression) (exprRanged : ExpByteRanged expression)
+    (ranged : PanSemStateRelExecRanged production)
+    (expression : Exp (RiscV.Word 64)) (wordResult : ∀ value, evalPanSemStateExp production expression = some value → ∃ word, value = .word word) (exprRanged : ExpByteRanged expression)
     (failed : panValueDecAccepted production.structs production.baseAddress production.topAddress panSemBitVec64BytesInWord
       production.locals production.globals production.memory expression (some (panSemBitVec64MemoryAccess production)) .one = none) :
     @evalHOLExact 64 σ _ source.toExact (fun address => Classical.propDecidable (source.memaddrs address))
@@ -186,7 +185,7 @@ theorem counted_scalar_initializer_error {σ : Type} {scope : List VarName}
     | some value =>
       have expressionRun : evalPanSemStateExp production expression = some value := by
         simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
-      obtain ⟨word,rfl⟩ := scalar_eval_word scalar production words value expressionRun
+      obtain ⟨word,rfl⟩ := wordResult value expressionRun
       simp [evaluated,panValueShape,panShapeMatches] at failed
   exact source_expression_error production source rel ranged expression exprRanged none
 

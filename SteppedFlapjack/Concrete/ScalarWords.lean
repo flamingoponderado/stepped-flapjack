@@ -139,10 +139,10 @@ theorem scalar_eval_word {scope : List VarName} {expression : Exp (RiscV.Word 64
           subst value
           exact ⟨word,rfl⟩
 /-- Scalar argument expressions evaluate to words. -/
-theorem scalar_expressions_eval_words {σ : Type} (scope : List VarName)
+theorem scalar_expressions_eval_words {σ : Type}
     (expressions : List (Exp (RiscV.Word 64)))
-    (shape : ∀ e ∈ expressions, Scalar scope e)
-    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (words : WordLocals production.locals)
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (wordResult : ∀ e ∈ expressions, ∀ value, evalPanSemStateExp production e = some value → ∃ word, value = .word word)
     (values : List (PanValue (RiscV.Word 64)))
     (evaluated : evalPanValueExps production.structs production.locals production.globals production.memory
       production.baseAddress production.topAddress panSemBitVec64BytesInWord expressions
@@ -170,16 +170,17 @@ theorem scalar_expressions_eval_words {σ : Type} (scope : List VarName)
         intro found member
         simp only [List.mem_cons] at member
         rcases member with rfl | member
-        · apply scalar_eval_word (shape e (by simp)) production words found
+        · apply wordResult e (by simp) found
           rw [evalPanSemStateExp_64_eq_previous]
           exact head
-        · exact ih (fun e member => shape e (by simp [member])) rest
+        · exact ih (fun e member => wordResult e (by simp [member])) rest
             (by simpa [evalPanValueExps] using tail) found member
 
 /-- The counted argument evaluator preserves the scalar word invariant. -/
-theorem scalar_counted_arguments_words {σ : Type} (scope : List VarName)
-    (expressions : List (Exp (RiscV.Word 64))) (shape : ∀ e ∈ expressions, Scalar scope e)
-    (production : PanSemState (RiscV.Word 64) (FfiState σ)) (words : WordLocals production.locals)
+theorem scalar_counted_arguments_words {σ : Type}
+    (expressions : List (Exp (RiscV.Word 64)))
+    (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (wordResult : ∀ e ∈ expressions, ∀ value, evalPanSemStateExp production e = some value → ∃ word, value = .word word)
     (values : List (PanValue (RiscV.Word 64))) (cost : Nat)
     (evaluated : evalPanValueExpsCounted production.structs production.locals production.globals production.memory
       production.baseAddress production.topAddress panSemBitVec64BytesInWord expressions
@@ -193,6 +194,6 @@ theorem scalar_counted_arguments_words {σ : Type} (scope : List VarName)
   | some result =>
     simp only [h,Option.map_some,Option.some.injEq,Prod.mk.injEq] at evaluated
     obtain ⟨rfl,_⟩ := evaluated
-    exact scalar_expressions_eval_words scope expressions shape production words result h
+    exact scalar_expressions_eval_words expressions production wordResult result h
 
 end SteppedFlapjack.Concrete

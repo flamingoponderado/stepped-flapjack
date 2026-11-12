@@ -1,5 +1,5 @@
 import SteppedFlapjack.Concrete.SourceState
-import SteppedFlapjack.Concrete.GlobalShapes
+import SteppedFlapjack.Concrete.CountedSource
 import SteppedFlapjack.PanToCrepSteps.CountedGlobalAssign
 import SteppedFlapjack.PanValueFfiSemantics
 import Flapjack.Pancake.Proofs.PanGlobals.CompileCorrect.Assembly
@@ -88,24 +88,84 @@ theorem globalStructWitness_run :
 def globalStructHOL : PanSemStateFiniteExact 64 Unit :=
   setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) globalStructBase
 
+open SteppedFlapjack.PanToCrepSteps
+
+def pairShapeMap (name : VarName) : Option ShapeHOL :=
+  if name = "pair" then some (.comb [.one,.one]) else none
+theorem pair_supported : GlobalCallSupportedIn pairShapeMap [] globalStructWitness := by
+  unfold globalStructWitness
+  apply GlobalCallSupportedIn.seq (.assignGlobal _ _)
+  apply GlobalCallSupportedIn.ret
+  apply GlobalScalarExpression.global
+  exact .field (.global "pair" (.comb [.one,.one]) (by decide) (by simp [pairShapeMap])) 1 .one rfl
+theorem pair_shapes : GlobalHOLShapes pairShapeMap globalStructInitial.globals := by
+  intro name hr
+  by_cases same : name = "pair"
+  · subst name
+    simp [pairShapeMap,globalStructInitial,updatePanValueMap,shapeOfHOLExact]
+  · simp [pairShapeMap,same,globalStructInitial,updatePanValueMap,sourceProduction]
+
+theorem pair_base_related :
+    PanSemStateRelExec {sourceProduction with topAddress := globalStructSourceTop, memaddrs := fun a => decide (globalStructSourceDomain a)} globalStructBase.toExact := by
+  obtain ⟨hl,hg,hs,hc,he,hm,hmd,hsm,hck,hbe,hffi,hb,ht⟩ := source_related (.skip : ProgHOL 64)
+  refine ⟨?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_⟩
+  · intro name hn; rfl
+  · intro name hn; rfl
+  · rfl
+  · intro name hn; rfl
+  · intro name hn; rfl
+  · intro a present; rfl
+  · intro a; simp [globalStructBase,sourceTemplate]
+  · intro a; simp [globalStructBase,sourceTemplate,sourceProduction]
+  · rfl
+  · rfl
+  · exact sourceFfiState_rel _
+  · rfl
+  · rfl
+
+theorem pair_initial_related : PanSemStateRelExec globalStructInitial globalStructHOL.toExact := by
+  simpa [globalStructInitial,globalStructHOL,globalStructBase] using pair_base_related.updateGlobals "pair" (by decide) (.rStruct [.word 0,.word 0])
+
+theorem pair_initial_ranged : PanSemStateRelExecRanged globalStructInitial := by
+  have h := source_ranged (.skip : ProgHOL 64)
+  have base : PanSemStateRelExecRanged {sourceProduction with topAddress := globalStructSourceTop, memaddrs := fun a => decide (globalStructSourceDomain a)} := by
+    simpa [PanSemStateRelExecRanged,executableState,singleEntrySourceProduction,sourceProduction] using h
+  simpa [globalStructInitial] using base.updateGlobals "pair" (.rStruct [.word 0,.word 0]) (by simp [PanValueByteRanged])
+
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
-/-- HOL evaluation returns the same second component with an explicit visit bound. -/
+/-- The counted global-pair run yields the HOL return with an eight-visit bound. -/
 theorem globalStructWitness_hol :
     ∃ final, globalStructHOL.evaluateHOLFiniteState (progToHOL globalStructWitness) =
-      (some (.returned (.val (.word 8))),final) ∧
-      SteppedFlapjack.PanToCrepSteps.controlSteps (progToHOL globalStructWitness) globalStructHOL ≤ 8 := by
-  refine ⟨(setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 7,.word 8])) globalStructHOL).emptyLocalsHOLFinite,?_,?_⟩
-  · simp [globalStructWitness,progToHOL,expToHOL,evaluateHOLFiniteState_seq_line780,
-      evaluateHOLFiniteState_assign,evaluateHOLFiniteState_return,evalHOLExact,evalListHOLExact,
-      globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,setKvarHOLFinite,isValidValueHOLFinite,
-      lookupKvarHOLExact,FUPDATE,
-      shapeOfHOLExact,shapeEqHOL,shapeEqHOL.shapeEqListHOL,emptyLocalsHOLFinite]
-  · rw [show progToHOL globalStructWitness = .seq (.assign .global (ofString "pair") (.rstruct [.const 7,.const 8])) (.return (.rfield 1 (.var .global (ofString "pair")))) from by simp [globalStructWitness,progToHOL,expToHOL], SteppedFlapjack.PanToCrepSteps.controlSteps_seq]
-    simp [evaluateHOLFiniteState_assign,evalHOLExact,
-      evalListHOLExact,globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,setKvarHOLFinite,
-      isValidValueHOLFinite,lookupKvarHOLExact,
-      FUPDATE,shapeOfHOLExact,shapeEqHOL,shapeEqHOL.shapeEqListHOL,SteppedFlapjack.PanToCrepSteps.controlSteps.eq_def]
+      (some (.returned (.val (.word 8))),final) ∧ controlSteps (progToHOL globalStructWitness) globalStructHOL ≤ 8 := by
+  let : DecidablePred globalStructHOL.memaddrs := by change DecidablePred globalStructSourceDomain; infer_instance
+  have words : WordLocals globalStructInitial.locals := by
+    intro name value h
+    simp [globalStructInitial,sourceProduction] at h
+  have codeRanged : ∀ name entry, panSemCodeLookup globalStructInitial.code name = some entry → PanLangEntryByteRanged entry := by
+    intro name entry h
+    simp [globalStructInitial,sourceProduction,panSemCodeLookup,lookupInfo] at h
+  have codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode globalStructInitial.code →
+      ∃ scope, GlobalCallSupportedIn pairShapeMap scope body := by
+    intro name params body h
+    simp [countedFunctionsOfCode,globalStructInitial,sourceProduction] at h
+  have run : evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
+      (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) globalStructInitial.structs
+      (countedFunctionsOfCode globalStructInitial.code) globalStructInitial.baseAddress globalStructInitial.topAddress
+      panSemBitVec64BytesInWord 10 globalStructInitial.locals globalStructInitial.globals globalStructInitial.memory
+      globalStructInitial.ffi globalStructWitness (memoryAccess := some (panSemBitVec64MemoryAccess globalStructInitial))
+      (contracts := some (countedContractsOfCode globalStructInitial.code [])) =
+        some (.returned globalStructInitial.locals (updatePanValueMap globalStructInitial.globals "pair" (.rStruct [.word 7,.word 8]))
+          globalStructInitial.memory globalStructInitial.ffi [.word 8],8) := by
+    with_unfolding_all rfl
+  obtain ⟨result,final,hol,outcome,bound,_,_⟩ := globalSupportedCalls_counted_source pair_supported
+    globalStructInitial globalStructHOL pair_initial_related pair_initial_ranged words pair_shapes
+    globalStructWitness_ranged codeRanged codeShape (riscv64PanValueFfiContext (fun _ => false))
+    (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 10 8 _ run (by decide)
+  cases outcome with
+  | returned locals globals memory ffi word final rel ranged words =>
+    exact ⟨final,hol,by simpa [countedErrorBonus] using bound⟩
 
 /-- The pair declaration as seen by the global-lowering compiler. -/
 def globalStructDecl : DeclHOL 64 :=
