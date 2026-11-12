@@ -136,4 +136,37 @@ theorem globalFrontend_correct_static {width : Nat} [NeZero width] {σ : Type}
   exact ⟨targetFinal,crepResult,crepFinal,targetRun,globalFinal,crepRun,finalRel,resultRel,
     globalFrontend_staticSteps shape loopFree crep⟩
 
+/-- Call-aware global programs use the same scalar-global layout checks and
+    allow ordinary or tail calls in arbitrary control-flow positions. -/
+inductive GlobalCallFrontend {width : Nat} [NeZero width] (globals : PanGlobalsContextExact width) :
+    PanToCrepContextExact width → ProgHOL width → Prop
+  | base {ctxt p} : GlobalFrontend globals ctxt p → GlobalCallFrontend globals ctxt p
+  | tail {ctxt name args} : (∀ e ∈ args, GlobalScalar globals ctxt e) →
+      GlobalCallFrontend globals ctxt (.call none name args)
+  | decCall {ctxt name shape fname args body} : (∀ e ∈ args, GlobalScalar globals ctxt e) →
+      GlobalCallFrontend globals (decCallCtxt ctxt name shape) body →
+      GlobalCallFrontend globals ctxt (.decCall name shape fname args body)
+  | decl {ctxt name e body} : GlobalScalar globals ctxt e →
+      GlobalCallFrontend globals (scalarDeclContext ctxt name) body →
+      GlobalCallFrontend globals ctxt (.dec name .one e body)
+  | seq {ctxt a b} : GlobalCallFrontend globals ctxt a → GlobalCallFrontend globals ctxt b →
+      GlobalCallFrontend globals ctxt (.seq a b)
+  | ite {ctxt e a b} : GlobalScalar globals ctxt e → GlobalCallFrontend globals ctxt a →
+      GlobalCallFrontend globals ctxt b → GlobalCallFrontend globals ctxt (.ite e a b)
+  | while {ctxt e body} : GlobalScalar globals ctxt e → GlobalCallFrontend globals ctxt body →
+      GlobalCallFrontend globals ctxt (.while e body)
+
+/-- Global lowering produces the existing call-aware frontend shape. -/
+theorem globalCallFrontend_compiled {width : Nat} [NeZero width]
+    {globals : PanGlobalsContextExact width} {ctxt : PanToCrepContextExact width} {p : ProgHOL width}
+    (h : GlobalCallFrontend globals ctxt p) : CallFrontend ctxt (compileProgExactHOL globals p) := by
+  induction h with
+  | base h => exact .base (globalFrontend_compiled h)
+  | tail args => simpa only [compileProgExactHOL] using CallFrontend.tail (globalScalar_list_compiled _ args)
+  | decCall args body ih => simpa only [compileProgExactHOL] using CallFrontend.decCall (globalScalar_list_compiled _ args) ih
+  | decl e body ih => simpa only [compileProgExactHOL] using CallFrontend.decl (globalScalar_compiled e) ih
+  | seq a b iha ihb => simpa only [compileProgExactHOL] using CallFrontend.seq iha ihb
+  | ite e a b iha ihb => simpa only [compileProgExactHOL] using CallFrontend.ite (globalScalar_compiled e) iha ihb
+  | «while» e body ih => simpa only [compileProgExactHOL] using CallFrontend.while (globalScalar_compiled e) ih
+
 end SteppedFlapjack.PanToCrepSteps
