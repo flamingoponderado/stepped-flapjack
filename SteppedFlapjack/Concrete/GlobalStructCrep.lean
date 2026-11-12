@@ -98,11 +98,11 @@ theorem globalStruct_actual_initializer_eq :
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
-theorem globalStruct_initializer_run :
-    globalStructTarget.evaluateHOLFiniteState
+theorem globalStruct_initializer_run_clock (clock : Nat) :
+    ({globalStructTarget with clock := clock}).evaluateHOLFiniteState
       (nestedSeqHOL (compileDecsExactHOL globalStructStart
         (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram)
-          (resortDeclsHOL globalStructProgram))).1) = (none,globalStructTarget) := by
+          (resortDeclsHOL globalStructProgram))).1) = (none,{globalStructTarget with clock := clock}) := by
   classical
   have hm1 : panMemStoreHOL globalStructSourceTop (.word 0) globalStructTarget.memaddrs globalStructTarget.memory =
       some globalStructTarget.memory := by
@@ -122,6 +122,13 @@ theorem globalStruct_initializer_run :
   rw [globalStruct_actual_initializer_eq, evaluateHOLFiniteState_seq_line780]
   simp [evaluateHOLFiniteState_store,evalHOLExact,evalListHOLExact,
     flattenHOL,panMemStoresHOL,panBytesInWord,valueIsWord,valueWord,topOp,hm1,hm2]
+
+theorem globalStruct_initializer_run :
+    globalStructTarget.evaluateHOLFiniteState
+      (nestedSeqHOL (compileDecsExactHOL globalStructStart
+        (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram)
+          (resortDeclsHOL globalStructProgram))).1) = (none,globalStructTarget) := by
+  simpa using globalStruct_initializer_run_clock globalStructTarget.clock
 
 
 theorem globalStruct_initializer_visits :

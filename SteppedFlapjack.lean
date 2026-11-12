@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.GlobalStructEntry
 import SteppedFlapjack.Concrete.GlobalStructCallee
 import SteppedFlapjack.PanToCrepSteps.GlobalNoInline
 import SteppedFlapjack.Concrete.GlobalNamedStruct
