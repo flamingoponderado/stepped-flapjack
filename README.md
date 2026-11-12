@@ -101,7 +101,8 @@ relations between the source, lowered and Crep states, compiler-table
 conditions, and checkable machine encoding, safety and capacity conditions.
 `pairGeneral_namedSource` instantiates these conditions for a global pair: its
 initializer and renamed entry call return the second field, and the compiled
-machine halts with the same I/O events as the named-struct source. Its clock
+machine runs the bytes produced by the Pancake compiler and halts with the
+same I/O events as the named-struct source. Its clock
 is 374,713,592,693,268,806,748 ticks for the concrete code and a 16-step
 initial source clock.
 `heapFixture_machine` carries a concrete heap store and load through the

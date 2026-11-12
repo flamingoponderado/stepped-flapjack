@@ -151,7 +151,9 @@ theorem globalCountedSource_machine
     let limit := globalProgramOptLimit globals panCtxt (progToHOL program) crep (globalSourcePrograms pan) source.clock ref ctxt .ln
     let allowance := (max 1 (wordCodeWeight (sptFromAList words)) + 1) * (6*limit+1) + 1
     let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*limit+1 + allowance)
-    ∃ sourceFinal : PanSemStateFiniteExact 64 Unit, ∃ finalMachine finalFfi,
+    ∃ sourceFinal : PanSemStateFiniteExact 64 Unit, ∃ finalMachine finalFfi compilerFinal,
+      Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig pan =
+        some (fixtureCodeBytes code,bs,compilerFinal) ∧
       evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
         (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
           bs code (fixtureStackOracle (fixtureCompilerConfig code)) n) (configuredMachineState code bs) =
@@ -172,5 +174,6 @@ theorem globalCountedSource_machine
         crep source.clock sourceTable compiledTable targetTable holRun bound globalRel panCrepRel panCodeRel excpRel
         panLocalsRel sources ref ctxt ctxtVars crepGlobals crepLocals codeRel heap memDomain sharedDomain base byteOrder
         ffi entry bitmapFits safe facts capacity sourceMemory
-    exact ⟨sourceFinal,finalMachine,finalFfi,machine,events,rel.2.2.2.2.2.2.2.2.2.2.1⟩
+    obtain ⟨compilerFinal,compiled⟩ := globalSource_compilerOutputFor pan pan rfl safe facts.1
+    exact ⟨sourceFinal,finalMachine,finalFfi,compilerFinal,compiled,machine,events,rel.2.2.2.2.2.2.2.2.2.2.1⟩
 end SteppedFlapjack.Concrete

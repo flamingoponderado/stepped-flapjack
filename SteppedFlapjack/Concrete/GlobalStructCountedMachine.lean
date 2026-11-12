@@ -319,7 +319,7 @@ theorem pairGeneral_machine :
   have bound : 16 ≤ pairEntrySource.clock := by
     change 16 ≤ 16
     decide
-  obtain ⟨sourceFinal,machine,finalFfi,machineRun,io,ffiRel⟩ :=
+  obtain ⟨sourceFinal,machine,finalFfi,compilerFinal,compiled,machineRun,io,ffiRel⟩ :=
     globalCountedSource_machine globalStructProgram globalStruct_sourceUnique good globalStructContext pairCrepContext
       pairWrapper pairShapeMap pairWrapper_Supported pair_layout pairEntrySource pairEntryTarget pairEntryProduction 8
       pairEntry_rel pairEntry_ranged pairEntry_words pairEntry_shapes pairEntry_codeRanged pairEntry_codeShape
