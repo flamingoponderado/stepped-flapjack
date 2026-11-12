@@ -256,7 +256,6 @@ theorem nestedCall_crep_clock_consumed :
 
 /-- A replay clock equal to the counted source budget. -/
 def nestedClockedSource : PanSemStateFiniteExact 64 Unit := {nestedSourceState 1 with clock := 6}
-def nestedClockedProduction := {nestedCountedProduction with clock := 6}
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
@@ -280,28 +279,5 @@ theorem nestedEntryCode : (nestedClockedSource).code = HolFiniteMapExact.empty.u
   by_cases ha : name = ofString "main" <;> by_cases hb : name = ofString "middle" <;>
     by_cases hc : name = ofString "leaf" <;> simp_all [eq_comm]
   all_goals subst name; contradiction
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-theorem nestedEntryCodeRel : PanSimp.CodeRel (nestedClockedSource).code (nestedClockedSource).code := by
-  constructor
-  · intro f h; exact h
-  · intro f params body rsh found
-    simp only [nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,FUPDATE,
-      HolFiniteMapExact.lookup_empty] at found ⊢
-    repeat' split at found
-    all_goals try simp only [Option.some.injEq,Prod.mk.injEq] at found
-    all_goals rcases found with ⟨rfl,rfl,rfl⟩
-    all_goals simp_all [beq_iff_eq,nestedCallEntry,progToHOL,expToHOL,shapeToHOL,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL]
-
-
-open SteppedFlapjack.PanToCrepSteps
-
-def nestedRenamedState : PanSemStateFiniteExact 64 Unit :=
-  {nestedClockedSource with code := fpermCodeHOL (ofString "main") (newMainNameHOL (nestedCallDeclarations.map declToHOL)) (nestedClockedSource).code}
-
-def nestedLoweredCode := HolFiniteMapExact.empty.updateList
-  (functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))).reverse
-
 
 end SteppedFlapjack.Concrete

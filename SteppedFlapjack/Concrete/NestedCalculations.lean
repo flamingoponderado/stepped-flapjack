@@ -213,7 +213,6 @@ theorem nested_initialized_machine :
     decide
   have sourceCode : source.code = HolFiniteMapExact.empty.updateList (functionsHOL (nestedCallDeclarations.map declToHOL)).reverse := by
     exact nestedEntryCode
-  have sourceCodeRel : PanSimp.CodeRel source.code source.code := nestedEntryCodeRel
   have sourceRun := nestedCounted_run memory (riscv64PanValueFfiContext (fun _ => false))
     (fun _ _ => none) (fun _ _ _ _ _ _ _ => none)
   have unique : ((functionsHOL (nestedCallDeclarations.map declToHOL)).map Prod.fst).Nodup := by
@@ -222,9 +221,12 @@ theorem nested_initialized_machine :
   have sourceGood : pancakeGoodCodeHOL (nestedCallDeclarations.map declToHOL) = true := by decide +kernel
   have span := countedCalls_initializedMachine shape production source related ranged words
     (by simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged])
-    codeRanged (by simpa [production] using nestedCounted_shapes) source.code sourceCodeRel
-    (functionsHOL (nestedCallDeclarations.map declToHOL)) sourceCode nestedEntryShapes
-    nestedHOLFunctions (ofString "main")
+    codeRanged (by simpa [production] using nestedCounted_shapes) source.code
+    (functionsHOL (nestedCallDeclarations.map declToHOL)) sourceCode
+    nestedHOLFunctions (by rw [nestedHOLDeclarations])
+    (by simpa only [nestedHOLDeclarations] using unique)
+    (by simp [nestedHOLFunctions,isWfShapeExactHOL]) nestedEntryShapes
+    nestedHOLFunctions (by simp [nestedHOLFunctions,nestedCallEntry,progToHOL,expToHOL,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL]) (ofString "main")
     (by simpa only [nestedHOLDeclarations] using sourceCode)
     (by rw [nestedHOLDeclarations]; simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,nestedCallEntry,panSimpProg,retToTail,seqAssoc,smartSeq,progToHOL,expToHOL,shapeToHOL])
     (by simp [source,nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,FUPDATE,ofString])
@@ -233,9 +235,6 @@ theorem nested_initialized_machine :
     (by simpa only [nestedHOLDeclarations] using nestedCall_inline_selection_empty)
     outside aligned (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 8 6
     _ _ _ _ 7 (by simpa [production,panSemBitVec64MemoryAccess] using sourceRun) (by rfl)
-    nestedHOLFunctions (by rw [nestedHOLDeclarations])
-    (by simpa only [nestedHOLDeclarations] using unique)
-    (by simp [nestedHOLFunctions,isWfShapeExactHOL])
     (by simpa [nestedHOLDeclarations,nestedRawWords,nestedCallCrepPrograms] using nested_panToWord)
     (by simpa only [nestedHOLDeclarations] using sourceGood)
     (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,nestedBitmaps] using nested_bitmapFits)

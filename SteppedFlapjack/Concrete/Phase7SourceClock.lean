@@ -302,4 +302,26 @@ theorem callSupported_initialized_simp_run {scope : List VarName} {program : Pro
       PanSimp.stateRel sourceFinal targetFinal targetFinal.code := by
   exact callSupported_panSimp_run supported _ sourceFinal _ result run nonerror
     (source_simp_function_table state functions empty wf)
+/-- Simplified function tables have the compiler relation, derived from their original declarations. -/
+theorem source_simp_function_code {width : Nat} {σ : Type} [NeZero width]
+    (state : PanSemStateFiniteExact width σ) (fs : List (FunDeclHOL width))
+    (empty : state.code = HolFiniteMapExact.empty)
+    (wf : fs.all (fun f => f.params.all (fun p => isWfShapeExactHOL state.structs p.2) &&
+      isWfShapeExactHOL state.structs f.returnShape) = true)
+    (unique : ((functionsHOL (fs.map DeclHOL.function)).map Prod.fst).Nodup) :
+    PanSimp.CodeRel
+      (HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)
+      (HolFiniteMapExact.empty.updateList (functionsHOL ((fs.map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function)).reverse) := by
+  have h := (source_simp_function_table state fs empty wf).2
+  rw [function_fold_code, function_fold_code, empty] at h
+  have unique' : ((functionsHOL ((fs.map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function)).map Prod.fst).Nodup := by
+    have eq : (functionsHOL ((fs.map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function)).map Prod.fst =
+      (functionsHOL (fs.map DeclHOL.function)).map Prod.fst := by
+      clear wf unique h
+      induction fs with
+      | nil => rfl
+      | cons f fs ih => simpa [functionsHOL,List.map_map] using congrArg (List.cons f.name) ih
+    rw [eq]; exact unique
+  rw [updateList_reverse_nodup _ unique, updateList_reverse_nodup _ unique'] at h
+  exact h
 end SteppedFlapjack.Concrete

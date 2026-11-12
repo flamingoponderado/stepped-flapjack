@@ -24,12 +24,17 @@ theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (
     (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
       ∃ scope, CallSupportedIn scope body)
     (targetCode : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
-    (codeRel : PanSimp.CodeRel source.code targetCode)
     (entries : List SimpVisits.SimpEntry)
     (sourceCode : source.code = HolFiniteMapExact.empty.updateList entries.reverse)
+    (originalFs : List (FunDeclHOL 64))
+    (originalEntries : entries = functionsHOL (originalFs.map DeclHOL.function))
+    (originalUnique : ((functionsHOL (originalFs.map DeclHOL.function)).map Prod.fst).Nodup)
+    (originalWellFormed : originalFs.all (fun f => f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
+      isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true)
     (entryShapes : ∀ entry ∈ entries, ∃ scope, ∃ program : Prog (RiscV.Word 64),
       entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program)
-    (fs : List (FunDeclHOL 64)) (start : MlS)
+    (fs : List (FunDeclHOL 64))
+    (simplifiedFs : fs = originalFs.map (fun f => {f with body := panSimpCompileHOL f.body})) (start : MlS)
     (targetTable : targetCode = HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)
     (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],progToHOL (panSimpProg program),.one))
     (mainFound : source.code.lookup start = some ([],progToHOL program,.one))
@@ -53,11 +58,7 @@ theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (
       (memoryAccess := some (panSemBitVec64MemoryAccess production))
       (contracts := some (countedContractsOfCode production.code exnContracts)) =
         some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
-    (budget : count ≤ source.clock) (originalFs : List (FunDeclHOL 64))
-    (originalEntries : entries = functionsHOL (originalFs.map DeclHOL.function))
-    (originalUnique : ((functionsHOL (originalFs.map DeclHOL.function)).map Prod.fst).Nodup)
-    (originalWellFormed : originalFs.all (fun f => f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
-      isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true)
+    (budget : count ≤ source.clock)
     (rawEq : panToWordCompileProgHOL riscvConfig.isa (originalFs.map DeclHOL.function) =
       loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start))))
     (sourceGood : pancakeGoodCodeHOL (originalFs.map DeclHOL.function) = true)
@@ -124,6 +125,11 @@ theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (
             (.halt .success,finalMachine,finalFfi) ∧
       finalFfi.ioEvents = sourceFinal.ffi.ioEvents ∧ FfiStateRel postFfi sourceFinal.ffi ∧
       semanticsDecls baseState start (originalFs.map DeclHOL.function) = .terminate .success finalFfi.ioEvents := by
+  have codeRel : PanSimp.CodeRel source.code targetCode := by
+    rw [sourceCode, originalEntries, targetTable, simplifiedFs]
+    apply source_simp_function_code {source with code := HolFiniteMapExact.empty} originalFs rfl
+    · simpa [structs] using originalWellFormed
+    · exact originalUnique
   let programs := compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)
   let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa programs)
   let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
