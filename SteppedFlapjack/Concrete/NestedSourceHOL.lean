@@ -19,32 +19,6 @@ def nestedSourceState (bitmapWords : Nat) : PanSemStateFiniteExact 64 Unit :=
   let allCode := middleCode.update (ofString "leaf", ([], .return (.const 7), .one))
   {initial with code := allCode}
 
-/-- Observational semantics starts from the original empty declaration state. -/
-theorem nestedCall_declared_semantics (bitmapWords : Nat) :
-    semanticsDecls {sourceTemplateFor bitmapWords with clock := 0} (ofString "main")
-      (nestedCallDeclarations.map declToHOL) = semantics (nestedSourceState bitmapWords) (ofString "main") := by
-  have same : semantics {nestedSourceState bitmapWords with clock := 0} (ofString "main") =
-      semantics (nestedSourceState bitmapWords) (ofString "main") := by
-    cases nestedSourceState bitmapWords
-    rfl
-  let fs : List (FunDeclHOL 64) :=
-    [⟨ofString "main",false,true,[],progToHOL nestedCallEntry,.one⟩,
-     ⟨ofString "middle",false,false,[],.call none (ofString "leaf") [],.one⟩,
-     ⟨ofString "leaf",false,false,[],.return (.const 7),.one⟩]
-  have wellFormed : fs.all (fun f =>
-      f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
-        isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true := by
-    simp [fs,isWfShapeExactHOL]
-  have sem := source_function_declarations_semantics
-    {sourceTemplateFor bitmapWords with clock := 0} (ofString "main") fs wellFormed
-  rw [← function_fold_code] at sem
-  have sem' : semanticsDecls {sourceTemplateFor bitmapWords with clock := 0} (ofString "main")
-      (nestedCallDeclarations.map declToHOL) =
-      semantics {nestedSourceState bitmapWords with clock := 0} (ofString "main") := by
-    simpa [fs,nestedCallDeclarations,declToHOL,funDeclToHOL,progToHOL,expToHOL,shapeToHOL,nestedSourceState,
-      sourceTemplateFor,sourceTemplate] using sem
-  exact sem'.trans same
-
 def nestedCountedProduction : PanSemState (RiscV.Word 64) (FfiState Unit) :=
   {sourceProduction with code := functionEntries nestedCallDeclarations}
 
@@ -148,54 +122,6 @@ theorem nestedCounted_run (memory : BitVec 64 → Option (PanValue (RiscV.Word 6
     restorePanValueFfiLocal]
   funext name
   simp [restorePanValueLocal]
-
-theorem nestedCounted_source (context : PanValueFfiContext (RiscV.Word 64))
-    (primitive : PanPrimitiveHandler (RiscV.Word 64)) (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
-    ∃ final, (nestedSourceState 1).evaluateHOLFiniteState (progToHOL nestedCallEntry) =
-      (some (.returned (.val (.word 7))),final) ∧
-      controlSteps (progToHOL nestedCallEntry) (nestedSourceState 1) ≤ 6 := by
-  let _ : DecidablePred (nestedSourceState 1).memaddrs := by
-    change DecidablePred ordinaryAddress
-    infer_instance
-  have shape : CallSupportedIn [] nestedCallEntry := by
-    exact .call "answer" "middle" [] (by simp) (.base (.ret (.local "answer" (by simp))))
-  have ranged : PanSemStateRelExecRanged nestedCountedProduction := by
-    simp [nestedCountedProduction,sourceProduction,PanSemStateRelExecRanged,StructContextByteRanged,StructContext.toHOL]
-  have words : WordLocals nestedCountedProduction.locals := by
-    simpa [nestedCountedProduction,sourceProduction] using wordLocals_empty
-  have codeRanged : ∀ name entry, panSemCodeLookup nestedCountedProduction.code name = some entry → PanLangEntryByteRanged entry := by
-    simpa [nestedCountedProduction,PanSemCodeRanged] using
-      panSemCodeRanged_of_functionEntries sourceProduction nestedCallDeclarations nestedCall_declarations_ranged
-  have budget : 6 ≤ (nestedSourceState 1).clock := by decide
-  obtain ⟨result,final,hol,outcome,bound,_⟩ := supportedCalls_counted_source shape nestedCountedProduction
-    (nestedSourceState 1) nestedCounted_related ranged words (by simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged])
-    codeRanged nestedCounted_shapes context primitive handler [] 8 6 _ (nestedCounted_run nestedCountedProduction.memory context primitive handler) budget
-  cases outcome with
-  | returned _ _ _ _ _ _ _ _ _ => exact ⟨final,hol,by simpa [countedErrorBonus] using bound⟩
-
-/-- The original source entry returns the witness value with unchanged FFI. -/
-theorem nestedCall_hol_run (bitmapWords : Nat) :
-    ∃ final, evaluateHOLFiniteState {nestedSourceState bitmapWords with clock := 4}
-      (.call none (ofString "main") []) =
-      (some (.returned (.val (.word 7))),final) ∧ final.ffi = sourceFfi := by
-  have leafMain : (ofString "leaf" == ofString "main") = false := by decide
-  have middleMain : (ofString "middle" == ofString "main") = false := by decide
-  have leafMiddle : (ofString "leaf" == ofString "middle") = false := by decide
-  simp [leafMain,middleMain,leafMiddle,evaluateHOLFiniteState_call,nestedSourceState,sourceTemplateFor,nestedCallEntry,progToHOL,
-    expToHOL,shapeToHOL,sourceTemplate,evalListHOLFinite,evalListHOLExact,
-    PanSemStateFiniteExact.lookupCodeHOLFinite,lookupCodeHOLExact,HolFiniteMapExact.lookup_update,FUPDATE,
-    evaluateHOLFiniteState_decCall_fixClockRewrite,evaluateHOLFiniteState_return,callEntryStateHOLFinite,
-    evalHOLExact,shapeOfHOLExact,shapeEqHOL,setVarHOLFinite,emptyLocalsHOLFinite]
-
-/-- The original declarations terminate successfully without I/O events. -/
-theorem nestedCall_source_semantics (bitmapWords : Nat) :
-    semanticsDecls {sourceTemplateFor bitmapWords with clock := 0} (ofString "main")
-      (nestedCallDeclarations.map declToHOL) = .terminate .success [] := by
-  obtain ⟨final,run,ffi⟩ := nestedCall_hol_run bitmapWords
-  rw [nestedCall_declared_semantics]
-  have result := source_semantics_of_return (nestedSourceState bitmapWords) final (ofString "main") 4
-    (.val (.word 7)) run
-  simpa [ffi,sourceFfi] using result
 
 /-- The HOL source run reaches five statement nodes across its two calls. -/
 theorem nestedCall_controlSteps (bitmapWords : Nat) :

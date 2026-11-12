@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.NestedMachine
 import SteppedFlapjack.Concrete.Phase7SourceBehaviour
 
 /-! Explicit source-to-RISC-V composition for supported programs. -/
@@ -5,7 +6,190 @@ namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang Flapjack.Compiler.Backend.LabToTarget
 open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.WordToStack.Native
-open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.LoopToWordSteps
+open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps
+open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.WordAllocSteps SteppedFlapjack.WordToStackSteps SteppedFlapjack.WordSimpSteps
+open Flapjack.PanSemStateFiniteExact Flapjack.LoopSemStateFiniteExact Flapjack.Compiler.Backend.WordToWord
+open Flapjack.Compiler.Backend.WordDepth Flapjack.Compiler.Backend.WordDepth.Executable Flapjack.Compiler.Backend.BackendProps
+open SteppedFlapjack.StackSteps
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 1000000 in
+/-- A counted function-only source return reaches the initialized machine with an explicit tick bound. -/
+theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program)     (production : PanSemState (RiscV.Word 64) (FfiState Unit)) (source : PanSemStateFiniteExact 64 Unit)
+    [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
+    (ranged : PanSemStateRelExecRanged production) (words_ : WordLocals production.locals)
+    (byteRanged : ProgByteRanged program)
+    (codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry)
+    (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
+      ∃ scope, CallSupportedIn scope body)
+    (targetCode : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (codeRel : PanSimp.CodeRel source.code targetCode)
+    (entries : List SimpVisits.SimpEntry)
+    (sourceCode : source.code = HolFiniteMapExact.empty.updateList entries.reverse)
+    (entryShapes : ∀ entry ∈ entries, ∃ scope, ∃ program : Prog (RiscV.Word 64),
+      entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program)
+    (fs : List (FunDeclHOL 64)) (start : MlS)
+    (targetTable : targetCode = HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)
+    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],progToHOL (panSimpProg program),.one))
+    (mainFound : source.code.lookup start = some ([],progToHOL program,.one))
+    (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
+    (structs : source.structs = []) (exceptions : source.eshapes = HolFiniteMapExact.empty)
+    (unique : ((functionsHOL (fs.map DeclHOL.function)).map Prod.fst).Nodup)
+    (shapes : ∀ entry ∈ functionsHOL (fs.map DeclHOL.function),
+      ∃ names, ∃ body : Prog (RiscV.Word 64),
+        entry.2.1 = names.map (fun n => (Flapjack.Basis.Pure.MlString.ofString n,ShapeHOL.one)) ∧
+        entry.2.2.1 = progToHOL body ∧ CallSupportedIn names body ∧ ProgByteRanged body)
+    (noInline : (functionsHOL ((compileTopExactHOL (fs.map DeclHOL.function) start).filter inlinableHOL)).map Prod.fst = [])
+    (topOutside : ¬ source.memaddrs source.topAddr)
+    (aligned : panGlobalsByteAlignedHOL source.topAddr)
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (exnContracts : InfoMap Shape) (fuel count : Nat)
+    (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))
+    (postMemory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (postFfi : FfiState Unit) (value : BitVec 64)
+    (run : evalPanValueFfiProgSteps context primitive handler production.structs (countedFunctionsOfCode production.code)
+      production.baseAddress production.topAddress panSemBitVec64BytesInWord fuel
+      production.locals production.globals production.memory production.ffi program
+      (memoryAccess := some (panSemBitVec64MemoryAccess production))
+      (contracts := some (countedContractsOfCode production.code exnContracts)) =
+        some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
+    (budget : count ≤ source.clock) (originalFs : List (FunDeclHOL 64))
+    (originalEntries : entries = functionsHOL (originalFs.map DeclHOL.function))
+    (originalUnique : ((functionsHOL (originalFs.map DeclHOL.function)).map Prod.fst).Nodup)
+    (originalWellFormed : originalFs.all (fun f => f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
+      isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true)
+    (rawEq : panToWordCompileProgHOL riscvConfig.isa (originalFs.map DeclHOL.function) =
+      loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start))))
+    (sourceGood : pancakeGoodCodeHOL (originalFs.map DeclHOL.function) = true)
+    (bitmapFits : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+      let bitmaps := (compileNative riscvConfig false optimized).1
+      0xa0020018 + bitmaps.length*8 ≤ 0xa0410000)
+    (safe : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+      fixtureStackSafe (compileNative riscvConfig false optimized).2.2.2 = true)
+    (facts : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+      let code := (compileNative riscvConfig false optimized).2.2.2
+      (fixtureRemoveLabels code).isSome = true ∧ (fixtureCodeBytes code).length ≤ 0xecc ∧ (fixtureCodeBytes code).length % 4 = 0)
+    (capacity : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+      let entry := ((sptLookup 64 (sptFromAList optimized)).getD (1,.skip)).2
+      let frame := (compileProgNative riscvConfig false entry 1 (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1
+      let frames := sptMapi (fun _ (argc,body) => (compileProgNative riscvConfig false body argc
+        (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1) (sptFromAList optimized)
+      optionLe (optionMap₂ max (some (max 1 (1+frame)))
+        (optionMap₂ (· + ·) (some 1) (fullCallGraphDepth frames 64 (sptFromAList optimized)))) (some 2097172))
+    (memDomain : source.memaddrs = ordinaryAddress) (sharedDomain : source.shMemaddrs = sharedAddress)
+    (base : source.baseAddr = heapBase) (top : source.topAddr = heapTop)
+    (byteOrder : source.be = false) (ffi : source.ffi = sourceFfi)
+    (sourceMemory : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+      let bitmaps := (compileNative riscvConfig false optimized).1
+      ∀ a, source.memaddrs a → source.memory a = (sourceTemplateFor bitmaps.length).memory a) :
+    let baseState := {source with code := HolFiniteMapExact.empty, structs := [], clock := 0}
+    let decls := fs.map DeclHOL.function
+    let lowered := compileTopExactHOL decls start
+    let renamed := {source with code := fpermCodeHOL start (newMainNameHOL decls) targetCode}
+    let before := noGlobalsLoweredPreCall renamed (HolFiniteMapExact.empty.updateList (functionsHOL lowered).reverse)
+    let p : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL decls) [])
+    let panCtxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL lowered)) 0 (getEidsFromDeclsHOL lowered)
+    let programs := compileProgDeclsHOLW lowered
+    let crep := compileProgExactHOLW panCtxt p
+    let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa programs)
+    let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+    let native := compileNative riscvConfig false optimized
+    let code := native.2.2.2
+    let bitmaps := native.1
+    let cfg := fixtureCompilerConfig code
+    let initial := concreteDeclCrepState before programs
+    let loop := {(concreteDeclLoopState riscvConfig.isa initial programs) with memory := (configuredStack code cfg bitmaps).memory}
+    let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
+    let crepLimit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) *
+      (1 + (SimpVisits.simpTableFactor entries * count + SimpVisits.hw (progToHOL (panSimpProg program))) + 2)
+    let rows := programs.map (fun row => (row.2.1,row.2.2))
+    let extra := callClockFactor ctxt rows initial.clock crep * (crepLimit+1)
+    let factor := max (callSyntaxCost ctxt crep) (loopCodeWeight loop.code+2)
+    let loopLimit := callSyntaxCost ctxt crep + factor * (initial.clock+extra)
+    let opt := optimiseHOL (compileHOLExact ctxt .ln crep)
+    let optFactor := max (loopVisitWeight opt) (loopCodeWeight loop.code+2)
+    let optLimit := loopVisitWeight opt + optFactor * (2 * loopLimit)
+    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*optLimit+2)
+    let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*optLimit+1 + allowance)
+    ∃ (sourceFinal : PanSemStateFiniteExact 64 Unit), ∃ finalMachine finalFfi,
+      source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word value))),sourceFinal) ∧
+      evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
+        (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
+          bitmaps code (fixtureStackOracle cfg) n) (configuredMachineState code bitmaps) =
+            (.halt .success,finalMachine,finalFfi) ∧
+      finalFfi.ioEvents = sourceFinal.ffi.ioEvents ∧ FfiStateRel postFfi sourceFinal.ffi ∧
+      semanticsDecls baseState start (originalFs.map DeclHOL.function) = .terminate .success finalFfi.ioEvents := by
+  let programs := compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)
+  let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa programs)
+  let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+  let native := compileNative riscvConfig false optimized
+  let code := native.2.2.2
+  let bitmaps := native.1
+  let cfg := fixtureCompilerConfig code
+  have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
+    funext a b c d e f g
+    exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
+  have good : StackToLab.Proofs.GoodCode.goodCode 24 code := by
+    have h := source_nativeGoodCode (originalFs.map DeclHOL.function) originalUnique
+    rw [rawEq, ← phase3WordConfig_eq] at h
+    simpa [code,native,optimized,raw,programs,compileWith_eq_compile _ allocator] using h
+  have bitmapFits' : 0xa0020018 + bitmaps.length*8 ≤ 0xa0410000 := by
+    simpa [bitmaps,native,optimized,raw,programs] using bitmapFits
+  have fits : 0xa0020018 + bitmaps.length*8 ≤ sourceBase := by simp only [sourceBase]; omega
+  obtain ⟨sourceFinal,post,sourceRun,wordRun,_,wordFfi,ffiRel⟩ :=
+    countedCalls_initializedWord supported production source rel ranged words_ byteRanged codeRanged codeShape
+      targetCode codeRel entries sourceCode entryShapes fs start targetTable found mainFound locals globals structs
+      exceptions unique shapes noInline topOutside aligned context primitive handler exnContracts fuel count
+      postLocals postGlobals postMemory postFfi value run budget phase3WordConfig code cfg bitmaps fits good
+      memDomain sharedDomain base top byteOrder ffi
+      (by simpa [bitmaps,native,optimized,raw,programs] using sourceMemory)
+  let decls := fs.map DeclHOL.function
+  let lowered := compileTopExactHOL decls start
+  let renamed : PanSemStateFiniteExact 64 Unit := {source with code := fpermCodeHOL start (newMainNameHOL decls) targetCode}
+  let before := noGlobalsLoweredPreCall renamed (HolFiniteMapExact.empty.updateList (functionsHOL lowered).reverse)
+  let panCtxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL lowered)) 0 (getEidsFromDeclsHOL lowered)
+  let p : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL decls) [])
+  let initial := concreteDeclCrepState before programs
+  let loop := {(concreteDeclLoopState riscvConfig.isa initial programs) with memory := (configuredStack code cfg bitmaps).memory}
+  let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
+  let crep := compileProgExactHOLW panCtxt p
+  let crepLimit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) *
+    (1 + (SimpVisits.simpTableFactor entries * count + SimpVisits.hw (progToHOL (panSimpProg program))) + 2)
+  let rows := programs.map (fun row => (row.2.1,row.2.2))
+  let extra := callClockFactor ctxt rows initial.clock crep * (crepLimit+1)
+  let factor := max (callSyntaxCost ctxt crep) (loopCodeWeight loop.code+2)
+  let loopLimit := callSyntaxCost ctxt crep + factor * (initial.clock+extra)
+  let opt := optimiseHOL (compileHOLExact ctxt .ln crep)
+  let optFactor := max (loopVisitWeight opt) (loopCodeWeight loop.code+2)
+  let optLimit := loopVisitWeight opt + optFactor * (2*loopLimit)
+  have machine := functionOnly_initialized_machine fs start (progToHOL (panSimpProg program)) found noInline
+    (originalFs.map DeclHOL.function) originalUnique rawEq optLimit value sourceGood bitmapFits safe facts capacity post
+    (by simpa [programs,raw,optimized,native,code,bitmaps,cfg,compileWith_eq_compile _ allocator,firstLoopName] using wordRun)
+  obtain ⟨finalMachine,finalFfi,machineRun,events⟩ := machine
+  have finalEvents : finalFfi.ioEvents = sourceFinal.ffi.ioEvents := events.trans (congrArg (fun f => f.ioEvents) wordFfi)
+  have foundOriginal : (functionsHOL (originalFs.map DeclHOL.function)).lookup start = some ([],progToHOL program,.one) := by
+    have h := mainFound
+    rw [sourceCode,originalEntries] at h
+    change FLOOKUP (FUPDATE_LIST FEMPTY (functionsHOL (originalFs.map DeclHOL.function)).reverse) start = _ at h
+    rwa [FLOOKUP_FUPDATE_LIST_reverse_eq_lookup] at h
+  let baseState : PanSemStateFiniteExact 64 Unit := {source with code := HolFiniteMapExact.empty, structs := [], clock := 0}
+  have sourceRun' : (let declared := {baseState with structs := [], code := (HolFiniteMapExact.empty.updateList
+        (functionsHOL (originalFs.map DeclHOL.function)).reverse)}
+      ({declared with clock := source.clock} : PanSemStateFiniteExact 64 Unit).evaluateHOLFiniteState (progToHOL program) =
+        (some (.returned (.val (.word value))),sourceFinal)) := by
+    have codeEq : HolFiniteMapExact.empty.updateList (functionsHOL (originalFs.map DeclHOL.function)).reverse = source.code := by
+      rw [← originalEntries, ← sourceCode]
+    dsimp only [baseState]
+    rw [codeEq, ← structs]
+    exact sourceRun
+  have semantics := functionOnly_body_semantics baseState start originalFs (progToHOL program)
+    originalWellFormed originalUnique rfl (by simpa [baseState] using locals) foundOriginal source.clock sourceFinal value sourceRun'
+  exact ⟨sourceFinal,finalMachine,finalFfi,sourceRun,machineRun,finalEvents,ffiRel,by simpa [finalEvents] using semantics⟩
 
 set_option maxHeartbeats 1000000 in
 /-- A supported counted source return reaches a successfully halting RISC-V

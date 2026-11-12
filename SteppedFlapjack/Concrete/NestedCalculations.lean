@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.Phase7Machine
 import SteppedFlapjack.Concrete.NestedMachine
 import SteppedFlapjack.PanToCrepSteps.RowColoring
 open Flapjack Flapjack.Compiler.Backend SteppedFlapjack.PanToCrepSteps SteppedFlapjack.Concrete
@@ -184,24 +185,107 @@ theorem nested_initialized_machine :
       finalFfi.ioEvents = sourceFfi.ioEvents ∧
       PanSemStateFiniteExact.semanticsDecls {sourceTemplateFor 2 with clock := 0} (ofString "main")
         (nestedCallDeclarations.map declToHOL) = .terminate .success finalFfi.ioEvents := by
-  let cfg := fixtureCompilerConfig nestedCode
-  have facts := nested_compilerFacts
-  have bitmapFits := nested_bitmapFits
-  have safe := nested_nativeSafe
-  have fits : 0xa0020018 + nestedBitmaps.length * 8 ≤ sourceBase := by simp only [sourceBase]; omega
-  have removed : LabToTarget.removeLabels 5 riscvConfig 0 .ln []
-      (LabFilter.filterSkip (configuredLab nestedCode cfg nestedBitmaps).code) =
-      some ((fixtureCompiled nestedCode).1,(fixtureCompiled nestedCode).2) := fixtureRemoveLabels_eq nestedCode facts.1
-  have guards := configuredMachine_allGuards nestedCode nestedBitmaps bitmapFits (nested_labGoodCode _) safe facts
-  obtain ⟨filtered,link,tie,rel,buffer⟩ := configuredMachine_relations nestedCode cfg nestedBitmaps bitmapFits
-    (fixtureCompiled nestedCode).1 (fixtureCompiled nestedCode).2 nested_nativeGoodCode removed guards
-  have result := nested_configured_machine cfg fits nested_capacity filtered (fixtureCodeStart nestedCode)
-    (fixtureMachineConfig (fixtureCodeStart nestedCode)) (fixtureCompiled nestedCode).1 (fixtureCompiled nestedCode).2
-    (configuredMachineAsm nestedCode nestedBitmaps) (configuredMachineState nestedCode nestedBitmaps) rfl link tie rel
-  simp only [buffer, fixtureLabMachineFactor nestedCode facts.2.1] at result
+  let n := nestedBitmaps.length
+  let source := {nestedSourceState n with clock := 6}
+  let memory : BitVec 64 → Option (PanValue (RiscV.Word 64)) := fun a => some (.word (initialWordFor n a))
+  let production := {nestedCountedProduction with clock := 6, memory := memory}
+  let _ : DecidablePred source.memaddrs := by
+    change DecidablePred ordinaryAddress
+    infer_instance
+  have related : PanSemStateRelExec production source.toExact := by
+    obtain ⟨a,b,c,d,e,f,g,h,_,j,k,l,m⟩ := nestedCounted_related_bitmaps n
+    exact ⟨a,b,c,d,e,f,g,h,rfl,j,k,l,m⟩
+  have shape : CallSupportedIn [] nestedCallEntry :=
+    .call "answer" "middle" [] (by simp) (.base (.ret (.local "answer" (by simp))))
+  have ranged : PanSemStateRelExecRanged production := by
+    simp [production,nestedCountedProduction,sourceProduction,PanSemStateRelExecRanged,StructContextByteRanged,StructContext.toHOL]
+  have words : WordLocals production.locals := by
+    simpa [production,nestedCountedProduction,sourceProduction] using wordLocals_empty
+  have codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry := by
+    simpa [production,nestedCountedProduction,PanSemCodeRanged] using
+      panSemCodeRanged_of_functionEntries sourceProduction nestedCallDeclarations nestedCall_declarations_ranged
+  have outside : ¬ source.memaddrs source.topAddr := by
+    simp [source,nestedSourceState,sourceTemplateFor,sourceTemplate,ordinaryAddress,heapTop,fixtureHeapEnd,heapEnd,
+      stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords,sourceBase]
+  have aligned : panGlobalsByteAlignedHOL source.topAddr := by
+    change panGlobalsByteAlignedHOL heapTop
+    change BitVec.ofNat 64 ((heapTop.toNat / 8) * 8) = heapTop
+    decide
+  have sourceCode : source.code = HolFiniteMapExact.empty.updateList (functionsHOL (nestedCallDeclarations.map declToHOL)).reverse := by
+    exact nestedEntryCode
+  have sourceCodeRel : PanSimp.CodeRel source.code source.code := nestedEntryCodeRel
+  have sourceRun := nestedCounted_run memory (riscv64PanValueFfiContext (fun _ => false))
+    (fun _ _ => none) (fun _ _ _ _ _ _ _ => none)
+  have unique : ((functionsHOL (nestedCallDeclarations.map declToHOL)).map Prod.fst).Nodup := by
+    simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL]
+    decide
+  have sourceGood : pancakeGoodCodeHOL (nestedCallDeclarations.map declToHOL) = true := by decide +kernel
+  have span := countedCalls_initializedMachine shape production source related ranged words
+    (by simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged])
+    codeRanged (by simpa [production] using nestedCounted_shapes) source.code sourceCodeRel
+    (functionsHOL (nestedCallDeclarations.map declToHOL)) sourceCode nestedEntryShapes
+    nestedHOLFunctions (ofString "main")
+    (by simpa only [nestedHOLDeclarations] using sourceCode)
+    (by rw [nestedHOLDeclarations]; simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,nestedCallEntry,panSimpProg,retToTail,seqAssoc,smartSeq,progToHOL,expToHOL,shapeToHOL])
+    (by simp [source,nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,FUPDATE,ofString])
+    rfl rfl rfl rfl
+    (by simpa only [nestedHOLDeclarations] using unique) nestedHOLFunctionShapes
+    (by simpa only [nestedHOLDeclarations] using nestedCall_inline_selection_empty)
+    outside aligned (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 8 6
+    _ _ _ _ 7 (by simpa [production,panSemBitVec64MemoryAccess] using sourceRun) (by rfl)
+    nestedHOLFunctions (by rw [nestedHOLDeclarations])
+    (by simpa only [nestedHOLDeclarations] using unique)
+    (by simp [nestedHOLFunctions,isWfShapeExactHOL])
+    (by simpa [nestedHOLDeclarations,nestedRawWords,nestedCallCrepPrograms] using nested_panToWord)
+    (by simpa only [nestedHOLDeclarations] using sourceGood)
+    (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,nestedBitmaps] using nested_bitmapFits)
+    (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,nestedCode] using nested_nativeSafe)
+    (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,nestedCode] using nested_compilerFacts)
+    (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,
+      nestedEntry,nestedEntryFrame,nestedFrameSizes] using nested_capacity)
+    rfl rfl rfl rfl rfl rfl (by
+      dsimp only
+      rw [nestedHOLDeclarations]
+      change ∀ addr, source.memaddrs addr → source.memory addr = (sourceTemplateFor nestedBitmaps.length).memory addr
+      intro addr ha
+      rfl)
+  obtain ⟨sourceFinal,finalMachine,finalFfi,sourceResult,machineRun,events,ffiRel,semantics⟩ := span
+  have sourceEvents : sourceFinal.ffi.ioEvents = [] := by
+    have h := ffiRel.2.1
+    simp only [nestedCountedProduction,sourceProduction,sourceFfiState,sourceFfi,List.map_nil] at h
+    cases heq : sourceFinal.ffi.ioEvents with
+    | nil => rfl
+    | cons e es => simp [heq,FfiEventListRel] at h
+  have outputEvents : finalFfi.ioEvents = sourceFfi.ioEvents := by
+    simpa [sourceFfi,sourceEvents] using events
+  rw [nestedHOLDeclarations] at machineRun semantics
+  have codeWeight : CrepSteps.codeWeight (compileProgDeclsHOLW
+      (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))) = 4 := by
+    rw [nestedCall_crep_code]
+    rfl
+  simp only [compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,
+    CrepSteps.statementWeight,codeWeight,show max 3 4 = 4 by decide] at machineRun
+  have fresh : newMainNameHOL (nestedCallDeclarations.map declToHOL) = ofString "main'" := by
+    simp [newMainNameHOL,nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,freshNameMlS,mlstrAppend,
+      ofString,MlString.explode_implode]
+  simp only [source,nestedSourceState,sourceTemplateFor,sourceTemplate,concreteDeclCrepState,noGlobalsLoweredPreCall,
+    concreteDeclLoopState,fresh] at machineRun
   obtain ⟨compilerFinal,compiled⟩ := nested_compilerOutput
-  rw [nested_bitmaps] at compiled result
-  exact ⟨compilerFinal,compiled,result⟩
-
+  rw [nested_bitmaps] at compiled
+  refine ⟨compilerFinal,compiled,finalMachine,finalFfi,?_,outputEvents,?_⟩
+  · simp only [List.flatMap_nil,Nat.reduceAdd] at machineRun
+    rw [← nestedCallCrepPrograms, ← nestedRawWords, ← nestedOptimizedWords, ← nestedNative,
+      ← nestedCode, ← nestedBitmaps] at machineRun
+    have bodyEq : (CrepProgHOL.skip.seq (CrepProgHOL.call none (ofString "main'") []) : CrepProgHOL 64) = nestedCrepBody := by
+      simp [nestedCrepBody,nestedPanContext,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList]
+    rw [bodyEq, ← nestedLoopContext] at machineRun
+    have entryEq : 1 + (SimpVisits.simpTableFactor (functionsHOL (nestedCallDeclarations.map declToHOL)) * 6 +
+        SimpVisits.hw (progToHOL (panSimpProg nestedCallEntry))) + 2 = nestedSourceEntryLimit := by
+      simp [nestedSourceEntryLimit,Nat.add_assoc]
+    rw [entryEq, ← nestedCrepLimit, ← nestedLoopBudget, ← nestedLoopBound,
+      ← nestedOptimizedLoopBody, ← nestedOptimizedLoopBound] at machineRun
+    rw [nested_bitmaps] at machineRun
+    simpa only [nestedOptimizedWords,nestedRawWords] using machineRun
+  · simpa [source,n,nestedSourceState,sourceTemplateFor,sourceTemplate,nested_bitmaps] using semantics
 
 end SteppedFlapjack.Concrete

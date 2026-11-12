@@ -11,29 +11,6 @@ open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.LoopToWordSteps
 
 def nestedCallCrepPrograms : List (MlString × List Nat × CrepProgHOL 64) := compileProgDeclsHOLW (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))
 
-/-- The source configuration immediately before the generated entry call. -/
-def nestedLoweredSource : PanSemStateFiniteExact 64 Unit :=
-  noGlobalsLoweredPreCall {sourceTemplate with clock := 6}
-    (HolFiniteMapExact.empty.updateList
-      (functionsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))).reverse)
-
-/-- The lowered wrapper follows the same two nested calls and returns seven. -/
-theorem nestedLoweredSource_run : ∃ final,
-    nestedLoweredSource.evaluateHOLFiniteState (.seq .skip (.call none (ofString "main'") [])) =
-      (some (.returned (.val (.word 7))),final) ∧ final.ffi = sourceFfi := by
-  have a : (ofString "main" == ofString "main'") = false := by decide
-  have b : (ofString "main" == ofString "middle") = false := by decide
-  have c : (ofString "main'" == ofString "middle") = false := by decide
-  have d : (ofString "main" == ofString "leaf") = false := by decide
-  have e : (ofString "main'" == ofString "leaf") = false := by decide
-  have f : (ofString "middle" == ofString "leaf") = false := by decide
-  simp [a,b,c,d,e,f,nestedLoweredSource,noGlobalsLoweredPreCall,nestedCall_lowered_declarations,
-    functionsHOL,evaluateHOLFiniteState_seq_line780,evaluateHOLFiniteState_skip,evaluateHOLFiniteState_call,
-    evaluateHOLFiniteState_decCall_fixClockRewrite,evaluateHOLFiniteState_return,evalListHOLFinite,evalListHOLExact,
-    PanSemStateFiniteExact.lookupCodeHOLFinite,lookupCodeHOLExact,HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,
-    HolFiniteMapExact.lookup_update,FUPDATE,callEntryStateHOLFinite,evalHOLExact,
-    shapeOfHOLExact,shapeEqHOL,setVarHOLFinite,emptyLocalsHOLFinite,sourceTemplate]
-
 /-- The wrapper visit limit is computed from the counted source run and source declarations. -/
 def nestedSourceEntryLimit : Nat :=
   1 + SimpVisits.simpTableFactor (functionsHOL (nestedCallDeclarations.map declToHOL)) * 6 +

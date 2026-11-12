@@ -1,4 +1,8 @@
-import SteppedFlapjack.Concrete.NestedWordSpan
+import SteppedFlapjack.Concrete.NestedLoopRun
+import SteppedFlapjack.Concrete.WordSpan
+import SteppedFlapjack.Concrete.SourceState
+import SteppedFlapjack.Concrete.FixtureWordStarter
+import SteppedFlapjack.Concrete.CountdownWordSpan
 import SteppedFlapjack.Concrete.FixtureMachineGuards
 import SteppedFlapjack.WordToStackSteps.StartRiscV
 namespace SteppedFlapjack.Concrete
@@ -49,11 +53,6 @@ def nestedEntryFrame : Nat :=
 def nestedNative := compileNative riscvConfig false nestedOptimizedWords
 def nestedCode : List (Nat × HolProg 64) := nestedNative.2.2.2
 def nestedBitmaps : List (BitVec 64) := nestedNative.1
-def nestedBitmapTail : List (BitVec 64) := nestedBitmaps.drop 1
-
-theorem nestedBitmaps_header : nestedBitmaps = 4 :: nestedBitmapTail := by
-  exact nativeBitmaps_header nestedOptimizedWords
-
 /-- Native frame-size table computed from the actual optimized functions. -/
 def nestedFrameSizes : Spt Nat :=
   sptMapi (fun _ (argc,body) =>
@@ -227,81 +226,95 @@ theorem functionOnly_configured_machine
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
-/-- The source-derived nested-call code reaches RISC-V at an explicit tick bound
-when its concrete memory-capacity and machine-initialization checks hold. -/
-theorem nested_configured_machine (cfg : LabToTarget.Config)
-    (fits : 0xa0020018 + nestedBitmaps.length*8 ≤ sourceBase)
-    (capacity : optionLe
-      (optionMap₂ max (some (max 1 (1+nestedEntryFrame)))
-        (optionMap₂ (· + ·) (some 1) (fullCallGraphDepth nestedFrameSizes 64 (sptFromAList nestedOptimizedWords))))
-      (some 2097172))
-    (filtered : LabSem.State 64 LabToTarget.Config Unit)
-    (pc : BitVec 64) (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
-    (labCode : LabSem.LabProgHOL 64) (labs : Spt (Spt Nat)) (asm : AsmState 64) (machine : RiscV.L3.riscv_state)
-    (hmc : mc.target = riscvTarget)
-    (link : LabToTargetSteps.LabExecutionLink filtered (configuredTargetLab nestedCode cfg nestedBitmaps machine))
-    (tie : LabToTarget.oracleTie mc machine filtered)
-    (rel : LabToTarget.stateRel (mc,labCode,labs,pc) filtered asm machine) :
-    let rawWords := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa nestedCallCrepPrograms)
-    let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig rawWords).2
-    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*nestedOptimizedLoopBound+2)
-    let n := 1 + max 1 (stackCodeWeight (sptFromAList nestedCode)) * (6*nestedOptimizedLoopBound+1 + allowance)
+theorem functionOnly_initialized_machine
+    (fs : List (FunDeclHOL 64)) (start : MlS) (body : ProgHOL 64)
+    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],body,.one))
+    (noInline : (functionsHOL ((compileTopExactHOL (fs.map DeclHOL.function) start).filter inlinableHOL)).map Prod.fst = [])
+    (pan : List (DeclHOL 64)) (unique : ((functionsHOL pan).map Prod.fst).Nodup)
+    (rawEq : panToWordCompileProgHOL riscvConfig.isa pan =
+      loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start))))
+    (limit : Nat) (value : BitVec 64)
+    (sourceGood : pancakeGoodCodeHOL pan = true)
+    (bitmapFits : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+      let bitmaps := (compileNative riscvConfig false optimized).1
+      0xa0020018 + bitmaps.length*8 ≤ 0xa0410000)
+    (safe : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+      fixtureStackSafe (compileNative riscvConfig false optimized).2.2.2 = true)
+    (facts : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+      let code := (compileNative riscvConfig false optimized).2.2.2
+      (fixtureRemoveLabels code).isSome = true ∧ (fixtureCodeBytes code).length ≤ 0xecc ∧ (fixtureCodeBytes code).length % 4 = 0)
+    (capacity : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+      let entry := ((sptLookup 64 (sptFromAList optimized)).getD (1,.skip)).2
+      let frame := (compileProgNative riscvConfig false entry 1 (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1
+      let frames := sptMapi (fun _ (argc,body) => (compileProgNative riscvConfig false body argc
+        (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1) (sptFromAList optimized)
+      optionLe (optionMap₂ max (some (max 1 (1+frame)))
+        (optionMap₂ (· + ·) (some 1) (fullCallGraphDepth frames 64 (sptFromAList optimized)))) (some 2097172))
+    (wordPost : WordSemStateFiniteExact 64 (Nat × LabToTarget.Config) Unit)
+    (run : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+      let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+      let native := compileNative riscvConfig false optimized
+      let code := native.2.2.2
+      let bs := native.1
+      let cfg := fixtureCompilerConfig code
+      WordSemStateFiniteExact.evaluate (.call none (some 64) [0] none)
+        {(configuredWord code optimized cfg bs) with clock := 6*limit+1} =
+          (some (.result (.loc 1 0) [.word value]),wordPost))
+ :
+    let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+    let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+    let native := compileNative riscvConfig false optimized
+    let code := native.2.2.2
+    let bitmaps := native.1
+    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*limit+2)
+    let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*limit+1 + allowance)
     ∃ finalMachine finalFfi,
-      evaluateTargetHOL mc sourceFfi (LabToTargetSteps.labTickBound 4 labCode filtered.codeBuffer *
-        StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
-          nestedBitmaps nestedCode (fixtureStackOracle cfg) n) machine =
-            (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFfi.ioEvents ∧
-      PanSemStateFiniteExact.semanticsDecls {sourceTemplateFor nestedBitmaps.length with clock := 0} (ofString "main")
-        (nestedCallDeclarations.map declToHOL) = .terminate .success finalFfi.ioEvents := by
-  have found : (functionsHOL (nestedHOLFunctions.map DeclHOL.function)).lookup (ofString "main") =
-      some ([],progToHOL nestedCallEntry,.one) := by
-    rw [nestedHOLDeclarations]
-    simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,shapeToHOL]
-  have unique : ((functionsHOL (nestedCallDeclarations.map declToHOL)).map Prod.fst).Nodup := by
-    simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL]
-    decide
-  have good : StackToLab.Proofs.GoodCode.goodCode 24 nestedCode := nested_nativeGoodCode
-  obtain ⟨post,run,ffi,_⟩ := nested_configured_optimized_start nestedCode cfg nestedBitmaps fits good
+      evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
+        (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
+          bitmaps code (fixtureStackOracle (fixtureCompilerConfig code)) n) (configuredMachineState code bitmaps) =
+            (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = wordPost.ffi.ioEvents := by
+  let programs := compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)
+  let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa programs)
+  let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
+  let native := compileNative riscvConfig false optimized
+  let code := native.2.2.2
+  let bitmaps := native.1
+  let cfg := fixtureCompilerConfig code
   have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
     funext a b c d e f g
     exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
-  have span := functionOnly_configured_machine nestedHOLFunctions (ofString "main") (progToHOL nestedCallEntry)
-    found (by simpa only [nestedHOLDeclarations] using nestedCall_inline_selection_empty)
-    (nestedCallDeclarations.map declToHOL) unique
-    (by simpa [nestedHOLDeclarations,nestedRawWords,nestedCallCrepPrograms] using nested_panToWord)
-    cfg nestedOptimizedLoopBound 7
-    (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,nestedBitmaps] using fits)
-    (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,
-      nestedEntry,nestedEntryFrame,nestedFrameSizes] using capacity)
-    post (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,
-      nestedCode,nestedBitmaps,compileWith_eq_compile _ allocator] using run)
-    filtered pc mc labCode labs asm machine hmc
-    (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,
-      nestedCode,nestedBitmaps] using link) tie rel
-  obtain ⟨finalMachine,finalFfi,machineRun,events⟩ := span
-  have outputEvents : finalFfi.ioEvents = sourceFfi.ioEvents := by rw [events,ffi]
-  refine ⟨finalMachine,finalFfi,?_,outputEvents,?_⟩
-  · simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,
-      nestedCode,nestedBitmaps] using machineRun
-  · simpa [outputEvents,sourceFfi] using nestedCall_source_semantics nestedBitmaps.length
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-/-- The source compiler provides the nested witness's Lab good-code fact. -/
-theorem nested_labGoodCode (cfg : LabToTarget.Config) :
-    LabToTarget.goodCode riscvConfig (.ln : Spt (Spt Nat))
-      (LabFilter.filterSkip (fixtureLab nestedCode cfg).code) := by
-  have nodup : ((functionsHOL (nestedCallDeclarations.map declToHOL)).map Prod.fst).Nodup := by
-    simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL]
-    decide
-  have sourceGood : pancakeGoodCodeHOL (nestedCallDeclarations.map declToHOL) = true := by
-    decide +kernel
-  have good := source_labGoodCode (nestedCallDeclarations.map declToHOL) nestedRawWords nested_panToWord sourceGood nodup
-  have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
-    funext a b c d e f g
-    exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
-  simpa [fixtureLab,nestedCode,nestedNative,nestedOptimizedWords,
-    compileWith_eq_compile _ allocator,phase3WordConfig_eq] using good
+  have good : StackToLab.Proofs.GoodCode.goodCode 24 code := by
+    have h := source_nativeGoodCode pan unique
+    rw [rawEq, ← phase3WordConfig_eq] at h
+    simpa [code,native,optimized,raw,programs,compileWith_eq_compile _ allocator] using h
+  have labGood : LabToTarget.goodCode riscvConfig (.ln : Spt (Spt Nat))
+      (LabFilter.filterSkip (fixtureLab code cfg).code) := by
+    have h := source_labGoodCode pan raw rawEq sourceGood unique
+    simpa [fixtureLab,code,cfg,native,optimized,raw,programs,compileWith_eq_compile _ allocator,phase3WordConfig_eq] using h
+  have bitmapFits' : 0xa0020018 + bitmaps.length*8 ≤ 0xa0410000 := by
+    simpa [bitmaps,native,optimized,raw,programs] using bitmapFits
+  have fits : 0xa0020018 + bitmaps.length*8 ≤ sourceBase := by simp only [sourceBase]; omega
+  have safe' : fixtureStackSafe code = true := by simpa [code,native,optimized,raw,programs] using safe
+  have facts' : (fixtureRemoveLabels code).isSome = true ∧ (fixtureCodeBytes code).length ≤ 0xecc ∧
+      (fixtureCodeBytes code).length % 4 = 0 := by simpa [code,native,optimized,raw,programs] using facts
+  have removed : LabToTarget.removeLabels 5 riscvConfig 0 .ln []
+      (LabFilter.filterSkip (configuredLab code cfg bitmaps).code) =
+      some ((fixtureCompiled code).1,(fixtureCompiled code).2) := fixtureRemoveLabels_eq code facts'.1
+  have guards := configuredMachine_allGuards code bitmaps bitmapFits' labGood safe' facts'
+  obtain ⟨filtered,link,tie,rel,buffer⟩ := configuredMachine_relations code cfg bitmaps bitmapFits'
+    (fixtureCompiled code).1 (fixtureCompiled code).2 good removed guards
+  have result := functionOnly_configured_machine fs start body found noInline pan unique rawEq cfg limit value fits capacity
+    wordPost (by simpa [programs,raw,optimized,native,code,bitmaps,cfg] using run)
+    filtered (fixtureCodeStart code) (fixtureMachineConfig (fixtureCodeStart code))
+    (fixtureCompiled code).1 (fixtureCompiled code).2 (configuredMachineAsm code bitmaps)
+    (configuredMachineState code bitmaps) rfl
+    (by simpa [programs,raw,optimized,native,code,bitmaps] using link) tie rel
+  simp only [buffer,fixtureLabMachineFactor code facts'.2.1] at result
+  exact result
 
 
 end SteppedFlapjack.Concrete
