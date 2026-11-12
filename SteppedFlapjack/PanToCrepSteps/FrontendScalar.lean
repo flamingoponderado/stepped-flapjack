@@ -4,6 +4,41 @@ import SteppedFlapjack.PanToCrepSteps.DeclShape
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 
+theorem selectFlatLoad {width : Nat} [NeZero width] (index count : Nat)
+    (address : BitVec width) (value : CrepExpHOL width) (h : index < count) :
+    ∃ offset, compFieldHOL index (List.replicate count .one)
+      (loadShapeBytesHOLW address count value) =
+      ([if offset == 0 then .load value else .load (.op .add [value,.const offset])], .one) := by
+  induction index generalizing count address with
+  | zero =>
+    cases count with
+    | zero => omega
+    | succ count =>
+      refine ⟨address, ?_⟩
+      simp [compFieldHOL, loadShapeBytesHOLW, sizeOfShapeHOL, List.replicate_succ]
+  | succ index ih =>
+    cases count with
+    | zero => omega
+    | succ count =>
+      have hh : index < count := by omega
+      obtain ⟨offset, ho⟩ := ih count (address + BitVec.ofNat width (width / 8)) hh
+      refine ⟨offset, ?_⟩
+      simpa [compFieldHOL, loadShapeBytesHOLW, sizeOfShapeHOL, List.replicate_succ] using ho
+
+theorem flatShapeSize (count : Nat) : sizeOfShapesHOL (List.replicate count .one) = count := by
+  induction count with
+  | zero => rfl
+  | succ count ih => simp [List.replicate_succ, sizeOfShapeHOL, ih, Nat.add_comm]
+
+theorem flatField_compiles {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width)
+    (index count : Nat) (address : ExpHOL width) (compiled : CrepExpHOL width)
+    (ha : compileExpExactHOLW ctxt address = ([compiled],.one)) (hi : index < count) :
+    ∃ offset, compileExpExactHOLW ctxt (.rfield index (.load (.comb (List.replicate count .one)) address)) =
+      ([if offset == 0 then .load compiled else .load (.op .add [compiled,.const offset])], .one) := by
+  obtain ⟨offset, h⟩ := selectFlatLoad index count 0 compiled hi
+  refine ⟨offset, ?_⟩
+  simpa [compileExpExactHOLW, ha, flatShapeSize] using h
+
 /-- A scalar expression the Pancake frontend compiles to one Crep expression.
 The direct subset also supports the existing no-auxiliary-code Loop proofs;
 comparisons may generate additional Loop code in a later pass. -/
@@ -13,6 +48,9 @@ inductive FrontendScalar {width : Nat} [NeZero width] (ctxt : PanToCrepContextEx
   | baseAddr : FrontendScalar ctxt .baseAddr
   | topAddr : FrontendScalar ctxt .topAddr
   | bytesInWord : FrontendScalar ctxt .bytesInWord
+  | fieldLoad (index count : Nat) (inBounds : index < count) {address} :
+      FrontendScalar ctxt address →
+      FrontendScalar ctxt (.rfield index (.load (.comb (List.replicate count .one)) address))
   | load {address} : FrontendScalar ctxt address → FrontendScalar ctxt (.load .one address)
   | op (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.op operator [a,b])
   | cmp (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.cmp operator a b)
@@ -61,6 +99,10 @@ theorem frontendScalar_compile {width : Nat} [NeZero width] {ctxt : PanToCrepCon
   | baseAddr => exact ⟨.baseAddr,by simp [compileExpExactHOLW]⟩
   | topAddr => exact ⟨.topAddr,by simp [compileExpExactHOLW]⟩
   | bytesInWord => exact ⟨.const (BitVec.ofNat width (width / 8)),by simp [compileExpExactHOLW]⟩
+  | fieldLoad index count inBounds address ih =>
+    obtain ⟨compiled, hc⟩ := ih
+    obtain ⟨offset, eq⟩ := flatField_compiles ctxt index count _ compiled hc inBounds
+    exact ⟨_, eq⟩
   | load address ih =>
     obtain ⟨compiled, hc⟩ := ih
     exact ⟨.load compiled, by simp [compileExpExactHOLW, hc, sizeOfShapeHOL, loadShapeBytesHOLW]⟩

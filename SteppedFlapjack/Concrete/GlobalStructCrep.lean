@@ -2,12 +2,26 @@ import SteppedFlapjack.Concrete.GlobalStructWitness
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
 import Flapjack.Pancake.Proofs.PanToCrep.PcCompileCorrect.Assembly
 import SteppedFlapjack.CrepSteps.BranchStatic
+import SteppedFlapjack.CrepToLoopSteps.FrontendScalar
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
 open SteppedFlapjack.PanToCrepSteps
 
 def globalStructCrepContext : PanToCrepContextExact 64 :=
   mkCtxtExactHOL HolFiniteMapExact.empty HolFiniteMapExact.empty 0 HolFiniteMapExact.empty
+
+/-- The pair's lowered second-field read belongs to the general frontend
+fragment, and its compiled expression has the supported Crep-to-Loop shape. -/
+theorem globalStruct_field_frontend :
+    FrontendScalar globalStructCrepContext
+      (.rfield 1 (.load (.comb [.one,.one]) (.op .sub [.topAddr,.const 16]))) := by
+  exact .fieldLoad 1 2 (by decide) (.op .sub .topAddr (.const 16))
+
+theorem globalStruct_field_compiled : ∃ (expression : CrepExpHOL 64),
+    compileExpExactHOLW globalStructCrepContext
+      (.rfield 1 (.load (.comb [.one,.one]) (.op .sub [.topAddr,.const 16]))) =
+        ([expression],.one) ∧ SteppedFlapjack.CrepToLoopSteps.CompiledScalar expression :=
+  SteppedFlapjack.CrepToLoopSteps.frontendScalar_compiled globalStruct_field_frontend
 
 def globalStructCrepState : CrepSemHOLState 64 Unit := concreteDeclCrepState globalStructTarget []
 

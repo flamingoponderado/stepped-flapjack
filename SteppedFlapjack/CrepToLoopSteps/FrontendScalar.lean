@@ -17,6 +17,13 @@ theorem frontendScalar_compiled {width : Nat} [NeZero width]
   | baseAddr => exact ⟨.baseAddr,by simp [compileExpExactHOLW],.direct .baseAddr⟩
   | topAddr => exact ⟨.topAddr,by simp [compileExpExactHOLW],.direct .topAddr⟩
   | bytesInWord => exact ⟨.const (BitVec.ofNat width (width / 8)),by simp [compileExpExactHOLW],.direct (.const _)⟩
+  | fieldLoad index count inBounds address ih =>
+    obtain ⟨compiled, eq, shape⟩ := ih
+    obtain ⟨offset, fieldEq⟩ := PanToCrepSteps.flatField_compiles ctxt index count _ compiled eq inBounds
+    refine ⟨_,fieldEq,?_⟩
+    split <;> rename_i h
+    · exact .load shape
+    · exact .load (.op .add shape (.direct (.const _)))
   | load address ih =>
     obtain ⟨compiled, eq, shape⟩ := ih
     exact ⟨.load compiled,by simp [compileExpExactHOLW,eq,sizeOfShapeHOL,loadShapeBytesHOLW],.load shape⟩
