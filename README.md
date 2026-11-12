@@ -124,7 +124,7 @@ The current fragment has scalar locals, parameters and return values. The
 fixture reserves globals below the init-e heap endpoint; it does not yet cover
 the complete init-e initialization or guest.
 
-The kernel-checked witness clocks are `8402039033998605948` ticks for the
+The kernel-checked witness clocks are `2587607680003341948` ticks for the
 comparison program and `12798071459382541821948` ticks for the branching loop.
 Both `countdownFixture_machine` and `naturalCountdownFixture_machine` state the
 bound `44195828396580057600 * (6*n+9) + 59847410146165518348` machine ticks.

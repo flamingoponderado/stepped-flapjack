@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.Phase7Machine
+import SteppedFlapjack.Concrete.SingletonMachine
 import SteppedFlapjack.Concrete.FixtureMachineGuards
 import SteppedFlapjack.Concrete.BranchingFrames
 import SteppedFlapjack.Concrete.CountdownOptimized
@@ -48,16 +49,6 @@ private theorem comparison_sourceRun (context : PanValueFfiContext (RiscV.Word 6
 open Flapjack.Basis.Pure.MlString
 def comparisonHOLFunctions := comparisonSourceFunctions.map funDeclToHOL
 def comparisonSimpFunctions := comparisonHOLFunctions.map (fun f => {f with body := panSimpCompileHOL f.body})
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 2000000 in
-private theorem comparison_noInline : (functionsHOL ((compileTopExactHOL (comparisonSimpFunctions.map DeclHOL.function) (ofString "main")).filter inlinableHOL)).map Prod.fst = [] := by
-  simp [comparisonSimpFunctions,comparisonHOLFunctions,comparisonSourceFunctions,funDeclToHOL,progToHOL,expToHOL,shapeToHOL,
-    panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL,branching,compileTopExactHOL,functionsHOL,
-    compileTopFunctionLookup_eq_lookup,List.lookup,resortDeclsHOL,newMainNameHOL,isNameHOL,isDeclHOL,
-    isExnDeclHOL,freshNameMlS,mlstrAppend,ofString,MlString.explode_implode]
-  dsimp only [List.filter,isFunctionHOL]
-  simp [fpermDecsHOL,compileDecsExactHOL,decShapesHOL,fpermHOL,fpermName,compileProgExactHOL,
-    compileExpExactHOL,inlinableHOL,functionsHOL]
 private theorem comparison_simpDeclarations : comparisonSimpFunctions.map DeclHOL.function = declarations (progToHOL (panSimpProg branching)) := by
   rw [branching_simp_program]
   simp [comparisonSimpFunctions,comparisonHOLFunctions,comparisonSourceFunctions,declarations,singleEntryProgram,funDeclToHOL,progToHOL,expToHOL,shapeToHOL,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL,branching]
@@ -67,40 +58,9 @@ private theorem comparison_nativeCode : (supportedNative branching).2.2.2 = comp
     rw [branching_simp_program,← branching_hol_eq,branching_crep_code]
     rfl
   simp only [supportedNative,supportedAllocated_eq,words,comparisonNativeCode]
-def comparisonSource := functionSourceExact comparisonSourceFunctions 1 6
-private instance : DecidablePred comparisonSource.memaddrs := by change DecidablePred ordinaryAddress; infer_instance
 open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Backend.WordToStack.Native
 open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackSteps SteppedFlapjack.LoopLiveSteps
-noncomputable def comparisonTicks : Nat :=
-  let entries := functionsHOL (comparisonHOLFunctions.map DeclHOL.function)
-  let targetCode := HolFiniteMapExact.empty.updateList (functionsHOL (comparisonSimpFunctions.map DeclHOL.function)).reverse
-  let decls := comparisonSimpFunctions.map DeclHOL.function
-  let lowered := compileTopExactHOL decls (ofString "main")
-  let renamed := {comparisonSource with code := fpermCodeHOL (ofString "main") (newMainNameHOL decls) targetCode}
-  let before := noGlobalsLoweredPreCall renamed (HolFiniteMapExact.empty.updateList (functionsHOL lowered).reverse)
-  let panCtxt := mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL lowered)) 0 (getEidsFromDeclsHOL lowered)
-  let p : ProgHOL 64 := .seq .skip (.call none (newMainNameHOL decls) [])
-  let programs := compileProgDeclsHOLW lowered
-  let crep := compileProgExactHOLW panCtxt p
-  let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa programs)
-  let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
-  let native := compileNative riscvConfig false optimized
-  let code := native.2.2.2
-  let bitmaps := native.1
-  let cfg := fixtureCompilerConfig code
-  let initial := concreteDeclCrepState before programs
-  let loop := {(concreteDeclLoopState riscvConfig.isa initial programs) with memory := (configuredStack code cfg bitmaps).memory}
-  let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
-  let rows := programs.map (fun row => (row.2.1,row.2.2))
-  let factor := max (callSyntaxCost ctxt crep) (loopCodeWeight loop.code+2)
-  let opt := optimiseHOL (compileHOLExact ctxt .ln crep)
-  let optFactor := max (loopVisitWeight opt) (loopCodeWeight loop.code+2)
-  callPipelineTicks code bitmaps (max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs))
-    (SimpVisits.simpTableFactor entries) (SimpVisits.hw (progToHOL (panSimpProg branching)))
-    (callClockFactor ctxt rows initial.clock crep) initial.clock (callSyntaxCost ctxt crep)
-    factor (loopVisitWeight opt) optFactor (max 1 (wordCodeWeight (sptFromAList optimized)))
-    (max 1 (stackCodeWeight (sptFromAList code))) 6
 def comparisonOptimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig
   (loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa
     (compileProgDeclsHOLW (compileTopExactHOL (comparisonSimpFunctions.map DeclHOL.function) (ofString "main")))))).2
@@ -124,8 +84,6 @@ private theorem sameCode : comparisonNative.2.2.2 = comparisonNativeCode := by
     rw [branching_simp_program,← branching_hol_eq,branching_crep_code]
     rfl
   simp only [supportedNative,supportedAllocated_eq,words,comparisonNativeCode]
-private theorem sameBitmap : comparisonNative.1 = [4] := by
-  rw [sameNative, supported_native_bitmap branching branching_supported]
 private theorem cmpFactor (cfg : LabToTarget.Config) :
     costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
       (sptFromAList (code1 countdownRiscVBackend.dataConf comparisonNative.2.2.2)) [4] (fixtureStackOracle cfg) = 1950 := by
@@ -136,13 +94,6 @@ private theorem cmpFactor (cfg : LabToTarget.Config) :
   decide +kernel
 
 open Flapjack.Basis.Pure.MlString
-private theorem cmpPrograms : compileProgDeclsHOLW (compileTopExactHOL (comparisonSimpFunctions.map DeclHOL.function) (ofString "main")) = crepPrograms branchingHOL := by
-  rw [comparison_simpDeclarations,branching_simp_program,← branching_hol_eq]
-  rfl
-private theorem cmpMain : newMainNameHOL (comparisonSimpFunctions.map DeclHOL.function) = entryName branchingHOL := by
-  rw [comparison_simpDeclarations,branching_simp_program,← branching_hol_eq]
-  rfl
-
 open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps SteppedFlapjack.StackSteps SteppedFlapjack.StackAllocSteps
 open SteppedFlapjack.WordSimpSteps
 open Flapjack.Compiler.Backend.StackRemove
@@ -161,12 +112,6 @@ private theorem cmpWordWeight : wordCodeWeight (sptFromAList comparisonOptimized
     rfl
   rw [cmpOpt,supportedAllocated_eq,words,comparison_optimized_table]
   decide +kernel
-private theorem cmpTableWeight : SimpVisits.simpTableFactor (functionsHOL (comparisonHOLFunctions.map DeclHOL.function)) = 4 := by
-  simp [comparisonHOLFunctions,comparisonSourceFunctions,funDeclToHOL,functionsHOL,SimpVisits.simpTableFactor,
-    panSimpCompileHOL,seqAssocHOL,retToTailHOL,smartSeqHOL,progToHOL,expToHOL,shapeToHOL,SimpVisits.hw,branching]
-private theorem cmpBodyWeight : SimpVisits.hw (progToHOL (panSimpProg branching)) = 3 := by
-  simp [branching,panSimpProg,seqAssoc,retToTail,progToHOL,expToHOL,SimpVisits.hw]
-private theorem cmpClock : comparisonSource.clock = 6 := by rfl
 private theorem cmpCodeWeight (name : MlString) : CrepSteps.codeWeight (twoPrograms (ofString "main") name branchCrepBody) = 3 := by
   simp [CrepSteps.codeWeight,CrepSteps.statementWeight,twoPrograms,branchCrepBody]
 private theorem cmpRate (ctx : CrepToLoopContextExact) (name : MlString) (clock : Nat) :
@@ -200,128 +145,9 @@ private theorem crepClockProjection {σ : Type} (source : PanSemStateFiniteExact
     (concreteDeclCrepState source programs).clock = source.clock := rfl
 private theorem setupClockProjection {σ : Type} (source : PanSemStateFiniteExact 64 σ) code :
     (noGlobalsLoweredPreCall source code).clock = source.clock+1 := rfl
-private theorem comparison_ticks_numeric : comparisonTicks = 8402039033998605948 := by
-  have uniform : uniformFactor (width := 64) countdownRiscVBackend.dataConf = 19 := by decide +kernel
-  have init : loopOnlyCost 0 (initCode (StackToLab.isGenGc countdownRiscVBackend.dataConf.gcKind) (2^53-1) 24 : HolProg 64) = 361 := by decide +kernel
-  unfold comparisonTicks callPipelineTicks
-  dsimp only
-  unfold fixtureStackOracle
-  rw [stackLabTickLimit_emptyOracle]
-  dsimp only
-  rw [← comparisonOptimized, ← comparisonNative, sameBitmap]
-  have factor := cmpFactor (fixtureCompilerConfig comparisonNative.2.2.2)
-  unfold fixtureStackOracle at factor
-  rw [factor, uniform, init]
-  rw [cmpPrograms,cmpMain,branching_crep_code]
-  simp only [compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,List.flatMap_nil]
-  rw [entryOptimizedWeight,cmpStackWeight,cmpWordWeight]
-  simp only [cmpTableWeight,cmpBodyWeight]
-  simp only [cmpRateRaw,entrySyntaxWeight,cmpCodeWeightRaw]
-  simp only [loopCodeProjection,crepClockProjection,setupClockProjection,cmpLoopWeightRaw,cmpClock]
-  simp [CrepSteps.statementWeight,flattenStepFactor]
 
 
 end
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-/-- The comparison program reaches the machine through the call-aware theorem. -/
-theorem comparisonFixture_machine : ∃ compilerFinal, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
-      (comparisonHOLFunctions.map DeclHOL.function) = some (fixtureCodeBytes comparisonNative.2.2.2,comparisonNative.1,compilerFinal) ∧
-    ∃ machine ffi, evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart comparisonNative.2.2.2)) sourceFfi
-      8402039033998605948 (configuredMachineState comparisonNative.2.2.2 comparisonNative.1) = (.halt .success,machine,ffi) ∧
-      ffi.ioEvents = sourceFfi.ioEvents ∧
-      Flapjack.PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
-        (comparisonHOLFunctions.map DeclHOL.function) = .terminate .success ffi.ioEvents := by
-  have shape : ScalarSupported branching := branching_supported.toScalarSupported
-  have table : FunctionTableSupported comparisonSourceFunctions := by
-    intro f hf
-    simp only [comparisonSourceFunctions,List.mem_cons,List.not_mem_nil,or_false] at hf
-    subst f
-    refine ⟨?_,shape.1,?_,rfl⟩
-    · simp [FunDeclByteRanged,ListParamByteRanged,ShapeByteRanged,NameRanged,shape.2]
-    · simp
-  have unique : ((functionsHOL (comparisonHOLFunctions.map DeclHOL.function)).map Prod.fst).Nodup := by
-    simp [comparisonHOLFunctions,comparisonSourceFunctions,funDeclToHOL,functionsHOL]
-  let targetCode := HolFiniteMapExact.empty.updateList (functionsHOL (comparisonSimpFunctions.map DeclHOL.function)).reverse
-  have span := countedCalls_initializedMachine shape comparisonProduction comparisonSource comparisonSourceFunctions 1 6 table rfl rfl targetCode
-    (functionsHOL (comparisonHOLFunctions.map DeclHOL.function)) (by rfl)
-    comparisonHOLFunctions rfl unique comparisonSimpFunctions rfl (ofString "main") rfl rfl
-    (by simp [comparisonSource,functionSourceExact,comparisonSourceFunctions,funDeclToHOL,shapeToHOL,functionsHOL,
-      HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,ofString])
-    comparison_noInline (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 2 6
-    _ _ _ _ 7 (comparison_sourceRun _ _ _) (by rfl)
-    (by
-      rw [comparison_simpDeclarations]
-      change 0xa0020018 + (supportedNative branching).1.length*8 ≤ 0xa0410000
-      rw [supported_native_bitmap branching branching_supported]
-      decide)
-    (by
-      rw [comparison_simpDeclarations]
-      change fixtureStackSafe (supportedNative branching).2.2.2 = true
-      rw [comparison_nativeCode]
-      exact comparison_stackSafe)
-    (by
-      rw [comparison_simpDeclarations]
-      change (fixtureRemoveLabels (supportedNative branching).2.2.2).isSome = true ∧
-        (fixtureCodeBytes (supportedNative branching).2.2.2).length ≤ 0xecc ∧
-        (fixtureCodeBytes (supportedNative branching).2.2.2).length % 4 = 0
-      rw [comparison_nativeCode]
-      exact comparison_compiler_facts)
-    (by
-      rw [comparison_simpDeclarations]
-      change (let optimized := (supportedAllocated branching).2
-        let entry := ((sptLookup 64 (sptFromAList optimized)).getD (1,.skip)).2
-        let frame := (Flapjack.Compiler.Backend.WordToStack.Native.compileProgNative riscvConfig false entry 1
-          (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1
-        let frames := sptMapi (fun _ (argc,body) => (Flapjack.Compiler.Backend.WordToStack.Native.compileProgNative riscvConfig false body argc
-          (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1) (sptFromAList optimized)
-        Flapjack.Compiler.Backend.BackendProps.optionLe (Flapjack.Compiler.Backend.WordDepth.optionMap₂ max (some (max 1 (1+frame)))
-          (Flapjack.Compiler.Backend.WordDepth.optionMap₂ (· + ·) (some 1) (Flapjack.Compiler.Backend.WordDepth.Executable.fullCallGraphDepth frames 64 (sptFromAList optimized)))) (some 2097172))
-      rw [supportedAllocated_eq]
-      have words : supportedWordPrograms branching = comparisonWordPrograms := by
-        unfold supportedWordPrograms
-        rw [branching_simp_program,← branching_hol_eq,branching_crep_code]
-        rfl
-      have rows : (Flapjack.Compiler.Backend.WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2 =
-          [(64,1,countdownOptimizedEntry),(65,1,.seq (.move 1 [(0,0)])
-            (.seq .tick (.seq (.inst (.const 2 (7 : BitVec 64))) (.seq (.move 0 [(2,2)]) (.return 0 [2])))))] := by
-        rw [comparison_optimized_table]
-        with_unfolding_all rfl
-      rw [words,rows]
-      dsimp only
-      have frames : sptMapi (fun _ (argc,body) => (Flapjack.Compiler.Backend.WordToStack.Native.compileProgNative riscvConfig false body argc
-          (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1)
-          (sptFromAList [(64,1,countdownOptimizedEntry),(65,1,.seq (.move 1 [(0,0)])
-            (.seq .tick (.seq (.inst (.const 2 (7 : BitVec 64))) (.seq (.move 0 [(2,2)]) (.return 0 [2])))))]) =
-          sptFromAList [(64,0),(65,0)] := by with_unfolding_all rfl
-      rw [frames]
-      simp [Flapjack.Compiler.Backend.WordDepth.Executable.fullCallGraphDepth,
-        Flapjack.Compiler.Backend.WordDepth.Executable.callGraphDepth,
-        sptLookup_sptFromAList,sptAListLookup,countdownOptimizedEntry]
-      all_goals try (split <;> simp_all [sptLookup_sptFromAList,sptAListLookup])
-      all_goals try (obtain ⟨rfl,rfl⟩ := ‹_ ∧ _›)
-      all_goals try simp [Flapjack.Compiler.Backend.WordDepth.Executable.callGraphDepth,sptSize,sptFromAList,sptInsert]
-      all_goals with_unfolding_all decide)
-    (by
-      rw [comparison_simpDeclarations]
-      change 1 = (supportedNative branching).1.length
-      rw [supported_native_bitmap branching branching_supported]
-      rfl)
-  obtain ⟨sourceFinal,machine,ffi,compilerFinal,compiled,sourceRun,machineRun,events,ffiRel,semantics⟩ := span
-  have sourceEvents : sourceFinal.ffi.ioEvents = [] := by
-    have h := ffiRel.2.1
-    simp only [comparisonProduction,functionSourceProduction,sourceProduction,sourceFfiState,sourceFfi,List.map_nil] at h
-    cases heq : sourceFinal.ffi.ioEvents with
-    | nil => rfl
-    | cons e es => simp [heq,FfiEventListRel] at h
-  have outputEvents : ffi.ioEvents = sourceFfi.ioEvents := by simpa [sourceFfi,sourceEvents] using events
-  refine ⟨compilerFinal,?_,machine,ffi,?_,outputEvents,?_⟩
-  · simpa only [comparisonNative,comparisonOptimized] using compiled
-  · rw [← comparison_ticks_numeric]
-    dsimp only [comparisonTicks,comparisonNative,comparisonOptimized]
-    exact machineRun
-  · simpa [comparisonSource,functionSourceExact,sourceTemplateFor_one,sourceTemplate] using semantics
 
 def branchingLoopSourceFunctions : List (FunDeclOf 64) := [⟨"main",false,false,[],branchingLoop,.one⟩]
 private def branchingLoopProduction := functionSourceProduction branchingLoopSourceFunctions 1 23
@@ -1233,5 +1059,221 @@ theorem naturalCountdownFixture_machine (n : Nat) (range : n < 2^64) :
     rw [clockEq] at padded
     exact padded
   · simpa [naturalCountdownSource,functionSourceExact,sourceTemplateFor_one,sourceTemplate] using semantics
+
+end SteppedFlapjack.Concrete
+
+namespace SteppedFlapjack.Concrete
+open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
+open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend
+open Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Backend.WordToStack.Native
+open Flapjack.Compiler.Backend.WordDepth Flapjack.Compiler.Backend.WordDepth.Executable Flapjack.Compiler.Backend.BackendProps
+open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackSteps SteppedFlapjack.LoopLiveSteps
+set_option maxRecDepth 100000
+set_option maxHeartbeats 4000000
+private def comparisonCanonical := globalEntryProduction (singletonPost 1 6) (singletonEntries branching)
+private theorem comparisonCanonicalRun : evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
+    (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) comparisonCanonical.structs (countedFunctionsOfCode comparisonCanonical.code)
+    comparisonCanonical.baseAddress comparisonCanonical.topAddress panSemBitVec64BytesInWord 2
+    comparisonCanonical.locals comparisonCanonical.globals comparisonCanonical.memory comparisonCanonical.ffi (panSimpProg branching)
+    (memoryAccess := some (panSemBitVec64MemoryAccess comparisonCanonical))
+    (contracts := some (countedContractsOfCode comparisonCanonical.code [])) =
+      some (.returned comparisonCanonical.locals comparisonCanonical.globals comparisonCanonical.memory comparisonCanonical.ffi [.word 7],6) := by
+  rw [branching_simp_program]
+  with_unfolding_all rfl
+private theorem comparisonCap : singletonCapacity (supportedAllocated branching).2 := by
+  change (let optimized := (supportedAllocated branching).2
+    let entry := ((sptLookup 64 (sptFromAList optimized)).getD (1,.skip)).2
+    let frame := (Flapjack.Compiler.Backend.WordToStack.Native.compileProgNative riscvConfig false entry 1
+      (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1
+    let frames := sptMapi (fun _ (argc,body) => (Flapjack.Compiler.Backend.WordToStack.Native.compileProgNative riscvConfig false body argc
+      (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1) (sptFromAList optimized)
+    Flapjack.Compiler.Backend.BackendProps.optionLe (Flapjack.Compiler.Backend.WordDepth.optionMap₂ max (some (max 1 (1+frame)))
+      (Flapjack.Compiler.Backend.WordDepth.optionMap₂ (· + ·) (some 1) (Flapjack.Compiler.Backend.WordDepth.Executable.fullCallGraphDepth frames 64 (sptFromAList optimized)))) (some 2097172))
+  rw [supportedAllocated_eq]
+  have words : supportedWordPrograms branching = comparisonWordPrograms := by
+    unfold supportedWordPrograms
+    rw [branching_simp_program,← branching_hol_eq,branching_crep_code]
+    rfl
+  have rows : (Flapjack.Compiler.Backend.WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2 =
+      [(64,1,countdownOptimizedEntry),(65,1,.seq (.move 1 [(0,0)])
+        (.seq .tick (.seq (.inst (.const 2 (7 : BitVec 64))) (.seq (.move 0 [(2,2)]) (.return 0 [2])))))] := by
+    rw [comparison_optimized_table]
+    with_unfolding_all rfl
+  rw [words,rows]
+  dsimp only
+  have frames : sptMapi (fun _ (argc,body) => (Flapjack.Compiler.Backend.WordToStack.Native.compileProgNative riscvConfig false body argc
+      (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1)
+      (sptFromAList [(64,1,countdownOptimizedEntry),(65,1,.seq (.move 1 [(0,0)])
+        (.seq .tick (.seq (.inst (.const 2 (7 : BitVec 64))) (.seq (.move 0 [(2,2)]) (.return 0 [2])))))]) =
+      sptFromAList [(64,0),(65,0)] := by with_unfolding_all rfl
+  rw [frames]
+  simp [Flapjack.Compiler.Backend.WordDepth.Executable.fullCallGraphDepth,
+    Flapjack.Compiler.Backend.WordDepth.Executable.callGraphDepth,
+    sptLookup_sptFromAList,sptAListLookup,countdownOptimizedEntry]
+  all_goals try (split <;> simp_all [sptLookup_sptFromAList,sptAListLookup])
+  all_goals try (obtain ⟨rfl,rfl⟩ := ‹_ ∧ _›)
+  all_goals try simp [Flapjack.Compiler.Backend.WordDepth.Executable.callGraphDepth,sptSize,sptFromAList,sptInsert]
+  all_goals with_unfolding_all decide
+private theorem comparisonUnified_machine : ∃ (sourceFinal : PanSemStateFiniteExact 64 Unit), ∃ finalMachine finalFfi compilerFinal,
+    Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig (singletonSourceProgram branching) =
+      some (fixtureCodeBytes (globalSourceCode (singletonSourceProgram branching)),globalSourceBitmaps (singletonSourceProgram branching),compilerFinal) ∧
+    evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (globalSourceCode (singletonSourceProgram branching)))) sourceFfi
+      (singletonTicks branching 1 6) (configuredMachineState (globalSourceCode (singletonSourceProgram branching)) (globalSourceBitmaps (singletonSourceProgram branching))) =
+      (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents ∧ FfiStateRel comparisonCanonical.ffi sourceFinal.ffi := by
+  apply singleton_counted_machine branching branching_supported 1 6 (by rw [singleton_bitmap branching branching_supported]; rfl)
+    (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 2 6
+    comparisonCanonical.locals comparisonCanonical.globals comparisonCanonical.memory comparisonCanonical.ffi 7 comparisonCanonicalRun (by decide)
+  · rw [singleton_bitmap branching branching_supported]
+    decide
+  · apply singleton_safe branching branching_supported
+    rw [comparison_nativeCode]
+    exact comparison_stackSafe
+  · apply singleton_facts branching branching_supported
+    rw [comparison_nativeCode]
+    exact comparison_compiler_facts
+  · exact singleton_capacity branching branching_supported comparisonCap
+open Flapjack.Compiler.Backend.StackLang Flapjack.Compiler.Backend.StackRemove
+open SteppedFlapjack.StackRemoveSteps.CompCorrect SteppedFlapjack.StackRemoveSteps
+open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics SteppedFlapjack.StackToLabSteps SteppedFlapjack.StackAllocSteps
+private theorem cmpUnifiedOptOfWeights (panCtxt : PanToCrepContextExact 64) (p : ProgHOL 64)
+    (crep : CrepSemHOLState 64 Unit) (programs : List (MlS × List Nat × CrepProgHOL 64))
+    (limit : Nat) (c : CrepToLoopContextExact) (entry : MlS)
+    (body : compileProgExactHOLW panCtxt p = .seq .skip (.call none entry []))
+    (sourceLimit : limit = 9) (crepClock : crep.clock = 7)
+    (cw : CrepSteps.codeWeight programs = 3)
+    (lw : loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa programs)) = 46)
+    (cf : callClockFactor c (programs.map (fun row => (row.2.1,row.2.2))) 7 (.seq .skip (.call none entry [])) = 192)
+    (sw : callSyntaxCost c (.seq .skip (.call none entry []) : CrepProgHOL 64) = 5)
+    (ow : loopVisitWeight (optimiseHOL (compileHOLExact c .ln (.seq .skip (.call none entry []) : CrepProgHOL 64))) = 10) :
+    loweredProgramOptLimit panCtxt p crep programs limit c c .ln = 24805354 := by
+  unfold loweredProgramOptLimit
+  dsimp only
+  rw [body,sourceLimit,crepClock,cw,lw,cf,sw,ow]
+  simp [CrepSteps.statementWeight]
+
+private theorem cmpUnifiedNumericBackend (code : List (Nat × HolProg 64))
+    (factor : costFromFields riscvConfig.addrOffset 0 (.call none (.inl Flapjack.Compiler.Backend.BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf code)) [4] (fixtureStackOracle (fixtureCompilerConfig code)) = 1950) :
+    948 * stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset [4] code
+      (fixtureStackOracle (fixtureCompilerConfig code))
+      (1 + 15 * (6*24805354+1 + ((9+1)*(6*24805354+1)+1))) = 2587607680003341948 := by
+  have uniform : uniformFactor (width := 64) countdownRiscVBackend.dataConf = 19 := by decide +kernel
+  have init : loopOnlyCost 0 (initCode (StackToLab.isGenGc countdownRiscVBackend.dataConf.gcKind) (2^53-1) 24 : HolProg 64) = 361 := by decide +kernel
+  unfold fixtureStackOracle
+  rw [stackLabTickLimit_emptyOracle]
+  dsimp only
+  unfold fixtureStackOracle at factor
+  rw [factor,uniform,init]
+  simp [flattenStepFactor]
+private theorem cmpUnifiedNumericFromInputs (code : List (Nat × HolProg 64)) (bs : List (BitVec 64)) (opt ww sw : Nat)
+    (bitmap : bs = [4]) (optEq : opt = 24805354) (wordEq : ww = 9) (stackEq : sw = 15)
+    (factor : costFromFields riscvConfig.addrOffset 0 (.call none (.inl Flapjack.Compiler.Backend.BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf code)) [4] (fixtureStackOracle (fixtureCompilerConfig code)) = 1950) :
+    948 * stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset bs code
+      (fixtureStackOracle (fixtureCompilerConfig code))
+      (1 + max 1 sw * (6*opt+1 + ((max 1 ww+1)*(6*opt+1)+1))) = 2587607680003341948 := by
+  subst bs; subst opt; subst ww; subst sw
+  exact cmpUnifiedNumericBackend code factor
+private theorem cmpUnifiedNumericTicks (source : List (DeclHOL 64)) (clock : Nat) (decs : List (DeclHOL 64))
+    (after : PanSemStateFiniteExact 64 Unit) (inits : List (ProgHOL 64)) (globalContext : PanGlobalsContextExact 64)
+    (functions : List (MlS × List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL)) (entry : MlS)
+    (panContext : PanToCrepContextExact 64)
+    (bitmap : globalSourceBitmaps source = [4])
+    (optEq : let context := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms source)) 0
+      loweredProgramOptLimit panContext (.seq (nestedSeqHOL inits) (.call none entry [])) (globalEntryCrep source clock globalContext functions)
+        (globalSourcePrograms source) (2*decs.length+(callEntryStateHOLFinite (installSourceFunctions after functions) HolFiniteMapExact.empty).clock+3)
+        context context .ln = 24805354)
+    (wordEq : wordCodeWeight (sptFromAList (globalSourceWords source)) = 9)
+    (stackEq : stackCodeWeight (sptFromAList (globalSourceCode source)) = 15)
+    (factor : costFromFields riscvConfig.addrOffset 0 (.call none (.inl Flapjack.Compiler.Backend.BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf (globalSourceCode source))) [4]
+      (fixtureStackOracle (fixtureCompilerConfig (globalSourceCode source))) = 1950) :
+    initializedGlobalTicks source clock decs after inits globalContext functions entry panContext = 2587607680003341948 := by
+  unfold initializedGlobalTicks
+  dsimp only
+  exact cmpUnifiedNumericFromInputs _ _ _ _ _ bitmap optEq wordEq stackEq factor
+
+
+private theorem cmpUnifiedPrograms : globalSourcePrograms (singletonSourceProgram branching) =
+    twoPrograms (ofString "main") (entryName branchingHOL) branchCrepBody := by
+  rw [singleton_programs branching branching_supported,branching_simp_program,← branching_hol_eq,branching_crep_code]
+  rfl
+private theorem cmpUnifiedName : singletonName branching = entryName branchingHOL := by
+  simp [singletonName,branching_simp_program,branching_hol_eq]
+private theorem cmpUnifiedOpt :
+    let source := singletonSourceProgram branching
+    let context := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms source)) 0
+    loweredProgramOptLimit (globalCompilerContext source) (.seq (nestedSeqHOL []) (.call none (singletonName branching) []))
+      (globalEntryCrep source 6 singletonGlobals (singletonEntries branching)) (globalSourcePrograms source)
+      (2*(([] : List (DeclHOL 64)).length)+(callEntryStateHOLFinite (installSourceFunctions (singletonPost 1 6) (singletonEntries branching)) HolFiniteMapExact.empty).clock+3)
+      context context .ln = 24805354 := by
+  dsimp only
+  apply cmpUnifiedOptOfWeights _ _ _ _ _ _ (singletonName branching)
+  · simp [compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,nestedSeqHOL]
+  · rfl
+  · rfl
+  · rw [cmpUnifiedPrograms]; exact cmpCodeWeight _
+  · rw [cmpUnifiedPrograms]; exact cmpLoopWeightRaw
+  · rw [cmpUnifiedPrograms,cmpUnifiedName]; exact cmpRate _ _ _
+  · exact entrySyntaxWeight _ _
+  · exact entryOptimizedWeight _ _
+private theorem cmpUnifiedWordWeight (p : Prog (RiscV.Word 64)) (h : CallFreeSupported p)
+    (w : wordCodeWeight (sptFromAList (supportedAllocated p).2) = 9) :
+    wordCodeWeight (sptFromAList (globalSourceWords (singletonSourceProgram p))) = 9 := by
+  rw [singleton_words p h]; exact w
+private theorem cmpUnifiedStackWeight (p : Prog (RiscV.Word 64)) (h : CallFreeSupported p)
+    (w : stackCodeWeight (sptFromAList (supportedNative p).2.2.2) = 15) :
+    stackCodeWeight (sptFromAList (globalSourceCode (singletonSourceProgram p))) = 15 := by
+  unfold globalSourceCode; rw [singleton_native p h]; exact w
+private theorem cmpUnifiedFactor (p : Prog (RiscV.Word 64)) (h : CallFreeSupported p)
+    (factor : costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf (supportedNative p).2.2.2)) [4]
+      (fixtureStackOracle (fixtureCompilerConfig (supportedNative p).2.2.2)) = 1950) :
+    costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf (globalSourceCode (singletonSourceProgram p)))) [4]
+      (fixtureStackOracle (fixtureCompilerConfig (globalSourceCode (singletonSourceProgram p)))) = 1950 := by
+  unfold globalSourceCode; rw [singleton_native p h]; exact factor
+private theorem cmpUnifiedClock : singletonTicks branching 1 6 = 2587607680003341948 := by
+  apply cmpUnifiedNumericTicks _ _ _ _ _ _ _ _ _ (singleton_bitmap branching branching_supported) cmpUnifiedOpt
+  · apply cmpUnifiedWordWeight branching branching_supported
+    rw [← cmpOpt]; exact cmpWordWeight
+  · apply cmpUnifiedStackWeight branching branching_supported
+    rw [← sameNative]; exact cmpStackWeight
+  · apply cmpUnifiedFactor branching branching_supported
+    rw [← sameNative]; exact cmpFactor _
+
+
+private theorem cmpUnifiedSource : PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
+    (singletonSourceProgram branching) = .terminate .success sourceFfi.ioEvents := by
+  obtain ⟨final,_,behavior,ffiRel⟩ := singleton_source_semantics branching branching_supported 1 6
+    (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 2 6
+    comparisonProduction.locals comparisonProduction.globals comparisonProduction.memory comparisonProduction.ffi 7
+    (comparison_sourceRun _ _ _) (by decide)
+  have events : final.ffi.ioEvents = [] := by
+    have h := ffiRel.2.1
+    change FfiEventListRel [] final.ffi.ioEvents at h
+    cases heq : final.ffi.ioEvents with
+    | nil => rfl
+    | cons e es => simp [heq,FfiEventListRel] at h
+  simpa [sourceTemplateFor_one,sourceFfi,events] using behavior
+/-- The comparison source reaches the initialized machine at a concrete clock. -/
+theorem comparisonFixture_machine : ∃ compilerFinal finalMachine finalFfi,
+    Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig (singletonSourceProgram branching) =
+      some (fixtureCodeBytes (globalSourceCode (singletonSourceProgram branching)),globalSourceBitmaps (singletonSourceProgram branching),compilerFinal) ∧
+    evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (globalSourceCode (singletonSourceProgram branching)))) sourceFfi
+      2587607680003341948 (configuredMachineState (globalSourceCode (singletonSourceProgram branching)) (globalSourceBitmaps (singletonSourceProgram branching))) =
+      (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFfi.ioEvents ∧
+    PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main") (singletonSourceProgram branching) = .terminate .success finalFfi.ioEvents := by
+  obtain ⟨sourceFinal,machine,ffi,compiler,compiled,run,events,ffiRel⟩ := comparisonUnified_machine
+  have sourceEvents : sourceFinal.ffi.ioEvents = [] := by
+    have h := ffiRel.2.1
+    change FfiEventListRel [] sourceFinal.ffi.ioEvents at h
+    cases heq : sourceFinal.ffi.ioEvents with
+    | nil => rfl
+    | cons e es => simp [heq,FfiEventListRel] at h
+  have machineEvents : ffi.ioEvents = sourceFfi.ioEvents := by simpa [sourceFfi,sourceEvents] using events
+  refine ⟨compiler,machine,ffi,compiled,?_,machineEvents,?_⟩
+  · simpa only [← cmpUnifiedClock] using run
+  · rw [machineEvents]; exact cmpUnifiedSource
 
 end SteppedFlapjack.Concrete
