@@ -101,7 +101,10 @@ relations between the source, lowered and Crep states, compiler-table
 conditions, and checkable machine encoding, safety and capacity conditions.
 `beforeGlobals_initializedFunctions` derives the global state relation by
 running declaration initializers and installing matching function tables; the
-pair witness uses this construction.
+pair witness uses this construction. `globalInitializedEntry_return` includes
+the generated initializer and a source body in one lowered entry,
+with an explicit initializer visit bound. `nonzeroGlobal_entry` instantiates it
+with a pair initialized to `(3, 4)` and returns `4`.
 `pairGeneral_namedSource` instantiates these conditions for a global pair: its
 initializer and renamed entry call return the second field, and the compiled
 machine runs the bytes produced by the Pancake compiler and halts with the

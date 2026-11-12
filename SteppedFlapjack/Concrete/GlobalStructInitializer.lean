@@ -51,7 +51,7 @@ private theorem pairAfter_eq : pairAfter = globalStructHOL := by
 
 private theorem pairEval : @evaluateDeclsHOLFinite 64 Unit _ pairBefore (fun _a => Classical.propDecidable _) [globalStructDecl] = some pairAfter := by
   with_unfolding_all rfl
-private theorem pairAllocated : ∀ a, addresses (globalStructTarget.topAddr - 16) 2 a → globalStructTarget.memaddrs a := by
+theorem globalStructSlots_allocated : ∀ a, addresses (globalStructTarget.topAddr - 16) 2 a → globalStructTarget.memaddrs a := by
   intro a ha
   rw [mem_addresses] at ha
   obtain ⟨i,hi,heq⟩ := ha
@@ -81,7 +81,7 @@ theorem pairConstructedInitializer :
     (by intro d hd; simp [globalStructDecl] at hd ⊢; subst d; rfl)
     (by exact pairEval)
     (by simpa [beforeGlobalsContext,globalStructStart,globalStructDecl,decShapesHOL,sizeOfShapeHOL,sizeOfShapesHOL,cakeBytesInWord,panBytesInWord] using compiled)
-    (by simpa [globalStructDecl,decShapesHOL,sizeOfShapeHOL,sizeOfShapesHOL,cakeBytesInWord,panBytesInWord] using pairAllocated)
+    (by simpa [globalStructDecl,decShapesHOL,sizeOfShapeHOL,sizeOfShapesHOL,cakeBytesInWord,panBytesInWord] using globalStructSlots_allocated)
     (by decide)
   obtain ⟨final,run,rel,_,_,_,_⟩ := result
   have initSame : nestedSeqHOL (compileDecsExactHOL globalStructStart [globalStructDecl]).1 =

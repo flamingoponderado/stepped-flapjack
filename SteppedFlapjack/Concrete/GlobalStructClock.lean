@@ -34,7 +34,7 @@ private theorem pairCallFactor : callClockFactor globalStructActualLoopContext (
 
 private theorem pairOptLimit : globalProgramOptLimit globalStructContext pairCrepContext (progToHOL pairWrapper) pairEntryCrep
     (globalSourcePrograms globalStructProgram) pairEntrySource.clock globalStructActualLoopContext globalStructActualLoopContext .ln = 616746942 := by
-  unfold globalProgramOptLimit
+  unfold globalProgramOptLimit loweredProgramOptLimit
   rw [pairEntry_actualCompiled,pairSourcePrograms]
   have sourceClock : pairEntrySource.clock = 16 := rfl
   have crepClock : pairEntryCrep.clock = 16 := rfl
