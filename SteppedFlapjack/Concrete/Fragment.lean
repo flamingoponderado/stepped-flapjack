@@ -50,6 +50,39 @@ theorem CallFreeSupported.toSupported {program : Prog (RiscV.Word 64)}
     (supported : CallFreeSupported program) : Supported program :=
   ⟨.base supported.1, supported.2⟩
 
+open SteppedFlapjack.PanToCrepSteps
+
+set_option maxHeartbeats 3000000 in
+set_option maxRecDepth 10000 in
+/-- Call-free evaluation does not inspect function tables or call contracts. -/
+theorem supported_calls_irrel {σ : Type} (context : PanValueFfiContext (RiscV.Word 64))
+    (primitive : PanPrimitiveHandler (RiscV.Word 64)) (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
+    (structs : StructContext) (functions otherFunctions : List (FunName × List VarName × Prog (RiscV.Word 64)))
+    (base top bytes : RiscV.Word 64) (fuel : Nat)
+    (access : Option (PanValueMemoryAccess (RiscV.Word 64))) (contracts : Option PanValueCallContracts) :
+    ∀ (scope : List VarName) (p : Prog (RiscV.Word 64)), SupportedIn scope p →
+      ∀ locals globals memory ffi,
+      evalPanValueFfiProgSteps context primitive handler structs functions base top bytes fuel locals globals memory ffi p
+        (memoryAccess := access) (contracts := contracts) =
+      evalPanValueFfiProgSteps context primitive handler structs otherFunctions base top bytes fuel locals globals memory ffi p
+        (memoryAccess := access) := by
+  induction fuel with
+  | zero => intros; simp [evalPanValueFfiProgSteps]
+  | succ fuel ih =>
+    intro scope p shape locals globals memory ffi
+    cases shape with
+    | skip => simp [evalPanValueFfiProgSteps]
+    | assign name member scalar => simp [evalPanValueFfiProgSteps]
+    | decl name scalar body =>
+      simp only [evalPanValueFfiProgSteps, ih _ _ body]
+    | seq a b =>
+      simp only [evalPanValueFfiProgSteps, ih _ _ a, ih _ _ b]
+    | ite scalar a b =>
+      simp only [evalPanValueFfiProgSteps, ih _ _ a, ih _ _ b]
+    | «while» scalar body =>
+      simp only [evalPanValueFfiProgSteps, ih _ _ body, ih _ _ (SupportedIn.while scalar body)]
+    | ret scalar => simp [evalPanValueFfiProgSteps]
+
 /-- Distinct Lean names can collapse to the same HOL byte string, so the
 representability condition above is necessary for an unrestricted bridge. -/
 theorem names_outside_byte_range_can_collide :

@@ -25,10 +25,14 @@ private theorem comparison_sourceRun (context : PanValueFfiContext (RiscV.Word 6
       (memoryAccess := some (panSemBitVec64MemoryAccess comparisonProduction))
       (contracts := some (countedContractsOfCode comparisonProduction.code [])) =
       some (.returned comparisonProduction.locals comparisonProduction.globals comparisonProduction.memory comparisonProduction.ffi [.word 7],6) := by
-  simp [branching,evalPanValueFfiProgSteps,panValueIteCondition,panValueReturnResult,evalPanValueExpCounted,
-    evalPanValueExp,panValueExpStepCost,comparisonProduction,functionSourceProduction,sourceProduction,
-    panSemBitVec64MemoryAccess,panValueMemoryAccessOfModel,panSemBitVec64WordModel,
-    panSemWordModel,RiscV.panRiscVMemoryModel,RiscV.panRiscVCmp]
+  rw [supported_calls_irrel context primitive handler comparisonProduction.structs
+    (countedFunctionsOfCode comparisonProduction.code) [] comparisonProduction.baseAddress comparisonProduction.topAddress
+    panSemBitVec64BytesInWord 2 (some (panSemBitVec64MemoryAccess comparisonProduction))
+    (some (countedContractsOfCode comparisonProduction.code [])) [] branching branching_supported.1]
+  simpa [comparisonProduction,functionSourceProduction,sourceProduction,initialWordFor_one,
+    executableState,singleEntrySourceProduction,panSemBitVec64MemoryAccess,panValueMemoryAccessOfModel,
+    panSemBitVec64WordModel,panSemWordModel,RiscV.panRiscVMemoryModel] using branching_run context primitive handler
+
 open Flapjack.Basis.Pure.MlString
 def comparisonHOLFunctions := comparisonSourceFunctions.map funDeclToHOL
 def comparisonSimpFunctions := comparisonHOLFunctions.map (fun f => {f with body := panSimpCompileHOL f.body})
@@ -199,13 +203,13 @@ private theorem branchingLoop_countedRun (context : PanValueFfiContext (RiscV.Wo
       (memoryAccess := some (panSemBitVec64MemoryAccess branchingLoopProduction))
       (contracts := some (countedContractsOfCode branchingLoopProduction.code [])) =
       some (.returned branchingLoopProduction.locals branchingLoopProduction.globals branchingLoopProduction.memory branchingLoopProduction.ffi [.word 7],23) := by
-  simp (config := {maxSteps := 1000000}) [branchingLoop,evalPanValueFfiProgSteps,panValueDecAccepted,panValueIteCondition,panValueAssignLocalResult,
-    panValueReturnResult,evalPanValueExpCounted,evalPanValueExp,panValueExpStepCost,branchingLoopProduction,functionSourceProduction,sourceProduction,
-    panSemBitVec64MemoryAccess,panValueMemoryAccessOfModel,panSemBitVec64WordModel,panSemWordModel,
-    RiscV.panRiscVMemoryModel,RiscV.panRiscVCmp,updatePanValueMap,restorePanValueFfiLocal,
-    panShapeMatches,panValueShape,panValueAssignmentValid]
-  funext name
-  simp [restorePanValueLocal]
+  rw [supported_calls_irrel context primitive handler branchingLoopProduction.structs
+    (countedFunctionsOfCode branchingLoopProduction.code) [] branchingLoopProduction.baseAddress branchingLoopProduction.topAddress
+    panSemBitVec64BytesInWord 7 (some (panSemBitVec64MemoryAccess branchingLoopProduction))
+    (some (countedContractsOfCode branchingLoopProduction.code [])) [] branchingLoop branchingLoop_supported.1]
+  simpa [branchingLoopProduction,functionSourceProduction,sourceProduction,initialWordFor_one,
+    executableState,singleEntrySourceProduction,panSemBitVec64MemoryAccess,panValueMemoryAccessOfModel,
+    panSemBitVec64WordModel,panSemWordModel,RiscV.panRiscVMemoryModel] using branchingLoop_source_run context primitive handler
 
 open Flapjack.Basis.Pure.MlString
 def branchingLoopHOLFunctions := branchingLoopSourceFunctions.map funDeclToHOL
