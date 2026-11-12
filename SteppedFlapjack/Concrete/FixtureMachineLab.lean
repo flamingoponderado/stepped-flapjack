@@ -53,65 +53,6 @@ noncomputable def fixtureCompilerConfig (code : List (Nat × HolProg 64)) : Conf
     pos := (fixtureCodeBytes code).length
     ffiNames := some [] }
 
-/-- The initialized fixture's explicit Lab run transfers to its concrete
-machine at the code-derived clock, with the same outcome and full FFI. -/
-theorem fixtureLabToMachineExplicit (code : List (Nat × HolProg 64)) (cfg : Config)
-    (code2 : LabProgHOL 64) (labs : Spt (Spt Nat))
-    (removed : removeLabels 5 riscvConfig 0 .ln [] (LabFilter.filterSkip (fixtureLab code cfg).code) = some (code2,labs))
-    (guards : LabMachineInitGuards (fixtureMachineConfig (fixtureCodeStart code)) (fixtureMachineState code)
-      (LabFilter.filterSkip (fixtureLab code cfg).code) code2 labs 5 0 0xecc (fixtureMachineAsm code)
-      (fixtureLabMemoryFor code) fixtureByteDomain fixtureSharedByteDomain
-      (fun n => (((fixtureLab code cfg).compileOracle n).1,
-        LabFilter.filterSkip ((fixtureLab code cfg).compileOracle n).2)) [] [] [])
-    (clock : Nat) (outcome : HolOutcome) (post : LabSem.State 64 Config Unit)
-    (run : evaluate {(fixtureTargetLab code cfg (fixtureMachineState code)) with clock := clock} = (.halt outcome,post)) :
-    ∃ machinePost, evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
-      (labTickBound 4 code2 ⟨0x800f0134,[],0xecc⟩ * clock) (fixtureMachineState code) =
-        (.halt outcome,machinePost,post.ffi) := by
-  have bytes : fixtureCodeBytes code = progToBytes code2 := by
-    apply fixtureCodeBytes_eq code code2 labs cfg
-    simpa only [fixtureLab] using removed
-  have pos : (fixtureMachineConfig (fixtureCodeStart code)).target.getPc (fixtureMachineState code) +
-      BitVec.ofNat 64 (progToBytes code2).length = 0x800f0134 := by
-    change fixtureCodeStart code + BitVec.ofNat 64 (progToBytes code2).length = 0x800f0134
-    rw [← bytes]
-    exact fixtureCodeStart_add_length code
-  have alignedD : ∀ a, decide (fixtureLabDomain a) = true → holByteAligned a = true := by
-    intro a h
-    exact fixtureLabDomain_aligned a (of_decide_eq_true h)
-  have alignedS : ∀ a, decide (sharedAddress a) = true → holByteAligned a = true := by
-    intro a h
-    exact ((sharedAddress_alignment a).1 (of_decide_eq_true h)).1
-  have fixtureEq : fixtureTargetLab code cfg (fixtureMachineState code) =
-      LabProps.alignSdm (LabProps.alignDm (makeInit
-        (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi (fixtureMachineAsm code)
-        (fixtureLabMemoryFor code) fixtureByteDomain fixtureSharedByteDomain (fixtureMachineState code)
-        (fixtureLab code cfg).code (compile riscvConfig) 0x800f0134 0xecc (fixtureLab code cfg).compileOracle)) := by
-    change fixtureTargetLab code cfg (fixtureMachineState code) =
-      LabProps.alignSdm (LabProps.alignDm (makeInit
-        (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi (fixtureMachineAsm code)
-        (fixtureLabMemoryFor code) (byteClosure (fun a => decide (fixtureLabDomain a)))
-        (byteClosure (fun a => decide (sharedAddress a))) (fixtureMachineState code)
-        (fixtureLab code cfg).code (compile riscvConfig) 0x800f0134 0xecc (fixtureLab code cfg).compileOracle))
-    rw [makeInit_byteClosure _ _ _ _ _ _ alignedD alignedS]
-    rfl
-  have labRun : evaluate {LabProps.alignSdm (LabProps.alignDm (makeInit
-        (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi (fixtureMachineAsm code)
-        (fixtureLabMemoryFor code) fixtureByteDomain fixtureSharedByteDomain (fixtureMachineState code)
-        (fixtureLab code cfg).code (compile riscvConfig)
-        ((fixtureMachineConfig (fixtureCodeStart code)).target.getPc (fixtureMachineState code) +
-          BitVec.ofNat 64 (progToBytes code2).length) 0xecc (fixtureLab code cfg).compileOracle)) with clock := clock} =
-      (.halt outcome,post) := by
-    rw [pos,← fixtureEq]
-    exact run
-  have result := initializedLabToRiscVExplicit (fixtureMachineConfig (fixtureCodeStart code)) (fixtureMachineState code)
-    sourceFfi (fixtureLab code cfg).code code2 labs 5 0 0xecc (fixtureMachineAsm code)
-    (fixtureLabMemoryFor code) fixtureByteDomain fixtureSharedByteDomain (fixtureLab code cfg).compileOracle
-    [] [] [] rfl guards clock clock outcome post labRun (Nat.le_refl clock)
-  simpa only [pos] using result
-
-
-
 /-- `makeInit` reads only the assembler's integer and floating-point registers. -/
 private theorem makeInit_asm_congr {C S Q F : Type} (mc : MachineConfig 64 S Q) (ffi : HolFfiState F) (t t' : Flapjack.AsmState 64)
     (hr : t.regs = t'.regs) (hf : t.fpRegs = t'.fpRegs) (m : BitVec 64 → WordLocW 64) (dm sdm : BitVec 64 → Bool) (ms : S)
@@ -245,26 +186,6 @@ theorem configuredMachine_relations (code : List (Nat × HolProg 64)) (cfg : Con
   · exact ctx.machineRel
   · change (⟨fixtureCodeStart code + BitVec.ofNat 64 (progToBytes code2).length,[],0xecc⟩ : WordSemBuffer 64 8) = _
     rw [← fixtureCodeBytes_eq code code2 labs cfg removed, fixtureCodeStart_add_length]
-
-noncomputable def fixtureMachineContext (code : List (Nat × HolProg 64)) (cfg : Config)
-    (code2 : LabProgHOL 64) (labs : Spt (Spt Nat))
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code)
-    (removed : removeLabels 5 riscvConfig 0 .ln [] (LabFilter.filterSkip (fixtureLab code cfg).code) = some (code2,labs))
-    (guards : LabMachineInitGuards (fixtureMachineConfig (fixtureCodeStart code)) (fixtureMachineState code)
-      (LabFilter.filterSkip (fixtureLab code cfg).code) code2 labs 5 0 0xecc (fixtureMachineAsm code)
-      (fixtureLabMemoryFor code) fixtureByteDomain fixtureSharedByteDomain
-      (fun n => (((fixtureLab code cfg).compileOracle n).1,
-        LabFilter.filterSkip ((fixtureLab code cfg).compileOracle n).2)) [] [] []) :
-    FullInitMachineContext (fixtureStack code cfg) := by
-  have memEq := congrArg (fun lab => lab.memory) (configuredLab_one code cfg)
-  change configuredLabMemory code [4] = fixtureLabMemoryFor code at memEq
-  have guards' := guards
-  rw [← configuredMachineState_one code, ← configuredMachineAsm_one code,
-    ← memEq, ← configuredByteDomain_one] at guards'
-  have ctx := configuredMachineContext code cfg [4] (by decide) code2 labs good removed guards'
-  rw [configuredStack_one] at ctx
-  exact ctx
-
 
 /-- Derive the complete Lab machine guards from concrete compiler facts and
 the already-proved machine initialization. -/

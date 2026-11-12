@@ -43,22 +43,6 @@ noncomputable def configuredMachineAsm (code : List (Nat × HolProg 64)) (bs : L
     pc := fixtureCodeStart code
     align := 2 }
 
-theorem configuredMachineBytes_one (code : List (Nat × HolProg 64)) :
-    configuredMachineBytes code [4] = fixtureMachineBytes code := by
-  unfold configuredMachineBytes fixtureMachineBytes fixtureLoadedWords
-  change countdownBytesOfWords (countdownWriteCode _ _ (bitmapInitialWords [4] (initialWordFor 1))) = _
-  rw [initialWordFor_one, bitmapInitialWords_singleton]
-
-theorem configuredMachineState_one (code : List (Nat × HolProg 64)) :
-    configuredMachineState code [4] = fixtureMachineState code := by
-  unfold configuredMachineState fixtureMachineState
-  rw [configuredMachineBytes_one]
-
-theorem configuredMachineAsm_one (code : List (Nat × HolProg 64)) :
-    configuredMachineAsm code [4] = fixtureMachineAsm code := by
-  unfold configuredMachineAsm fixtureMachineAsm
-  rw [configuredMachineBytes_one]
-
 set_option maxRecDepth 10000 in
 theorem configuredMachineState_targetRel (code : List (Nat × HolProg 64)) (bs : List (BitVec 64))
     (aligned : holAligned 2 (fixtureCodeStart code) = true) :

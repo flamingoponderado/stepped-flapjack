@@ -36,12 +36,15 @@ noncomputable def callPipelineFactor (code : List (Nat × HolProg 64)) (bitmaps 
   948 * flattenStepFactor * factor * uniformFactor (width := 64) countdownRiscVBackend.dataConf *
     stackW * (1+(ww+1)) * 6 * ofac * 2 * lf * cf * cw * tableW
 set_option maxHeartbeats 2000000 in
-/-- The complete pipeline clock is affine in the source-step count. -/
+/-- If the initial clock is affine in source steps, the complete machine bound
+is affine in those steps as well. Both coefficients depend only on the code,
+compiler configuration, and the chosen initial-clock slope. -/
 theorem callPipelineTicks_affine (code : List (Nat × HolProg 64)) (bitmaps : List (BitVec 64))
-    (cw tableW progW cf initial sw lf ow ofac ww stackW count : Nat) :
-    callPipelineTicks code bitmaps cw tableW progW cf initial sw lf ow ofac ww stackW count =
-      callPipelineFactor code bitmaps cw tableW cf lf ofac ww stackW * count +
-        callPipelineTicks code bitmaps cw tableW progW cf initial sw lf ow ofac ww stackW 0 := by
+    (cw tableW progW cf initialBase initialSlope sw lf ow ofac ww stackW count : Nat) :
+    callPipelineTicks code bitmaps cw tableW progW cf (initialBase + initialSlope * count) sw lf ow ofac ww stackW count =
+      (callPipelineFactor code bitmaps cw tableW cf lf ofac ww stackW +
+        initialSlope * callPipelineFactor code bitmaps 1 1 1 lf ofac ww stackW) * count +
+        callPipelineTicks code bitmaps cw tableW progW cf initialBase sw lf ow ofac ww stackW 0 := by
   dsimp only [callPipelineTicks,callPipelineFactor,fixtureStackOracle]
   have h (n : Nat) := stackLabTickLimit_emptyOracle countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset bitmaps code (fixtureCompilerConfig code) n
   change ∀ n, stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset bitmaps code (fixtureStackOracle (fixtureCompilerConfig code)) n = _ at h
