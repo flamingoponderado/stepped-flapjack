@@ -3,7 +3,7 @@ import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
 import Flapjack.Pancake.Proofs.PanToCrep.PcCompileCorrect.Assembly
 import SteppedFlapjack.CrepSteps.BranchStatic
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
-import SteppedFlapjack.PanToCrepSteps.GlobalInitializers
+import SteppedFlapjack.PanToCrepSteps.GlobalFrontend
 import SteppedFlapjack.PanToCrepSteps.GlobalNoInline
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
@@ -18,27 +18,22 @@ theorem globalStruct_pairLookup : globalStructContext.globals.lookup (ofString "
     compileDecsGlobalAddressExact_eq,sizeOfShapeHOL,cakeBytesInWord,
     HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL]
 
-theorem globalStruct_field_from_global : FrontendScalar globalStructCrepContext
-    (compileExpExactHOL globalStructContext (.rfield 1 (.var .global (ofString "pair")))) := by
-  exact globalCompile_globalField globalStructContext globalStructCrepContext (ofString "pair") 16 1 2
-    (by decide) globalStruct_pairLookup
-/-- The source global field read lowers to a supported frontend scalar. -/
-theorem globalStruct_field_frontend :
-    FrontendScalar globalStructCrepContext
-      (.rfield 1 (.load (.comb [.one,.one]) (.op .sub [.topAddr,.const 16]))) := by
-  simpa [compileExpExactHOL,globalStruct_pairLookup] using globalStruct_field_from_global
+/-- The witness is an instance of the general source globals fragment. -/
+theorem globalStruct_sourceFrontend : GlobalFrontend globalStructContext globalStructCrepContext
+    (progToHOL globalStructWitness) := by
+  simp only [globalStructWitness,progToHOL,expToHOL]
+  apply GlobalFrontend.seq
+  · apply GlobalFrontend.assignGlobalStruct
+    · simpa using globalStruct_pairLookup
+    · intro e member
+      simp [expToHOL] at member
+      rcases member with rfl | rfl <;> exact .local (.const _)
+  · exact .ret (.globalField (ofString "pair") 16 1 2 (by decide) globalStruct_pairLookup)
 
-/-- Global lowering produces a program in the shared structured-store and
-field-load frontend fragment. -/
+/-- The actual globals pass lowers the source fragment to the shared frontend. -/
 theorem globalStruct_frontend : FrontendProgram globalStructCrepContext
-    (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) := by
-  rw [globalStructWitness_lowering]
-  apply FrontendProgram.seq
-  · apply FrontendProgram.storeStruct (.op .sub .topAddr (.const 16))
-    intro e member
-    simp only [List.mem_cons,List.not_mem_nil,or_false] at member
-    rcases member with rfl | rfl <;> exact .const _
-  · exact .ret globalStruct_field_frontend
+    (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) :=
+  globalFrontend_compiled globalStruct_sourceFrontend
 
 /-- The actual renamed declaration initializer uses the general frontend. -/
 theorem globalStruct_initializer_frontend (globals : PanGlobalsContextExact 64) :
