@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.FunctionSource
 import SteppedFlapjack.Concrete.CountedSpan
 import SteppedFlapjack.PanToCrepSteps.SourceInitialGlobals
 import SteppedFlapjack.Concrete.NestedCalls
@@ -22,76 +23,36 @@ def nestedSourceState (bitmapWords : Nat) : PanSemStateFiniteExact 64 Unit :=
 def nestedCountedProduction : PanSemState (RiscV.Word 64) (FfiState Unit) :=
   {sourceProduction with code := functionEntries nestedCallDeclarations}
 
-set_option linter.unusedSimpArgs false in
-set_option linter.unnecessarySimpa false in
-theorem nestedCounted_related : PanSemStateRelExec nestedCountedProduction (nestedSourceState 1).toExact := by
-  have base := source_related (progToHOL nestedCallEntry)
-  obtain ⟨hl,hg,hs,hc,he,hm,hmem,hshared,hclock,hbe,hffi,hbase,htop⟩ := base
-  refine ⟨?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_,?_⟩
-  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
-      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hl
-  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
-      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hg
-  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
-      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hs
-  · intro name nameRanged
-    have neq (other : String) (ranged : NameRanged other) (h : name ≠ other) : ofString name ≠ ofString other := by
-      intro eq
-      exact h (ofString_injective_of_ranged nameRanged ranged eq)
-    have leafMain : ofString "leaf" ≠ ofString "main" := by decide
-    have midMain : ofString "middle" ≠ ofString "main" := by decide
-    have leafMid : ofString "leaf" ≠ ofString "middle" := by decide
-    by_cases hmain : name = "main"
-    · subst name
-      simp [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,sourceProduction,sourceTemplate,
-        PanSemStateFiniteExact.toExact,functionEntries,nestedCallDeclarations,panSemCodeLookup,lookupInfo,
-        HolFiniteMapExact.lookup_update,FUPDATE,panLangEntryToHOL,shapeToHOL,progToHOL,expToHOL,nestedCallEntry,leafMain,midMain,leafMid]
-    · by_cases hmiddle : name = "middle"
-      · subst name
-        simp [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,sourceProduction,sourceTemplate,
-          PanSemStateFiniteExact.toExact,functionEntries,nestedCallDeclarations,panSemCodeLookup,lookupInfo,
-          HolFiniteMapExact.lookup_update,FUPDATE,panLangEntryToHOL,shapeToHOL,progToHOL,expToHOL,nestedCallEntry,leafMain,midMain,leafMid]
-      · by_cases hleaf : name = "leaf"
-        · subst name
-          simp [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,sourceProduction,sourceTemplate,
-            PanSemStateFiniteExact.toExact,functionEntries,nestedCallDeclarations,panSemCodeLookup,lookupInfo,
-            HolFiniteMapExact.lookup_update,FUPDATE,panLangEntryToHOL,shapeToHOL,progToHOL,expToHOL,nestedCallEntry,leafMain,midMain,leafMid]
-        · have hm := neq "main" (by decide) hmain
-          have hmid := neq "middle" (by decide) hmiddle
-          have hl := neq "leaf" (by decide) hleaf
-          simp [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,sourceProduction,sourceTemplate,
-            PanSemStateFiniteExact.toExact,functionEntries,nestedCallDeclarations,panSemCodeLookup,lookupInfo,
-            HolFiniteMapExact.lookup_update,FUPDATE,hm,hmid,hl,hmain,hmiddle,hleaf,
-            Ne.symm hm,Ne.symm hmid,Ne.symm hl,Ne.symm hmain,Ne.symm hmiddle,Ne.symm hleaf]
-  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
-      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using he
-  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
-      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hm
-  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
-      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hmem
-  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
-      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hshared
-  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
-      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hclock
-  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
-      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hbe
-  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
-      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hffi
-  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
-      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using hbase
-  · simpa [nestedCountedProduction,nestedSourceState,sourceTemplateFor_one,executableState,exactState,
-      singleEntrySourceProduction,singleEntrySourceTemplate,PanSemStateFiniteExact.toExact,sourceProduction,sourceTemplate] using htop
+/-- A replay clock equal to the counted source budget. -/
+def nestedClockedSource : PanSemStateFiniteExact 64 Unit := {nestedSourceState 1 with clock := 6}
 
-/-- The nested source and production state agree for any concrete bitmap length. -/
-theorem nestedCounted_related_bitmaps (n : Nat) :
-    PanSemStateRelExec {nestedCountedProduction with memory := fun a => some (.word (initialWordFor n a))}
-      (nestedSourceState n).toExact := by
-  change PanSemStateRelExec {nestedCountedProduction with memory := fun a => some (.word (initialWordFor n a))}
-    {(nestedSourceState 1).toExact with memory := fun a => .word (initialWordFor n a)}
-  obtain ⟨a,b,c,d,e,_,g,h,i,j,k,l,m⟩ := nestedCounted_related
-  refine ⟨a,b,c,d,e,?_,g,h,i,j,k,l,m⟩
-  intro addr member
-  rfl
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 3000000 in
+theorem nestedEntryCode : (nestedClockedSource).code = HolFiniteMapExact.empty.updateList
+    (functionsHOL (nestedCallDeclarations.map declToHOL)).reverse := by
+  apply HolFiniteMapExact.ext_lookup
+  intro name
+  simp [nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,
+    HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,nestedCallDeclarations,declToHOL,
+    funDeclToHOL,functionsHOL,progToHOL,expToHOL,shapeToHOL]
+  by_cases ha : name = ofString "main" <;> by_cases hb : name = ofString "middle" <;>
+    by_cases hc : name = ofString "leaf" <;> simp_all [eq_comm]
+  all_goals subst name; contradiction
+
+/-- The executable functions of the nested witness. -/
+def nestedSourceFunctions : List (FunDeclOf 64) :=
+  [⟨"main",false,true,[],nestedCallEntry,.one⟩,
+   ⟨"middle",false,false,[],.call none "leaf" [],.one⟩,
+   ⟨"leaf",false,false,[],.return (.const 7),.one⟩]
+
+theorem nestedSourceFunctions_ranged : ∀ f ∈ nestedSourceFunctions, NameRanged f.name := by
+  simp [nestedSourceFunctions,NameRanged]
+
+theorem nestedSourceExact_eq (n clock : Nat) :
+    functionSourceExact nestedSourceFunctions n clock = {nestedSourceState n with clock := clock} := by
+  simp only [functionSourceExact, nestedSourceState]
+  congr 1
+  simpa [nestedSourceFunctions,nestedCallDeclarations,declToHOL,funDeclToHOL,nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate] using nestedEntryCode.symm
 
 theorem nestedCounted_shapes :
     ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode nestedCountedProduction.code →
@@ -254,9 +215,6 @@ theorem nestedCall_crep_clock_consumed :
     exact SteppedFlapjack.CrepToLoopSteps.callFrontend_crepTable _
       (SteppedFlapjack.CrepToLoopSteps.callFrontend_declaration_sources _ nestedCall_declaration_shapes)
 
-/-- A replay clock equal to the counted source budget. -/
-def nestedClockedSource : PanSemStateFiniteExact 64 Unit := {nestedSourceState 1 with clock := 6}
-
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
 theorem nestedEntryShapes : ∀ entry ∈ functionsHOL (nestedCallDeclarations.map declToHOL),
@@ -267,17 +225,5 @@ theorem nestedEntryShapes : ∀ entry ∈ functionsHOL (nestedCallDeclarations.m
   obtain ⟨names,program,_,body,supported,ranged⟩ := nestedHOLFunctionShapes entry member
   exact ⟨names,program,body,supported,ranged⟩
 
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-theorem nestedEntryCode : (nestedClockedSource).code = HolFiniteMapExact.empty.updateList
-    (functionsHOL (nestedCallDeclarations.map declToHOL)).reverse := by
-  apply HolFiniteMapExact.ext_lookup
-  intro name
-  simp [nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,
-    HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,nestedCallDeclarations,declToHOL,
-    funDeclToHOL,functionsHOL,progToHOL,expToHOL,shapeToHOL]
-  by_cases ha : name = ofString "main" <;> by_cases hb : name = ofString "middle" <;>
-    by_cases hc : name = ofString "leaf" <;> simp_all [eq_comm]
-  all_goals subst name; contradiction
 
 end SteppedFlapjack.Concrete

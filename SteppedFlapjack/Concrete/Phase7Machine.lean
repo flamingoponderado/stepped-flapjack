@@ -17,8 +17,11 @@ set_option maxHeartbeats 1000000 in
 /-- A counted function-only source return reaches the initialized machine with an explicit tick bound. -/
 theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : CallSupportedIn scope program)     (production : PanSemState (RiscV.Word 64) (FfiState Unit)) (source : PanSemStateFiniteExact 64 Unit)
-    [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
-    (ranged : PanSemStateRelExecRanged production) (words_ : WordLocals production.locals)
+    [DecidablePred source.memaddrs]
+    (sourceFs : List (FunDeclOf 64)) (sourceN sourceClock : Nat)
+    (namesRanged : ∀ f ∈ sourceFs, NameRanged f.name)
+    (productionInit : production = functionSourceProduction sourceFs sourceN sourceClock)
+    (sourceInit : source = functionSourceExact sourceFs sourceN sourceClock)
     (byteRanged : ProgByteRanged program)
     (codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry)
     (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
@@ -38,16 +41,12 @@ theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (
     (targetTable : targetCode = HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)
     (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],progToHOL (panSimpProg program),.one))
     (mainFound : source.code.lookup start = some ([],progToHOL program,.one))
-    (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
-    (structs : source.structs = []) (exceptions : source.eshapes = HolFiniteMapExact.empty)
     (unique : ((functionsHOL (fs.map DeclHOL.function)).map Prod.fst).Nodup)
     (shapes : ∀ entry ∈ functionsHOL (fs.map DeclHOL.function),
       ∃ names, ∃ body : Prog (RiscV.Word 64),
         entry.2.1 = names.map (fun n => (Flapjack.Basis.Pure.MlString.ofString n,ShapeHOL.one)) ∧
         entry.2.2.1 = progToHOL body ∧ CallSupportedIn names body ∧ ProgByteRanged body)
     (noInline : (functionsHOL ((compileTopExactHOL (fs.map DeclHOL.function) start).filter inlinableHOL)).map Prod.fst = [])
-    (topOutside : ¬ source.memaddrs source.topAddr)
-    (aligned : panGlobalsByteAlignedHOL source.topAddr)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (exnContracts : InfoMap Shape) (fuel count : Nat)
     (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))
@@ -81,13 +80,9 @@ theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (
         (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1) (sptFromAList optimized)
       optionLe (optionMap₂ max (some (max 1 (1+frame)))
         (optionMap₂ (· + ·) (some 1) (fullCallGraphDepth frames 64 (sptFromAList optimized)))) (some 2097172))
-    (memDomain : source.memaddrs = ordinaryAddress) (sharedDomain : source.shMemaddrs = sharedAddress)
-    (base : source.baseAddr = heapBase) (top : source.topAddr = heapTop)
-    (byteOrder : source.be = false) (ffi : source.ffi = sourceFfi)
-    (sourceMemory : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
+    (bitmapLength : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
       let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
-      let bitmaps := (compileNative riscvConfig false optimized).1
-      ∀ a, source.memaddrs a → source.memory a = (sourceTemplateFor bitmaps.length).memory a) :
+      sourceN = (compileNative riscvConfig false optimized).1.length) :
     let baseState := {source with code := HolFiniteMapExact.empty, structs := [], clock := 0}
     let decls := fs.map DeclHOL.function
     let lowered := compileTopExactHOL decls start
@@ -125,6 +120,28 @@ theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (
             (.halt .success,finalMachine,finalFfi) ∧
       finalFfi.ioEvents = sourceFinal.ffi.ioEvents ∧ FfiStateRel postFfi sourceFinal.ffi ∧
       semanticsDecls baseState start (originalFs.map DeclHOL.function) = .terminate .success finalFfi.ioEvents := by
+  have ranged : PanSemStateRelExecRanged production := by
+    rw [productionInit]
+    simp [functionSourceProduction,sourceProduction,PanSemStateRelExecRanged,StructContextByteRanged,StructContext.toHOL]
+  have words_ : WordLocals production.locals := by
+    rw [productionInit]
+    exact wordLocals_empty
+  have locals : source.locals = HolFiniteMapExact.empty := by rw [sourceInit]; rfl
+  have globals : source.globals = HolFiniteMapExact.empty := by rw [sourceInit]; rfl
+  have structs : source.structs = [] := by rw [sourceInit]; rfl
+  have exceptions : source.eshapes = HolFiniteMapExact.empty := by rw [sourceInit]; rfl
+  have topOutside : ¬ source.memaddrs source.topAddr := by
+    rw [sourceInit]
+    simp [functionSourceExact,sourceTemplateFor,sourceTemplate,ordinaryAddress,heapTop,fixtureHeapEnd,heapEnd,
+      stackStart,ramEnd,ramStart,ramSize,stackSize,globalsWords,sourceBase]
+  have aligned : panGlobalsByteAlignedHOL source.topAddr := by
+    rw [sourceInit]
+    change panGlobalsByteAlignedHOL heapTop
+    change BitVec.ofNat 64 ((heapTop.toNat / 8) * 8) = heapTop
+    decide
+  have rel : PanSemStateRelExec production source.toExact := by
+    rw [productionInit,sourceInit]
+    exact functionSource_related sourceFs sourceN sourceClock namesRanged
   have codeRel : PanSimp.CodeRel source.code targetCode := by
     rw [sourceCode, originalEntries, targetTable, simplifiedFs]
     apply source_simp_function_code {source with code := HolFiniteMapExact.empty} originalFs rfl
@@ -137,6 +154,19 @@ theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (
   let code := native.2.2.2
   let bitmaps := native.1
   let cfg := fixtureCompilerConfig code
+  have memDomain : source.memaddrs = ordinaryAddress := by rw [sourceInit]; rfl
+  have sharedDomain : source.shMemaddrs = sharedAddress := by rw [sourceInit]; rfl
+  have base : source.baseAddr = heapBase := by rw [sourceInit]; rfl
+  have top : source.topAddr = heapTop := by rw [sourceInit]; rfl
+  have byteOrder : source.be = false := by rw [sourceInit]; rfl
+  have ffi : source.ffi = sourceFfi := by rw [sourceInit]; rfl
+  have bitmapLength' : sourceN = bitmaps.length := by
+    simpa [bitmaps,native,optimized,raw,programs] using bitmapLength
+  have sourceMemory : ∀ a, source.memaddrs a → source.memory a = (sourceTemplateFor bitmaps.length).memory a := by
+    rw [sourceInit]
+    intro a _
+    change HolWordLab.word (initialWordFor sourceN a) = HolWordLab.word (initialWordFor bitmaps.length a)
+    rw [bitmapLength']
   have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
     funext a b c d e f g
     exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
@@ -153,7 +183,7 @@ theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (
       exceptions unique shapes noInline topOutside aligned context primitive handler exnContracts fuel count
       postLocals postGlobals postMemory postFfi value run budget phase3WordConfig code cfg bitmaps fits good
       memDomain sharedDomain base top byteOrder ffi
-      (by simpa [bitmaps,native,optimized,raw,programs] using sourceMemory)
+      sourceMemory
   let decls := fs.map DeclHOL.function
   let lowered := compileTopExactHOL decls start
   let renamed : PanSemStateFiniteExact 64 Unit := {source with code := fpermCodeHOL start (newMainNameHOL decls) targetCode}
