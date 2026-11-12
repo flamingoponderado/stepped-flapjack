@@ -7,32 +7,32 @@ open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Backend.WordToStack.Native
 open Flapjack.Compiler.Backend.WordToStackRegFormat
 /-- Reached conditional branches admit bounded simulations. -/
-def BudgetIfHypotheses {width : Nat} [NeZero width] {C F : Type}
+def RateIfHypotheses {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (comparison : Cmp) (register : Nat)
     (operand : WordRegImm (BitVec width))
     (first second : WordLangProgHOL (BitVec width))
-    (source : WordSemStateFiniteExact width (Nat × C) F) (cost : Nat) : Prop :=
+    (source : WordSemStateFiniteExact width (Nat × C) F) (rate cost : Nat) : Prop :=
   (∀ v3 v4 x y value,
     (WordSemStateFiniteExact.getVar register source,
       WordSemStateFiniteExact.getVarImm operand source) = (v3, v4) ∧
     v3 = some x ∧ v4 = some y ∧ wordSemWordCmp comparison x y = some value ∧
-    value = true → BudgetSimulation ac first source cost) ∧
+    value = true → RateSimulation ac rate cost first source) ∧
   (∀ v3 v4 x y value,
     (WordSemStateFiniteExact.getVar register source,
       WordSemStateFiniteExact.getVarImm operand source) = (v3, v4) ∧
     v3 = some x ∧ v4 = some y ∧ wordSemWordCmp comparison x y = some value ∧
-    ¬ value = true → BudgetSimulation ac second source cost)
+    ¬ value = true → RateSimulation ac rate cost second source)
 
 /-- Flapjack infrastructure deriving the selected recursive simulation from
 actual source execution and its original non-error premise. No branch success
 or operand value is assumed independently, and both literal IH guards remain. -/
-private theorem budgetSelectedSourceBranch {width : Nat} [NeZero width] {C F : Type}
+private theorem rateSelectedSourceBranch {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (comparison : Cmp) (register : Nat)
     (operand : WordRegImm (BitVec width))
     (first second : WordLangProgHOL (BitVec width))
     (source sourcePost : WordSemStateFiniteExact width (Nat × C) F)
-    (result : Option (WordSemResult width)) (cost : Nat)
-    (ih : BudgetIfHypotheses ac comparison register operand first second source cost)
+    (result : Option (WordSemResult width)) (rate cost : Nat)
+    (ih : RateIfHypotheses ac comparison register operand first second source rate cost)
     (execution : WordSemStateFiniteExact.evaluate (.ite comparison register operand first second)
       source = (result, sourcePost))
     (nonerror : result ≠ some .error) :
@@ -42,7 +42,7 @@ private theorem budgetSelectedSourceBranch {width : Nat} [NeZero width] {C F : T
       wordSemWordCmp comparison x y = some value ∧
       WordSemStateFiniteExact.evaluate (if value then first else second) source =
         (result, sourcePost) ∧
-      BudgetSimulation ac (if value then first else second) source cost := by
+      RateSimulation ac rate cost (if value then first else second) source := by
   cases left : WordSemStateFiniteExact.getVar register source with
   | none => simp [WordSemStateFiniteExact.evaluate, left] at execution; cases nonerror execution.1.symm
   | some x =>
@@ -68,18 +68,18 @@ private theorem physicalOperandEven {width : Nat} [NeZero width]
 
 
 /-- Conditional compilation preserves a common explicit branch budget. -/
-theorem budgetIf {width : Nat} [NeZero width] {C F : Type}
+theorem rateIf {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (comparison : Cmp) (register : Nat)
     (operand : WordRegImm (BitVec width))
     (first second : WordLangProgHOL (BitVec width))
     (source : WordSemStateFiniteExact width (Nat × C) F)
-    (cost : Nat) (ih : BudgetIfHypotheses ac comparison register operand first second source cost) :
-    BudgetSimulation ac (.ite comparison register operand first second) source cost := by
+    (rate cost : Nat) (ih : RateIfHypotheses ac comparison register operand first second source rate cost) :
+    RateSimulation ac rate cost (.ite comparison register operand first second) source := by
   intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises reserve
   rcases premises with ⟨execution, notError, notTimeout, related, conventions, flat,
     compilation, lengthBound, bitmapBound, bitmapPrefix, labels, maxBound⟩
   obtain ⟨x,y,value,left,right,compared,selectedRun,selectedIH⟩ :=
-    budgetSelectedSourceBranch ac comparison register operand first second source sourcePost result cost ih execution notError
+    rateSelectedSourceBranch ac comparison register operand first second source sourcePost result rate cost ih execution notError
   have conventionParts := conventions
   simp only [postAllocConventionsHOL,everyVarHOL,everyStackVarHOL,
     callArgConventionHOL,Bool.and_eq_true] at conventionParts
@@ -153,9 +153,42 @@ theorem budgetIf {width : Nat} [NeZero width] {C F : Type}
       ⟨selectedRun,notError,notTimeout,loadedRel,selectedConventions,selectedFlat,selectedCompile,
         selectedLength,selectedBitmapBound,selectedPrefix,selectedLabels,selectedMax⟩ reserve
   refine ⟨post,targetResult,?_,enough,accounting,conclusion⟩
-  rw [routing q1 q2 (target.clock + cost + reserve),sameClock]
+  rw [routing q1 q2 (target.clock + rate*source.clock + cost + reserve),sameClock]
   exact targetRun
 
 
+
+/-- Reached conditional branches admit bounded simulations. -/
+def BudgetIfHypotheses {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (comparison : Cmp) (register : Nat)
+    (operand : WordRegImm (BitVec width))
+    (first second : WordLangProgHOL (BitVec width))
+    (source : WordSemStateFiniteExact width (Nat × C) F) (cost : Nat) : Prop :=
+  (∀ v3 v4 x y value,
+    (WordSemStateFiniteExact.getVar register source,
+      WordSemStateFiniteExact.getVarImm operand source) = (v3, v4) ∧
+    v3 = some x ∧ v4 = some y ∧ wordSemWordCmp comparison x y = some value ∧
+    value = true → BudgetSimulation ac first source cost) ∧
+  (∀ v3 v4 x y value,
+    (WordSemStateFiniteExact.getVar register source,
+      WordSemStateFiniteExact.getVarImm operand source) = (v3, v4) ∧
+    v3 = some x ∧ v4 = some y ∧ wordSemWordCmp comparison x y = some value ∧
+    ¬ value = true → BudgetSimulation ac second source cost)
+
+/-- Conditional compilation preserves a common explicit branch budget. -/
+theorem budgetIf {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (comparison : Cmp) (register : Nat)
+    (operand : WordRegImm (BitVec width)) (first second : WordLangProgHOL (BitVec width))
+    (source : WordSemStateFiniteExact width (Nat × C) F) (cost : Nat)
+    (ih : BudgetIfHypotheses ac comparison register operand first second source cost) :
+    BudgetSimulation ac (.ite comparison register operand first second) source cost := by
+  have rateIH : RateIfHypotheses ac comparison register operand first second source 0 cost := by
+    constructor
+    · intro v3 v4 x y value guard
+      exact budget_to_rate ac 0 cost first source (ih.1 v3 v4 x y value guard)
+    · intro v3 v4 x y value guard
+      exact budget_to_rate ac 0 cost second source (ih.2 v3 v4 x y value guard)
+  have sim := rateIf ac comparison register operand first second source 0 cost rateIH
+  simpa using rate_to_fixed_budget ac 0 cost (.ite comparison register operand first second) source sim
 
 end SteppedFlapjack.WordToStackSteps

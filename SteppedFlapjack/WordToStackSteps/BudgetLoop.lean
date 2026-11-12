@@ -21,16 +21,16 @@ private theorem bodyNonTimeout {width : Nat} [NeZero width] {C F : Type}
   obtain ⟨rfl,rfl⟩ := loopRun
   contradiction
 
-private theorem budgetEnterBody {width : Nat} [NeZero width] {C F : Type}
+private theorem rateEnterBody {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (names exitNames : Spt Unit)
     (body : WordLangProgHOL (BitVec width))
     (source cutSource bodyPost : WordSemStateFiniteExact width (Nat × C) F)
     (target : StackSemStateFiniteExact width C F) (k f frame : Nat) (lens : List Nat)
     (bs bsPost : AppList (BitVec width)) (n nPost : Nat)
     (compiled : Compiler.Backend.StackLang.HolProg width) (bodyResult : Option (WordSemResult width))
-    (bodyCost reserve : Nat)
+    (rate bodyCost reserve : Nat)
     (ih : ∀ cutSource, WordSemStateFiniteExact.cutState (names,.ln) source = some cutSource →
-      BudgetSimulation ac body cutSource bodyCost)
+      RateSimulation ac rate bodyCost body cutSource)
     (cut : WordSemStateFiniteExact.cutState (names,.ln) source = some cutSource)
     (execution : WordSemStateFiniteExact.evaluate body cutSource = (bodyResult,bodyPost))
     (notError : bodyResult ≠ some .error) (notTimeout : bodyResult ≠ some .timeOut)
@@ -45,10 +45,10 @@ private theorem budgetEnterBody {width : Nat} [NeZero width] {C F : Type}
     (maxBound : maxVarHOL (.loop names body exitNames) < 2*frame+2*k) :
     ∃ compiledBody targetPost targetResult,
       compiled = .loop compiledBody ∧
-      StackSemEvaluate.evaluate (compiledBody,{target with clock := target.clock + bodyCost + reserve}) = (targetResult,targetPost) ∧
+      StackSemEvaluate.evaluate (compiledBody,{target with clock := target.clock + rate*cutSource.clock + bodyCost + reserve}) = (targetResult,targetPost) ∧
       reserve ≤ targetPost.clock ∧
       (targetResult = some (.halt (.word 2)) ∨
-        (bodyPost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ bodyPost.clock + bodyCost + reserve)) ∧
+        ((rate+1)*bodyPost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ bodyPost.clock + rate*cutSource.clock + bodyCost + reserve)) ∧
       compCorrectResult ac k f frame cutSource bodyPost {targetPost with clock := bodyPost.clock} bodyResult targetResult lens := by
   rcases bodyComp : compNative ac false body (bs,n) (k,f,frame) with ⟨compiledBody,next⟩
   simp only [compNative,bodyComp,Prod.mk.injEq] at compilation
@@ -74,26 +74,27 @@ private theorem budgetEnterBody {width : Nat} [NeZero width] {C F : Type}
 
 
 /-- Explicit body and remaining-iteration allowances for one reached loop state. -/
-def BudgetLoopHypotheses {width : Nat} [NeZero width] {C F : Type}
+def RateLoopHypotheses {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (names exitNames : Spt Unit)
     (body : WordLangProgHOL (BitVec width))
-    (source : WordSemStateFiniteExact width (Nat × C) F) (bodyCost recCost : Nat) : Prop :=
+    (source : WordSemStateFiniteExact width (Nat × C) F) (rate bodyCost recCost : Nat) : Prop :=
   (∀ cutSource bodyResult bodyPost,
     WordSemStateFiniteExact.cutState (names,.ln) source = some cutSource ∧
     (bodyResult,bodyPost) = WordSemStateFiniteExact.evaluate body cutSource ∧
     wordSemContLoop bodyResult = true ∧ bodyPost.clock ≠ 0 →
-    BudgetSimulation ac (wordSemSTOP (.loop names body exitNames))
-      (WordSemStateFiniteExact.decClock bodyPost) recCost) ∧
+    RateSimulation ac rate recCost (wordSemSTOP (.loop names body exitNames))
+      (WordSemStateFiniteExact.decClock bodyPost)) ∧
   (∀ cutSource, WordSemStateFiniteExact.cutState (names,.ln) source = some cutSource →
-    BudgetSimulation ac body cutSource bodyCost)
+    RateSimulation ac rate bodyCost body cutSource)
 
 /-- Loop iterations compose their explicit body and remaining-iteration budgets. -/
-theorem budgetLoop {width : Nat} [NeZero width] {C F : Type}
+theorem rateLoop {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (names exitNames : Spt Unit)
     (body : WordLangProgHOL (BitVec width))
-    (source : WordSemStateFiniteExact width (Nat × C) F) (bodyCost recCost : Nat)
-    (ih : BudgetLoopHypotheses ac names exitNames body source bodyCost recCost) :
-    BudgetSimulation ac (.loop names body exitNames) source (bodyCost + recCost) := by
+    (source : WordSemStateFiniteExact width (Nat × C) F) (rate extra bodyCost recCost : Nat)
+    (bodyFits : bodyCost ≤ extra) (rateFits : bodyCost + recCost ≤ rate + extra)
+    (ih : RateLoopHypotheses ac names exitNames body source rate bodyCost recCost) :
+    RateSimulation ac rate extra (.loop names body exitNames) source := by
   classical
   intro k f frame finalSource target finalResult bs bsPost n nPost compiled lens premises reserve
   rcases premises with ⟨sourceLoop,notError,notTimeout,related,conventions,flat,compilation,
@@ -110,9 +111,15 @@ theorem budgetLoop {width : Nat} [NeZero width] {C F : Type}
     have bodyTimeout := bodyNonTimeout names exitNames body source cutSource bodyPost finalSource
       bodyResult finalResult cut sourceBody sourceLoop notTimeout
     obtain ⟨compiledBody,targetBody,targetResult,compiledEq,targetRun,bodyEnough,bodyAccounting,bodyConclusion⟩ :=
-      budgetEnterBody ac names exitNames body source cutSource bodyPost target k f frame lens
-        bs bsPost n nPost compiled bodyResult bodyCost (recCost+reserve) ih.2 cut sourceBody bodyError bodyTimeout related conventions
+      rateEnterBody ac names exitNames body source cutSource bodyPost target k f frame lens
+        bs bsPost n nPost compiled bodyResult rate bodyCost (extra-bodyCost+reserve) ih.2 cut sourceBody bodyError bodyTimeout related conventions
         flat compilation lengthBound bitmapBound bitmapPrefix labels maxBound
+    have cutClocks := WordSemStateFiniteExact.cutState_clock_termdep _ _ _ cut
+    have budgetEq : rate*cutSource.clock + bodyCost + (extra-bodyCost+reserve) = rate*source.clock+extra+reserve := by
+      rw [cutClocks.1]
+      omega
+    simp only [Nat.add_assoc] at budgetEq targetRun
+    rw [budgetEq] at targetRun
     subst compiled
     by_cases mismatch : bodyResult.map compileResult ≠ targetResult
     · have bodyUnnormalized : compCorrectResult ac k f frame cutSource bodyPost targetBody
@@ -121,7 +128,7 @@ theorem budgetLoop {width : Nat} [NeZero width] {C F : Type}
         rw [if_pos mismatch] at bodyConclusion ⊢
         exact bodyConclusion
       have overflow := bodyOverflow ac k f frame names exitNames body source cutSource bodyPost
-        finalSource target targetBody lens compiledBody (bodyCost+(recCost+reserve)) bodyResult finalResult targetResult
+        finalSource target targetBody lens compiledBody (rate*source.clock+extra+reserve) bodyResult finalResult targetResult
         related cut sourceBody sourceLoop (by simpa [Nat.add_assoc] using targetRun) bodyUnnormalized mismatch
       refine ⟨targetBody,some (.halt (.word 2)),?_,by omega,Or.inl rfl,?_⟩
       · simpa [Nat.add_assoc] using overflow.1
@@ -137,6 +144,9 @@ theorem budgetLoop {width : Nat} [NeZero width] {C F : Type}
           simp only [Option.map_some, ne_eq, Option.some.injEq]
           exact Ne.symm ((haltEqCompileResult r).2 dimension)
       have ⟨bodyLower,bodyUpper⟩ := bodyAccounting.resolve_left bodyNotLimit
+      simp only [Nat.add_mul,Nat.one_mul] at bodyLower
+      rw [cutClocks.1] at bodyUpper
+      have bodyUpper' : targetBody.clock ≤ bodyPost.clock + rate*source.clock + extra + reserve := by omega
       have tailRun := sourceLoop
       rw [WordSemStateFiniteExact.evaluate,cut] at tailRun
       simp only [] at tailRun
@@ -153,14 +163,19 @@ theorem budgetLoop {width : Nat} [NeZero width] {C F : Type}
           have targetContinues : StackSemControl.contLoop (bodyResult.map compileResult) = true := by
             rw [contLoopCompile,continues]
           have metadata := recursiveMetadata compiledBody target targetBody (bodyResult.map compileResult)
-            (bodyCost+(recCost+reserve)) (n-(appListAppend bs).length) (appListAppend bsPost)
+            (rate*source.clock+extra+reserve) (n-(appListAppend bs).length) (appListAppend bsPost)
             (by simpa [Nat.add_assoc] using targetRun) bitmapBound bitmapPrefix labels
           have relation := recursiveRelation ac k f frame cutSource bodyPost
             {targetBody with clock := bodyPost.clock} lens bodyResult continues bodyConclusion
-          let remaining := targetBody.clock - bodyPost.clock - recCost
+          have rateDec : rate * (bodyPost.clock-1) + rate = rate * bodyPost.clock := by
+            have pred : bodyPost.clock-1+1 = bodyPost.clock := by omega
+            calc
+              _ = rate * (bodyPost.clock-1+1) := by simp [Nat.mul_add]
+              _ = _ := by rw [pred]
+          let remaining := targetBody.clock - bodyPost.clock - rate*(bodyPost.clock-1) - recCost
           have remainingLower : reserve ≤ remaining := by dsimp [remaining]; omega
-          have remainingUpper : recCost + remaining ≤ bodyCost + recCost + reserve := by dsimp [remaining]; omega
-          have remainingEq : bodyPost.clock - 1 + recCost + remaining = targetBody.clock - 1 := by dsimp [remaining]; omega
+          have remainingUpper : rate*(bodyPost.clock-1) + recCost + remaining ≤ rate*source.clock + extra + reserve := by dsimp [remaining]; omega
+          have remainingEq : bodyPost.clock - 1 + rate*(bodyPost.clock-1) + recCost + remaining = targetBody.clock - 1 := by dsimp [remaining]; omega
           have recursiveIH := ih.1 cutSource bodyResult bodyPost ⟨cut,sourceBody.symm,continues,zero⟩
           obtain ⟨post,res,recursiveRun,postEnough,accounting,recursiveConclusion⟩ :=
             recursiveIH k f frame finalSource (StackSemStateOps.decClock {targetBody with clock := bodyPost.clock})
@@ -168,11 +183,11 @@ theorem budgetLoop {width : Nat} [NeZero width] {C F : Type}
               ⟨by simpa [wordSemSTOP] using tailRun, notError, notTimeout, relation, conventions, flat,
                 compilation, lengthBound, metadata.1, metadata.2.1, metadata.2.2, maxBound⟩ remaining
           have actualRec : StackSemEvaluate.evaluate (.loop compiledBody,StackSemStateOps.decClock targetBody) = (res,post) := by
-            simpa only [StackSemStateOps.decClock, remainingEq] using recursiveRun
+            simpa only [StackSemStateOps.decClock, WordSemStateFiniteExact.decClock, remainingEq] using recursiveRun
           have targetNonzero : targetBody.clock ≠ 0 := by omega
           have actual := runLoopRecursive compiledBody
-            {target with clock := target.clock + bodyCost + (recCost+reserve)}
-            targetBody post (bodyResult.map compileResult) res 0 targetRun targetContinues
+            {target with clock := target.clock + rate*source.clock + extra + reserve}
+            targetBody post (bodyResult.map compileResult) res 0 (by simpa [Nat.add_assoc] using targetRun) targetContinues
             targetNonzero (by simpa using actualRec)
           have sourceHandler : source.handler = (WordSemStateFiniteExact.decClock bodyPost).handler := by
             have bodyHandler := LoopHandler.evaluateContLoopHandler body cutSource bodyPost bodyResult sourceBody continues
@@ -182,7 +197,10 @@ theorem budgetLoop {width : Nat} [NeZero width] {C F : Type}
           · simpa [Nat.add_assoc] using actual
           · rcases accounting with limit | ⟨lower,upper⟩
             · exact Or.inl limit
-            · right; constructor <;> omega
+            · right
+              simp only [Nat.add_mul,Nat.one_mul,WordSemStateFiniteExact.decClock] at lower upper
+              simp only [Nat.add_mul,Nat.one_mul]
+              constructor <;> omega
           · exact originRelation ac k f frame source (WordSemStateFiniteExact.decClock bodyPost)
               finalSource {post with clock := finalSource.clock} lens finalResult res sourceHandler recursiveConclusion
       · simp only [continues] at tailRun
@@ -201,8 +219,11 @@ theorem budgetLoop {width : Nat} [NeZero width] {C F : Type}
               {targetBody with clock := bodyPost.clock} lens exitNames bodyConclusion exitCut
             refine ⟨targetBody,none,?_,by omega,?_,?_⟩
             · simpa [Nat.add_assoc] using runLoopBreakZero compiledBody
-                {target with clock := target.clock + bodyCost + (recCost+reserve)} targetBody targetRun
-            · right; constructor <;> omega
+                {target with clock := target.clock + rate*source.clock + extra + reserve} targetBody (by simpa [Nat.add_assoc,compileResult] using targetRun)
+            · right
+              rw [clocks.1]
+              simp only [Nat.add_mul,Nat.one_mul]
+              constructor <;> omega
             · simpa only [show exitPost.clock = bodyPost.clock by omega] using relation
         · have sourceExit : (wordSemExitLoop bodyResult,bodyPost) = (finalResult,finalSource) := by
             cases bodyResult with
@@ -223,10 +244,40 @@ theorem budgetLoop {width : Nat} [NeZero width] {C F : Type}
           refine ⟨targetBody,(wordSemExitLoop bodyResult).map compileResult,?_,by omega,?_,?_⟩
           · rw [← exitEq]
             simpa [Nat.add_assoc] using runLoopExit compiledBody
-              {target with clock := target.clock + bodyCost + (recCost+reserve)}
-              targetBody (bodyResult.map compileResult) targetRun targetExits
-          · right; constructor <;> omega
+              {target with clock := target.clock + rate*source.clock + extra + reserve}
+              targetBody (bodyResult.map compileResult) (by simpa [Nat.add_assoc] using targetRun) targetExits
+          · right; simp only [Nat.add_mul,Nat.one_mul]; constructor <;> omega
           · exact exitRelation ac k f frame source cutSource bodyPost {targetBody with clock := bodyPost.clock} lens bodyResult
               (cutHandler names source cutSource cut) bodyConclusion
+
+
+def BudgetLoopHypotheses {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (names exitNames : Spt Unit)
+    (body : WordLangProgHOL (BitVec width))
+    (source : WordSemStateFiniteExact width (Nat × C) F) (bodyCost recCost : Nat) : Prop :=
+  (∀ cutSource bodyResult bodyPost,
+    WordSemStateFiniteExact.cutState (names,.ln) source = some cutSource ∧
+    (bodyResult,bodyPost) = WordSemStateFiniteExact.evaluate body cutSource ∧
+    wordSemContLoop bodyResult = true ∧ bodyPost.clock ≠ 0 →
+    BudgetSimulation ac (wordSemSTOP (.loop names body exitNames))
+      (WordSemStateFiniteExact.decClock bodyPost) recCost) ∧
+  (∀ cutSource, WordSemStateFiniteExact.cutState (names,.ln) source = some cutSource →
+    BudgetSimulation ac body cutSource bodyCost)
+
+/-- Fixed loop budgets are the zero-rate instance of the credit-preserving proof. -/
+theorem budgetLoop {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (names exitNames : Spt Unit)
+    (body : WordLangProgHOL (BitVec width))
+    (source : WordSemStateFiniteExact width (Nat × C) F) (bodyCost recCost : Nat)
+    (ih : BudgetLoopHypotheses ac names exitNames body source bodyCost recCost) :
+    BudgetSimulation ac (.loop names body exitNames) source (bodyCost + recCost) := by
+  have rateIH : RateLoopHypotheses ac names exitNames body source 0 bodyCost recCost := by
+    constructor
+    · intro cutSource bodyResult bodyPost guard
+      exact budget_to_rate ac 0 recCost _ _ (ih.1 cutSource bodyResult bodyPost guard)
+    · intro cutSource cut
+      exact budget_to_rate ac 0 bodyCost _ _ (ih.2 cutSource cut)
+  have sim := rateLoop ac names exitNames body source 0 (bodyCost+recCost) bodyCost recCost (by omega) (by omega) rateIH
+  simpa using rate_to_fixed_budget ac 0 (bodyCost+recCost) (.loop names body exitNames) source sim
 
 end SteppedFlapjack.WordToStackSteps

@@ -4,6 +4,7 @@ namespace SteppedFlapjack.WordToStackSteps
 open Flapjack Flapjack.WordToStackProofs Flapjack.WordToStackProofs.CompCorrect
 open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Backend.WordToStack.Native
+open Flapjack.WordSemStateFiniteExact
 
 /-- A compiler simulation with a concrete extra clock budget and a preserved
 reserve for subsequent execution. -/
@@ -33,6 +34,65 @@ def BudgetSimulation {width : Nat} [NeZero width] {C F : Type}
       (targetResult = some (.halt (.word 2)) ∨
         (sourcePost.clock + reserve ≤ targetPost.clock ∧ targetPost.clock ≤ sourcePost.clock + cost + reserve)) ∧
       compCorrectResult ac k f frame source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens
+
+/-- A rate reserves clock for each remaining source tick, so nested calls can
+spend only the credit associated with ticks they actually consume. -/
+def RateSimulation {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (rate extra : Nat) (program : WordLangProgHOL (BitVec width))
+    (source : WordSemStateFiniteExact width (Nat × C) F) : Prop :=
+  ∀ (k f frame : Nat) (sourcePost : WordSemStateFiniteExact width (Nat × C) F)
+    (target : StackSemStateFiniteExact width C F) (result : Option (WordSemResult width))
+    (bs bsPost : AppList (BitVec width)) (n nPost : Nat) (compiled : HolProg width) (lens : List Nat),
+    (WordSemStateFiniteExact.evaluate program source = (result, sourcePost) ∧
+      result ≠ some .error ∧ result ≠ some .timeOut ∧ stateRel ac k f frame source target lens 0 ∧
+      postAllocConventionsHOL k program = true ∧ flatExpConventions program = true ∧
+      compNative ac false program (bs, n) (k, f, frame) = (compiled, (bsPost, nPost)) ∧
+      (appListAppend bs).length ≤ n ∧ n - (appListAppend bs).length ≤ target.bitmaps.length ∧
+      List.IsPrefix (appListAppend bsPost) (target.bitmaps.drop (n - (appListAppend bs).length)) ∧
+      (∀ loc, StackSem.getLabelsExact compiled loc → StackSem.locCheckExact target.code loc) ∧
+      maxVarHOL program < 2 * frame + 2 * k) →
+    ∀ reserve : Nat, ∃ (targetPost : StackSemStateFiniteExact width C F)
+      (targetResult : Option (StackSemResult width)),
+      StackSemEvaluate.evaluate (compiled, {target with clock := target.clock + rate*source.clock + extra + reserve}) =
+        (targetResult, targetPost) ∧
+      reserve ≤ targetPost.clock ∧
+      (targetResult = some (.halt (.word 2)) ∨
+        ((rate+1)*sourcePost.clock + reserve ≤ targetPost.clock ∧
+          targetPost.clock ≤ sourcePost.clock + rate*source.clock + extra + reserve)) ∧
+      compCorrectResult ac k f frame source sourcePost {targetPost with clock := sourcePost.clock} result targetResult lens
+
+theorem budget_to_rate {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (rate extra : Nat) (p : WordLangProgHOL (BitVec width))
+    (s : WordSemStateFiniteExact width (Nat × C) F) (sim : BudgetSimulation ac p s extra) :
+    RateSimulation ac rate extra p s := by
+  intro k f frame post target result bs bsPost n nPost compiled lens premises reserve
+  have bound := (Flapjack.WordSemStateFiniteExact.evaluate_clock p s result post premises.1).1
+  obtain ⟨out,res,run,enough,accounting,correct⟩ := sim k f frame post target result bs bsPost n nPost compiled lens premises (rate*s.clock+reserve)
+  refine ⟨out,res,?_,?_,?_,correct⟩
+  · simpa [Nat.add_assoc,Nat.add_left_comm,Nat.add_comm] using run
+  · omega
+  · rcases accounting with halt | ⟨low,high⟩
+    · exact Or.inl halt
+    · right
+      constructor
+      · have mul := Nat.mul_le_mul_left rate bound
+        simp only [Nat.add_mul,Nat.one_mul]
+        omega
+      · omega
+theorem rate_to_fixed_budget {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (rate extra : Nat) (p : WordLangProgHOL (BitVec width))
+    (s : WordSemStateFiniteExact width (Nat × C) F) (sim : RateSimulation ac rate extra p s) :
+    BudgetSimulation ac p s (rate*s.clock + extra) := by
+  intro k f frame post target result bs bsPost n nPost compiled lens premises reserve
+  obtain ⟨out,res,run,enough,accounting,correct⟩ := sim k f frame post target result bs bsPost n nPost compiled lens premises reserve
+  refine ⟨out,res,?_,enough,?_,correct⟩
+  · simpa [Nat.add_assoc] using run
+  · rcases accounting with halt | ⟨low,high⟩
+    · exact Or.inl halt
+    · right
+      simp only [Nat.add_mul,Nat.one_mul] at low
+      constructor <;> omega
+
 
 theorem zeroBudget {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (p : WordLangProgHOL (BitVec width))
@@ -66,14 +126,14 @@ theorem raiseBudget {width : Nat} [NeZero width] {C F : Type}
 
 
 
-private theorem budgetSeqFirstNonNone {width : Nat} [NeZero width] {C F : Type}
+private theorem rateSeqFirstNonNone {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (first second : WordLangProgHOL (BitVec width))
-    (source : WordSemStateFiniteExact width (Nat × C) F) (firstCost secondCost : Nat)
+    (source : WordSemStateFiniteExact width (Nat × C) F) (rate firstCost secondCost : Nat)
     (ih : (∀ result middle,
       (result, middle) = WordSemStateFiniteExact.evaluate first source ∧ result = none →
-        BudgetSimulation ac second middle secondCost) ∧ BudgetSimulation ac first source firstCost)
+        RateSimulation ac rate secondCost second middle) ∧ RateSimulation ac rate firstCost first source)
     (firstNonNone : (WordSemStateFiniteExact.evaluate first source).1 ≠ none) :
-    BudgetSimulation ac (.seq first second) source (firstCost + secondCost) := by
+    RateSimulation ac rate (firstCost + secondCost) (.seq first second) source := by
   intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises reserve
   rcases premises with ⟨execution, notError, notTimeout, related, conventions, flat,
     compilation, lengthBound, bitmapBound, bitmapPrefix, labels, maxBound⟩
@@ -134,14 +194,14 @@ private theorem budgetSeqFirstNonNone {width : Nat} [NeZero width] {C F : Type}
 
 
 
-private theorem budgetSeqFirstNone {width : Nat} [NeZero width] {C F : Type}
+private theorem rateSeqFirstNone {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (first second : WordLangProgHOL (BitVec width))
-    (source : WordSemStateFiniteExact width (Nat × C) F) (firstCost secondCost : Nat)
+    (source : WordSemStateFiniteExact width (Nat × C) F) (rate firstCost secondCost : Nat)
     (ih : (∀ result middle,
       (result, middle) = WordSemStateFiniteExact.evaluate first source ∧ result = none →
-        BudgetSimulation ac second middle secondCost) ∧ BudgetSimulation ac first source firstCost)
+        RateSimulation ac rate secondCost second middle) ∧ RateSimulation ac rate firstCost first source)
     (firstNone : (WordSemStateFiniteExact.evaluate first source).1 = none) :
-    BudgetSimulation ac (.seq first second) source (firstCost + secondCost) := by
+    RateSimulation ac rate (firstCost + secondCost) (.seq first second) source := by
   classical
   intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises reserve
   rcases premises with ⟨execution, notError, notTimeout, related, conventions, flat,
@@ -230,7 +290,7 @@ private theorem budgetSeqFirstNone {width : Nat} [NeZero width] {C F : Type}
       have accounting := compImpLength ac false first (bs, n) (k, f, frame)
         firstCode middleBitmaps ⟨firstCompile, lengthBound⟩
       have mono := Flapjack.Compiler.Backend.StackProps.EvaluateMono.evaluateMono
-        firstCode {target with clock := target.clock + firstCost + (secondCost + reserve)} targetMiddle none targetRun
+        firstCode {target with clock := target.clock + rate*source.clock + firstCost + (secondCost + reserve)} targetMiddle none targetRun
       have gap := accounting.2
       have secondBitmapBound : middleBitmaps.2 - (appListAppend middleBitmaps.1).length ≤
           targetMiddle.bitmaps.length := by
@@ -248,13 +308,14 @@ private theorem budgetSeqFirstNone {width : Nat} [NeZero width] {C F : Type}
         apply labels loc
         rw [StackSem.getLabelsExact]
         exact Or.inr member
-      have enough : middle.clock + (secondCost + reserve) ≤ targetMiddle.clock := by
+      have enough : middle.clock + (rate*middle.clock + secondCost + reserve) ≤ targetMiddle.clock := by
         rcases firstAccounting with impossible | enough
         · simp at impossible
-        · exact enough.1
-      let remaining := targetMiddle.clock - middle.clock - secondCost
+        · simp only [Nat.add_mul,Nat.one_mul] at enough
+          omega
+      let remaining := targetMiddle.clock - middle.clock - (rate*middle.clock+secondCost)
       have remainingBound : reserve ≤ remaining := by dsimp [remaining]; omega
-      have remainingEq : middle.clock + secondCost + remaining = targetMiddle.clock := by dsimp [remaining]; omega
+      have remainingEq : middle.clock + rate*middle.clock + secondCost + remaining = targetMiddle.clock := by dsimp [remaining]; omega
       obtain ⟨targetPost, targetResult, secondRun, secondReserve, secondAccounting, conclusion⟩ :=
         ih.1 none middle ⟨firstRun.symm, rfl⟩ k f frame sourcePost {targetMiddle with clock := middle.clock}
           result middleBitmaps.1 finalBitmaps.1 middleBitmaps.2 finalBitmaps.2
@@ -284,6 +345,17 @@ private theorem budgetSeqFirstNone {width : Nat} [NeZero width] {C F : Type}
           · right; constructor <;> omega
 
 
+
+theorem rateSeq {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (rate firstCost secondCost : Nat) (a b : WordLangProgHOL (BitVec width))
+    (source : WordSemStateFiniteExact width (Nat × C) F)
+    (first : RateSimulation ac rate firstCost a source)
+    (second : ∀ result middle, (result,middle) = evaluate a source ∧ result = none → RateSimulation ac rate secondCost b middle) :
+    RateSimulation ac rate (firstCost+secondCost) (.seq a b) source := by
+  by_cases h : (evaluate a source).1 = none
+  · exact rateSeqFirstNone ac a b source rate firstCost secondCost ⟨second,first⟩ h
+  · exact rateSeqFirstNonNone ac a b source rate firstCost secondCost ⟨second,first⟩ h
+
 /-- A larger concrete budget preserves a bounded simulation. -/
 theorem budgetMono {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (p : WordLangProgHOL (BitVec width))
@@ -309,9 +381,13 @@ theorem budgetSeq {width : Nat} [NeZero width] {C F : Type}
       (result, middle) = WordSemStateFiniteExact.evaluate a source ∧ result = none →
         BudgetSimulation ac b middle secondCost) :
     BudgetSimulation ac (.seq a b) source (firstCost + secondCost) := by
-  by_cases h : (WordSemStateFiniteExact.evaluate a source).1 = none
-  · exact budgetSeqFirstNone ac a b source firstCost secondCost ⟨second, first⟩ h
-  · exact budgetSeqFirstNonNone ac a b source firstCost secondCost ⟨second, first⟩ h
+  have firstRate := budget_to_rate ac 0 firstCost a source first
+  have secondRate : ∀ result middle,
+      (result,middle) = evaluate a source ∧ result = none → RateSimulation ac 0 secondCost b middle := by
+    intro result middle h
+    exact budget_to_rate ac 0 secondCost b middle (second result middle h)
+  have sim := rateSeq ac 0 firstCost secondCost a b source firstRate secondRate
+  simpa using rate_to_fixed_budget ac 0 (firstCost+secondCost) (.seq a b) source sim
 
 /-- Count the raises in a sequence, giving a computable extra-clock budget. -/
 def sequenceRaiseBudget {width : Nat} [NeZero width] : WordLangProgHOL (BitVec width) → Nat

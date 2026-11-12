@@ -10,10 +10,11 @@ open Flapjack.Compiler.Backend.WordToStack.Native
 
 /-- A tail call preserves an explicit callee clock allowance, including
 the target resource-limit case. -/
-theorem budgetCallTail {width : Nat} [NeZero width] {C F : Type}
+theorem rateCallTail {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (dest : Option Nat) (args : List Nat)
     (handler : Option (Nat × WordLangProgHOL (BitVec width) × Nat × Nat))
-    (source : WordSemStateFiniteExact width (Nat × C) F) (cost : Nat)
+    (source : WordSemStateFiniteExact width (Nat × C) F) (rate extra childExtra : Nat)
+    (fits : childExtra ≤ rate + extra)
     (ih : ∀ (xs : List (WordLocW width)) (args1 : List (WordLocW width))
         (prog : WordLangProgHOL (BitVec width)) (ss : Option Nat),
       WordSemStateFiniteExact.getVars args source = some xs ∧
@@ -21,9 +22,9 @@ theorem budgetCallTail {width : Nat} [NeZero width] {C F : Type}
         wordSemFindCode dest (wordSemAddRetLoc (none : Option (List Nat × WordLangCutsetsHOL × WordLangProgHOL (BitVec width) × Nat × Nat)) xs) source.code source.stackSize =
           some (args1, prog, ss) ∧
         handler = none ∧ source.clock ≠ 0 →
-      BudgetSimulation ac prog
-        (WordSemStateFiniteExact.callEnv args1 ss (WordSemStateFiniteExact.decClock source)) cost)
-    : BudgetSimulation ac (.call none dest args handler) source cost := by
+      RateSimulation ac rate childExtra prog
+        (WordSemStateFiniteExact.callEnv args1 ss (WordSemStateFiniteExact.decClock source)))
+    : RateSimulation ac rate extra (.call none dest args handler) source := by
   intro k f frame sourcePost target result bs bsPost n nPost compiled lens premises reserve
   obtain ⟨execution, notError, notTimeout, related, conventions, flat, compilation, hbsn, hbsl, hpre,
     labels, maxVar⟩ := premises
@@ -174,7 +175,7 @@ theorem budgetCallTail {width : Nat} [NeZero width] {C F : Type}
       rfl
     by_cases hlim : t4.stackSpace + nfree < m
     · -- the callee's frame does not fit: Halt (Word 2w)
-      have hrun := hreach (cost + reserve)
+      have hrun := hreach (rate*source.clock + extra + reserve)
       rw [StackSemEvaluate.evaluate_seq (Prog.stackAlloc m) body,
         StackSemEvaluate.evaluate_stackAlloc, if_neg (by simp [r5]),
         if_pos (by simp only; omega)] at hrun
@@ -317,10 +318,21 @@ theorem budgetCallTail {width : Nat} [NeZero width] {C F : Type}
         have := Nat.le_max_left (maxVarHOL prog / 2 + 1 - k) (args1.length - k)
         rw [← hsvc] at this
         omega
+      have rateClock : rate * (WordSemStateFiniteExact.callEnv args1 ss (WordSemStateFiniteExact.decClock source)).clock +
+          childExtra + (rate + extra - childExtra + reserve) = rate * source.clock + extra + reserve := by
+        simp only [WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.decClock]
+        have pred : source.clock - 1 + 1 = source.clock := by omega
+        have mul : rate * (source.clock - 1) + rate = rate * source.clock := by
+          calc
+            _ = rate * (source.clock - 1 + 1) := by simp [Nat.mul_add]
+            _ = _ := by rw [pred]
+        omega
       obtain ⟨tpost, tres, hrunb, hreserve, haccount, hresb⟩ := ih xs args1 prog ss ⟨hgv, hbad, hfc, rfl, hclk⟩
         k fs svc s' t5 res' bs0 bs2 i0 i2 body lens
         ⟨hbody, notError, notTimeout, hrelC, hpa, hflatp, hbc, hb1, by rw [hbm4]; exact hb2,
-          by rw [hbm4]; exact hb3, hlabels, hmaxv⟩ reserve
+          by rw [hbm4]; exact hb3, hlabels, hmaxv⟩ (rate + extra - childExtra + reserve)
+      simp only [Nat.add_assoc] at rateClock hrunb
+      rw [rateClock] at hrunb
       have hbadT : StackSemControl.badFunReturn tres = false := by
         unfold compCorrectResult at hresb
         split_ifs at hresb with hne
@@ -329,22 +341,35 @@ theorem budgetCallTail {width : Nat} [NeZero width] {C F : Type}
           rcases res' with _ | r
           · simp [wordSemBadFunReturn] at hbf
           · cases r <;> first | rfl | simp [wordSemBadFunReturn] at hbf
-      have hle : tpost.clock ≤ t4.clock - 1 + cost + reserve := by
+      have hle : tpost.clock ≤ t4.clock - 1 + rate*source.clock + extra + reserve := by
         have := StackSemEvaluateClock.evaluateClock body _ tres tpost hrunb
-        exact this
-      refine ⟨tpost, tres, ?_, hreserve, haccount, ?_⟩
-      · have reachZero := hreach (cost + reserve)
-        have clockEq : t4.clock + (cost + reserve) - 1 = t4.clock - 1 + cost + reserve := by omega
+        simpa [t5,Nat.add_assoc] using this
+      refine ⟨tpost, tres, ?_, by omega, ?_, ?_⟩
+      · have reachZero := hreach (rate*source.clock + extra + reserve)
+        have clockEq : t4.clock + (rate*source.clock + extra + reserve) - 1 = t4.clock - 1 + rate*source.clock + extra + reserve := by omega
         rw [clockEq] at reachZero
         simp only [Nat.add_assoc] at reachZero ⊢
         rw [reachZero, StackSemEvaluate.evaluate_seq (Prog.stackAlloc m) body,
           StackSemEvaluate.evaluate_stackAlloc]
         simp only [r5, Bool.not_true, Bool.false_eq_true, if_false, hlim]
         simp only [StackSemControl.fixClock, Nat.min_self]
-        simp only [t5, r5, Nat.add_assoc] at hrunb ⊢
+        simp only [t5, r5] at hrunb ⊢
         rw [hrunb]
         simp only [Nat.add_assoc] at hle
         simp only [Nat.min_eq_right hle, hbadT, Bool.false_eq_true, if_false]
+      · rcases haccount with halt | ⟨low,high⟩
+        · exact Or.inl halt
+        · right
+          simp only [WordSemStateFiniteExact.callEnv,WordSemStateFiniteExact.decClock,Nat.add_mul,Nat.one_mul] at low high
+          have pred : source.clock - 1 + 1 = source.clock := by omega
+          have mul : rate * (source.clock - 1) + rate = rate * source.clock := by
+            calc
+            _ = rate * (source.clock - 1 + 1) := by simp [Nat.mul_add]
+            _ = _ := by rw [pred]
+          constructor
+          · simp only [Nat.add_mul,Nat.one_mul]
+            omega
+          · omega
       · unfold compCorrectResult at hresb ⊢
         split_ifs at hresb ⊢ with hne
         · exact hresb
@@ -356,6 +381,25 @@ theorem budgetCallTail {width : Nat} [NeZero width] {C F : Type}
             | _ => exact hresb
 
 
+
+/-- A fixed-budget tail call is the zero-rate instance. -/
+theorem budgetCallTail {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (dest : Option Nat) (args : List Nat)
+    (handler : Option (Nat × WordLangProgHOL (BitVec width) × Nat × Nat))
+    (source : WordSemStateFiniteExact width (Nat × C) F) (cost : Nat)
+    (ih : ∀ (xs : List (WordLocW width)) (args1 : List (WordLocW width))
+        (prog : WordLangProgHOL (BitVec width)) (ss : Option Nat),
+      WordSemStateFiniteExact.getVars args source = some xs ∧
+        ¬ wordSemBadDestArgs dest args = true ∧
+        wordSemFindCode dest (wordSemAddRetLoc (none : Option (List Nat × WordLangCutsetsHOL × WordLangProgHOL (BitVec width) × Nat × Nat)) xs) source.code source.stackSize =
+          some (args1, prog, ss) ∧
+        handler = none ∧ source.clock ≠ 0 →
+      BudgetSimulation ac prog (WordSemStateFiniteExact.callEnv args1 ss (WordSemStateFiniteExact.decClock source)) cost) :
+    BudgetSimulation ac (.call none dest args handler) source cost := by
+  have sim := rateCallTail ac dest args handler source 0 cost cost (by omega) (by
+    intro xs args1 prog ss guard
+    exact budget_to_rate ac 0 cost prog _ (ih xs args1 prog ss guard))
+  simpa using rate_to_fixed_budget ac 0 cost (.call none dest args handler) source sim
 
 /-- A tail call into a code table of raise sequences is simulated with the
 explicit maximum raise budget computed from that table. -/
