@@ -75,7 +75,7 @@ theorem nonzeroScalar_sources : ∀ row ∈ globalSourcePrograms nonzeroScalarPr
   · exact ⟨context,entryProg,entryCompile.symm,nonzeroEntryShape⟩
   · exact ⟨context,bodyProg,bodyCompile.symm,bodyShape⟩
 
-private def loopLiteral : List (Nat × List Nat × HolLoopProg 64) :=
+def nonzeroScalarLoop : List (Nat × List Nat × HolLoopProg 64) :=
 [(64,
   [],
   Flapjack.HolLoopProg.mark
@@ -132,14 +132,14 @@ private def loopLiteral : List (Nat × List Nat × HolLoopProg 64) :=
         (Flapjack.HolLoopProg.seq
           (Flapjack.HolLoopProg.mark (Flapjack.HolLoopProg.return [1]))
           (Flapjack.HolLoopProg.mark (Flapjack.HolLoopProg.skip))))))]
-theorem nonzeroScalar_loop : compileProgHOLExact riscvConfig.isa (globalSourcePrograms nonzeroScalarProgram) = loopLiteral := by
+theorem nonzeroScalar_loop : compileProgHOLExact riscvConfig.isa (globalSourcePrograms nonzeroScalarProgram) = nonzeroScalarLoop := by
   rw [← callFrontend_compileProgWithStructuralLive_eq riscvConfig.isa _ nonzeroScalar_sources,nonzeroScalar_crep]
   with_unfolding_all rfl
 
 open Flapjack.RegAlloc Flapjack.RiscV.CakeRegAlloc Flapjack.Compiler.Backend.WordToWord
 open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.WordToStack.Native
-private def row0 := (64,1,loopToWordCompFuncHOL 64 [] (loopLiteral[0]'(by decide)).2.2)
-private def row1 := (65,1,loopToWordCompFuncHOL 65 [] (loopLiteral[1]'(by decide)).2.2)
+private def row0 := (64,1,loopToWordCompFuncHOL 64 [] (nonzeroScalarLoop[0]'(by decide)).2.2)
+private def row1 := (65,1,loopToWordCompFuncHOL 65 [] (nonzeroScalarLoop[1]'(by decide)).2.2)
 private def cols0 := [(0, 0), (9, 0), (13, 1), (17, 1), (21, 1), (25, 1), (33, 2), (37, 1)]
 private def cols1 := [(0, 0), (2, 1), (5, 0), (9, 1), (13, 1), (17, 1), (21, 1)]
 private theorem guard0 : countdownAllocatorGuard row0 = true := by with_unfolding_all rfl
@@ -263,4 +263,26 @@ theorem nonzeroScalar_capacity : optionLe (optionMap₂ max (some (max 1 (1+glob
       (sptFromAList (globalSourceWords nonzeroScalarProgram))))) (some 2097172) := by
   rw [frame,depth]
   decide
+
+open Flapjack.Compiler.Backend.StackLang SteppedFlapjack.StackRemoveSteps.CompCorrect SteppedFlapjack.StackRemoveSteps
+open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics SteppedFlapjack.StackToLabSteps
+open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackSteps
+theorem nonzeroScalar_loopWeight : loopCodeWeight (sptFromAList
+    (compileProgHOLExact riscvConfig.isa (globalSourcePrograms nonzeroScalarProgram))) = 42 := by
+  rw [nonzeroScalar_loop]
+  decide +kernel
+theorem nonzeroScalar_wordWeight : wordCodeWeight (sptFromAList (globalSourceWords nonzeroScalarProgram)) = 19 := by
+  rw [optimizedTable,row0_exact,row1_exact]
+  decide +kernel
+theorem nonzeroScalar_stackWeight : stackCodeWeight (sptFromAList (globalSourceCode nonzeroScalarProgram)) = 23 := by
+  unfold globalSourceCode globalSourceNative
+  rw [optimizedTable,row0_exact,row1_exact]
+  decide +kernel
+theorem nonzeroScalar_tickFactor (cfg : Flapjack.Compiler.Backend.LabToTarget.Config) :
+    costFromFields riscvConfig.addrOffset 0 (.call none (.inl Flapjack.Compiler.Backend.BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf (globalSourceCode nonzeroScalarProgram))) [4] (fixtureStackOracle cfg) = 1950 := by
+  simp only [costFromFields,oracleBitmapBudget,Nat.add_zero,List.range_zero,List.flatMap_nil,maxListNat]
+  unfold globalSourceCode globalSourceNative
+  rw [optimizedTable,row0_exact,row1_exact]
+  decide +kernel
 end SteppedFlapjack.Concrete

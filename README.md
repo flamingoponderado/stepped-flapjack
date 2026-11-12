@@ -105,9 +105,10 @@ pair witness uses this construction. `globalInitializedEntry_return` includes
 the generated initializer and a source body in one lowered entry,
 with an explicit initializer visit bound. `nonzeroGlobal_entry` instantiates it
 with a pair initialized to `(3, 4)` and returns `4`.
-`nonzeroScalar_machine` carries a separately compiled scalar global initialized
+`nonzeroScalar_source_machine` carries a separately compiled scalar global initialized
 to `3` through the counted source execution and the initialized RISC-V machine.
-Its closed tick bound is computed from the code and fixture configuration.
+It returns `3` and has a kernel-checked bound of
+20,435,390,013,946,508,748 ticks.
 `pairGeneral_namedSource` instantiates these conditions for a global pair: its
 initializer and renamed entry call return the second field, and the compiled
 machine runs the bytes produced by the Pancake compiler and halts with the
