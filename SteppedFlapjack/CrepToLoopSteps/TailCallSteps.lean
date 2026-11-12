@@ -1762,20 +1762,30 @@ theorem callWholeClock {σ : Type}
         let bf := callClockFactor ref rows source.clock b
         have left := ih a source (Prod.Lex.right _ (by simp_wf; omega)) ha rfl ctxt live
         have right := ih b source (Prod.Lex.right _ (by simp_wf)) hb rfl ctxt live
-        have sim := scalarIte_clock e he a b ctxt live source tableOk af bf (by simpa [af] using left) (by simpa [bf] using right)
-        apply simAt_mono _ ctxt live source tableOk _ _ ?_ sim
+        have sim := scalarIte_clock e he a b ctxt live source tableOk af bf af bf
+          (by simpa [af,Nat.mul_add] using left) (by simpa [bf,Nat.mul_add] using right)
+        intro sourceFinal result target run nonerror sr mr gr cr tb lr
+        obtain ⟨extra,out,post,ev,hs,hm,hg,hcode,hr,hl,bound⟩ :=
+          sim sourceFinal result target run nonerror sr mr gr cr tb lr
+        refine ⟨extra,out,post,ev,hs,hm,hg,hcode,hr,hl,?_⟩
         have eq := scalarExpressionWeight he ctxt ref (ctxt.vmax+1) (ref.vmax+1) live .ln
         change _ = callExpressionCost ref e at eq
-        rw [eq]
         have maxBound : max af bf ≤ af+bf := max_le (by omega) (by omega)
         have scale : 1 ≤ (callTableCost ref rows+3)^(source.clock+1) := by
           exact Nat.one_le_iff_ne_zero.mpr (Nat.ne_of_gt (Nat.pow_pos (by omega)))
-        apply max_le
-        · dsimp [callClockFactor,callSyntaxCost]
-          nlinarith
-        · dsimp [af,bf,callClockFactor,callSyntaxCost] at maxBound ⊢
-          simp only [Nat.mul_add]
-          nlinarith
+        have factorLe : max (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live e).1) + 1)
+            (max af bf) ≤ callClockFactor ref rows source.clock (.ite e a b) := by
+          rw [eq]
+          apply max_le
+          · dsimp [callClockFactor,callSyntaxCost]
+            nlinarith
+          · dsimp [af,bf,callClockFactor,callSyntaxCost] at maxBound ⊢
+            simp only [Nat.mul_add]
+            nlinarith
+        have offLe : max af bf ≤ callClockFactor ref rows source.clock (.ite e a b) :=
+          (Nat.le_max_right _ _).trans factorLe
+        have mul := Nat.mul_le_mul_right (CrepSteps.steps (.ite e a b) source) factorLe
+        nlinarith
       | @loop e body he hb =>
         let bf := callClockFactor ref rows source.clock body
         have child : ∀ entry : CrepSemHOLState width σ, entry.clock < source.clock → entry.code = source.code →
