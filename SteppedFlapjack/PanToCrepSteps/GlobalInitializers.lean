@@ -156,4 +156,19 @@ theorem globalCompile_initializers_noWhile {width : Nat} [NeZero width]
   | cons decl decls ih =>
     cases decl <;> simp [compileDecsExactHOL,noWhile,ih]
 
+theorem globalCompile_globalWord {width : Nat} [NeZero width]
+    (globals : PanGlobalsContextExact width) (ctxt : PanToCrepContextExact width)
+    (name : MlString) (offset : BitVec width) (found : globals.globals.lookup name = some (.one,offset)) :
+    FrontendScalar ctxt (compileExpExactHOL globals (.var .global name)) := by
+  simp only [compileExpExactHOL,found]
+  exact .load (.op .sub .topAddr (.const offset))
+
+theorem globalCompile_globalField {width : Nat} [NeZero width]
+    (globals : PanGlobalsContextExact width) (ctxt : PanToCrepContextExact width)
+    (name : MlString) (offset : BitVec width) (index count : Nat) (hi : index < count)
+    (found : globals.globals.lookup name = some (.comb (List.replicate count .one),offset)) :
+    FrontendScalar ctxt (compileExpExactHOL globals (.rfield index (.var .global name))) := by
+  simp only [compileExpExactHOL,found]
+  exact .fieldLoad index count hi (.op .sub .topAddr (.const offset))
+
 end SteppedFlapjack.PanToCrepSteps

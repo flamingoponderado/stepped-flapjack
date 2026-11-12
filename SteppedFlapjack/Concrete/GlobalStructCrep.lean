@@ -11,18 +11,21 @@ open SteppedFlapjack.PanToCrepSteps
 def globalStructCrepContext : PanToCrepContextExact 64 :=
   mkCtxtExactHOL HolFiniteMapExact.empty HolFiniteMapExact.empty 0 HolFiniteMapExact.empty
 
-/-- The pair's lowered second-field read belongs to the general frontend
-fragment, and its compiled expression has the supported Crep-to-Loop shape. -/
+theorem globalStruct_pairLookup : globalStructContext.globals.lookup (ofString "pair") =
+    some (.comb [.one,.one],(16 : BitVec 64)) := by
+  simp [globalStructContext,globalStructStart,globalStructDecl,compileDecsExactHOL,
+    compileDecsGlobalAddressExact_eq,sizeOfShapeHOL,cakeBytesInWord,
+    HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL]
+
+theorem globalStruct_field_from_global : FrontendScalar globalStructCrepContext
+    (compileExpExactHOL globalStructContext (.rfield 1 (.var .global (ofString "pair")))) := by
+  exact globalCompile_globalField globalStructContext globalStructCrepContext (ofString "pair") 16 1 2
+    (by decide) globalStruct_pairLookup
+/-- The source global field read lowers to a supported frontend scalar. -/
 theorem globalStruct_field_frontend :
     FrontendScalar globalStructCrepContext
       (.rfield 1 (.load (.comb [.one,.one]) (.op .sub [.topAddr,.const 16]))) := by
-  exact .fieldLoad 1 2 (by decide) (.op .sub .topAddr (.const 16))
-
-theorem globalStruct_field_compiled : ∃ (expression : CrepExpHOL 64),
-    compileExpExactHOLW globalStructCrepContext
-      (.rfield 1 (.load (.comb [.one,.one]) (.op .sub [.topAddr,.const 16]))) =
-        ([expression],.one) ∧ SteppedFlapjack.CrepToLoopSteps.CompiledScalar expression :=
-  SteppedFlapjack.CrepToLoopSteps.frontendScalar_compiled globalStruct_field_frontend
+  simpa [compileExpExactHOL,globalStruct_pairLookup] using globalStruct_field_from_global
 
 /-- Global lowering produces a program in the shared structured-store and
 field-load frontend fragment. -/
@@ -36,14 +39,17 @@ theorem globalStruct_frontend : FrontendProgram globalStructCrepContext
     rcases member with rfl | rfl <;> exact .const _
   · exact .ret globalStruct_field_frontend
 
-/-- Initializers of the declared pair use the general structured frontend for
-any starting global layout. -/
+/-- The actual renamed declaration initializer uses the general frontend. -/
 theorem globalStruct_initializer_frontend (globals : PanGlobalsContextExact 64) :
     FrontendProgram globalStructCrepContext
-      (nestedSeqHOL (compileDecsExactHOL globals globalStructProgram).1) := by
+      (nestedSeqHOL (compileDecsExactHOL globals
+        (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram)
+          (resortDeclsHOL globalStructProgram))).1) := by
   apply globalCompile_frontend_initializer_sequence
   intro shape name value member
-  simp only [globalStructProgram,globalStructDecl,List.mem_cons,List.not_mem_nil,or_false,
+  simp only [globalStructProgram,globalStructDecl,resortDeclsHOL,isNameHOL,isExnDeclHOL,
+    isDeclHOL,isFunctionHOL,List.filter_cons,List.filter_nil,if_true,if_false,Bool.false_eq_true,List.nil_append,
+    List.cons_append,List.append_nil,fpermDecsHOL,List.mem_cons,List.not_mem_nil,or_false,
     DeclHOL.decl.injEq] at member
   rcases member with ⟨rfl,rfl,rfl⟩ | impossible
   · apply FrontendInitializer.flatStruct
@@ -57,13 +63,17 @@ satisfies the Crep-to-Loop shape invariant. -/
 theorem globalStruct_initializer_compiled (globals : PanGlobalsContextExact 64)
     (state : CrepSemHOLState 64 Unit) :
     let program := compileProgExactHOLW globalStructCrepContext
-      (nestedSeqHOL (compileDecsExactHOL globals globalStructProgram).1)
+      (nestedSeqHOL (compileDecsExactHOL globals
+        (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram)
+          (resortDeclsHOL globalStructProgram))).1)
     SteppedFlapjack.CrepToLoopSteps.ScalarProgram program ∧
       SteppedFlapjack.CrepSteps.steps program state ≤ SteppedFlapjack.CrepSteps.statementWeight program := by
   have h := globalStruct_initializer_frontend globals
   exact ⟨SteppedFlapjack.CrepToLoopSteps.frontend_scalar_program h,
     SteppedFlapjack.CrepSteps.staticProgram_statementWeight
-      (frontendLoopFree_static h (globalCompile_initializers_noWhile globalStructProgram globals)) state⟩
+      (frontendLoopFree_static h (globalCompile_initializers_noWhile
+        (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram)
+          (resortDeclsHOL globalStructProgram)) globals)) state⟩
 
 def globalStructCrepState : CrepSemHOLState 64 Unit := concreteDeclCrepState globalStructTarget []
 
