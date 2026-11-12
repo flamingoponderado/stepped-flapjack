@@ -77,7 +77,7 @@ theorem globalStruct_wordStateRel : loopToWordStateRelHOLExact
   refine ⟨len,mem,domain,shared,clock,be,ffi,current,length,heap,globals,?_⟩
   simp [loopToWordCodeRelHOLExact,globalStructLoopState,concreteDeclLoopState,compileProgHOLExact,sptFromAList]
 
-def globalStructLoopVisitLimit : Nat := loopVisitWeight globalStructLoopProgram * (10 + globalStructLoopClock + 1)
+def globalStructLoopVisitLimit : Nat := loopVisitWeight globalStructLoopProgram * (globalStructCrepLimit + globalStructLoopClock + 1)
 
 theorem globalStruct_initialLocals : LoopToWord.localsRelHOL globalStructWordContext
     ({globalStructLoopState with clock := globalStructLoopState.clock + globalStructLoopClock}).locals globalStructWordState.locals := by

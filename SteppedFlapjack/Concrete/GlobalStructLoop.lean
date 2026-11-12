@@ -5,11 +5,8 @@ open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.
 open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopToWordSteps
 
-def globalStructCrepProgram : CrepProgHOL 64 :=
-  compileProgExactHOLW globalStructCrepContext (compileProgExactHOL globalStructContext (progToHOL globalStructWitness))
-
 theorem globalStruct_scalar_program : ScalarProgram globalStructCrepProgram :=
-  frontend_scalar_program globalStruct_frontend
+  frontend_scalar_program globalStruct_initialized_frontend
 
 def globalStructLoopContext : CrepToLoopContextExact :=
   mkCtxtExact riscvConfig.isa HolFiniteMapExact.empty HolFiniteMapExact.empty 0
@@ -18,7 +15,7 @@ noncomputable def globalStructLoopState : LoopSemStateFiniteExact 64 Unit :=
   concreteDeclLoopState riscvConfig.isa globalStructCrepState []
 
 def globalStructLoopClock : Nat :=
-  3 * loopVisitWeight (optimiseHOL (compileHOLExact globalStructLoopContext .ln globalStructCrepProgram)) * 11
+  3 * loopVisitWeight (optimiseHOL (compileHOLExact globalStructLoopContext .ln globalStructCrepProgram)) * (globalStructCrepLimit + 1)
 
 /-- The concrete pair program reaches optimized Loop code at a calculated clock. -/
 theorem globalStruct_loop_run : ∃ sourcePost targetPost crepPost loopPost,
@@ -33,7 +30,7 @@ theorem globalStruct_loop_run : ∃ sourcePost targetPost crepPost loopPost,
     SteppedFlapjack.LoopSteps.steps (optimiseHOL (compileHOLExact globalStructLoopContext .ln globalStructCrepProgram))
       {globalStructLoopState with clock := globalStructLoopState.clock + globalStructLoopClock} ≤
         loopVisitWeight (optimiseHOL (compileHOLExact globalStructLoopContext .ln globalStructCrepProgram)) *
-          (10 + globalStructLoopClock + 1) := by
+          (globalStructCrepLimit + globalStructLoopClock + 1) := by
   obtain ⟨sourcePost,targetPost,crepPost,sourceRun,targetRun,crepRun,_,crepBound⟩ := globalStruct_crep_run
   have crepGlobals : globalStructCrepState.globals = HolFiniteMapExact.empty := rfl
   obtain ⟨stateRel,memRel,globalsRel⟩ := concreteDecl_crepLoop_relations riscvConfig.isa globalStructCrepState [] crepGlobals
@@ -44,7 +41,7 @@ theorem globalStruct_loop_run : ∃ sourcePost targetPost crepPost loopPost,
     apply empty_crepLoop_locals
     rfl
   obtain ⟨loopPost,loopRun,loopBound,_,_,_,_⟩ := scalarProgram_explicit globalStructCrepProgram globalStruct_scalar_program
-    globalStructLoopContext .ln globalStructCrepState crepPost (some (.return [.word 8])) globalStructLoopState 10
+    globalStructLoopContext .ln globalStructCrepState crepPost (some (.return [.word 8])) globalStructLoopState globalStructCrepLimit
     (by simpa [globalStructCrepProgram] using crepRun) (by simpa [globalStructCrepProgram] using crepBound)
     (.return _) stateRel memRel globalsRel codeRel localsRel
   refine ⟨sourcePost,targetPost,crepPost,loopPost,sourceRun,targetRun,?_,?_,?_⟩
