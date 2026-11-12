@@ -36,15 +36,16 @@ def globalStructActualOptimizedLimit : Nat :=
       (loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa globalStructCallPrograms))+2) * (2 * globalStructActualLoopLimit)
 
 /-- The actual optimizer preserves the real entry execution at an explicit visit bound. -/
-theorem globalStruct_actualOptimizedLoop_run : ∃ crepPost loopPost,
+theorem globalStruct_actualOptimizedLoop_run_withMemory (memory : BitVec 64 → WordLocW 64)
+    (memoryRel : crepToLoopMemRelHOLExact globalStructCallCrep.memory memory globalStructCallCrep.memaddrs) : ∃ crepPost loopPost,
     evalCrepSemHOLProgExact globalStructCallCrep globalStructActualEntryCrep =
       (some (.return [.word 8]),crepPost) ∧
     evaluate globalStructActualOptimizedLoop
-      {globalStructActualLoopState with clock := globalStructActualLoopState.clock+globalStructActualLoopClock} =
+      {globalStructActualLoopState with memory := memory, clock := globalStructActualLoopState.clock+globalStructActualLoopClock} =
         (some (.result [.word 8]),loopPost) ∧
     SteppedFlapjack.LoopSteps.steps globalStructActualOptimizedLoop
-      {globalStructActualLoopState with clock := globalStructActualLoopState.clock+globalStructActualLoopClock} ≤ globalStructActualOptimizedLimit := by
-  obtain ⟨crepPost,loopPost,crepRun,loopRun,loopBound⟩ := globalStruct_actualLoop_run
+      {globalStructActualLoopState with memory := memory, clock := globalStructActualLoopState.clock+globalStructActualLoopClock} ≤ globalStructActualOptimizedLimit := by
+  obtain ⟨crepPost,loopPost,crepRun,loopRun,loopBound⟩ := globalStruct_actualLoop_run_withMemory memory memoryRel
   have shape : SimpleLoopSequenceSource globalStructActualEntryLoop := by
     unfold globalStructActualEntryLoop globalStructActualEntryCrep
     rw [← globalStruct_actualPan_compiled]
@@ -53,7 +54,7 @@ theorem globalStruct_actualOptimizedLoop_run : ∃ crepPost loopPost,
     callFrontend_compiled_loopTableSupported riscvConfig.isa globalStructCallPrograms globalStruct_actualCode_sources
   have weight := loopCodeWeight_lookup globalStructActualLoopState.code firstLoopName [] globalStructActualOptimizedLoop globalStruct_actualLoop_lookup
   have bound := optimise_simpleSequence_source_bound shape
-    {globalStructActualLoopState with clock := globalStructActualLoopState.clock+globalStructActualLoopClock}
+    {globalStructActualLoopState with memory := memory, clock := globalStructActualLoopState.clock+globalStructActualLoopClock}
     loopPost (some (.result [.word 8])) (by simpa using table) (by simpa [globalStructActualOptimizedLoop] using Nat.le_trans weight (by omega))
     (by simpa [globalStructActualEntryLoop,globalStructActualEntryCrep] using loopRun) (.return _)
   refine ⟨crepPost,loopPost,by simpa [globalStructActualEntryCrep] using crepRun,?_,?_⟩
@@ -64,5 +65,20 @@ theorem globalStruct_actualOptimizedLoop_run : ∃ crepPost loopPost,
     have steps := Nat.mul_le_mul_left (loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa globalStructCallPrograms))+2)
       (Nat.mul_le_mul_left 2 loopBound)
     simpa [globalStructActualOptimizedLoop,globalStructActualOptimizedLimit,globalStructActualEntryLoop,globalStructActualEntryCrep] using Nat.le_trans bound.2 (Nat.add_le_add_left steps _)
+
+
+/-- The source's own memory is a concrete instance of the optimized run. -/
+theorem globalStruct_actualOptimizedLoop_run : ∃ crepPost loopPost,
+    evalCrepSemHOLProgExact globalStructCallCrep globalStructActualEntryCrep =
+      (some (.return [.word 8]),crepPost) ∧
+    evaluate globalStructActualOptimizedLoop
+      {globalStructActualLoopState with clock := globalStructActualLoopState.clock+globalStructActualLoopClock} =
+        (some (.result [.word 8]),loopPost) ∧
+    SteppedFlapjack.LoopSteps.steps globalStructActualOptimizedLoop
+      {globalStructActualLoopState with clock := globalStructActualLoopState.clock+globalStructActualLoopClock} ≤ globalStructActualOptimizedLimit := by
+  have relations := concreteDecl_crepLoop_relations riscvConfig.isa globalStructCallCrep globalStructCallPrograms rfl
+  have h := globalStruct_actualOptimizedLoop_run_withMemory globalStructActualLoopState.memory (by
+    simpa [globalStructActualLoopState] using relations.2.1)
+  simpa using h
 
 end SteppedFlapjack.Concrete

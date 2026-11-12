@@ -5,6 +5,7 @@ import SteppedFlapjack.LoopToWordSteps.WholeWordSpan
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.LoopSemStateFiniteExact
 open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.WordToWord Flapjack.WordSemStateFiniteExact
+open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
 open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps SteppedFlapjack.LoopToWordSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.WordAllocSteps
 
 def globalStructActualWordPrograms := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa globalStructCallPrograms)
@@ -33,9 +34,13 @@ theorem globalStruct_actualWord_heap : globalStructActualClockedCrep.topAddr =
   decide
 
 
-/-- The actual global entry reaches optimized Word with a code-derived bound. -/
-theorem globalStruct_actualWord_run {C : Type} (template : WordSemStateFiniteExact 64 C Unit) (frame : Nat) :
-    let starter := globalStructActualWordStarter template frame
+noncomputable def globalStructActualWordStarterWithMemory {C : Type} (template : WordSemStateFiniteExact 64 C Unit) (frame : Nat) (memory : BitVec 64 → WordLocW 64) :=
+  {globalStructActualWordStarter template frame with memory := memory}
+
+theorem globalStruct_actualWord_run_withMemory {C : Type} (template : WordSemStateFiniteExact 64 C Unit) (frame : Nat)
+    (memory : BitVec 64 → WordLocW 64)
+    (memoryRel : crepToLoopMemRelHOLExact globalStructCallCrep.memory memory globalStructCallCrep.memaddrs) :
+    let starter := globalStructActualWordStarterWithMemory template frame memory
     let final := WordSemStateFiniteExact.evaluate (.call none (some firstLoopName) [0] none)
       {starter with clock := 6*globalStructActualOptimizedLimit+1, code := sptFromAList (Flapjack.Compiler.Backend.WordToWord.compile phase3WordConfig riscvConfig globalStructActualWordPrograms).2}
     final.1 = some (.result (.loc 1 0) [.word 8]) ∧
@@ -44,19 +49,18 @@ theorem globalStruct_actualWord_run {C : Type} (template : WordSemStateFiniteExa
         1 + max 1 (wordCodeWeight (sptFromAList (compileWith Flapjack.RegAlloc.regAllocExecutable
           phase3WordConfig riscvConfig globalStructActualWordPrograms).2)) * (6*globalStructActualOptimizedLimit+1) := by
   classical
-  obtain ⟨crepPost,loopPost,crepRun,loopRun,loopBound⟩ := globalStruct_actualOptimizedLoop_run
-  let memory := (concreteDeclLoopState riscvConfig.isa globalStructActualClockedCrep globalStructCallPrograms).memory
+  obtain ⟨crepPost,loopPost,crepRun,loopRun,loopBound⟩ := globalStruct_actualOptimizedLoop_run_withMemory memory memoryRel
   have relations := phase3Starter_relations riscvConfig.isa globalStructActualClockedCrep globalStructCallPrograms
     template fixtureHeapLength firstLoopName frame memory globalStruct_actualWord_heap
   have localFacts := phase3Starter_locals riscvConfig.isa globalStructActualClockedCrep globalStructCallPrograms
     template fixtureHeapLength firstLoopName frame globalStructActualOptimizedLoop memory
   have starterEq : {(phase3Starter riscvConfig.isa globalStructActualClockedCrep globalStructCallPrograms
-      template fixtureHeapLength firstLoopName frame) with memory := memory} = globalStructActualWordStarter template frame := by
-    simp [globalStructActualWordStarter,phase3Starter,concreteDeclWordState,memory]
+      template fixtureHeapLength firstLoopName frame) with memory := memory} = globalStructActualWordStarterWithMemory template frame memory := by
+    rfl
   rw [starterEq] at relations localFacts
   have loopEq : {(concreteDeclLoopState riscvConfig.isa globalStructActualClockedCrep globalStructCallPrograms) with memory := memory} =
-      {globalStructActualLoopState with clock := globalStructActualLoopState.clock+globalStructActualLoopClock} := by
-    simp [globalStructActualLoopState,globalStructActualClockedCrep,memory,concreteDeclLoopState]
+      {globalStructActualLoopState with memory := memory, clock := globalStructActualLoopState.clock+globalStructActualLoopClock} := by
+    simp [globalStructActualLoopState,globalStructActualClockedCrep,concreteDeclLoopState]
     constructor <;> funext address <;> apply Bool.eq_iff_iff.mpr
     · by_cases h : globalStructCallCrep.memaddrs address <;> simp [h]
     · by_cases h : globalStructCallCrep.shMemaddrs address <;> simp [h]
@@ -66,11 +70,11 @@ theorem globalStruct_actualWord_run {C : Type} (template : WordSemStateFiniteExa
     unfold globalStructActualEntryLoop globalStructActualEntryCrep
     rw [← globalStruct_actualPan_compiled]
     exact callFrontend_compiled_loopShape globalStruct_actualPan_shape _ _
-  have table : LoopTableSupported ({globalStructActualLoopState with clock := globalStructActualLoopState.clock+globalStructActualLoopClock}).code :=
+  have table : LoopTableSupported ({globalStructActualLoopState with memory := memory, clock := globalStructActualLoopState.clock+globalStructActualLoopClock}).code :=
     callFrontend_compiled_loopTableSupported riscvConfig.isa globalStructCallPrograms globalStruct_actualCode_sources
   have run := loopTable_wholeWord_span shape
-    {globalStructActualLoopState with clock := globalStructActualLoopState.clock+globalStructActualLoopClock}
-    loopPost (some (.result [.word 8])) table firstLoopName (globalStructActualWordStarter template frame)
+    {globalStructActualLoopState with memory := memory, clock := globalStructActualLoopState.clock+globalStructActualLoopClock}
+    loopPost (some (.result [.word 8])) table firstLoopName (globalStructActualWordStarterWithMemory template frame memory)
     globalStructActualWordContext (firstLoopName,2) globalStructActualOptimizedLimit globalStructActualWordPrograms
     phase3WordConfig riscvConfig globalStruct_actualWordEntry globalStruct_actualWord_unique
     (loopToWord_programSafety _) (by rfl)
@@ -84,5 +88,22 @@ theorem globalStruct_actualWord_run {C : Type} (template : WordSemStateFiniteExa
   obtain ⟨wordPost,wordResult,resultRel,success,_,steps⟩ := run
   have resultEq : wordResult = some (.result (.loc 1 0) [.word 8]) := resultRel.2.1
   exact ⟨success.trans resultEq,steps⟩
+
+
+/-- The actual global entry reaches optimized Word with a code-derived bound. -/
+theorem globalStruct_actualWord_run {C : Type} (template : WordSemStateFiniteExact 64 C Unit) (frame : Nat) :
+    let starter := globalStructActualWordStarter template frame
+    let final := WordSemStateFiniteExact.evaluate (.call none (some firstLoopName) [0] none)
+      {starter with clock := 6*globalStructActualOptimizedLimit+1, code := sptFromAList (Flapjack.Compiler.Backend.WordToWord.compile phase3WordConfig riscvConfig globalStructActualWordPrograms).2}
+    final.1 = some (.result (.loc 1 0) [.word 8]) ∧
+      WordSteps.steps (.call none (some firstLoopName) [0] none)
+        {starter with clock := 6*globalStructActualOptimizedLimit+1, code := sptFromAList (Flapjack.Compiler.Backend.WordToWord.compile phase3WordConfig riscvConfig globalStructActualWordPrograms).2} ≤
+        1 + max 1 (wordCodeWeight (sptFromAList (compileWith Flapjack.RegAlloc.regAllocExecutable
+          phase3WordConfig riscvConfig globalStructActualWordPrograms).2)) * (6*globalStructActualOptimizedLimit+1) := by
+  have relations := concreteDecl_crepLoop_relations riscvConfig.isa globalStructCallCrep globalStructCallPrograms rfl
+  have h := globalStruct_actualWord_run_withMemory template frame globalStructActualLoopState.memory (by
+    simpa [globalStructActualLoopState] using relations.2.1)
+  simpa [globalStructActualWordStarterWithMemory,globalStructActualWordStarter,phase3Starter,
+    concreteDeclWordState,globalStructActualLoopState,globalStructActualClockedCrep,concreteDeclLoopState] using h
 
 end SteppedFlapjack.Concrete

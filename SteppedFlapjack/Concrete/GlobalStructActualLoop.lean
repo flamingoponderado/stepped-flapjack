@@ -126,6 +126,38 @@ def globalStructActualLoopLimit : Nat :=
       (loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa globalStructCallPrograms))+2) * (globalStructCallCrep.clock+globalStructActualLoopClock)
 
 /-- The actual entry and function table execute in Loop at a code-derived clock. -/
+theorem globalStruct_actualLoop_run_withMemory (memory : BitVec 64 → WordLocW 64)
+    (memoryRel : crepToLoopMemRelHOLExact globalStructCallCrep.memory memory globalStructCallCrep.memaddrs) : ∃ crepPost loopPost,
+    evalCrepSemHOLProgExact globalStructCallCrep (.seq globalStructActualInit (.call none (newMainNameHOL globalStructProgram) [])) =
+      (some (.return [.word 8]),crepPost) ∧
+    LoopSemStateFiniteExact.evaluate
+      (compileHOLExact globalStructActualLoopContext .ln (.seq globalStructActualInit (.call none (newMainNameHOL globalStructProgram) [])))
+      {globalStructActualLoopState with memory := memory, clock := globalStructActualLoopState.clock+globalStructActualLoopClock} =
+        (some (.result [.word 8]),loopPost) ∧
+    SteppedFlapjack.LoopSteps.steps
+      (compileHOLExact globalStructActualLoopContext .ln (.seq globalStructActualInit (.call none (newMainNameHOL globalStructProgram) [])))
+      {globalStructActualLoopState with memory := memory, clock := globalStructActualLoopState.clock+globalStructActualLoopClock} ≤ globalStructActualLoopLimit := by
+  obtain ⟨h,crepPost,run,bound⟩ := globalStruct_actualEntry_run
+  simp only [globalStruct_actualPrograms_eq,List.getElem_cons_zero] at run bound
+  have relations := concreteDecl_crepLoop_relations riscvConfig.isa globalStructCallCrep globalStructCallPrograms rfl
+  have locals : crepToLoopLocalsRelExact globalStructActualLoopContext .ln globalStructCallCrep.locals globalStructActualLoopState.locals := by
+    apply empty_crepLoop_locals
+    rfl
+  have table := callFrontend_compiled_loopTableSupported riscvConfig.isa globalStructCallPrograms globalStruct_actualCode_sources
+  obtain ⟨post,ev,visits,_,_,_,_,_⟩ := callFrontend_wholeVisits_explicit globalStructCrepContext globalStructActualPanProgram
+    globalStruct_actualPan_shape globalStructCallPrograms globalStruct_actualCode_sources globalStructActualLoopContext globalStructActualLoopContext .ln
+    globalStructCallCrep crepPost (some (.return [.word 8])) {globalStructActualLoopState with memory := memory} rfl
+    (by simpa [globalStruct_actualPan_compiled] using run) (by simp) (by simp) globalStructActualEntryLimit (by simpa [globalStruct_actualPan_compiled] using bound)
+    (by simpa [globalStructActualLoopState,crepToLoopStateRelExact] using relations.1) memoryRel (by simpa [globalStructActualLoopState,crepToLoopGlobalsRelHOLExact] using relations.2.2) (by simpa [crepToLoopCodeRelExact] using globalStruct_actualCode_relation) (by simpa [globalStructActualLoopState,concreteDeclLoopState] using table) (by simpa [crepToLoopLocalsRelExact] using locals)
+  refine ⟨crepPost,post,run,?_,?_⟩
+  · simpa [globalStruct_actualPan_compiled,globalStructActualLoopClock,resultToLoop,wlabWlocExact] using ev
+  · have code : globalStructActualLoopState.code = sptFromAList (compileProgHOLExact riscvConfig.isa globalStructCallPrograms) := rfl
+    rw [code] at visits
+    simp only [code]
+    simpa [globalStruct_actualPan_compiled,globalStructActualLoopClock,globalStructActualLoopLimit] using visits
+
+
+/-- The concrete source memory satisfies the generalized execution theorem. -/
 theorem globalStruct_actualLoop_run : ∃ crepPost loopPost,
     evalCrepSemHOLProgExact globalStructCallCrep (.seq globalStructActualInit (.call none (newMainNameHOL globalStructProgram) [])) =
       (some (.return [.word 8]),crepPost) ∧
@@ -136,23 +168,9 @@ theorem globalStruct_actualLoop_run : ∃ crepPost loopPost,
     SteppedFlapjack.LoopSteps.steps
       (compileHOLExact globalStructActualLoopContext .ln (.seq globalStructActualInit (.call none (newMainNameHOL globalStructProgram) [])))
       {globalStructActualLoopState with clock := globalStructActualLoopState.clock+globalStructActualLoopClock} ≤ globalStructActualLoopLimit := by
-  obtain ⟨h,crepPost,run,bound⟩ := globalStruct_actualEntry_run
-  simp only [globalStruct_actualPrograms_eq,List.getElem_cons_zero] at run bound
   have relations := concreteDecl_crepLoop_relations riscvConfig.isa globalStructCallCrep globalStructCallPrograms rfl
-  have locals : crepToLoopLocalsRelExact globalStructActualLoopContext .ln globalStructCallCrep.locals globalStructActualLoopState.locals := by
-    apply empty_crepLoop_locals
-    rfl
-  have table := callFrontend_compiled_loopTableSupported riscvConfig.isa globalStructCallPrograms globalStruct_actualCode_sources
-  obtain ⟨post,ev,visits,_,_,_,_,_⟩ := callFrontend_wholeVisits_explicit globalStructCrepContext globalStructActualPanProgram
-    globalStruct_actualPan_shape globalStructCallPrograms globalStruct_actualCode_sources globalStructActualLoopContext globalStructActualLoopContext .ln
-    globalStructCallCrep crepPost (some (.return [.word 8])) globalStructActualLoopState rfl
-    (by simpa [globalStruct_actualPan_compiled] using run) (by simp) (by simp) globalStructActualEntryLimit (by simpa [globalStruct_actualPan_compiled] using bound)
-    relations.1 relations.2.1 relations.2.2 globalStruct_actualCode_relation table locals
-  refine ⟨crepPost,post,run,?_,?_⟩
-  · simpa [globalStruct_actualPan_compiled,globalStructActualLoopClock,resultToLoop,wlabWlocExact] using ev
-  · have code : globalStructActualLoopState.code = sptFromAList (compileProgHOLExact riscvConfig.isa globalStructCallPrograms) := rfl
-    rw [code] at visits
-    simp only [code]
-    simpa [globalStruct_actualPan_compiled,globalStructActualLoopClock,globalStructActualLoopLimit] using visits
+  have h := globalStruct_actualLoop_run_withMemory globalStructActualLoopState.memory (by
+    simpa [globalStructActualLoopState] using relations.2.1)
+  simpa using h
 
 end SteppedFlapjack.Concrete
