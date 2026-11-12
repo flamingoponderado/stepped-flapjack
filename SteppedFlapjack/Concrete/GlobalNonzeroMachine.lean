@@ -1,0 +1,270 @@
+import SteppedFlapjack.Concrete.GlobalNonzeroNativeFacts
+import SteppedFlapjack.Concrete.FunctionSource
+namespace SteppedFlapjack.Concrete
+open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
+open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.StackRemove SteppedFlapjack.PanToCrepSteps
+set_option maxRecDepth 100000
+set_option maxHeartbeats 4000000
+private def funName : String := "main" ++ String.singleton (Char.ofNat 39)
+private def prog : Prog (RiscV.Word 64) := .return (.var .global "x")
+private def fs : List (FunDeclOf 64) := [⟨funName,false,false,[],prog,.one⟩]
+private def slot : BitVec 64 := heapTop - 8
+private def domain (a : BitVec 64) : Prop := ordinaryAddress a ∧ a ≠ slot
+private instance (a : BitVec 64) : Decidable (domain a) := by unfold domain; infer_instance
+private def prodBase : PanSemState (RiscV.Word 64) (FfiState Unit) :=
+  {functionSourceProduction fs 1 2 with topAddress := slot, memaddrs := fun a => decide (domain a)}
+private def holBase : PanSemStateFiniteExact 64 Unit :=
+  {functionSourceExact fs 1 2 with topAddr := slot, memaddrs := domain}
+private theorem names : ∀ f ∈ fs, NameRanged f.name := by
+  intro f hf
+  simp only [fs,List.mem_cons,List.not_mem_nil,or_false] at hf
+  subst f
+  simp [funName,NameRanged]
+private theorem baseRel : PanSemStateRelExec prodBase holBase.toExact := by
+  obtain ⟨hl,hg,hs,hc,he,hm,hmd,hsm,hck,hbe,hffi,hb,ht⟩ := functionSource_related fs 1 2 names
+  refine ⟨hl,hg,hs,hc,he,?_,?_,hsm,hck,hbe,hffi,hb,rfl⟩
+  · intro a ha
+    have present : domain a := of_decide_eq_true ha
+    have oldPresent : (functionSourceProduction fs 1 2).memaddrs a = true := by
+      simpa [functionSourceProduction,sourceProduction] using present.1
+    exact hm a oldPresent
+  · intro a
+    simp [prodBase,holBase]
+private def prod := {prodBase with globals := updatePanValueMap prodBase.globals "x" (.word 3)}
+private def hol := setGlobalHOLFinite (ofString "x") (panValueToHOL (.word 3)) holBase
+private theorem stateRel : PanSemStateRelExec prod hol.toExact := by
+  exact baseRel.updateGlobals "x" (by decide) _
+private def shapes (name : VarName) := if name = "x" then some ShapeHOL.one else none
+private theorem supported : Supported shapes prog := by
+  refine ⟨.ret (.global (.global "x" .one (by decide) ?_)), ?_⟩
+  · simp [shapes]
+  · simp [prog,ProgByteRanged,ExpByteRanged]
+private theorem globalShapes : GlobalHOLShapes shapes prod.globals := by
+  intro name ranged
+  by_cases same : name = "x"
+  · subst name
+    simp [prod,prodBase,functionSourceProduction,sourceProduction,updatePanValueMap,shapes,shapeOfHOLExact]
+  · simp [prod,prodBase,functionSourceProduction,sourceProduction,updatePanValueMap,shapes,same]
+
+private theorem ranged : PanSemStateRelExecRanged prod := by
+  have base : PanSemStateRelExecRanged prodBase := by
+    simp [prodBase,functionSourceProduction,sourceProduction,PanSemStateRelExecRanged,StructContextByteRanged,StructContext.toHOL]
+  exact base.updateGlobals "x" (.word 3) (by simp [PanValueByteRanged])
+private theorem localsWord : WordLocals prod.locals := by
+  exact wordLocals_empty
+private theorem prodCode : prod.code = [(funName,[],prog,.one)] := by
+  simp [prod,prodBase,functionSourceProduction,fs,functionEntries]
+private theorem codeRanged : ∀ name entry, panSemCodeLookup prod.code name = some entry → PanLangEntryByteRanged entry := by
+  intro name entry found
+  rw [prodCode] at found
+  simp only [panSemCodeLookup,lookupInfo] at found
+  split at found
+  · simp only [Option.some.injEq] at found
+    subst entry
+    simp [PanLangEntryByteRanged,ListParamByteRanged,prog,ProgByteRanged,ExpByteRanged,ShapeByteRanged]
+  · simp at found
+private theorem codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode prod.code →
+    ∃ scope, GlobalCallSupportedIn shapes scope body := by
+  intro name params body member
+  rw [prodCode] at member
+  simp only [countedFunctionsOfCode,List.map,List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at member
+  obtain ⟨rfl,rfl,rfl⟩ := member
+  exact ⟨[],supported.1⟩
+private theorem countedRun : evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
+    (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) prod.structs (countedFunctionsOfCode prod.code)
+    prod.baseAddress prod.topAddress panSemBitVec64BytesInWord 5 prod.locals prod.globals prod.memory prod.ffi prog
+    (memoryAccess := some (panSemBitVec64MemoryAccess prod))
+    (contracts := some (countedContractsOfCode prod.code [])) =
+      some (.returned prod.locals prod.globals prod.memory prod.ffi [.word 3],2) := by
+  with_unfolding_all rfl
+
+private def decl : DeclHOL 64 := .decl .one (ofString "x") (.const 3)
+private def globals : PanGlobalsContextExact 64 :=
+  {globals := HolFiniteMapExact.empty.updateEq (ofString "x",(.one,8)), globalsSize := 8, maxGlobalsSize := 8}
+private def entries : List (MlS × List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL) :=
+  [(ofString funName,[],progToHOL prog,.one)]
+private def target := globalEntryTarget nonzeroScalarProgram 2 globals entries
+private def before := beforeGlobals target 8 1
+private def post := setGlobalHOLFinite (ofString "x") (panValueToHOL (.word 3)) before
+private theorem addressSlot (a : BitVec 64) : addresses slot 1 a ↔ a = slot := by
+  rw [mem_addresses]
+  constructor
+  · rintro ⟨i,hi,eq⟩
+    have : i = 0 := by omega
+    subst i
+    simpa [bytesInWord] using eq
+  · intro eq
+    subst a
+    exact ⟨0,by decide,by simp [bytesInWord]⟩
+private theorem sourceEq : callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty = hol := by
+  have domainEq : (fun a => ordinaryAddress a ∧ ¬ addresses slot 1 a) = domain := by
+    funext a
+    apply propext
+    simp [domain,addressSlot]
+  unfold hol holBase post before target globalEntryTarget globalEntryTemplate
+  rw [nonzeroScalar_bitmap]
+  simp only [List.length_cons,List.length_nil]
+  simp [callEntryStateHOLFinite,installSourceFunctions,installTargetFunctions,beforeGlobals,
+    setGlobalHOLFinite,functionSourceExact,sourceTemplateFor,sourceTemplate,fs,entries,funDeclToHOL,functionsHOL,
+    shapeToHOL,slot]
+  exact domainEq
+
+
+private def panCtxt : PanToCrepContextExact 64 := mkCtxtExactHOL HolFiniteMapExact.empty
+  (HolFiniteMapExact.empty.update (ofString funName,([],ShapeHOL.one))) 0 HolFiniteMapExact.empty
+private def inits : List (ProgHOL 64) := [.store (.op .sub [.topAddr,.const 8]) (.const 3)]
+private theorem declEval : @evaluateDeclsHOLFinite 64 Unit _
+    (beforeGlobals target (panBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL [decl]).map sizeOfShapeHOL).sum)
+      ((decShapesHOL [decl]).map sizeOfShapeHOL).sum) (fun _a => Classical.propDecidable _) [decl] = some post := by
+  with_unfolding_all rfl
+private theorem compiled : compileDecsExactHOL
+    (beforeGlobalsContext (panBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL [decl]).map sizeOfShapeHOL).sum)) [decl] =
+    (inits,[],[],globals) := by
+  simp [beforeGlobalsContext,decl,decShapesHOL,sizeOfShapeHOL,panBytesInWord,cakeBytesInWord,
+    compileDecsExactHOL,compileDecsGlobalAddressExact_eq,compileExpExactHOL,inits,globals]
+private theorem allocated : ∀ a, addresses ((globalEntryTemplate nonzeroScalarProgram 2).topAddr - panBytesInWord 64 *
+    BitVec.ofNat 64 ((decShapesHOL [decl]).map sizeOfShapeHOL).sum)
+    ((decShapesHOL [decl]).map sizeOfShapeHOL).sum a → (globalEntryTemplate nonzeroScalarProgram 2).memaddrs a := by
+  intro a present
+  change addresses slot 1 a at present
+  have eq := (addressSlot a).mp present
+  subst a
+  change ordinaryAddress slot
+  unfold slot heapTop fixtureHeapEnd heapEnd stackStart ramEnd ramStart ramSize stackSize globalsWords ordinaryAddress sourceBase
+  decide
+private theorem layout : GlobalLayout shapes globals := by
+  intro name sh found
+  by_cases same : name = "x"
+  · subst name
+    simp [shapes] at found
+    subst sh
+    exact ⟨8,by simp [globals,HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL]⟩
+  · simp [shapes,same] at found
+private theorem initShape : ∀ sh n e, DeclHOL.decl sh n e ∈ [decl] → FrontendValue panCtxt e := by
+  intro sh n e member
+  simp only [List.mem_cons,List.not_mem_nil,or_false] at member
+  cases member
+  exact .scalar (.const 3)
+
+private theorem bodyShape : GlobalCallFrontend globals panCtxt (progToHOL prog) :=
+  globalCallSupported_frontend layout supported.1 panCtxt (by intro n member; simp at member)
+private theorem targetTable : CallFrontendCode panCtxt target.code := by
+  intro name params body ret found
+  simp only [target,globalEntryTarget,installTargetFunctions,entries,List.map,List.reverse_cons,List.reverse_nil,
+    List.nil_append,HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,List.foldl_cons,List.foldl_nil,FUPDATE] at found
+  split at found
+  · simp only [Option.some.injEq,Prod.mk.injEq] at found
+    obtain ⟨rfl,rfl,rfl⟩ := found
+    apply globalCallFrontend_compiled
+    exact globalCallSupported_frontend layout supported.1 _ (by intro n member; simp at member)
+  · simp [HolFiniteMapExact.lookup_empty] at found
+private theorem panCode : codeRelExactHOLW panCtxt target.code (globalEntryCrep nonzeroScalarProgram 2 globals entries).code := by
+  intro name params body ret found
+  simp only [target,globalEntryTarget,installTargetFunctions,entries,List.map,List.reverse_cons,List.reverse_nil,
+    List.nil_append,HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,List.foldl_cons,List.foldl_nil,FUPDATE] at found
+  split at found
+  · rename_i equal
+    have keyEq : ofString funName = name := beq_iff_eq.mp equal
+    subst name
+    simp only [Option.some.injEq,Prod.mk.injEq] at found
+    obtain ⟨rfl,rfl,rfl⟩ := found
+    have shape := targetTable (ofString funName) [] (compileProgExactHOL globals (progToHOL prog)) .one
+      (by simp [target,globalEntryTarget,installTargetFunctions,entries,HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE])
+    refine ⟨callFrontend_localised shape,?_,?_⟩
+    · simp [panCtxt,mkCtxtExactHOL,HolFiniteMapExact.lookup_update,FUPDATE]
+    · simp only [List.map_nil,sizeOfShapeHOL,sizeOfShapesHOL,List.range_zero]
+      rw [show (globalEntryCrep nonzeroScalarProgram 2 globals entries).code = alistToFmapCodeExact nonzeroScalarCrep from congrArg alistToFmapCodeExact nonzeroScalar_crep]
+      simp [nonzeroScalarCrep,alistToFmapCodeExact,prog,progToHOL,expToHOL,globals,compileProgExactHOL,
+        compileExpExactHOL,compileReturnExactHOLW,compileProgExactHOLW,
+        panCtxt,mkCtxtExactHOL,ctxtFcExactHOL,funName,ofString]
+      with_unfolding_all rfl
+  · simp [HolFiniteMapExact.lookup_empty] at found
+
+open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackSteps
+open Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Backend.WordToStack.Native
+private def entryBody : CrepProgHOL 64 := (nonzeroScalarCrep[0]'(by decide)).2.2
+private theorem compiledEntry : compileProgExactHOLW panCtxt (.seq (nestedSeqHOL inits) (.call none (ofString funName) [])) = entryBody := by
+  simp [entryBody,nonzeroScalarCrep,inits,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileStoreExactHOLW,
+    compileExpExactHOLW,compileExpExactHOLWList,panCtxt,mkCtxtExactHOL,cexpHeads,nestedDecsHOL,crepNestedSeqHOL,storesHOL,
+    funName,ofString,nestedSeqHOL]
+private theorem entryFixed : crepSimpProgHOL entryBody = entryBody := by
+  obtain ⟨ctx,q,eq,shape⟩ := nonzeroScalar_sources (nonzeroScalarCrep[0]'(by decide)) (by rw [nonzeroScalar_crep]; simp [nonzeroScalarCrep])
+  change entryBody = compileProgExactHOLW ctx q at eq
+  rw [eq]
+  exact callFrontend_simp_fixed shape
+private theorem loopCodeRel : let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms nonzeroScalarProgram)) 0
+    crepToLoopCodeRelExact ctxt (globalEntryCrep nonzeroScalarProgram 2 globals entries).code
+      (sptFromAList (compileProgHOLExact riscvConfig.isa (globalSourcePrograms nonzeroScalarProgram))) := by
+  apply wholeCrep_fixed_executable_codeRel _ _ (ofString "main") entryBody
+  · rw [nonzeroScalar_crep]
+    decide
+  · rw [nonzeroScalar_crep]
+    with_unfolding_all rfl
+  · intro name params body member
+    obtain ⟨ctx,q,eq,shape⟩ := nonzeroScalar_sources (name,params,body) member
+    simp only at eq
+    rw [eq]
+    exact callFrontend_simp_fixed shape
+private theorem loopEntry : let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms nonzeroScalarProgram)) 0
+    let body := compileProgExactHOLW panCtxt (.seq (nestedSeqHOL inits) (.call none (ofString funName) []))
+    (64,[],optimiseHOL (compileHOLExact ctxt .ln body)) ∈ compileProgHOLExact riscvConfig.isa (globalSourcePrograms nonzeroScalarProgram) := by
+  dsimp only
+  rw [compiledEntry]
+  have first : globalSourcePrograms nonzeroScalarProgram = (ofString "main",[],entryBody) :: [nonzeroScalarCrep[1]'(by decide)] := by
+    rw [nonzeroScalar_crep]
+    with_unfolding_all rfl
+  have result := firstCrep_loopEntry riscvConfig.isa (ofString "main") entryBody [nonzeroScalarCrep[1]'(by decide)] entryFixed
+  rw [← first] at result
+  obtain ⟨tail,eq⟩ := result
+  rw [eq]
+  simp [firstLoopName]
+
+private theorem sourceGood : pancakeGoodCodeHOL nonzeroScalarProgram = true := by with_unfolding_all decide
+private theorem unique : ((functionsHOL nonzeroScalarProgram).map Prod.fst).Nodup := by with_unfolding_all decide
+private theorem productionRel : PanSemStateRelExec prod (callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).toExact := by
+  rw [sourceEq]
+  exact stateRel
+private theorem budget : 2 ≤ (callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).clock := by
+  rw [sourceEq]
+  decide
+private theorem bitmapFits : 0xa0020018 + (globalSourceBitmaps nonzeroScalarProgram).length*8 ≤ 0xa0410000 := by
+  rw [nonzeroScalar_bitmap]
+  decide
+noncomputable def nonzeroScalarTicks : Nat :=
+  let code := globalSourceCode nonzeroScalarProgram
+  let bs := globalSourceBitmaps nonzeroScalarProgram
+  let words := globalSourceWords nonzeroScalarProgram
+  let crep := globalEntryCrep nonzeroScalarProgram 2 globals entries
+  let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms nonzeroScalarProgram)) 0
+  let body := .seq (nestedSeqHOL inits) (.call none (ofString funName) [])
+  let visitLimit := 2*[decl].length+(callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).clock+3
+  let opt := loweredProgramOptLimit panCtxt body crep (globalSourcePrograms nonzeroScalarProgram) visitLimit ctxt ctxt .ln
+  let allowance := (max 1 (wordCodeWeight (sptFromAList words)) + 1) * (6*opt+1) + 1
+  let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*opt+1 + allowance)
+  948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
+    bs code (fixtureStackOracle (fixtureCompilerConfig code)) n
+
+/-- A nonzero global initializer runs on the actual compiled RISC-V machine. -/
+theorem nonzeroScalar_machine : ∃ finalMachine finalFfi compilerFinal,
+    Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig nonzeroScalarProgram =
+      some (fixtureCodeBytes (globalSourceCode nonzeroScalarProgram),globalSourceBitmaps nonzeroScalarProgram,compilerFinal) ∧
+    evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (globalSourceCode nonzeroScalarProgram))) sourceFfi
+      nonzeroScalarTicks (configuredMachineState (globalSourceCode nonzeroScalarProgram) (globalSourceBitmaps nonzeroScalarProgram)) =
+      (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFfi.ioEvents := by
+  have all := initializedGlobal_counted_machine nonzeroScalarProgram unique sourceGood 2 [decl] post inits [] [] globals
+    entries (ofString funName) prog shapes supported layout panCtxt prod 3
+    (by intro d hd; simp at hd; subst d; rfl) initShape declEval compiled allocated (by decide)
+    (by simp [entries]) productionRel ranged localsWord globalShapes codeRanged codeShape
+    (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 5 2
+    prod.locals prod.globals prod.memory prod.ffi countedRun budget targetTable panCode rfl rfl nonzeroScalar_sources
+    loopCodeRel loopEntry bitmapFits nonzeroScalar_safe nonzeroScalar_facts nonzeroScalar_capacity
+  obtain ⟨sourceFinal,machine,ffi,compilerFinal,compiledOutput,machineRun,events,ffiRel⟩ := all
+  have sourceEvents : sourceFinal.ffi.ioEvents = [] := by
+    have h := ffiRel.2.1
+    simp only [prod,prodBase,functionSourceProduction,sourceProduction,sourceFfiState,sourceFfi,List.map_nil] at h
+    cases heq : sourceFinal.ffi.ioEvents with
+    | nil => rfl
+    | cons e es => simp [heq,FfiEventListRel] at h
+  refine ⟨machine,ffi,compilerFinal,compiledOutput,machineRun,?_⟩
+  simpa [sourceFfi,sourceEvents] using events
+end SteppedFlapjack.Concrete

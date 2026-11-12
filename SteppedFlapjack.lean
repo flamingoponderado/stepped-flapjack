@@ -16,6 +16,8 @@ import SteppedFlapjack.Concrete.GlobalNamedStruct
 import SteppedFlapjack.Concrete.GlobalStructSourceSemantics
 import SteppedFlapjack.Concrete.GlobalStructCrep
 import SteppedFlapjack.Concrete.GlobalStructWitness
+import SteppedFlapjack.Concrete.GlobalNonzeroMachine
+import SteppedFlapjack.Concrete.GlobalNonzeroNativeFacts
 import SteppedFlapjack.Concrete.GlobalNonzeroEntry
 import SteppedFlapjack.Concrete.GlobalStructInitializer
 import SteppedFlapjack.Concrete.HeapWordMachine
