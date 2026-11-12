@@ -231,7 +231,8 @@ theorem nested_initialized_machine :
   rw [nestedHOLDeclarations, ← nestedCallCrepPrograms, ← nestedRawWords, ← nestedOptimizedWords,
     ← nestedNative, ← nestedCode, ← nestedBitmaps, nested_bitmaps] at compiled
   refine ⟨compilerFinal,compiled,finalMachine,finalFfi,?_,outputEvents,?_⟩
-  · simp only [List.flatMap_nil,Nat.reduceAdd] at machineRun
+  · unfold callPipelineTicks at machineRun
+    simp only [List.flatMap_nil,Nat.reduceAdd] at machineRun
     rw [← nestedCallCrepPrograms, ← nestedRawWords, ← nestedOptimizedWords, ← nestedNative,
       ← nestedCode, ← nestedBitmaps] at machineRun
     have bodyEq : (CrepProgHOL.skip.seq (CrepProgHOL.call none (ofString "main'") []) : CrepProgHOL 64) = nestedCrepBody := by

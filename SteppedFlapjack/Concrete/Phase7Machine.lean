@@ -12,6 +12,43 @@ open Flapjack.PanSemStateFiniteExact Flapjack.LoopSemStateFiniteExact Flapjack.C
 open Flapjack.Compiler.Backend.WordDepth Flapjack.Compiler.Backend.WordDepth.Executable Flapjack.Compiler.Backend.BackendProps
 open SteppedFlapjack.StackSteps
 
+open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
+open SteppedFlapjack.StackAllocSteps SteppedFlapjack.StackRemoveSteps.CompCorrect SteppedFlapjack.StackToLabSteps
+
+/-- Machine clock as a function of concrete code-derived coefficients and source steps. -/
+noncomputable def callPipelineTicks (code : List (Nat × HolProg 64)) (bitmaps : List (BitVec 64))
+    (cw tableW progW cf initial sw lf ow ofac ww stackW count : Nat) : Nat :=
+  let crep := cw * (1 + (tableW * count + progW) + 2)
+  let loop := sw + lf * (initial + cf * (crep + 1))
+  let opt := ow + ofac * (2 * loop)
+  let word := 6 * opt + 1
+  let n := 1 + stackW * (word + ((ww+1) * word + 1))
+  948 * stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
+    bitmaps code (fixtureStackOracle (fixtureCompilerConfig code)) n
+/-- Coefficient of the source-step count in the complete pipeline clock. -/
+noncomputable def callPipelineFactor (code : List (Nat × HolProg 64)) (bitmaps : List (BitVec 64))
+    (cw tableW cf lf ofac ww stackW : Nat) : Nat :=
+  let cfg := fixtureCompilerConfig code
+  let entry := (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
+  let generated := sptFromAList (code1 countdownRiscVBackend.dataConf code)
+  let factor := max (costFromFields riscvConfig.addrOffset 0 entry generated bitmaps (fixtureStackOracle cfg))
+    (costFromFields riscvConfig.addrOffset 0 entry generated [4] (fixtureStackOracle cfg))
+  948 * flattenStepFactor * factor * uniformFactor (width := 64) countdownRiscVBackend.dataConf *
+    stackW * (1+(ww+1)) * 6 * ofac * 2 * lf * cf * cw * tableW
+set_option maxHeartbeats 2000000 in
+/-- The complete pipeline clock is affine in the source-step count. -/
+theorem callPipelineTicks_affine (code : List (Nat × HolProg 64)) (bitmaps : List (BitVec 64))
+    (cw tableW progW cf initial sw lf ow ofac ww stackW count : Nat) :
+    callPipelineTicks code bitmaps cw tableW progW cf initial sw lf ow ofac ww stackW count =
+      callPipelineFactor code bitmaps cw tableW cf lf ofac ww stackW * count +
+        callPipelineTicks code bitmaps cw tableW progW cf initial sw lf ow ofac ww stackW 0 := by
+  dsimp only [callPipelineTicks,callPipelineFactor,fixtureStackOracle]
+  have h (n : Nat) := stackLabTickLimit_emptyOracle countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset bitmaps code (fixtureCompilerConfig code) n
+  change ∀ n, stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset bitmaps code (fixtureStackOracle (fixtureCompilerConfig code)) n = _ at h
+  simp only [h]
+  unfold fixtureStackOracle
+  ring
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 1000000 in
 /-- A counted function-only source return reaches the initialized machine with
@@ -89,24 +126,20 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
     let initial := concreteDeclCrepState before programs
     let loop := {(concreteDeclLoopState riscvConfig.isa initial programs) with memory := (configuredStack code cfg bitmaps).memory}
     let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable programs) 0
-    let crepLimit := max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs) *
-      (1 + (SimpVisits.simpTableFactor entries * count + SimpVisits.hw (progToHOL (panSimpProg program))) + 2)
     let rows := programs.map (fun row => (row.2.1,row.2.2))
-    let extra := callClockFactor ctxt rows initial.clock crep * (crepLimit+1)
     let factor := max (callSyntaxCost ctxt crep) (loopCodeWeight loop.code+2)
-    let loopLimit := callSyntaxCost ctxt crep + factor * (initial.clock+extra)
     let opt := optimiseHOL (compileHOLExact ctxt .ln crep)
     let optFactor := max (loopVisitWeight opt) (loopCodeWeight loop.code+2)
-    let optLimit := loopVisitWeight opt + optFactor * (2 * loopLimit)
-    let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) * (6*optLimit+1) + 1
-    let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*optLimit+1 + allowance)
     ∃ (sourceFinal : PanSemStateFiniteExact 64 Unit), ∃ finalMachine finalFfi compilerFinal,
       Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
         (originalFs.map DeclHOL.function) = some (fixtureCodeBytes code,bitmaps,compilerFinal) ∧
       source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word value))),sourceFinal) ∧
       evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
-        (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
-          bitmaps code (fixtureStackOracle cfg) n) (configuredMachineState code bitmaps) =
+        (callPipelineTicks code bitmaps (max (CrepSteps.statementWeight crep) (CrepSteps.codeWeight programs))
+          (SimpVisits.simpTableFactor entries) (SimpVisits.hw (progToHOL (panSimpProg program)))
+          (callClockFactor ctxt rows initial.clock crep) initial.clock (callSyntaxCost ctxt crep)
+          factor (loopVisitWeight opt) optFactor (max 1 (wordCodeWeight (sptFromAList optimized)))
+          (max 1 (stackCodeWeight (sptFromAList code))) count) (configuredMachineState code bitmaps) =
             (.halt .success,finalMachine,finalFfi) ∧
       finalFfi.ioEvents = sourceFinal.ffi.ioEvents ∧ FfiStateRel postFfi sourceFinal.ffi ∧
       semanticsDecls baseState start (originalFs.map DeclHOL.function) = .terminate .success finalFfi.ioEvents := by
