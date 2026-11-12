@@ -27,14 +27,18 @@ private theorem simpFixed : panSimpProg heapWordWitness = heapWordWitness := by
 private theorem simpDeclarations : heapSimpFunctions.map DeclHOL.function = declarations (progToHOL heapWordWitness) := by
   simp [heapSimpFunctions,heapHOLFunctions,heapFunctions,declarations,singleEntryProgram,funDeclToHOL,progToHOL,expToHOL,shapeToHOL,
     panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL,seqCallRetHOL,heapWordWitness]
-private theorem programsEq : globalSourcePrograms heapSourceProgram = crepPrograms (progToHOL heapWordWitness) := by
-  unfold globalSourcePrograms heapSourceProgram
+private theorem compilerDeclEq : globalCompilerDecls heapSourceProgram =
+    compileTopExactHOL (declarations (progToHOL heapWordWitness)) (ofString "main") := by
+  unfold globalCompilerDecls heapSourceProgram
   rw [simpFunctions]
-  change compileProgDeclsHOLW (compileTopExactHOL
-    (Flapjack.Pancake.PanStructs.CompileShapeExact.compileTopExact (heapSimpFunctions.map DeclHOL.function)) (ofString "main")) = _
+  change compileTopExactHOL (Flapjack.Pancake.PanStructs.CompileShapeExact.compileTopExact
+    (heapSimpFunctions.map DeclHOL.function)) (ofString "main") = _
   have fixed : Flapjack.Pancake.PanStructs.CompileShapeExact.compileTopExact (heapSimpFunctions.map DeclHOL.function) = heapSimpFunctions.map DeclHOL.function := by
     exact call_structs_top heapFunctions tableSupported
   rw [fixed,simpDeclarations]
+private theorem programsEq : globalSourcePrograms heapSourceProgram = crepPrograms (progToHOL heapWordWitness) := by
+  change compileProgDeclsHOLW (globalCompilerDecls heapSourceProgram) = _
+  rw [compilerDeclEq]
   rfl
 private theorem rawEq : globalSourceRaw heapSourceProgram = supportedWordPrograms heapWordWitness := by
   unfold globalSourceRaw supportedWordPrograms
@@ -100,46 +104,21 @@ private theorem callFree : CallFreeSupported heapWordWitness := ⟨.seq (.store 
 private theorem tableEq : globalSourcePrograms heapSourceProgram = twoPrograms (ofString "main") name (supportedCallee (progToHOL heapWordWitness)) := by
   rw [programsEq,supported_crepPrograms heapWordWitness callFree]
   rfl
-private theorem firstRow : globalSourcePrograms heapSourceProgram =
-    (ofString "main",[],compileProgExactHOLW ctxt (.seq (nestedSeqHOL []) (.call none name []))) ::
-      [(name,[],supportedCallee (progToHOL heapWordWitness))] := by
-  rw [tableEq]
-  simp [twoPrograms,compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,nestedSeqHOL]
-private theorem sources : ∀ row ∈ globalSourcePrograms heapSourceProgram, ∃ (c : PanToCrepContextExact 64) (p : ProgHOL 64),
-    row.2.2 = compileProgExactHOLW c p ∧ CallFrontend c p := by
-  intro row member
-  rw [tableEq] at member
-  simp only [twoPrograms,List.mem_cons,List.not_mem_nil,or_false] at member
-  rcases member with rfl | rfl
-  · refine ⟨ctxt,.seq .skip (.call none name []),?_,.seq (.base .skip) (.tail (by simp))⟩
-    simp [compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList]
-  · exact ⟨_,progToHOL heapWordWitness,rfl,.base (supported_frontend_shape callFree _)⟩
-private theorem targetEq : (globalEntryTarget heapSourceProgram 7 globals entries).code =
-    HolFiniteMapExact.empty.update (name,([],progToHOL heapWordWitness,.one)) := by
-  simp [globalEntryTarget,installTargetFunctions,entries,HolFiniteMapExact.updateList,HolFiniteMapExact.update,FUPDATE_LIST,
-    supported_globals_fixed callFree globals]
-private theorem crepEq : (globalEntryCrep heapSourceProgram 7 globals entries).code = (crepState (progToHOL heapWordWitness)).code := by
-  simp [globalEntryCrep,crepState,concreteDeclCrepState,programsEq]
-private theorem fullLookup : (loweredState (progToHOL heapWordWitness)).code.lookup name = some ([],progToHOL heapWordWitness,.one) := by
+private theorem ctxtEq : ctxt = globalCompilerContext heapSourceProgram := by
+  unfold ctxt frontendContext globalCompilerContext
+  rw [compilerDeclEq]
+private theorem allRows : functionsHOL (globalCompilerDecls heapSourceProgram) =
+    (ofString "main",[],.seq (nestedSeqHOL []) (.call none name []),.one) ::
+      entries.map (fun e => (e.1,e.2.1,compileProgExactHOL globals e.2.2.1,e.2.2.2)) := by
+  rw [compilerDeclEq,lowered_declarations]
   have rename := supported_fperm callFree (ofString "main") name
-  have global := supported_globals_fixed callFree emptyGlobalsContext
-  have fresh : name ≠ ofString "main" := entryName_fresh (progToHOL heapWordWitness)
-  simp only [name] at rename fresh
-  simp [loweredState,noGlobalsLoweredPreCall,loweredCode,lowered_declarations,functionsHOL,
-    HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,rename,global,Ne.symm fresh,name]
-private theorem panCode : codeRelExactHOLW ctxt (globalEntryTarget heapSourceProgram 7 globals entries).code (globalEntryCrep heapSourceProgram 7 globals entries).code := by
-  intro n ps body ret found
-  rw [targetEq] at found
-  simp only [HolFiniteMapExact.lookup_update,FUPDATE] at found
-  split at found
-  · rename_i equal
-    have keyEq : name = n := beq_iff_eq.mp equal
-    subst n
-    simp only [Option.some.injEq,Prod.mk.injEq] at found
-    obtain ⟨rfl,rfl,rfl⟩ := found
-    rw [crepEq]
-    exact supported_code_related heapWordWitness callFree name [] (progToHOL heapWordWitness) .one fullLookup
-  · simp [HolFiniteMapExact.lookup_empty] at found
+  have global := supported_globals_fixed callFree globals
+  have globalEmpty := supported_globals_fixed callFree emptyGlobalsContext
+  simp only [name] at rename
+  simp [functionsHOL,entries,nestedSeqHOL,name,rename,global,globalEmpty]
+private theorem noInline : (functionsHOL ((globalCompilerDecls heapSourceProgram).filter inlinableHOL)).map Prod.fst = [] := by
+  rw [compilerDeclEq]
+  exact singleEntry_inline_selection_empty _ _
 open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Backend.WordToStack.Native
 open Flapjack.Compiler.Backend.WordDepth Flapjack.Compiler.Backend.WordDepth.Executable Flapjack.Compiler.Backend.BackendProps
 private theorem safetyOfRaw (source : List (DeclHOL 64)) (program : Prog (RiscV.Word 64))
@@ -171,7 +150,6 @@ private theorem allocated : ∀ a, addresses ((globalEntryTemplate heapSourcePro
 private theorem sourceUnique : ((functionsHOL heapSourceProgram).map Prod.fst).Nodup := by
   simp [heapSourceProgram,heapHOLFunctions,heapFunctions,funDeclToHOL,functionsHOL]
 private theorem sourceGood : pancakeGoodCodeHOL heapSourceProgram = true := by with_unfolding_all decide
-private theorem varsEmpty : ctxt.vars = HolFiniteMapExact.empty := by rfl
 private theorem exceptionsEmpty : ctxt.eids = HolFiniteMapExact.empty := by
   simp [ctxt,frontendContext,declarations,singleEntry_compiled_eids_empty,mkCtxtExactHOL]
 private def capacityOfWords (words : List (Nat × Nat × WordLangProgHOL (BitVec 64))) : Prop :=
@@ -200,7 +178,7 @@ private theorem capacity : optionLe (optionMap₂ max (some (max 1 (1+globalSour
   capacityFromRaw heapSourceProgram heapWordWitness rawEq capacityProgram
 open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackSteps
 noncomputable def heapUnifiedTicks : Nat :=
-  initializedGlobalTicks heapSourceProgram 7 [] post [] globals entries name ctxt
+  initializedGlobalTicks heapSourceProgram 7 [] post [] globals entries name (globalCompilerContext heapSourceProgram)
 private theorem machine : ∃ finalMachine finalFfi compilerFinal,
     Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig heapSourceProgram =
       some (fixtureCodeBytes (globalSourceCode heapSourceProgram),globalSourceBitmaps heapSourceProgram,compilerFinal) ∧
@@ -209,14 +187,14 @@ private theorem machine : ∃ finalMachine finalFfi compilerFinal,
       (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFfi.ioEvents := by
   have bits : 0xa0020018 + (globalSourceBitmaps heapSourceProgram).length*8 ≤ 0xa0410000 := by rw [bitmaps]; decide
   have all := initializedGlobal_counted_machine heapSourceProgram sourceUnique sourceGood 7 [] post [] [] [] globals
-    entries name heapWordWitness supported ctxt 7
+    entries name heapWordWitness supported 7
     (by simp) (by simp) declEval compiled allocated (by decide)
     (by simp [entries]) table
     (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 10 7
     (globalEntryProduction post entries).locals (globalEntryProduction post entries).globals
     (updatePanValueMemory (globalEntryProduction post entries).memory 0xa1000100 (.word 7))
     (globalEntryProduction post entries).ffi canonicalRun (by decide)
-    panCode varsEmpty exceptionsEmpty sources [(name,[],supportedCallee (progToHOL heapWordWitness))] firstRow
+    allRows noInline (by rw [← ctxtEq]; exact exceptionsEmpty)
     bits safety facts capacity
   obtain ⟨sourceFinal,machine,ffi,compilerFinal,compiledOutput,machineRun,events,ffiRel⟩ := all
   have sourceEvents : sourceFinal.ffi.ioEvents = [] := by
@@ -366,10 +344,12 @@ private theorem numericTicks (source : List (DeclHOL 64)) (clock : Nat) (decs : 
   dsimp only
   exact numericFromInputs _ _ _ _ _ bitmap optEq wordEq stackEq factor
 private theorem clockNumeric : heapUnifiedTicks = 8745709949718150348 := by
-  exact numericTicks heapSourceProgram 7 [] post [] globals entries name ctxt bitmaps optLimit
+  have h := numericTicks heapSourceProgram 7 [] post [] globals entries name ctxt bitmaps optLimit
     (wordWeightOfRaw heapSourceProgram heapWordWitness rawEq wordWeight)
     (stackWeightOfRaw heapSourceProgram heapWordWitness rawEq stackWeight)
     (factorOfRaw heapSourceProgram heapWordWitness rawEq (targetFactor _))
+  rw [ctxtEq] at h
+  exact h
 private def originalProduction := functionSourceProduction heapFunctions 1 7
 private def originalSource := functionSourceExact heapFunctions 1 7
 private instance : DecidablePred originalSource.memaddrs := by change DecidablePred ordinaryAddress; infer_instance

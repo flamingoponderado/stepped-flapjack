@@ -9,56 +9,7 @@ open Flapjack Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.
 
 set_option maxRecDepth 100000
 set_option maxHeartbeats 4000000
-theorem pairEntry_name : entryName (progToHOL globalStructWitness) = newMainNameHOL globalStructProgram := by
-  simp [entryName,singleEntryProgram,newMainNameHOL,globalStructProgram,globalStructDecl,functionsHOL]
-
-def pairEntryTarget : PanSemStateFiniteExact 64 Unit :=
-  {globalStructTarget with clock := 16, code := (HolFiniteMapExact.empty.update (entryName (progToHOL globalStructWitness),([],compileProgExactHOL globalStructContext (progToHOL globalStructWitness),.one)))}
-
-def pairCrepContext : PanToCrepContextExact 64 := mkCtxtExactHOL HolFiniteMapExact.empty
-  (HolFiniteMapExact.empty.update (newMainNameHOL globalStructProgram,([],ShapeHOL.one))) 0 HolFiniteMapExact.empty
-
-def pairEntryCrep : CrepSemHOLState 64 Unit := concreteDeclCrepState pairEntryTarget globalStructCallPrograms
-
-theorem pairEntry_compiledBody : compileProgExactHOLW (ctxtFcExactHOL pairCrepContext.funcs pairCrepContext.eids [] [] [])
-    (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) = globalStructActualBody := by
-  rw [globalStructWitness_lowering]
-  unfold globalStructActualBody
-  rw [globalStructWitness_lowering]
-  simp [compileProgExactHOLW,compileStoreExactHOLW,compileReturnExactHOLW,compileExpExactHOLW,
-    compileExpExactHOLWList,sizeOfShapeHOL,sizeOfShapesHOL,loadShapeBytesHOLW,nestedDecsHOL,
-    pairCrepContext,globalStructCrepContext,mkCtxtExactHOL,ctxtFcExactHOL,maxList]
-
-theorem pairEntry_targetCode : CallFrontendCode pairCrepContext pairEntryTarget.code := by
-  intro name params body ret found
-  simp only [pairEntryTarget,HolFiniteMapExact.lookup_update,FUPDATE] at found
-  split at found
-  · simp only [Option.some.injEq,Prod.mk.injEq] at found
-    obtain ⟨rfl,rfl,rfl⟩ := found
-    apply globalCallFrontend_compiled
-    exact globalCallSupported_frontend pair_layout pair_supported _ (by intro name member; simp at member)
-  · simp [HolFiniteMapExact.lookup_empty] at found
-
-
-theorem pairEntry_panCodeRel : codeRelExactHOLW pairCrepContext pairEntryTarget.code pairEntryCrep.code := by
-  intro name params body ret found
-  simp only [pairEntryTarget,HolFiniteMapExact.lookup_update,FUPDATE] at found
-  split at found
-  · rename_i equal
-    have keyEq : entryName (progToHOL globalStructWitness) = name := beq_iff_eq.mp equal
-    subst name
-    simp only [Option.some.injEq,Prod.mk.injEq] at found
-    obtain ⟨rfl,rfl,rfl⟩ := found
-    have shape := pairEntry_targetCode (entryName (progToHOL globalStructWitness)) []
-      (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) .one
-      (by simp [pairEntryTarget,HolFiniteMapExact.lookup_update,FUPDATE])
-    refine ⟨callFrontend_localised shape,?_,?_⟩
-    · simp [pairCrepContext,mkCtxtExactHOL,pairEntry_name,HolFiniteMapExact.lookup_update,FUPDATE]
-    · simp only [List.map_nil,sizeOfShapeHOL,sizeOfShapesHOL,List.range_zero]
-      rw [pairEntry_compiledBody]
-      simpa [pairEntryCrep,concreteDeclCrepState,globalStructCallPrograms,pairEntry_name,globalStructActualBody] using globalStruct_actualCrep_lookup
-  · simp [HolFiniteMapExact.lookup_empty] at found
-
+def pairCrepContext : PanToCrepContextExact 64 := globalCompilerContext globalStructProgram
 
 theorem pairSourcePrograms : globalSourcePrograms globalStructProgram = globalStructCallPrograms := by
   unfold globalSourcePrograms globalStructCallPrograms
@@ -68,20 +19,15 @@ theorem pairEntry_actualCompiled : compileProgExactHOLW pairCrepContext
     (compileProgExactHOL globalStructContext (progToHOL pairWrapper)) = globalStructActualEntryCrep := by
   rw [pairWrapper_lowered]
   unfold globalStructActualEntryCrep
-  have init := globalStruct_initializer_context pairCrepContext (by simp [pairCrepContext,mkCtxtExactHOL])
+  have init := globalStruct_initializer_context pairCrepContext (by simp [pairCrepContext,globalCompilerContext,mkCtxtExactHOL])
   rw [globalStruct_actual_initializer_eq] at init
   simp only [compileProgExactHOLW,compileCallNoReturnExactHOLW,compileExpExactHOLWList,List.flatMap_nil]
   congr 1
   unfold globalStructActualInit
   rw [globalStruct_actual_initializer_eq]
   simp [compileProgExactHOLW,compileStoreExactHOLW,compileExpExactHOLW,compileExpExactHOLWList,
-    sizeOfShapeHOL,sizeOfShapesHOL,nestedDecsHOL,pairCrepContext,globalStructCrepContext,mkCtxtExactHOL]
+    sizeOfShapeHOL,sizeOfShapesHOL,nestedDecsHOL,pairCrepContext,globalCompilerContext,globalStructCrepContext,mkCtxtExactHOL]
 
-
-theorem pairEntry_sources : ∀ row ∈ globalSourcePrograms globalStructProgram,
-    ∃ (ctx : PanToCrepContextExact 64) (q : ProgHOL 64), row.2.2 = compileProgExactHOLW ctx q ∧ CallFrontend ctx q := by
-  rw [pairSourcePrograms]
-  exact globalStruct_actualCode_sources
 
 open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Backend.WordToStack.Native
 open Flapjack.Compiler.Backend.WordDepth Flapjack.Compiler.Backend.WordDepth.Executable Flapjack.Compiler.Backend.BackendProps
@@ -167,22 +113,30 @@ private theorem allocated : ∀ a, addresses ((globalEntryTemplate globalStructP
     BitVec.ofNat 64 ((decShapesHOL [globalStructDecl]).map sizeOfShapeHOL).sum)
     ((decShapesHOL [globalStructDecl]).map sizeOfShapeHOL).sum a → (globalEntryTemplate globalStructProgram 8).memaddrs a := by
   simpa [template_eq,globalStructDecl,decShapesHOL,sizeOfShapeHOL,sizeOfShapesHOL,cakeBytesInWord,panBytesInWord] using globalStructSlots_allocated
-private theorem panCode : codeRelExactHOLW pairCrepContext (globalEntryTarget globalStructProgram 8 globalStructContext entries).code
-    (globalEntryCrep globalStructProgram 8 globalStructContext entries).code := by
-  simpa [globalEntryTarget,installTargetFunctions,globalEntryCrep,concreteDeclCrepState,entries,pairEntryTarget,
-    pairEntryCrep,pairEntry_name,pairSourcePrograms,template_eq,HolFiniteMapExact.updateList,HolFiniteMapExact.update,FUPDATE_LIST] using pairEntry_panCodeRel
 private theorem compiledEntry : compileProgExactHOLW pairCrepContext
     (.seq (nestedSeqHOL inits) (.call none (newMainNameHOL globalStructProgram) [])) = globalStructActualEntryCrep := by
   rw [← pairEntry_actualCompiled,pairWrapper_lowered]
   congr 2
   simp [inits,globalStructDecl,globalStructStart,compileDecsExactHOL,compileDecsGlobalAddressExact_eq,
     sizeOfShapeHOL,sizeOfShapesHOL,cakeBytesInWord,nestedSeqHOL,compileExpExactHOL,compileExpExactHOLList]
-private theorem firstRow : globalSourcePrograms globalStructProgram =
-    (ofString "main",[],compileProgExactHOLW pairCrepContext
-      (.seq (nestedSeqHOL inits) (.call none (newMainNameHOL globalStructProgram) []))) ::
-      [(newMainNameHOL globalStructProgram,[],globalStructActualBody)] := by
-  rw [compiledEntry,pairSourcePrograms,globalStruct_actualPrograms_eq]
-  rfl
+private theorem declEq : globalCompilerDecls globalStructProgram = compileTopExactHOL globalStructProgram (ofString "main") := by
+  unfold globalCompilerDecls
+  rw [globalStruct_simp_fixed,globalStruct_structs_fixed]
+private theorem allRows : functionsHOL (globalCompilerDecls globalStructProgram) =
+    (ofString "main",[],.seq (nestedSeqHOL inits) (.call none (newMainNameHOL globalStructProgram) []),.one) ::
+      entries.map (fun e => (e.1,e.2.1,compileProgExactHOL globalStructContext e.2.2.1,e.2.2.2)) := by
+  rw [declEq,globalStruct_compileTop]
+  simp [functionsHOL,entries,inits,globalStructStart,globalStructDecl,compileDecsExactHOL,
+    compileDecsGlobalAddressExact_eq,sizeOfShapeHOL,sizeOfShapesHOL,cakeBytesInWord,nestedSeqHOL,
+    compileExpExactHOL,compileExpExactHOLList]
+private theorem noInline : (functionsHOL ((globalCompilerDecls globalStructProgram).filter inlinableHOL)).map Prod.fst = [] := by
+  rw [declEq]
+  exact globalStruct_noInline
+private theorem exceptionsEmpty : pairCrepContext.eids = HolFiniteMapExact.empty := by
+  unfold pairCrepContext globalCompilerContext
+  rw [declEq,globalStruct_compileTop]
+  with_unfolding_all rfl
+
 private instance : DecidablePred post.memaddrs := by
   change DecidablePred globalStructSourceDomain
   infer_instance
@@ -263,14 +217,14 @@ private theorem pairUnified_machine : ∃ finalMachine finalFfi compilerFinal,
     rw [pairSourceFrame,pairSourceFrames,pairSourceWords]
     exact globalStruct_nativeCapacity
   have all := initializedGlobal_counted_machine globalStructProgram globalStruct_sourceUnique good 8 [globalStructDecl] post inits [] [] globalStructContext
-    entries (newMainNameHOL globalStructProgram) globalStructWitness supportedPair pairCrepContext 8
+    entries (newMainNameHOL globalStructProgram) globalStructWitness supportedPair 8
     (by intro d hd; simp at hd; subst d; rfl) initShape declEval compiled allocated (by decide)
     (by simp [entries]) tablePair
     (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 10 8
     (globalEntryProduction post entries).locals
     (updatePanValueMap (globalEntryProduction post entries).globals "pair" (.rStruct [.word 7,.word 8]))
     (globalEntryProduction post entries).memory (globalEntryProduction post entries).ffi canonicalRun (by decide)
-    panCode rfl rfl pairEntry_sources [(newMainNameHOL globalStructProgram,[],globalStructActualBody)] firstRow
+    allRows noInline exceptionsEmpty
     bits safety facts capacity
   obtain ⟨sourceFinal,machine,ffi,compilerFinal,compiledOutput,machineRun,events,ffiRel⟩ := all
   have sourceEvents : sourceFinal.ffi.ioEvents = [] := by
