@@ -115,8 +115,8 @@ same I/O events as the named-struct source. Its clock
 is 304,799,299,979,875,449,948 ticks for the concrete code and an eight-step
 initial source clock.
 `heapFixture_machine_numeric` carries a concrete heap store and load through the
-function-only composition with a kernel-checked bound of
-29,426,197,640,928,697,548 ticks.
+shared initialized-machine theorem with a kernel-checked bound of
+8,745,709,949,718,150,348 ticks.
 
 The current fragment has scalar locals, parameters and return values. The
 fixture reserves globals below the init-e heap endpoint; it does not yet cover

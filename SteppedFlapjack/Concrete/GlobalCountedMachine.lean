@@ -304,6 +304,26 @@ private theorem initializedGlobal_counted_machine_fromRel
         bitmapFits safe facts capacity
     exact ⟨sourceFinal,machine,finalFfi,compilerFinal,compiledOutput,machineRun,events,rel.2.2.2.2.2.2.2.2.2.2.1⟩
 
+/-- Machine tick bound calculated from source declarations, initialization and code. -/
+noncomputable def initializedGlobalTicks
+    (pan : List (DeclHOL 64)) (clock : Nat) (decs : List (DeclHOL 64))
+    (post : PanSemStateFiniteExact 64 Unit) (initializers : List (ProgHOL 64))
+    (globals : PanGlobalsContextExact 64)
+    (entries : List (MlS × List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
+    (name : MlS) (panCtxt : PanToCrepContextExact 64) : Nat :=
+    let code := globalSourceCode pan
+    let bs := globalSourceBitmaps pan
+    let words := globalSourceWords pan
+    let crep := globalEntryCrep pan clock globals entries
+    let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms pan)) 0
+    let body := .seq (nestedSeqHOL initializers) (.call none name [])
+    let visitLimit := 2*decs.length+(callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).clock+3
+    let opt := loweredProgramOptLimit panCtxt body crep (globalSourcePrograms pan) visitLimit ctxt ctxt .ln
+    let allowance := (max 1 (wordCodeWeight (sptFromAList words)) + 1) * (6*opt+1) + 1
+    let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*opt+1 + allowance)
+    948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
+      bs code (fixtureStackOracle (fixtureCompilerConfig code)) n
+
 /-- A counted source reaches the machine from declaration-constructed source and target states. -/
 theorem initializedGlobal_counted_machine
     (pan : List (DeclHOL 64)) (unique : ((functionsHOL pan).map Prod.fst).Nodup)
@@ -355,22 +375,12 @@ theorem initializedGlobal_counted_machine
       (fixtureCodeBytes (globalSourceCode pan)).length ≤ 0xecc ∧ (fixtureCodeBytes (globalSourceCode pan)).length % 4 = 0)
     (capacity : optionLe (optionMap₂ max (some (max 1 (1+globalSourceFrame pan)))
       (optionMap₂ (· + ·) (some 1) (fullCallGraphDepth (globalSourceFrames pan) 64 (sptFromAList (globalSourceWords pan))))) (some 2097172)) :
-    let code := globalSourceCode pan
-    let bs := globalSourceBitmaps pan
-    let words := globalSourceWords pan
-    let crep := globalEntryCrep pan clock globals entries
-    let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms pan)) 0
-    let body := .seq (nestedSeqHOL initializers) (.call none name [])
-    let visitLimit := 2*decs.length+(callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).clock+3
-    let opt := loweredProgramOptLimit panCtxt body crep (globalSourcePrograms pan) visitLimit ctxt ctxt .ln
-    let allowance := (max 1 (wordCodeWeight (sptFromAList words)) + 1) * (6*opt+1) + 1
-    let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*opt+1 + allowance)
     ∃ sourceFinal : PanSemStateFiniteExact 64 Unit, ∃ finalMachine finalFfi compilerFinal,
       Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig pan =
-        some (fixtureCodeBytes code,bs,compilerFinal) ∧
-      evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
-        (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
-          bs code (fixtureStackOracle (fixtureCompilerConfig code)) n) (configuredMachineState code bs) =
+        some (fixtureCodeBytes (globalSourceCode pan),globalSourceBitmaps pan,compilerFinal) ∧
+      evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart (globalSourceCode pan))) sourceFfi
+        (initializedGlobalTicks pan clock decs post initializers globals entries name panCtxt)
+        (configuredMachineState (globalSourceCode pan) (globalSourceBitmaps pan)) =
             (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents ∧ FfiStateRel postFfi sourceFinal.ffi := by
   let target := globalEntryTarget pan clock globals entries
   have outside : ¬ target.memaddrs target.topAddr := by
@@ -421,7 +431,7 @@ theorem initializedGlobal_counted_machine
     obtain ⟨tail,eq⟩ := result
     rw [eq]
     simp [firstLoopName]
-  exact initializedGlobal_counted_machine_fromRel pan unique sourceGood clock decs post initializers funs exns globals entries name
+  simpa only [initializedGlobalTicks] using initializedGlobal_counted_machine_fromRel pan unique sourceGood clock decs post initializers funs exns globals entries name
     program (globalEntryShapes post entries) supported layout panCtxt (globalEntryProduction post entries) value
     onlyDecls initializerShape eval compiled allocated sizeBound found relExec ranged localsWord globalShapes codeRanged codeShape
     context primitive handler exceptions fuel count postLocals postGlobals postMemory postFfi run budget
