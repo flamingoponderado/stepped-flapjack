@@ -88,33 +88,35 @@ theorem globalCompile_frontendScalar {width : Nat} [NeZero width]
   | cmp op a b iha ihb => simpa [compileExpExactHOL] using FrontendScalar.cmp op iha ihb
   | shift op a b iha ihb => simpa [compileExpExactHOL] using FrontendScalar.shift op iha ihb
 
-theorem globalCompile_flatInitializer {width : Nat} [NeZero width]
-    (globals : PanGlobalsContextExact width) {ctxt : PanToCrepContextExact width}
-    (fields : List (ExpHOL width)) (hs : ∀ e ∈ fields, FrontendScalar ctxt e) :
-    ∀ e ∈ compileExpExactHOLList globals fields, FrontendScalar ctxt e := by
+theorem globalCompile_list_map {width : Nat} [NeZero width] (globals : PanGlobalsContextExact width)
+    (fields : List (ExpHOL width)) : compileExpExactHOLList globals fields = fields.map (compileExpExactHOL globals) := by
   induction fields with
   | nil => simp [compileExpExactHOLList]
-  | cons e es ih =>
-    intro x hx
-    simp only [compileExpExactHOLList,List.mem_cons] at hx
-    rcases hx with rfl | hx
-    · exact globalCompile_frontendScalar globals (hs e (by simp))
-    · exact ih (fun y hy => hs y (by simp [hy])) x hx
+  | cons e es ih => simp [compileExpExactHOLList,ih]
 
-
-inductive FrontendInitializer {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width) : ExpHOL width → Prop
-  | scalar {e} : FrontendScalar ctxt e → FrontendInitializer ctxt e
-  | flatStruct {fields} : (∀ e ∈ fields, FrontendScalar ctxt e) → FrontendInitializer ctxt (.rstruct fields)
+/-- Global lowering preserves recursively nested scalar values. -/
+theorem globalCompile_frontendValue {width : Nat} [NeZero width]
+    (globals : PanGlobalsContextExact width) {ctxt : PanToCrepContextExact width} {e : ExpHOL width}
+    (h : FrontendValue ctxt e) : FrontendValue ctxt (compileExpExactHOL globals e) := by
+  induction h with
+  | scalar h => exact .scalar (globalCompile_frontendScalar globals h)
+  | @tuple fields hs ih =>
+    simp only [compileExpExactHOL]
+    apply FrontendValue.tuple
+    intro e member
+    rw [globalCompile_list_map,List.mem_map] at member
+    obtain ⟨field,fieldMember,rfl⟩ := member
+    exact ih field fieldMember
 
 theorem globalCompile_frontend_initializers {width : Nat} [NeZero width]
     (ctxt : PanToCrepContextExact width) (declarations : List (DeclHOL width))
-    (shape : ∀ sh name value, DeclHOL.decl sh name value ∈ declarations → FrontendInitializer ctxt value)
+    (shape : ∀ sh name value, DeclHOL.decl sh name value ∈ declarations → FrontendValue ctxt value)
     (globals : PanGlobalsContextExact width) :
     ∀ initializer ∈ (compileDecsExactHOL globals declarations).1, FrontendProgram ctxt initializer := by
   induction declarations generalizing globals with
   | nil => simp [compileDecsExactHOL]
   | cons d ds ih =>
-    have tailShape : ∀ sh name value, DeclHOL.decl sh name value ∈ ds → FrontendInitializer ctxt value := by
+    have tailShape : ∀ sh name value, DeclHOL.decl sh name value ∈ ds → FrontendValue ctxt value := by
       intro sh name value h
       exact shape sh name value (by simp [h])
     cases d with
@@ -129,14 +131,18 @@ theorem globalCompile_frontend_initializers {width : Nat} [NeZero width]
       rcases member with rfl | member
       · cases hv with
         | scalar h => exact .store (.op .sub .topAddr (.const _)) (globalCompile_frontendScalar globals h)
-        | flatStruct h =>
+        | tuple h =>
           simp only [compileExpExactHOL]
-          exact .storeStruct (.op .sub .topAddr (.const _)) (globalCompile_flatInitializer globals _ h)
+          apply FrontendProgram.storeStruct (.op .sub .topAddr (.const _))
+          intro e member
+          rw [globalCompile_list_map,List.mem_map] at member
+          obtain ⟨field,fieldMember,rfl⟩ := member
+          exact globalCompile_frontendValue globals (h field fieldMember)
       · exact ih tailShape _ initializer member
 
 theorem globalCompile_frontend_initializer_sequence {width : Nat} [NeZero width]
     (ctxt : PanToCrepContextExact width) (declarations : List (DeclHOL width))
-    (shape : ∀ sh name value, DeclHOL.decl sh name value ∈ declarations → FrontendInitializer ctxt value)
+    (shape : ∀ sh name value, DeclHOL.decl sh name value ∈ declarations → FrontendValue ctxt value)
     (globals : PanGlobalsContextExact width) :
     FrontendProgram ctxt (nestedSeqHOL (compileDecsExactHOL globals declarations).1) := by
   have hs := globalCompile_frontend_initializers ctxt declarations shape globals

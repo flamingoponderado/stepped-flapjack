@@ -48,7 +48,43 @@ theorem globalScalar_list_compiled {width : Nat} [NeZero width]
     · exact globalScalar_compiled (h e (by simp))
     · exact ih (fun y hy => h y (by simp [hy])) x hx
 
-/-- Programs with scalar globals and flat global structs lower to the proven
+/-- A scalar or recursively nested tuple, with global reads in scalar leaves. -/
+inductive GlobalValue {width : Nat} [NeZero width]
+    (globals : PanGlobalsContextExact width) (ctxt : PanToCrepContextExact width) : ExpHOL width → Prop
+  | scalar {e} : GlobalScalar globals ctxt e → GlobalValue globals ctxt e
+  | tuple {fields} : (∀ e ∈ fields, GlobalValue globals ctxt e) → GlobalValue globals ctxt (.rstruct fields)
+
+/-- Global lowering preserves recursive nested value structure. -/
+theorem globalValue_compiled {width : Nat} [NeZero width]
+    {globals : PanGlobalsContextExact width} {ctxt : PanToCrepContextExact width} {e : ExpHOL width}
+    (h : GlobalValue globals ctxt e) : FrontendValue ctxt (compileExpExactHOL globals e) := by
+  induction h with
+  | scalar h => exact .scalar (globalScalar_compiled h)
+  | @tuple fields hs ih =>
+    simp only [compileExpExactHOL]
+    apply FrontendValue.tuple
+    intro e member
+    rw [globalCompile_list_map,List.mem_map] at member
+    obtain ⟨field,fieldMember,rfl⟩ := member
+    exact ih field fieldMember
+
+/-- Values in the old frontend are accepted by the global-aware fragment. -/
+theorem GlobalValue.of_frontend {width : Nat} [NeZero width] (globals : PanGlobalsContextExact width)
+    {ctxt : PanToCrepContextExact width} {e : ExpHOL width} (h : FrontendValue ctxt e) : GlobalValue globals ctxt e := by
+  induction h with
+  | scalar h => exact .scalar (.local h)
+  | tuple fields ih => exact .tuple ih
+
+theorem globalValue_list_compiled {width : Nat} [NeZero width]
+    {globals : PanGlobalsContextExact width} {ctxt : PanToCrepContextExact width}
+    (fields : List (ExpHOL width)) (h : ∀ e ∈ fields, GlobalValue globals ctxt e) :
+    ∀ e ∈ compileExpExactHOLList globals fields, FrontendValue ctxt e := by
+  intro e member
+  rw [globalCompile_list_map,List.mem_map] at member
+  obtain ⟨field,fieldMember,rfl⟩ := member
+  exact globalValue_compiled (h field fieldMember)
+
+/-- Programs with scalar globals and recursively nested scalar structs lower to the proven
     frontend. Layout lookup is tracked directly in the fragment. -/
 inductive GlobalFrontend {width : Nat} [NeZero width] (globals : PanGlobalsContextExact width) :
     PanToCrepContextExact width → ProgHOL width → Prop
@@ -58,14 +94,14 @@ inductive GlobalFrontend {width : Nat} [NeZero width] (globals : PanGlobalsConte
   | tick {ctxt} : GlobalFrontend globals ctxt .tick
   | store {ctxt a v} : GlobalScalar globals ctxt a → GlobalScalar globals ctxt v → GlobalFrontend globals ctxt (.store a v)
   | storeStruct {ctxt a fields} : GlobalScalar globals ctxt a →
-      (∀ e ∈ fields, GlobalScalar globals ctxt e) → GlobalFrontend globals ctxt (.store a (.rstruct fields))
+      (∀ e ∈ fields, GlobalValue globals ctxt e) → GlobalFrontend globals ctxt (.store a (.rstruct fields))
   | assignLocal {ctxt name e} (reg : Nat) : ctxt.vars.lookup name = some (.one,[reg]) →
       GlobalScalar globals ctxt e → GlobalFrontend globals ctxt (.assign .local name e)
   | assignGlobal {ctxt name offset e} : globals.globals.lookup name = some (.one,offset) →
       GlobalScalar globals ctxt e → GlobalFrontend globals ctxt (.assign .global name e)
-  | assignGlobalStruct {ctxt name offset fields} :
-      globals.globals.lookup name = some (.comb (List.replicate fields.length .one),offset) →
-      (∀ e ∈ fields, GlobalScalar globals ctxt e) → GlobalFrontend globals ctxt (.assign .global name (.rstruct fields))
+  | assignGlobalStruct {ctxt name offset fields shapes} :
+      globals.globals.lookup name = some (.comb shapes,offset) →
+      (∀ e ∈ fields, GlobalValue globals ctxt e) → GlobalFrontend globals ctxt (.assign .global name (.rstruct fields))
   | decl {ctxt name e body} : GlobalScalar globals ctxt e →
       GlobalFrontend globals (scalarDeclContext ctxt name) body → GlobalFrontend globals ctxt (.dec name .one e body)
   | seq {ctxt a b} : GlobalFrontend globals ctxt a → GlobalFrontend globals ctxt b → GlobalFrontend globals ctxt (.seq a b)
@@ -74,7 +110,7 @@ inductive GlobalFrontend {width : Nat} [NeZero width] (globals : PanGlobalsConte
   | while {ctxt e body} : GlobalScalar globals ctxt e → GlobalFrontend globals ctxt body → GlobalFrontend globals ctxt (.while e body)
   | ret {ctxt e} : GlobalScalar globals ctxt e → GlobalFrontend globals ctxt (.return e)
 
-/-- Global reads and writes, including flat struct assignment, are accepted by
+/-- Global reads and writes, including nested struct assignment, are accepted by
     the existing general Crep frontend after the actual globals pass. -/
 theorem globalFrontend_compiled {width : Nat} [NeZero width]
     {globals : PanGlobalsContextExact width} {ctxt : PanToCrepContextExact width} {p : ProgHOL width}
@@ -87,14 +123,14 @@ theorem globalFrontend_compiled {width : Nat} [NeZero width]
   | store a v => simpa only [compileProgExactHOL] using FrontendProgram.store (globalScalar_compiled a) (globalScalar_compiled v)
   | storeStruct a fields =>
     simpa only [compileProgExactHOL,compileExpExactHOL] using
-      FrontendProgram.storeStruct (globalScalar_compiled a) (globalScalar_list_compiled _ fields)
+      FrontendProgram.storeStruct (globalScalar_compiled a) (globalValue_list_compiled _ fields)
   | assignLocal reg found e => simpa only [compileProgExactHOL] using FrontendProgram.assign reg found (globalScalar_compiled e)
   | assignGlobal found e =>
     simp only [compileProgExactHOL,found]
     exact .store (.op .sub .topAddr (.const _)) (globalScalar_compiled e)
   | assignGlobalStruct found fields =>
     simp only [compileProgExactHOL,found,compileExpExactHOL]
-    exact .storeStruct (.op .sub .topAddr (.const _)) (globalScalar_list_compiled _ fields)
+    exact .storeStruct (.op .sub .topAddr (.const _)) (globalValue_list_compiled _ fields)
   | decl e body ih => simpa only [compileProgExactHOL] using FrontendProgram.decl (globalScalar_compiled e) ih
   | seq a b iha ihb => simpa only [compileProgExactHOL] using FrontendProgram.seq iha ihb
   | ite e a b iha ihb => simpa only [compileProgExactHOL] using FrontendProgram.ite (globalScalar_compiled e) iha ihb
@@ -110,7 +146,7 @@ theorem GlobalFrontend.of_frontend {width : Nat} [NeZero width]
   | «continue» => exact .continue
   | tick => exact .tick
   | store a v => exact .store (.local a) (.local v)
-  | storeStruct a fields => exact .storeStruct (.local a) (by intro e member; exact .local (fields e member))
+  | storeStruct a fields => exact .storeStruct (.local a) (by intro e member; exact GlobalValue.of_frontend globals (fields e member))
   | assign reg found e => exact .assignLocal reg found (.local e)
   | decl e body ih => exact .decl (.local e) ih
   | seq a b iha ihb => exact .seq iha ihb

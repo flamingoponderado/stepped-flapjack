@@ -27,7 +27,7 @@ theorem globalStruct_sourceFrontend : GlobalFrontend globalStructContext globalS
     · simpa using globalStruct_pairLookup
     · intro e member
       simp [expToHOL] at member
-      rcases member with rfl | rfl <;> exact .local (.const _)
+      rcases member with rfl | rfl <;> exact .scalar (.local (.const _))
   · exact .ret (.globalField (ofString "pair") 16 1 2 (by decide) globalStruct_pairLookup)
 
 /-- The generic global-control theorem gives the concrete source visit bound. -/
@@ -59,10 +59,10 @@ theorem globalStruct_initializer_frontend (globals : PanGlobalsContextExact 64) 
     List.cons_append,List.append_nil,fpermDecsHOL,List.mem_cons,List.not_mem_nil,or_false,
     DeclHOL.decl.injEq] at member
   rcases member with ⟨rfl,rfl,rfl⟩ | impossible
-  · apply FrontendInitializer.flatStruct
+  · apply FrontendValue.tuple
     intro e member
     simp only [List.mem_cons,List.not_mem_nil,or_false] at member
-    rcases member with rfl | rfl <;> exact .const _
+    rcases member with rfl | rfl <;> exact .scalar (.const _)
   · cases impossible
 
 /-- Writing the value already in a valid memory slot preserves memory. -/

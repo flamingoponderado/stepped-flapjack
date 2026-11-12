@@ -119,31 +119,6 @@ theorem frontendScalar_compile {width : Nat} [NeZero width] {ctxt : PanToCrepCon
     obtain ⟨b,cb⟩ := ihb
     exact ⟨.shift op a b,by simp [compileExpExactHOLW,ca,cb]⟩
 
-theorem frontendScalars_compile {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width)
-    (expressions : List (ExpHOL width)) (shape : ∀ e ∈ expressions, FrontendScalar ctxt e) :
-    ∃ (values : List (CrepExpHOL width)), values.length = expressions.length ∧
-      compileExpExactHOLWList ctxt expressions = values.map (fun value => ([value], .one)) := by
-  induction expressions with
-  | nil => exact ⟨[],rfl,by simp [compileExpExactHOLWList]⟩
-  | cons expression rest ih =>
-    obtain ⟨value,hv⟩ := frontendScalar_compile (shape expression (by simp))
-    obtain ⟨values,hl,he⟩ := ih (fun e he => shape e (by simp [he]))
-    refine ⟨value :: values, by simp [hl], ?_⟩
-    simp [compileExpExactHOLWList,hv,he]
-
-
-theorem flatStruct_compile {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width)
-    (expressions : List (ExpHOL width)) (shape : ∀ e ∈ expressions, FrontendScalar ctxt e) :
-    ∃ (values : List (CrepExpHOL width)), values.length = expressions.length ∧
-      compileExpExactHOLW ctxt (.rstruct expressions) =
-        (values, .comb (List.replicate values.length .one)) := by
-  obtain ⟨values,hl,h⟩ := frontendScalars_compile ctxt expressions shape
-  refine ⟨values,hl,?_⟩
-  simp [compileExpExactHOLW,h,List.map_map,Function.comp_def]
-  clear h hl shape expressions ctxt
-  induction values <;> simp_all
-
-
 /-- Generalized scalar declarations compile with the actual extended context,
 including when the initializer contains comparisons. -/
 theorem frontendDecl_compile {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width) (name : MlString)

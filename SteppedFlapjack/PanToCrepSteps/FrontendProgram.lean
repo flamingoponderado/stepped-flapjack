@@ -1,4 +1,4 @@
-import SteppedFlapjack.PanToCrepSteps.FrontendScalar
+import SteppedFlapjack.PanToCrepSteps.FrontendValue
 import SteppedFlapjack.CrepSteps.BranchStatic
 
 /-! General frontend program shapes and loop-free Crep compilation. -/
@@ -14,7 +14,7 @@ inductive FrontendProgram {width : Nat} [NeZero width] : PanToCrepContextExact w
   | continue {ctxt} : FrontendProgram ctxt .continue
   | tick {ctxt} : FrontendProgram ctxt .tick
   | storeStruct {ctxt a fields} : FrontendScalar ctxt a →
-      (∀ e ∈ fields, FrontendScalar ctxt e) → FrontendProgram ctxt (.store a (.rstruct fields))
+      (∀ e ∈ fields, FrontendValue ctxt e) → FrontendProgram ctxt (.store a (.rstruct fields))
   | store {ctxt a v} : FrontendScalar ctxt a → FrontendScalar ctxt v → FrontendProgram ctxt (.store a v)
   | assign {ctxt name e} (reg : Nat) : ctxt.vars.lookup name = some (.one,[reg]) →
       FrontendScalar ctxt e → FrontendProgram ctxt (.assign .local name e)
@@ -39,7 +39,7 @@ theorem frontendProgram_localised {width : Nat} [NeZero width] {ctxt : PanToCrep
     | nil => rfl
     | cons e es ih =>
       simp only [everyExpListHOL,Bool.and_eq_true]
-      exact ⟨frontendScalar_localised (hf e (by simp)),
+      exact ⟨frontendValue_localised (hf e (by simp)),
         ih (fun x hx => hf x (by simp [hx]))⟩
   all_goals simp_all [localisedProgHOL] <;> aesop (add safe frontendScalar_localised)
 
@@ -102,8 +102,8 @@ theorem frontendLoopFree_static {width : Nat} [NeZero width] {ctxt : PanToCrepCo
   | tick => simpa [compileProgExactHOLW] using (StaticProgram.leaf (.tick : CrepProgHOL width) rfl)
   | @storeStruct ctxt a fields ha hf =>
     obtain ⟨address,ca⟩ := frontendScalar_compile ha
-    obtain ⟨values,_,cv⟩ := flatStruct_compile ctxt fields hf
-    simp only [compileProgExactHOLW,compileStoreExactHOLW,ca,cv,sizeOfShapeHOL,flatShapeSize,
+    obtain ⟨values,sh,cv,size⟩ := frontendValue_compile (FrontendValue.tuple hf)
+    simp only [compileProgExactHOLW,compileStoreExactHOLW,ca,cv,size,
       bne_self_eq_false, Bool.false_eq_true, if_false]
     apply nestedDecs_static
     apply nestedStores_static

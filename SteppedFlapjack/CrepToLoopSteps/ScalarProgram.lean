@@ -1,5 +1,5 @@
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgramDef
-import SteppedFlapjack.CrepToLoopSteps.FrontendScalar
+import SteppedFlapjack.CrepToLoopSteps.FrontendValue
 import SteppedFlapjack.CrepToLoopSteps.SimpFixed
 import SteppedFlapjack.PanToCrepSteps.FrontendProgram
 import Flapjack.Pancake.CrepArith
@@ -8,24 +8,6 @@ namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.Pancake.PanLang
 open SteppedFlapjack.PanToCrepSteps
 
-
-theorem frontendScalars_compiled {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width)
-    (expressions : List (ExpHOL width)) (shape : ∀ e ∈ expressions, SteppedFlapjack.PanToCrepSteps.FrontendScalar ctxt e) :
-    ∃ (values : List (CrepExpHOL width)), values.length = expressions.length ∧
-      compileExpExactHOLWList ctxt expressions = values.map (fun value => ([value], .one)) ∧
-      ∀ value ∈ values, CompiledScalar value := by
-  induction expressions with
-  | nil => exact ⟨[],rfl,by simp [compileExpExactHOLWList],by simp⟩
-  | cons expression rest ih =>
-    obtain ⟨value,hv,hshape⟩ := frontendScalar_compiled (shape expression (by simp))
-    obtain ⟨values,hl,he,hs⟩ := ih (fun e he => shape e (by simp [he]))
-    refine ⟨value :: values, by simp [hl], ?_, ?_⟩
-    · simp [compileExpExactHOLWList,hv,he]
-    · intro v hv
-      simp only [List.mem_cons] at hv
-      rcases hv with rfl | hv
-      · exact hshape
-      · exact hs v hv
 
 theorem nestedDecs_scalar {width : Nat} [NeZero width] (names : List Nat)
     (values : List (CrepExpHOL width)) {body : CrepProgHOL width} (h : ScalarProgram body)
@@ -67,14 +49,12 @@ theorem frontend_scalar_program {width : Nat} [NeZero width] {ctxt : PanToCrepCo
   | tick => simpa [compileProgExactHOLW] using (ScalarProgram.tick : ScalarProgram (.tick : CrepProgHOL width))
   | @storeStruct ctxt a fields ha hf =>
     obtain ⟨address,ca,sa⟩ := frontendScalar_compiled ha
-    obtain ⟨values,hlen,cv,sv⟩ := frontendScalars_compiled ctxt fields hf
-    have flat : (values.map (fun value => ([value], ShapeHOL.one))).flatMap Prod.fst = values := by
-      clear hlen cv sv hf fields ca sa address
-      induction values <;> simp_all
-    have compiled : compileExpExactHOLW ctxt (.rstruct fields) =
-        (values,.comb (List.replicate values.length .one)) := by
-      simp [compileExpExactHOLW,cv,List.map_map,Function.comp_def,flat]
-    simp only [compileProgExactHOLW,compileStoreExactHOLW,ca,compiled,sizeOfShapeHOL,flatShapeSize,
+    have hv : FrontendValue ctxt (.rstruct fields) := .tuple hf
+    obtain ⟨values,sh,cv,size⟩ := frontendValue_compile hv
+    have sv := frontendValue_scalars hv
+    rw [cv] at sv
+    simp only at sv
+    simp only [compileProgExactHOLW,compileStoreExactHOLW,ca,cv,size,
       bne_self_eq_false, Bool.false_eq_true, if_false]
     apply nestedDecs_scalar
     · exact nestedStores_scalar _ _ _
