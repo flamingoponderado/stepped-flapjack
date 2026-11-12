@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.GlobalStructCountedMachine
 import SteppedFlapjack.Concrete.GlobalCountedMachine
 import SteppedFlapjack.Concrete.GlobalConfiguredWord
 import SteppedFlapjack.LoopToWordSteps.GlobalFrontendSpan

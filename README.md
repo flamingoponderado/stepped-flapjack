@@ -99,8 +99,12 @@ the supported source table. Its explicit clock depends on the compiled code,
 fixture configuration and initial source clock. The theorem also requires
 relations between the source, lowered and Crep states, compiler-table
 conditions, and checkable machine encoding, safety and capacity conditions.
-The pair witness satisfies the supported fragment and layout, but has not yet
-instantiated every condition of this general theorem.
+`pairGeneral_namedSource` instantiates these conditions for a global pair: its
+initializer and renamed entry call return the second field, and the compiled
+machine halts with the same I/O events as the named-struct source. Its clock
+is an explicit expression over the concrete code and initial configuration.
+`heapFixture_machine` carries a concrete heap store and load through the
+function-only composition with an explicit clock expression.
 
 The current fragment has scalar locals, parameters and return values. The
 fixture reserves globals below the init-e heap endpoint; it does not yet cover
