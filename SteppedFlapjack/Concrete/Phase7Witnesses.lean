@@ -233,7 +233,7 @@ theorem comparisonFixture_machine : ∃ compilerFinal, Flapjack.Pancake.Proofs.P
       ffi.ioEvents = sourceFfi.ioEvents ∧
       Flapjack.PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
         (comparisonHOLFunctions.map DeclHOL.function) = .terminate .success ffi.ioEvents := by
-  have shape : Supported branching := branching_supported.toSupported
+  have shape : ScalarSupported branching := branching_supported.toScalarSupported
   have table : FunctionTableSupported comparisonSourceFunctions := by
     intro f hf
     simp only [comparisonSourceFunctions,List.mem_cons,List.not_mem_nil,or_false] at hf
@@ -525,7 +525,7 @@ theorem branchingLoopFixture_machine : ∃ compilerFinal, Flapjack.Pancake.Proof
       ffi.ioEvents = sourceFfi.ioEvents ∧
       Flapjack.PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
         (branchingLoopHOLFunctions.map DeclHOL.function) = .terminate .success ffi.ioEvents := by
-  have shape : Supported branchingLoop := branchingLoop_supported.toSupported
+  have shape : ScalarSupported branchingLoop := branchingLoop_supported.toScalarSupported
   have table : FunctionTableSupported branchingLoopSourceFunctions := by
     intro f hf
     simp only [branchingLoopSourceFunctions,List.mem_cons,List.not_mem_nil,or_false] at hf
@@ -920,7 +920,7 @@ theorem countdownFixture_machine (n : Nat) (range : n < 2^64) :
       Flapjack.PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
         ((countdownHOLFunctions n).map DeclHOL.function) = .terminate .success ffi.ioEvents := by
   let _ : DecidablePred (countdownSource n).memaddrs := by change DecidablePred ordinaryAddress; infer_instance
-  have shape : Supported (countdown n) := (countdown_supported n).toSupported
+  have shape : ScalarSupported (countdown n) := (countdown_supported n).toScalarSupported
   have table : FunctionTableSupported (countdownSourceFunctions n) := by
     intro f hf
     simp only [countdownSourceFunctions,List.mem_cons,List.not_mem_nil,or_false] at hf
@@ -1165,7 +1165,7 @@ theorem naturalCountdownFixture_machine (n : Nat) (range : n < 2^64) :
       Flapjack.PanSemStateFiniteExact.semanticsDecls {sourceTemplate with clock := 0} (ofString "main")
         ((naturalCountdownHOLFunctions n).map DeclHOL.function) = .terminate .success ffi.ioEvents := by
   let _ : DecidablePred (naturalCountdownSource n).memaddrs := by change DecidablePred ordinaryAddress; infer_instance
-  have shape : Supported (naturalCountdown n) := (naturalCountdown_supported n).toSupported
+  have shape : ScalarSupported (naturalCountdown n) := (naturalCountdown_supported n).toScalarSupported
   have table : FunctionTableSupported (naturalCountdownSourceFunctions n) := by
     intro f hf
     simp only [naturalCountdownSourceFunctions,List.mem_cons,List.not_mem_nil,or_false] at hf

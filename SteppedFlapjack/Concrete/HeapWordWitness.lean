@@ -12,7 +12,7 @@ def heapWordLoad : Prog (RiscV.Word 64) :=
   .return (.load .one (.const 0xa1000100))
 
 /-- The load is accepted by the public source fragment. -/
-theorem heapWordLoad_supported : Supported heapWordLoad := by
+theorem heapWordLoad_supported : ScalarSupported heapWordLoad := by
   refine ⟨.base (.ret (.load (.const _))), ?_⟩
   simp [heapWordLoad,ProgByteRanged,ExpByteRanged,ShapeByteRanged]
 
@@ -34,7 +34,7 @@ def heapWordWitness : Prog (RiscV.Word 64) :=
     (.return (.load .one (.const 0xa1000100)))
 
 /-- Both the store and subsequent load are in the public supported fragment. -/
-theorem heapWordWitness_supported : Supported heapWordWitness := by
+theorem heapWordWitness_supported : ScalarSupported heapWordWitness := by
   refine ⟨.base (.seq (.store (.const _) (.const _)) (.ret (.load (.const _)))), ?_⟩
   simp [heapWordWitness,ProgByteRanged,ExpByteRanged,ShapeByteRanged]
 

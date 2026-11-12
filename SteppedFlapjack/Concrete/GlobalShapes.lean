@@ -114,6 +114,12 @@ inductive GlobalScalarExpression (shapes : VarName → Option ShapeHOL) (scope :
   | cmp (operator) {a b} : GlobalScalarExpression shapes scope a → GlobalScalarExpression shapes scope b → GlobalScalarExpression shapes scope (.cmp operator a b)
   | shift (operator) {a b} : GlobalScalarExpression shapes scope a → GlobalScalarExpression shapes scope b → GlobalScalarExpression shapes scope (.shift operator a b)
 
+/-- Values with scalar leaves and recursively nested anonymous structs. -/
+inductive GlobalValueExpression (shapes : VarName → Option ShapeHOL) (scope : List VarName) : Exp (RiscV.Word 64) → Prop
+  | scalar {e} : GlobalScalarExpression shapes scope e → GlobalValueExpression shapes scope e
+  | tuple {fields} : (∀ e ∈ fields, GlobalValueExpression shapes scope e) →
+      GlobalValueExpression shapes scope (.rStruct fields)
+
 theorem globalScalarExpression_word {σ : Type} {shapes : VarName → Option ShapeHOL} {scope : List VarName} {expression : Exp (RiscV.Word 64)}
     (scalar : GlobalScalarExpression shapes scope expression) (production : PanSemState (RiscV.Word 64) (FfiState σ))
     (words : WordLocals production.locals) (globals : GlobalHOLShapes shapes production.globals)

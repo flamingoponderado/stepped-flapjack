@@ -60,7 +60,7 @@ functions for inlining and the source heap headers to use the compiled bitmap
 count. The call-graph capacity check can reject recursion and unresolved calls;
 these checks and the fixture layout are restrictions for init-e applicability. -/
 theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
-    (supported : Supported program)     (production : PanSemState (RiscV.Word 64) (FfiState Unit)) (source : PanSemStateFiniteExact 64 Unit)
+    (supported : ScalarSupported program)     (production : PanSemState (RiscV.Word 64) (FfiState Unit)) (source : PanSemStateFiniteExact 64 Unit)
     [DecidablePred source.memaddrs]
     (sourceFs : List (FunDeclOf 64)) (sourceN sourceClock : Nat)
     (tableSupported : FunctionTableSupported sourceFs)

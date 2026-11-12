@@ -94,10 +94,16 @@ def pairShapeMap (name : VarName) : Option ShapeHOL :=
   if name = "pair" then some (.comb [.one,.one]) else none
 theorem pair_supported : GlobalCallSupportedIn pairShapeMap [] globalStructWitness := by
   unfold globalStructWitness
-  apply GlobalCallSupportedIn.seq (.assignGlobal _ _)
-  apply GlobalCallSupportedIn.ret
-  apply GlobalScalarExpression.global
-  exact .field (.global "pair" (.comb [.one,.one]) (by decide) (by simp [pairShapeMap])) 1 .one rfl
+  refine GlobalCallSupportedIn.seq (.assignGlobalStruct "pair" [.one,.one] (by simp [pairShapeMap]) ?_) ?_
+  · intro e member
+    simp at member
+    rcases member with rfl | rfl <;> exact .scalar (.local (.const _))
+  · apply GlobalCallSupportedIn.ret
+    apply GlobalScalarExpression.global
+    exact .field (.global "pair" (.comb [.one,.one]) (by decide) (by simp [pairShapeMap])) 1 .one rfl
+/-- The concrete global-pair source inhabits the widened supported fragment. -/
+theorem pairSupported : Supported pairShapeMap globalStructWitness :=
+  ⟨pair_supported,globalStructWitness_ranged⟩
 theorem pair_shapes : GlobalHOLShapes pairShapeMap globalStructInitial.globals := by
   intro name hr
   by_cases same : name = "pair"

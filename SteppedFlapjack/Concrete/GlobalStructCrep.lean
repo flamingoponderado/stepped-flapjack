@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.GlobalStructWitness
+import SteppedFlapjack.Concrete.GlobalFrontendShape
 import SteppedFlapjack.PanToCrepSteps.ConcreteDeclInitial
 import Flapjack.Pancake.Proofs.PanToCrep.PcCompileCorrect.Assembly
 import SteppedFlapjack.CrepSteps.BranchStatic
@@ -17,6 +18,19 @@ theorem globalStruct_pairLookup : globalStructContext.globals.lookup (ofString "
   simp [globalStructContext,globalStructStart,globalStructDecl,compileDecsExactHOL,
     compileDecsGlobalAddressExact_eq,sizeOfShapeHOL,cakeBytesInWord,
     HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL]
+
+/-- The concrete pair layout satisfies the production-to-compiler bridge. -/
+theorem pair_layout : GlobalLayout pairShapeMap globalStructContext := by
+  intro name shape found
+  by_cases same : name = "pair"
+  · subst name
+    simp [pairShapeMap] at found
+    subst shape
+    exact ⟨16,globalStruct_pairLookup⟩
+  · simp [pairShapeMap,same] at found
+
+example : GlobalCallFrontend globalStructContext globalStructCrepContext (progToHOL globalStructWitness) :=
+  globalCallSupported_frontend pair_layout pair_supported globalStructCrepContext (by intro name member; simp at member)
 
 /-- The witness is an instance of the general source globals fragment. -/
 theorem globalStruct_sourceFrontend : GlobalFrontend globalStructContext globalStructCrepContext

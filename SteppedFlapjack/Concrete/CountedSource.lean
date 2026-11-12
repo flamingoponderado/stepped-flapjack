@@ -1780,12 +1780,15 @@ private theorem supportedBridge {invariant : PanSemCodeMap (RiscV.Word 64) → L
 other computations retain the existing scalar-local discipline. -/
 inductive GlobalCallSupportedIn (shapes : VarName → Option ShapeHOL) : List VarName → Prog (RiscV.Word 64) → Prop
   | base {scope program} : SupportedIn scope program → GlobalCallSupportedIn shapes scope program
-  | assignGlobal {scope} (name : VarName) (expression : Exp (RiscV.Word 64)) :
-      GlobalCallSupportedIn shapes scope (.assign .global name expression)
+  | assignGlobalWord {scope e} (name : VarName) : shapes name = some .one →
+      GlobalScalarExpression shapes scope e → GlobalCallSupportedIn shapes scope (.assign .global name e)
+  | assignGlobalStruct {scope fields} (name : VarName) (fieldShapes : List ShapeHOL) :
+      shapes name = some (.comb fieldShapes) → (∀ e ∈ fields, GlobalValueExpression shapes scope e) →
+      GlobalCallSupportedIn shapes scope (.assign .global name (.rStruct fields))
   | ret {scope e} : GlobalScalarExpression shapes scope e → GlobalCallSupportedIn shapes scope (.return e)
   | assignLocal {scope} (name : VarName) {e} : name ∈ scope → GlobalScalarExpression shapes scope e →
       GlobalCallSupportedIn shapes scope (.assign .local name e)
-  | store {scope address value} : GlobalScalarExpression shapes scope address →
+  | store {scope address value} : GlobalScalarExpression shapes scope address → GlobalValueExpression shapes scope value →
       GlobalCallSupportedIn shapes scope (.store address value)
   | tail {scope} (name) (args) : (∀ e ∈ args, GlobalScalarExpression shapes scope e) → GlobalCallSupportedIn shapes scope (.call none name args)
   | call {scope} (dest name) (args) {cont} : (∀ e ∈ args, GlobalScalarExpression shapes scope e) →
@@ -1797,10 +1800,18 @@ inductive GlobalCallSupportedIn (shapes : VarName → Option ShapeHOL) : List Va
   | while {scope e body} : GlobalScalarExpression shapes scope e → GlobalCallSupportedIn shapes scope body → GlobalCallSupportedIn shapes scope (.while e body)
 
 /-- A nested struct global update can precede a scalar return in the counted fragment. -/
-example : GlobalCallSupportedIn (fun _ => none) []
+example : GlobalCallSupportedIn (fun name => if name = "pair" then some (.comb [.comb [.one,.one],.one]) else none) []
     (.seq (.assign .global "pair" (.rStruct [.rStruct [.const 1,.const 2],.const 3]))
       (.return (.const 0))) := by
-  exact .seq (.assignGlobal _ _) (.base (.ret (.const _)))
+  refine GlobalCallSupportedIn.seq (.assignGlobalStruct "pair" [.comb [.one,.one],.one] (by simp) ?_) (.base (.ret (.const _)))
+  intro e member
+  simp at member
+  rcases member with rfl | rfl
+  · apply GlobalValueExpression.tuple
+    intro e member
+    simp at member
+    rcases member with rfl | rfl <;> exact .scalar (.local (.const _))
+  · exact .scalar (.local (.const _))
 
 /-- Existing call-aware programs remain supported by the global-aware induction. -/
 theorem CallSupportedIn.toGlobal {shapes : VarName → Option ShapeHOL} {scope : List VarName} {program : Prog (RiscV.Word 64)}
@@ -1813,6 +1824,15 @@ theorem CallSupportedIn.toGlobal {shapes : VarName → Option ShapeHOL} {scope :
   | seq a b iha ihb => exact .seq iha ihb
   | ite scalar a b iha ihb => exact .ite (.local scalar) iha ihb
   | «while» scalar body ih => exact .while (.local scalar) ih
+
+/-- A closed source program supported with the supplied concrete global shape map. -/
+def Supported (shapes : VarName → Option ShapeHOL) (program : Prog (RiscV.Word 64)) : Prop :=
+  GlobalCallSupportedIn shapes [] program ∧ ProgByteRanged program
+
+/-- Previously supported scalar programs are supported for any global shape map. -/
+theorem ScalarSupported.toSupported {program : Prog (RiscV.Word 64)}
+    (supported : ScalarSupported program) (shapes : VarName → Option ShapeHOL) : Supported shapes program :=
+  ⟨supported.1.toGlobal,supported.2⟩
 
 private def CallCodeInvariant (contracts : Option PanValueCallContracts)
     (code : PanSemCodeMap (RiscV.Word 64)) (functions : List (FunName × List VarName × Prog (RiscV.Word 64))) : Prop :=
@@ -1866,9 +1886,10 @@ private theorem supportedCallsBridge (contracts : Option PanValueCallContracts) 
       exact ih supported
     cases supported with
     | assignLocal name member scalar => exact @assignBridge bridgeShapes _ name _ scalar (CallCodeInvariant (bridgeShapes := bridgeShapes) contracts) contracts (limit+1)
-    | store address => exact @storeBridge bridgeShapes _ _ _ address (CallCodeInvariant (bridgeShapes := bridgeShapes) contracts) contracts (limit+1)
+    | store address value => exact @storeBridge bridgeShapes _ _ _ address (CallCodeInvariant (bridgeShapes := bridgeShapes) contracts) contracts (limit+1)
     | ret scalar => exact @returnBridge bridgeShapes _ _ scalar (CallCodeInvariant (bridgeShapes := bridgeShapes) contracts) contracts (limit+1)
-    | assignGlobal name expression => exact @globalAssignBridge bridgeShapes name expression (CallCodeInvariant (bridgeShapes := bridgeShapes) contracts) contracts (limit+1)
+    | assignGlobalWord name found scalar => exact @globalAssignBridge bridgeShapes name _ (CallCodeInvariant (bridgeShapes := bridgeShapes) contracts) contracts (limit+1)
+    | assignGlobalStruct name fieldShapes found values => exact @globalAssignBridge bridgeShapes name _ (CallCodeInvariant (bridgeShapes := bridgeShapes) contracts) contracts (limit+1)
     | base h => exact @supportedBridge bridgeShapes (CallCodeInvariant (bridgeShapes := bridgeShapes) contracts) contracts (limit+1) _ _ h
     | tail name args h => exact @tailCallBridge bridgeShapes _ name args h (CallCodeInvariant (bridgeShapes := bridgeShapes) contracts) contracts limit coherent callee
     | call dest name args h cont => exact @decCallBridge bridgeShapes _ dest name args _ h (CallCodeInvariant (bridgeShapes := bridgeShapes) contracts) contracts limit coherent callee (ih cont)

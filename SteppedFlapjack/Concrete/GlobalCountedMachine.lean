@@ -1,5 +1,5 @@
 import SteppedFlapjack.Concrete.GlobalSourceMachine
-import SteppedFlapjack.Concrete.CountedSource
+import SteppedFlapjack.Concrete.GlobalFrontendShape
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.LoopSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend
@@ -18,13 +18,13 @@ theorem globalCountedSource_machine
     (sourceGood : pancakeGoodCodeHOL pan = true)
     (globals : PanGlobalsContextExact 64) (panCtxt : PanToCrepContextExact 64)
     (program : Prog (RiscV.Word 64)) (shapes : VarName → Option ShapeHOL)
-    (supported : GlobalCallSupportedIn shapes [] program)
-    (shape : GlobalCallFrontend globals panCtxt (progToHOL program))
+    (supported : Supported shapes program)
+    (layout : GlobalLayout shapes globals)
     (source panTarget : PanSemStateFiniteExact 64 Unit) [DecidablePred source.memaddrs]
     (production : PanSemState (RiscV.Word 64) (FfiState Unit)) (value : BitVec 64)
     (productionRel : PanSemStateRelExec production source.toExact)
     (productionRanged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
-    (globalShapes : GlobalHOLShapes shapes production.globals) (byteRanged : ProgByteRanged program)
+    (globalShapes : GlobalHOLShapes shapes production.globals)
     (codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry)
     (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
       ∃ scope, GlobalCallSupportedIn shapes scope body)
@@ -39,7 +39,6 @@ theorem globalCountedSource_machine
       (contracts := some (countedContractsOfCode production.code exceptions)) =
         some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
     (budget : count ≤ source.clock) (crep : CrepSemHOLState 64 Unit)
-    (sourceTable : GlobalCallTable globals source.code)
     (compiledTable : crep.code = alistToFmapCodeExact (globalSourcePrograms pan))
     (targetTable : CallFrontendCode panCtxt panTarget.code)
     (globalRel : panGlobalsStateRelHOLExact true globals source panTarget)
@@ -75,9 +74,12 @@ theorem globalCountedSource_machine
         (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
           bs code (fixtureStackOracle (fixtureCompilerConfig code)) n) (configuredMachineState code bs) =
             (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents ∧ FfiStateRel postFfi sourceFinal.ffi := by
+  have sourceTable := globalSupported_sourceTable shapes globals layout production source productionRel codeShape
+  have shape : GlobalCallFrontend globals panCtxt (progToHOL program) :=
+    globalCallSupported_frontend layout supported.1 panCtxt (by intro name member; simp at member)
   obtain ⟨holResult,sourceFinal,holRun,outcome,sourceBound,_,_⟩ :=
-    globalSupportedCalls_counted_source supported production source productionRel productionRanged words globalShapes
-      byteRanged codeRanged codeShape context primitive handler exceptions fuel count _ run budget
+    globalSupportedCalls_counted_source supported.1 production source productionRel productionRanged words globalShapes
+      supported.2 codeRanged codeShape context primitive handler exceptions fuel count _ run budget
   cases outcome with
   | returned _ _ _ _ word final rel ranged words =>
     have bound : controlSteps (progToHOL program) source ≤ source.clock := by
