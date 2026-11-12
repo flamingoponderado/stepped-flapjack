@@ -1,5 +1,6 @@
 import SteppedFlapjack.Concrete.CountdownStackSpan
-import SteppedFlapjack.Concrete.FixtureCrepMemory
+import SteppedFlapjack.Concrete.InitEHeap
+import SteppedFlapjack.Concrete.CountedApplications
 import SteppedFlapjack.PanToCrepSteps.SingleEntryNativeGoodCode
 import SteppedFlapjack.PanToCrepSteps.CountdownMachineConfig
 open Flapjack Flapjack.Basis.Pure.MlString Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target

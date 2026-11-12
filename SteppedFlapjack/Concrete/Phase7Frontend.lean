@@ -1,6 +1,9 @@
 import SteppedFlapjack.Concrete.WitnessLoopCode
 import SteppedFlapjack.Concrete.CountedApplications
-import SteppedFlapjack.Concrete.ScalarEntry
+import SteppedFlapjack.Concrete.BranchEntryLoop
+import SteppedFlapjack.CrepSteps.TailEntry
+import SteppedFlapjack.CrepToLoopSteps.TailEntryLoop
+import SteppedFlapjack.CrepToLoopSteps.ScalarSequenceBound
 
 /-! Generated code for the supported Phase 7 frontend. -/
 namespace SteppedFlapjack.Concrete

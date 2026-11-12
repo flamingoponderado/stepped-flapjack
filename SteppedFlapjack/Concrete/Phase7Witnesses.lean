@@ -3,7 +3,10 @@ import SteppedFlapjack.Concrete.FixtureMachineGuards
 import SteppedFlapjack.Concrete.BranchingFrames
 import SteppedFlapjack.Concrete.CountdownOptimized
 import SteppedFlapjack.Concrete.CountdownLabBounds
-import SteppedFlapjack.Concrete.WitnessWeights
+import SteppedFlapjack.Concrete.BranchEntryLoop
+import SteppedFlapjack.CrepSteps.TailEntry
+import SteppedFlapjack.CrepToLoopSteps.TailEntryLoop
+import SteppedFlapjack.CrepToLoopSteps.ScalarSequenceBound
 
 /-! Concrete instances of the supported source-to-machine theorem. -/
 namespace SteppedFlapjack.Concrete

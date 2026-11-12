@@ -1,5 +1,5 @@
 import SteppedFlapjack.Concrete.InitELab
-import SteppedFlapjack.StackRemoveSteps.InitStackNonempty
+import Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInit
 import SteppedFlapjack.LoopToWordSteps.FullInitNativeValidity
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Encoders.RiscV.Target SteppedFlapjack.Concrete SteppedFlapjack.PanToCrepSteps
@@ -119,9 +119,5 @@ theorem fixtureStack_bitmaps (code : List (Nat × HolProg 64)) (cfg : LabToTarge
   change (InitMake.makeInitAny _ _ _ _ _ _ _ _ _ _).bitmaps = [4]
   rw [InitAny.makeInitAnyBitmaps]
   simp
-
-theorem fixtureStack_nonempty (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) :
-    1 ≤ (fixtureStack code cfg).stack.length := by
-  exact SteppedFlapjack.StackRemoveSteps.fullMakeInit_stack_nonempty _ _ _ _ _ _ _ _ _ _ _
 
 end SteppedFlapjack.Concrete

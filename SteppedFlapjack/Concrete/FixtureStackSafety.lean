@@ -1,9 +1,9 @@
 import SteppedFlapjack.Concrete.FixtureCompilerFacts
 import SteppedFlapjack.LabToTargetSteps.FfiFreeFlatten
 import SteppedFlapjack.LabToTargetSteps.GoodCodeFilter
-import SteppedFlapjack.PanToCrepSteps.CountdownGoodCode
-import Flapjack.Compiler.Backend.StackToLab.Proofs.NoShmemop
+import SteppedFlapjack.PanToCrepSteps.SingleEntryGlobals
 import Flapjack.Pancake.Proofs.PanToTarget.AssemblyGoodCodeSource
+import Flapjack.Compiler.Backend.StackToLab.Proofs.NoShmemop
 
 /-! The concrete native programs have neither FFI nor shared-memory operations. -/
 namespace SteppedFlapjack.Concrete
@@ -42,21 +42,6 @@ theorem source_labGoodCode (source : List (Flapjack.Pancake.PanLang.DeclHOL 64))
     exact good
   exact goodCode_filterSkip riscvConfig (.ln : Spt (Spt Nat)) _ whole
 
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 1000000 in
-/-- The actual source compiler establishes the Lab good-code guard. -/
-theorem singleEntry_labGoodCode (body : Flapjack.Pancake.PanLang.ProgHOL 64)
-    (words : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
-    (compiled : panToWordCompileProgHOL riscvConfig.isa (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main") body) = words)
-    (sourceGood : pancakeGoodCodeHOL (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main") body) = true) :
-    goodCode riscvConfig (.ln : Spt (Spt Nat))
-      (LabFilter.filterSkip (fixtureLab
-        (Flapjack.Compiler.Backend.WordToStack.Native.compileNative riscvConfig false
-          (Flapjack.Compiler.Backend.WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).2.2.2
-        countdownRiscVBackend.labConf).code) := by
-  apply source_labGoodCode _ words compiled sourceGood
-  simp [singleEntryProgram,Flapjack.Pancake.PanLang.functionsHOL]
 
 /-- An FFI-free, shared-operation-free native table has the corresponding Lab properties. -/
 theorem fixtureLabSafe (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
@@ -108,38 +93,5 @@ theorem branching_stackSafe : fixtureStackSafe branchingLoopNativeCode = true :=
   rw [branch_optimized_table,riscvNative_two_entry_code]
   with_unfolding_all decide
 
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 1000000 in
-/-- The original countdown compiler produces valid Lab code for every input. -/
-theorem countdown_labGoodCode (n : Nat) (cfg : LabToTarget.Config) :
-    goodCode riscvConfig (.ln : Spt (Spt Nat))
-      (LabFilter.filterSkip (fixtureLab (countdownNativeStackCode n) cfg).code) := by
-  have sourceGood : pancakeGoodCodeHOL (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main")
-      (progToHOL (countdown n))) = true := by
-    simpa [countdown,progToHOL,expToHOL,shapeToHOL,countdownBody] using
-      countdown_pancakeGoodCode (Flapjack.Basis.Pure.MlString.ofString "x") (BitVec.ofNat 64 n) 0
-  have h := singleEntry_labGoodCode (progToHOL (countdown n)) (countdownWordPrograms n) (countdown_panToWord n) sourceGood
-  exact h
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 1000000 in
-/-- The original comparison compiler produces valid Lab code. -/
-theorem comparison_labGoodCode (cfg : LabToTarget.Config) :
-    goodCode riscvConfig (.ln : Spt (Spt Nat))
-      (LabFilter.filterSkip (fixtureLab comparisonNativeCode cfg).code) := by
-  have sourceGood : pancakeGoodCodeHOL (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main")
-      (progToHOL branching)) = true := by with_unfolding_all decide
-  exact singleEntry_labGoodCode (progToHOL branching) comparisonWordPrograms comparison_panToWord sourceGood
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 1000000 in
-/-- The original branching-loop compiler produces valid Lab code. -/
-theorem branching_labGoodCode (cfg : LabToTarget.Config) :
-    goodCode riscvConfig (.ln : Spt (Spt Nat))
-      (LabFilter.filterSkip (fixtureLab branchingLoopNativeCode cfg).code) := by
-  have sourceGood : pancakeGoodCodeHOL (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main")
-      (progToHOL branchingLoop)) = true := by with_unfolding_all decide
-  exact singleEntry_labGoodCode (progToHOL branchingLoop) branchWordPrograms branchingLoop_panToWord sourceGood
 
 end SteppedFlapjack.Concrete

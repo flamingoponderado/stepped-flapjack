@@ -1,5 +1,6 @@
 import SteppedFlapjack.Concrete.CountedSpan
-import SteppedFlapjack.Concrete.FixtureCrepMemory
+import SteppedFlapjack.Concrete.InitEHeap
+import SteppedFlapjack.Concrete.CountedApplications
 import SteppedFlapjack.Concrete.WordStarter
 import Flapjack.Misc.Sptree.InsertUnchanged
 open Flapjack Flapjack.Basis.Pure.MlString Flapjack.Pancake.PanLang Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target

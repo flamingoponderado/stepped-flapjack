@@ -1,5 +1,7 @@
 import SteppedFlapjack.CrepToLoopSteps.ScalarSequenceBound
-import SteppedFlapjack.Concrete.WitnessWeights
+import SteppedFlapjack.Concrete.BranchEntryLoop
+import SteppedFlapjack.CrepSteps.TailEntry
+import SteppedFlapjack.CrepToLoopSteps.TailEntryLoop
 
 namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.LoopSemStateFiniteExact Flapjack.Compiler.Encoders.Asm

@@ -1,7 +1,8 @@
 import SteppedFlapjack.Concrete.ComparisonWordSpan
 import SteppedFlapjack.Concrete.BranchingWordSpan
 import SteppedFlapjack.Concrete.WordBitmap
-import SteppedFlapjack.Concrete.FixtureCrepMemory
+import SteppedFlapjack.Concrete.InitEHeap
+import SteppedFlapjack.Concrete.CountedApplications
 import SteppedFlapjack.Concrete.CountdownStackSpan
 import SteppedFlapjack.Concrete.WordTables
 import SteppedFlapjack.Concrete.FixtureWordStarter

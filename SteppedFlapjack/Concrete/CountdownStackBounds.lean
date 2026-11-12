@@ -125,21 +125,4 @@ private theorem entryCost (code : Spt (HolProg 64)) :
   simp [countdownOptimizedEntry,callSequenceCost.eq_def,loopWord,straightWord,linearLoopCost,loopOnlyCost,callDestNative,compNative,countdownZeroLimit,RowColoring.limit,h]
   omega
 
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 1000000 in
-/-- Closed linear native Stack visit bound for every countdown input. -/
-theorem countdown_stackBound_closed (n limit : Nat) : nativeTailEntryBound countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n) 64 (countdownSourceWordEntry n) limit = 3 + 41*(limit+1) := by
- have selected : nativeTailEntryCode countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n) 64 (countdownSourceWordEntry n) = countdownOptimizedEntry := countdown_compilerSelectedEntry n
- have cursor : nativeTailEntryBitmap countdownRiscVBackend.wordToWordConf riscvConfig (countdownWordPrograms n) 64 = (.list [4],1) := by
-   unfold nativeTailEntryBitmap
-   rw [countdown_optimized_literal]
-   rfl
- have size : nativeEntryFrameSize countdownZeroLimit countdownOptimizedEntry = 0 := by with_unfolding_all rfl
- have frame : nativeEntryFrame countdownZeroLimit countdownOptimizedEntry = 0 := by with_unfolding_all rfl
- unfold nativeTailEntryBound
- rw [selected,cursor]
- change 3 + callSequenceCost riscvConfig 0 _ countdownOptimizedEntry (.list [4],1)
-   (countdownZeroLimit,nativeEntryFrameSize countdownZeroLimit countdownOptimizedEntry,nativeEntryFrame countdownZeroLimit countdownOptimizedEntry) * (limit+1) = _
- rw [size,frame,entryCost,tableInvariant n,zeroCost]
-
 end SteppedFlapjack.Concrete

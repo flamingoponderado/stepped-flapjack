@@ -1,6 +1,8 @@
 import SteppedFlapjack.Concrete.CountdownStackSafety
 import SteppedFlapjack.Concrete.WordBitmap
-import SteppedFlapjack.WordToStackSteps.NativeEntrySpan
+import SteppedFlapjack.WordToStackSteps.TailEntryFrame
+import SteppedFlapjack.WordToStackSteps.ResourceSafeResult
+import SteppedFlapjack.WordToStackSteps.TailFrameBound
 open Flapjack Flapjack.Basis.Pure.MlString Flapjack.WordSemStateFiniteExact Flapjack.Compiler.Backend
 open Flapjack.Compiler.Encoders.RiscV.Target SteppedFlapjack.Concrete
 open SteppedFlapjack.WordSimpSteps SteppedFlapjack.WordAllocSteps SteppedFlapjack.WordToStackSteps SteppedFlapjack.CrepToLoopSteps

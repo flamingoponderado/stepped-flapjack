@@ -1,6 +1,8 @@
 import SteppedFlapjack.PanToCrepSteps.RiscVInitializerFacts
 import SteppedFlapjack.Concrete.FixtureMachineState
-import SteppedFlapjack.LabToTargetSteps.InitializedRiscV
+import SteppedFlapjack.LabToTargetSteps.DomainAlignmentBridge
+import SteppedFlapjack.LabToTargetSteps.ByteClosure
+import SteppedFlapjack.LoopToWordSteps.FullInitMachineConstruct
 
 /-! Connect the init-e-shaped fixture Lab run to its concrete RISC-V machine. -/
 namespace SteppedFlapjack.Concrete

@@ -1,6 +1,6 @@
 import SteppedFlapjack.Concrete.CountdownOptimized
 import SteppedFlapjack.PanToCrepSteps.CountdownColoring
-import SteppedFlapjack.StackRemoveSteps.InitStackNonempty
+import Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInit
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.WordSemStateFiniteExact SteppedFlapjack.WordSimpSteps
 open SteppedFlapjack.Concrete SteppedFlapjack.PanToCrepSteps
