@@ -1,4 +1,5 @@
-import SteppedFlapjack.Concrete.Phase7Machine
+import SteppedFlapjack.Concrete.NestedMachine
+import SteppedFlapjack.Concrete.Phase7SourceBehaviour
 import SteppedFlapjack.Concrete.SingletonMachine
 import SteppedFlapjack.Concrete.FixtureMachineGuards
 import SteppedFlapjack.Concrete.BranchingFrames

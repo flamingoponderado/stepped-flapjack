@@ -63,31 +63,21 @@ Pancake → Crep → Loop → Word passes → Stack → Lab → RISC-V.
 
 ## Source-to-machine bound
 
-`SteppedFlapjack.Concrete.countedCalls_initializedMachine` composes the spans
+`SteppedFlapjack.Concrete.initializedGlobal_counted_machine` composes the spans
 from a counted Pancake source return to a successfully halting initialized
-RISC-V machine. It proves the emitted compiler bytes and bitmaps, source
-semantics, and matching I/O events at an explicit machine clock.
+RISC-V machine. It proves the emitted compiler bytes and bitmaps and matching
+I/O events at an explicit machine clock. Declaration semantics for the original
+source is established separately and connected to the same machine events.
 
-`ScalarSupported` admits ordinary and tail calls, scalar declarations, word
-loads and stores, sequencing, conditionals, loops, and word returns. For function-only programs,
-`FunctionTableSupported` requires scalar parameters and return shapes, scoped
-call-aware bodies, and byte-representable names. `countedCalls_initializedMachine`
-uses those declarations and a counted source return to derive the actual
-compiler output, matching source and machine behavior, and an explicit machine
-tick expression. Its concrete checks include code size, alignment, native
-stack safety and call-graph capacity; the capacity check can reject recursion.
-It also requires that the compiler select no functions for inlining and that
-the source heap headers use the bitmap count computed by the compiler. These
-conditions and the fixed fixture layout are gaps relative to init-e's actual
-initialization and guest.
-The machine clock is `callPipelineTicks`. Its coefficient in the counted
-source-step bound depends on the compiled code and function table. The
-Crep-to-Loop factor is independent of the initial source clock; that clock
-appears separately and linearly in the complete expression. Thus choosing an
-initial clock that is affine in the source-step bound retains an affine machine
-tick bound.
-`nested_initialized_machine` instantiates this composition with two call levels
-and a six-step source execution.
+The supported fragment includes ordinary and tail calls, scalar declarations,
+word loads and stores, sequencing, conditionals, loops, and word returns. Its
+concrete checks include code size, alignment, native stack safety and call-graph
+capacity; the capacity check can reject recursion. The theorem also requires
+that the compiler select no functions for inlining and that the source heap
+headers use the compiler's bitmap count. These conditions and the fixed fixture
+layout are gaps relative to init-e's actual initialization and guest.
+`nested_initialized_machine` instantiates the common theorem with two call
+levels and a six-step source execution, using 5,924,092,061,654,822,880 ticks.
 
 `SteppedFlapjack.Concrete.initializedGlobal_counted_machine` connects a counted
 run of `Supported shapes program` to the initialized machine. The fragment
