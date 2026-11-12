@@ -4,9 +4,10 @@ import Flapjack.Pancake.Proofs.PanToCrep.PcCompileCorrect.Assembly
 import SteppedFlapjack.CrepSteps.BranchStatic
 import SteppedFlapjack.CrepToLoopSteps.ScalarProgram
 import SteppedFlapjack.PanToCrepSteps.GlobalInitializers
+import SteppedFlapjack.PanToCrepSteps.GlobalNoInline
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
-open SteppedFlapjack.PanToCrepSteps
+open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps
 
 def globalStructCrepContext : PanToCrepContextExact 64 :=
   mkCtxtExactHOL HolFiniteMapExact.empty HolFiniteMapExact.empty 0 HolFiniteMapExact.empty
@@ -218,5 +219,73 @@ theorem globalStruct_crep_run : ∃ sourcePost targetPost crepPost,
   subst result
   refine ⟨sourcePost,targetPost,crepPost,sourceRun,targetRun,?_,postState,globalStruct_crep_visits⟩
   simpa [globalStructCrepProgram,flattenHOL] using crepRun
+
+theorem globalStruct_noInline :
+    (functionsHOL ((compileTopExactHOL globalStructProgram (ofString "main")).filter inlinableHOL)).map Prod.fst = [] := by
+  rw [compileTop_noInline globalStructProgram (by simp [globalStructProgram,globalStructDecl,inlinableHOL])]
+  rfl
+
+theorem globalStruct_initializer_branch (ctxt : PanToCrepContextExact 64) :
+    SteppedFlapjack.CrepToLoopSteps.BranchProgram (compileProgExactHOLW ctxt
+      (nestedSeqHOL (compileDecsExactHOL globalStructStart
+        (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram)
+          (resortDeclsHOL globalStructProgram))).1)) := by
+  rw [globalStruct_actual_initializer_eq]
+  simp [compileProgExactHOLW,compileStoreExactHOLW,compileExpExactHOLW,
+    compileExpExactHOLWList,sizeOfShapeHOL,sizeOfShapesHOL,nestedDecsHOL,cexpHeads]
+  simp [List.range_succ,List.range_zero,nestedDecsHOL,crepNestedSeqHOL,storesHOL,Function.comp_def]
+  repeat' first | apply SteppedFlapjack.CrepToLoopSteps.BranchProgram.seq | apply SteppedFlapjack.CrepToLoopSteps.BranchProgram.dec | apply SteppedFlapjack.CrepToLoopSteps.BranchProgram.expr
+                | apply ExprProgram.store | apply ExprProgram.leaf | apply DirectExpression.op
+                | apply DirectExpression.topAddr | apply DirectExpression.const | apply DirectExpression.var | constructor
+
+theorem globalStruct_initialContext :
+    let renamed := fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram) (resortDeclsHOL globalStructProgram)
+    ({globals := HolFiniteMapExact.empty, globalsSize := 0,
+      maxGlobalsSize := cakeBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL renamed).map sizeOfShapeHOL).sum} : PanGlobalsContextExact 64) = globalStructStart := by
+  simp only [globalStructProgram,globalStructDecl,resortDeclsHOL,isNameHOL,isExnDeclHOL,
+    isDeclHOL,isFunctionHOL,List.filter_cons,List.filter_nil,if_true,if_false,Bool.false_eq_true,List.nil_append,
+    List.cons_append,List.append_nil,fpermDecsHOL,decShapesHOL,List.map_cons,List.map_nil,
+    List.sum_cons,List.sum_nil,sizeOfShapeHOL,sizeOfShapesHOL,globalStructStart,cakeBytesInWord]
+  rfl
+
+theorem globalStruct_function_found : (functionsHOL globalStructProgram).lookup (ofString "main") =
+    some ([],progToHOL globalStructWitness,.one) := by
+  simp [globalStructProgram,globalStructDecl,functionsHOL]
+
+
+/-- The actual compiler retains the global initializer followed by a tail call. -/
+theorem globalStruct_actualCrep_entry :
+    let lowered := compileTopExactHOL globalStructProgram (ofString "main")
+    let ctxt := mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
+      (makeFuncsExactHOL (functionsHOL lowered)) (sizeOfShapeHOL (.comb [])-1)
+      (getEidsFromDeclsHOL lowered)
+    let init := compileProgExactHOLW ctxt (nestedSeqHOL (compileDecsExactHOL globalStructStart
+      (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram) (resortDeclsHOL globalStructProgram))).1)
+    ∃ h : 0 < (compileProgDeclsHOLW lowered).length,
+      (compileProgDeclsHOLW lowered)[0]'h =
+        (ofString "main",[],.seq init (.call none (newMainNameHOL globalStructProgram) [])) := by
+  obtain ⟨inits,funs,exns,ctx,compiled,top⟩ := compileTop_entry_wrapper globalStructProgram (ofString "main") []
+    (progToHOL globalStructWitness) .one globalStruct_function_found
+  have actual := compiled
+  rw [globalStruct_initialContext] at actual
+  have initsEq : (compileDecsExactHOL globalStructStart
+      (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram) (resortDeclsHOL globalStructProgram))).1 = inits := by
+    rw [actual]
+  let ctxt := mkCtxtExactHOL (panToCrepMakeVmapHOLExact [])
+    (makeFuncsExactHOL (functionsHOL (compileTopExactHOL globalStructProgram (ofString "main"))))
+    (sizeOfShapeHOL (.comb [])-1) (getEidsFromDeclsHOL (compileTopExactHOL globalStructProgram (ofString "main")))
+  have shape : SteppedFlapjack.CrepToLoopSteps.BranchProgram (compileProgExactHOLW ctxt (nestedSeqHOL inits)) := by
+    rw [← initsEq]
+    exact globalStruct_initializer_branch ctxt
+  have notInline : newMainNameHOL globalStructProgram ∉
+      (functionsHOL ((compileTopExactHOL globalStructProgram (ofString "main")).filter inlinableHOL)).map Prod.fst := by
+    rw [globalStruct_noInline]
+    simp
+  obtain ⟨h,eq,_⟩ := globalEntry_nonInline_preserved globalStructProgram (ofString "main") inits .one
+    (progToHOL globalStructWitness) globalStruct_function_found funs exns ctx compiled shape notInline globalStructCrepState
+  refine ⟨h,?_⟩
+  simpa only [initsEq] using eq
+
+
 
 end SteppedFlapjack.Concrete

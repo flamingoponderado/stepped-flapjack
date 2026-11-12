@@ -1,3 +1,4 @@
+import SteppedFlapjack.PanToCrepSteps.GlobalNoInline
 import SteppedFlapjack.Concrete.GlobalNamedStruct
 import SteppedFlapjack.Concrete.GlobalStructSourceSemantics
 import SteppedFlapjack.Concrete.GlobalStructWordAllocated
