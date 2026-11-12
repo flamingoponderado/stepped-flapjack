@@ -114,9 +114,9 @@ and a six-step source execution.
 
 `comparisonFixture_machine` and `branchingLoopFixture_machine` instantiate the
 call-aware theorem with concrete clocks `comparisonTicks` and
-`branchingLoopTicks`. The countdown and natural countdown fixtures still use
-the earlier call-free theorem. For countdown input `n < 2^64`, its clock is
-`167602730287449600 * (6*n+9) + 1592247331570371948`.
+`branchingLoopTicks`. `countdownFixture_machine` also uses the call-aware
+theorem with its concrete clock `countdownTicks`. The natural countdown fixture
+still uses the earlier call-free theorem.
 
 This fragment and fixture do not yet cover init-e's full guest: globals, heap
 and shared-memory operations, exceptions, FFI, primitive behavior and host
