@@ -1706,14 +1706,24 @@ theorem callWholeClock {σ : Type}
             simp_wf
           simpa [bf,CrepSemHOLState.setVar] using ih body (CrepSemHOLState.setVar name value source)
             smaller hb (by rfl) bc bl
-        have sim := scalarDecl_clock name e he body ctxt live source tableOk bf child
-        apply simAt_mono _ ctxt live source tableOk _ _ ?_ sim
+        have sim := scalarDecl_clock name e he body ctxt live source tableOk bf bf
+          (fun value hv => by simpa [Nat.mul_add] using child value hv)
+        intro sourceFinal result target run nonerror sr mr gr cr tb lr
+        obtain ⟨extra,out,post,ev,hs,hm,hg,hcode,hr,hl,bound⟩ :=
+          sim sourceFinal result target run nonerror sr mr gr cr tb lr
+        refine ⟨extra,out,post,ev,hs,hm,hg,hcode,hr,hl,?_⟩
         have eq := scalarExpressionWeight he ctxt ref (ctxt.vmax+1) (ref.vmax+1) live .ln
         change _ = callExpressionCost ref e at eq
-        rw [eq]
         have scale : 1 ≤ (callTableCost ref rows+3)^(source.clock+1) := by
           exact Nat.one_le_iff_ne_zero.mpr (Nat.ne_of_gt (Nat.pow_pos (by omega)))
-        apply max_le <;> dsimp [bf,callClockFactor,callSyntaxCost] <;> nlinarith
+        have factorLe : max (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live e).1)) bf ≤
+            callClockFactor ref rows source.clock (.dec name e body) := by
+          rw [eq]
+          apply max_le <;> dsimp [bf,callClockFactor,callSyntaxCost] <;> nlinarith
+        have bodyLe : bf ≤ callClockFactor ref rows source.clock (.dec name e body) :=
+          (Nat.le_max_right _ _).trans factorLe
+        have mul := Nat.mul_le_mul_right (CrepSteps.steps (.dec name e body) source) factorLe
+        nlinarith
       | @seq a b ha hb =>
         let af := callClockFactor ref rows source.clock a
         let bf := callClockFactor ref rows source.clock b
@@ -1732,11 +1742,21 @@ theorem callWholeClock {σ : Type}
           have child := ih b middle smaller hb same ctxt live
           apply simAt_mono b ctxt live middle tableOk _ _ ?_ child
           exact factor_mono ref rows b middle.clock source.clock (by simpa using clock)
-        have sim := sequence_clock_at a b ctxt live source af bf tableOk (by simpa [af] using first) second
-        apply simAt_mono _ ctxt live source tableOk _ _ ?_ sim
-        dsimp [af,bf,callClockFactor,callSyntaxCost]
-        simp only [Nat.mul_add,Nat.mul_one]
-        omega
+        have sim := sequence_clock_at a b ctxt live source af bf af bf tableOk
+          (by simpa [af,Nat.mul_add] using first)
+          (fun middle run => by simpa [Nat.mul_add] using second middle run)
+        intro sourceFinal result target run nonerror sr mr gr cr tb lr
+        obtain ⟨extra,out,post,ev,hs,hm,hg,hcode,hr,hl,bound⟩ :=
+          sim sourceFinal result target run nonerror sr mr gr cr tb lr
+        refine ⟨extra,out,post,ev,hs,hm,hg,hcode,hr,hl,?_⟩
+        have parentBound : af+bf ≤ callClockFactor ref rows source.clock (.seq a b) := by
+          dsimp [af,bf,callClockFactor,callSyntaxCost]
+          simp only [Nat.mul_add,Nat.mul_one]
+          omega
+        have maxBound : max af bf ≤ callClockFactor ref rows source.clock (.seq a b) :=
+          (max_le (by omega) (by omega)).trans parentBound
+        have mul := Nat.mul_le_mul_right (CrepSteps.steps (.seq a b) source) maxBound
+        nlinarith
       | @ite e a b he ha hb =>
         let af := callClockFactor ref rows source.clock a
         let bf := callClockFactor ref rows source.clock b
@@ -1766,11 +1786,15 @@ theorem callWholeClock {σ : Type}
           exact factor_mono ref rows body entry.clock source.clock (Nat.le_of_lt smaller)
         intro sourceFinal result target run nonerror stateRel memRel globalsRel codeRel tableGood localsRel
         obtain ⟨extra,post,bound,ev,hs,hm,hg,hcode,hl⟩ :=
-          branchConditionWhile_bounded_clock e he body bf source sourceFinal result target ctxt live tableOk child tableGood
+          branchConditionWhile_bounded_clock e he body bf bf source sourceFinal result target ctxt live tableOk
+            (fun entry smaller same => by simpa [Nat.mul_add] using child entry smaller same) tableGood
             run nonerror stateRel memRel globalsRel codeRel localsRel
         refine ⟨extra,resultToLoop result,post,ev,hs,hm,hg,hcode,rfl,hl,?_⟩
+        have maxEq : max bf (LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live e).1) + bf+2) =
+            LoopSteps.structuralWeight (loopNestedSeqHOL (compileExpHOLExact ctxt (ctxt.vmax+1) live e).1) + bf+2 := by omega
+        rw [maxEq] at bound
         apply bound.trans
-        apply Nat.mul_le_mul_right
+        apply Nat.le_trans (Nat.mul_le_mul_right _ ?_) (Nat.mul_le_mul_left _ (by omega))
         have eq := scalarExpressionWeight he ctxt ref (ctxt.vmax+1) (ref.vmax+1) live .ln
         change _ = callExpressionCost ref e at eq
         rw [eq]
