@@ -81,8 +81,8 @@ theorem globalCompile_frontendScalar {width : Nat} [NeZero width]
   | baseAddr => simpa [compileExpExactHOL] using (FrontendScalar.baseAddr (ctxt := ctxt))
   | topAddr => simpa [compileExpExactHOL] using (FrontendScalar.op (ctxt := ctxt) .sub .topAddr (.const _))
   | bytesInWord => simpa [compileExpExactHOL] using (FrontendScalar.bytesInWord (ctxt := ctxt))
-  | fieldLoad index count hi address ih =>
-    simpa [compileExpExactHOL] using FrontendScalar.fieldLoad index count hi ih
+  | fieldLoad index shapes hi address ih =>
+    simpa [compileExpExactHOL] using FrontendScalar.fieldLoad index shapes hi ih
   | load address ih => simpa [compileExpExactHOL] using FrontendScalar.load ih
   | op op a b iha ihb => simpa [compileExpExactHOL,compileExpExactHOLList] using FrontendScalar.op op iha ihb
   | cmp op a b iha ihb => simpa [compileExpExactHOL] using FrontendScalar.cmp op iha ihb
@@ -171,10 +171,10 @@ theorem globalCompile_globalWord {width : Nat} [NeZero width]
 
 theorem globalCompile_globalField {width : Nat} [NeZero width]
     (globals : PanGlobalsContextExact width) (ctxt : PanToCrepContextExact width)
-    (name : MlString) (offset : BitVec width) (index count : Nat) (hi : index < count)
-    (found : globals.globals.lookup name = some (.comb (List.replicate count .one),offset)) :
+    (name : MlString) (offset : BitVec width) (index : Nat) (shapes : List ShapeHOL) (hi : shapes[index]? = some .one)
+    (found : globals.globals.lookup name = some (.comb shapes,offset)) :
     FrontendScalar ctxt (compileExpExactHOL globals (.rfield index (.var .global name))) := by
   simp only [compileExpExactHOL,found]
-  exact .fieldLoad index count hi (.op .sub .topAddr (.const offset))
+  exact .fieldLoad index shapes hi (.op .sub .topAddr (.const offset))
 
 end SteppedFlapjack.PanToCrepSteps

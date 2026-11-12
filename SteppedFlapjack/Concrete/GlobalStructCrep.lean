@@ -28,7 +28,7 @@ theorem globalStruct_sourceFrontend : GlobalFrontend globalStructContext globalS
     · intro e member
       simp [expToHOL] at member
       rcases member with rfl | rfl <;> exact .scalar (.local (.const _))
-  · exact .ret (.globalField (ofString "pair") 16 1 2 (by decide) globalStruct_pairLookup)
+  · exact .ret (.globalField (ofString "pair") 16 1 [.one,.one] (by rfl) globalStruct_pairLookup)
 
 /-- The generic global-control theorem gives the concrete source visit bound. -/
 theorem globalStruct_source_visits (clock : Nat) :

@@ -4,40 +4,42 @@ import SteppedFlapjack.PanToCrepSteps.DeclShape
 namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 
-theorem selectFlatLoad {width : Nat} [NeZero width] (index count : Nat)
-    (address : BitVec width) (value : CrepExpHOL width) (h : index < count) :
-    ∃ offset, compFieldHOL index (List.replicate count .one)
-      (loadShapeBytesHOLW address count value) =
+theorem dropShapeLoads {width : Nat} [NeZero width] (n count : Nat)
+    (address : BitVec width) (value : CrepExpHOL width) :
+    ∃ next, (loadShapeBytesHOLW address (n+count) value).drop n = loadShapeBytesHOLW next count value := by
+  induction n generalizing address with
+  | zero => exact ⟨address, by simp⟩
+  | succ n ih =>
+    obtain ⟨next, eq⟩ := ih (address + BitVec.ofNat width (width / 8))
+    exact ⟨next, by simpa [loadShapeBytesHOLW, Nat.succ_add] using eq⟩
+
+theorem selectScalarShapeLoad {width : Nat} [NeZero width] (index : Nat) (shapes : List ShapeHOL)
+    (address : BitVec width) (value : CrepExpHOL width) (h : shapes[index]? = some .one) :
+    ∃ offset, compFieldHOL index shapes (loadShapeBytesHOLW address (sizeOfShapesHOL shapes) value) =
       ([if offset == 0 then .load value else .load (.op .add [value,.const offset])], .one) := by
-  induction index generalizing count address with
-  | zero =>
-    cases count with
-    | zero => omega
-    | succ count =>
+  induction shapes generalizing index address with
+  | nil => simp at h
+  | cons shape shapes ih =>
+    cases index with
+    | zero =>
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at h
+      subst shape
       refine ⟨address, ?_⟩
-      simp [compFieldHOL, loadShapeBytesHOLW, sizeOfShapeHOL, List.replicate_succ]
-  | succ index ih =>
-    cases count with
-    | zero => omega
-    | succ count =>
-      have hh : index < count := by omega
-      obtain ⟨offset, ho⟩ := ih count (address + BitVec.ofNat width (width / 8)) hh
+      simp [compFieldHOL,sizeOfShapesHOL,sizeOfShapeHOL,Nat.one_add,loadShapeBytesHOLW]
+    | succ index =>
+      simp only [List.getElem?_cons_succ] at h
+      obtain ⟨next, drop⟩ := dropShapeLoads (sizeOfShapeHOL shape) (sizeOfShapesHOL shapes) address value
+      obtain ⟨offset, eq⟩ := ih index next h
       refine ⟨offset, ?_⟩
-      simpa [compFieldHOL, loadShapeBytesHOLW, sizeOfShapeHOL, List.replicate_succ] using ho
+      simpa [compFieldHOL,sizeOfShapesHOL,drop] using eq
 
-theorem flatShapeSize (count : Nat) : sizeOfShapesHOL (List.replicate count .one) = count := by
-  induction count with
-  | zero => rfl
-  | succ count ih => simp [List.replicate_succ, sizeOfShapeHOL, ih, Nat.add_comm]
-
-theorem flatField_compiles {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width)
-    (index count : Nat) (address : ExpHOL width) (compiled : CrepExpHOL width)
-    (ha : compileExpExactHOLW ctxt address = ([compiled],.one)) (hi : index < count) :
-    ∃ offset, compileExpExactHOLW ctxt (.rfield index (.load (.comb (List.replicate count .one)) address)) =
+theorem scalarShapeField_compiles {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width)
+    (index : Nat) (shapes : List ShapeHOL) (address : ExpHOL width) (compiled : CrepExpHOL width)
+    (ha : compileExpExactHOLW ctxt address = ([compiled],.one)) (hi : shapes[index]? = some .one) :
+    ∃ offset, compileExpExactHOLW ctxt (.rfield index (.load (.comb shapes) address)) =
       ([if offset == 0 then .load compiled else .load (.op .add [compiled,.const offset])], .one) := by
-  obtain ⟨offset, h⟩ := selectFlatLoad index count 0 compiled hi
-  refine ⟨offset, ?_⟩
-  simpa [compileExpExactHOLW, ha, flatShapeSize] using h
+  obtain ⟨offset, h⟩ := selectScalarShapeLoad index shapes 0 compiled hi
+  exact ⟨offset, by simpa [compileExpExactHOLW, ha, sizeOfShapeHOL] using h⟩
 
 /-- A scalar expression the Pancake frontend compiles to one Crep expression.
 The direct subset also supports the existing no-auxiliary-code Loop proofs;
@@ -48,9 +50,9 @@ inductive FrontendScalar {width : Nat} [NeZero width] (ctxt : PanToCrepContextEx
   | baseAddr : FrontendScalar ctxt .baseAddr
   | topAddr : FrontendScalar ctxt .topAddr
   | bytesInWord : FrontendScalar ctxt .bytesInWord
-  | fieldLoad (index count : Nat) (inBounds : index < count) {address} :
+  | fieldLoad (index : Nat) (shapes : List ShapeHOL) (inBounds : shapes[index]? = some .one) {address} :
       FrontendScalar ctxt address →
-      FrontendScalar ctxt (.rfield index (.load (.comb (List.replicate count .one)) address))
+      FrontendScalar ctxt (.rfield index (.load (.comb shapes) address))
   | load {address} : FrontendScalar ctxt address → FrontendScalar ctxt (.load .one address)
   | op (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.op operator [a,b])
   | cmp (operator) {a b} : FrontendScalar ctxt a → FrontendScalar ctxt b → FrontendScalar ctxt (.cmp operator a b)
@@ -99,9 +101,9 @@ theorem frontendScalar_compile {width : Nat} [NeZero width] {ctxt : PanToCrepCon
   | baseAddr => exact ⟨.baseAddr,by simp [compileExpExactHOLW]⟩
   | topAddr => exact ⟨.topAddr,by simp [compileExpExactHOLW]⟩
   | bytesInWord => exact ⟨.const (BitVec.ofNat width (width / 8)),by simp [compileExpExactHOLW]⟩
-  | fieldLoad index count inBounds address ih =>
+  | fieldLoad index shapes inBounds address ih =>
     obtain ⟨compiled, hc⟩ := ih
-    obtain ⟨offset, eq⟩ := flatField_compiles ctxt index count _ compiled hc inBounds
+    obtain ⟨offset, eq⟩ := scalarShapeField_compiles ctxt index shapes _ compiled hc inBounds
     exact ⟨_, eq⟩
   | load address ih =>
     obtain ⟨compiled, hc⟩ := ih
@@ -144,5 +146,14 @@ theorem frontendWhile_compile {width : Nat} [NeZero width] (ctxt : PanToCrepCont
       .while value (compileProgExactHOLW ctxt body) := by
   obtain ⟨value,compiled⟩ := frontendScalar_compile shape
   exact ⟨value,by simp [compileProgExactHOLW,compileWhileExactHOLW,compiled]⟩
+
+/-- The scalar after a two-word nested field is supported and loads at byte offset 16. -/
+example (ctxt : PanToCrepContextExact 64) :
+    FrontendScalar ctxt (.rfield 1 (.load (.comb [.comb [.one,.one],.one]) .topAddr)) := by
+  exact .fieldLoad 1 [.comb [.one,.one],.one] rfl .topAddr
+example (ctxt : PanToCrepContextExact 64) :
+    compileExpExactHOLW ctxt (.rfield 1 (.load (.comb [.comb [.one,.one],.one]) (.topAddr : ExpHOL 64))) =
+      ([.load (.op .add [.topAddr,.const 16])],.one) := by
+  simp [compileExpExactHOLW,compFieldHOL,sizeOfShapeHOL,sizeOfShapesHOL,loadShapeBytesHOLW]
 
 end SteppedFlapjack.PanToCrepSteps

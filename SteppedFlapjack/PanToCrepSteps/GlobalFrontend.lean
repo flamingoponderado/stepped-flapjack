@@ -5,14 +5,14 @@ namespace SteppedFlapjack.PanToCrepSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 
 /-- Scalar expressions whose global references are resolved by the actual
-    global layout. Flat fields are selected only at valid indices. -/
+    global layout. Scalar fields may follow nested fields in the global layout. -/
 inductive GlobalScalar {width : Nat} [NeZero width]
     (globals : PanGlobalsContextExact width) (ctxt : PanToCrepContextExact width) : ExpHOL width → Prop
   | local {e} : FrontendScalar ctxt e → GlobalScalar globals ctxt e
   | globalWord (name offset) : globals.globals.lookup name = some (.one,offset) →
       GlobalScalar globals ctxt (.var .global name)
-  | globalField (name offset index count) : index < count →
-      globals.globals.lookup name = some (.comb (List.replicate count .one),offset) →
+  | globalField (name offset index) (shapes : List ShapeHOL) : shapes[index]? = some .one →
+      globals.globals.lookup name = some (.comb shapes,offset) →
       GlobalScalar globals ctxt (.rfield index (.var .global name))
   | load {address} : GlobalScalar globals ctxt address → GlobalScalar globals ctxt (.load .one address)
   | op (operator) {a b} : GlobalScalar globals ctxt a → GlobalScalar globals ctxt b →
@@ -29,7 +29,7 @@ theorem globalScalar_compiled {width : Nat} [NeZero width]
   induction h with
   | «local» h => exact globalCompile_frontendScalar globals h
   | globalWord name offset found => exact globalCompile_globalWord globals ctxt name offset found
-  | globalField name offset index count valid found => exact globalCompile_globalField globals ctxt name offset index count valid found
+  | globalField name offset index shapes valid found => exact globalCompile_globalField globals ctxt name offset index shapes valid found
   | load h ih => simpa [compileExpExactHOL] using FrontendScalar.load ih
   | op operator a b iha ihb => simpa [compileExpExactHOL,compileExpExactHOLList] using FrontendScalar.op operator iha ihb
   | cmp operator a b iha ihb => simpa [compileExpExactHOL] using FrontendScalar.cmp operator iha ihb
