@@ -4,16 +4,6 @@ namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Compiler.Encoders.Asm
 open SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps
 set_option maxRecDepth 10000 in
-theorem comparison_weight (arch : AsmArchitecture) :
-  let ctxt := witnessLoopContext arch branchingHOL
-  let c := ctxtFcExact ctxt.target ctxt.funcs [] []
-  loopVisitWeight (optimiseScalar (compileHOLExact c .ln branchCrepBody)) = 46 := by
-  simp only [witnessLoopContext,ctxtFcExact,mkCtxtExact,makeVmapExact,HolFiniteMapExact.updateListEq,
-    branchCrepBody,compileHOLExact,compileExpHOLExact,compileExpsHOLExact,progIfHOLExact,
-    genTemps,List.length_cons,List.length_nil,List.range_succ,List.range_zero,List.map_cons,List.map_nil,
-    List.append_nil,List.nil_append,List.zipWith_cons_cons,List.zipWith_nil_left,Nat.add_zero]
-  decide +kernel
-set_option maxRecDepth 10000 in
 theorem countdown_weight (arch : AsmArchitecture) (n : Nat) :
   let ctxt := witnessLoopContext arch (naturalCountdownHOL n)
   let c := ctxtFcExact ctxt.target ctxt.funcs [] []
@@ -36,17 +26,6 @@ theorem conditional_weight (arch : AsmArchitecture) :
     genTemps,List.length_cons,List.length_nil,List.range_succ,List.range_zero,List.map_cons,List.map_nil,
     List.append_nil,List.nil_append,List.zipWith_cons_cons,List.zipWith_nil_left,Nat.add_zero]
   decide +kernel
-
-/-- The actual liveness optimizer agrees with the executable calculation. -/
-theorem comparison_optimized_weight (arch : AsmArchitecture) :
-    let ctxt := witnessLoopContext arch branchingHOL
-    let c := ctxtFcExact ctxt.target ctxt.funcs [] []
-    loopVisitWeight (optimiseHOL (compileHOLExact c .ln branchCrepBody)) = 46 := by
-  let ctxt := witnessLoopContext arch branchingHOL
-  let c := ctxtFcExact ctxt.target ctxt.funcs [] []
-  change loopVisitWeight (optimiseHOL (compileHOLExact c .ln branchCrepBody)) = 46
-  rw [← optimiseScalar_eq (compile_scalar_program branching_scalar c .ln)]
-  exact comparison_weight arch
 
 theorem countdown_optimized_weight (arch : AsmArchitecture) (n : Nat) :
     let ctxt := witnessLoopContext arch (naturalCountdownHOL n)

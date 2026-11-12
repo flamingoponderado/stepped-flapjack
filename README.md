@@ -112,12 +112,12 @@ therefore does not yet meet the roadmap’s code-only affine requirement.
 `nested_initialized_machine` instantiates this composition with two call levels
 and a six-step source execution.
 
-`countdownFixture_machine`, `naturalCountdownFixture_machine`,
-`comparisonFixture_machine` and `branchingLoopFixture_machine` instantiate the
-common theorem and discharge those checks. For countdown input `n < 2^64`,
-the machine clock is `167602730287449600 * (6*n+9) + 1592247331570371948`.
-The comparison and branching-loop clocks are `90715439766875148` and
-`36771214184170446348` respectively.
+`comparisonFixture_machine` instantiates the call-aware theorem with a
+concrete, code-derived clock `comparisonTicks`. The countdown, natural
+countdown, and branching-loop fixtures still use the earlier call-free theorem.
+For countdown input `n < 2^64`, its clock is
+`167602730287449600 * (6*n+9) + 1592247331570371948`; the branching-loop
+clock is `36771214184170446348`.
 
 This fragment and fixture do not yet cover init-e's full guest: globals, heap
 and shared-memory operations, exceptions, FFI, primitive behavior and host

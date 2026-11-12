@@ -47,15 +47,6 @@ private theorem branch_extract : cakeExtractColor (RowColoring.colored branchRow
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
-/-- The comparison callee's actual optimized code has no stack frame. -/
-theorem comparison_callee_frame : nativeEntryFrameSize countdownZeroLimit
-    (fullCompileSingleWith regAllocExecutable riscvConfig.twoRegArith countdownZeroLimit 3 riscvConfig (comparisonRow,none)).2.2 = 0 := by
-  change nativeEntryFrameSize RowColoring.limit (fullCompileSingleWith regAllocExecutable riscvConfig.twoRegArith RowColoring.limit 3 riscvConfig (_,none)).2.2 = 0
-  rw [RowColoring.compiled_exact comparisonRow comparisonColors comparison_guard comparison_failure comparison_extract]
-  with_unfolding_all rfl
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 4000000 in
 /-- The branching loop's actual optimized code has no stack frame. -/
 theorem branch_callee_frame : nativeEntryFrameSize countdownZeroLimit
     (fullCompileSingleWith regAllocExecutable riscvConfig.twoRegArith countdownZeroLimit 3 riscvConfig (branchRow,none)).2.2 = 0 := by
@@ -107,16 +98,6 @@ theorem branch_optimized_table :
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
-/-- The comparison fixture has a closed native call-sequence cost. -/
-theorem comparison_stackCost :
-    callSequenceCost riscvConfig 0 (sptFromAList (compileNative riscvConfig false
-      (compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2).2.2.2)
-      countdownOptimizedEntry (.list [4],1) (countdownZeroLimit,0,0) = 22 := by
-  rw [comparison_optimized_table]
-  with_unfolding_all rfl
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 4000000 in
 /-- The branching-loop fixture has a closed native call-sequence cost. -/
 theorem branch_stackCost :
     callSequenceCost riscvConfig 0 (sptFromAList (compileNative riscvConfig false
@@ -124,26 +105,6 @@ theorem branch_stackCost :
       countdownOptimizedEntry (.list [4],1) (countdownZeroLimit,0,0) = 55 := by
   rw [branch_optimized_table]
   with_unfolding_all rfl
-
-/-- Closed linear Stack bound for the comparison program. -/
-theorem comparison_stackBound_closed (limit : Nat) :
-    nativeTailEntryBound countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms 64
-      (loopToWordCompFuncHOL 64 [] branchingLoopEntry) limit = 3 + 22*(limit+1) := by
-  have selected : nativeTailEntryCode countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms 64
-      (loopToWordCompFuncHOL 64 [] branchingLoopEntry) = countdownOptimizedEntry :=
-    twoProgram_selectedEntry riscvConfig.isa (ofString "main") (entryName branchingHOL) branchCrepBody
-      (Ne.symm (entryName_fresh branchingHOL)) branching_scalar
-  have cursor : nativeTailEntryBitmap countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms 64 = (.list [4],1) := by
-    unfold nativeTailEntryBitmap
-    rw [comparison_optimized_table]
-    rfl
-  have size : nativeEntryFrameSize countdownZeroLimit countdownOptimizedEntry = 0 := by with_unfolding_all rfl
-  have frame : nativeEntryFrame countdownZeroLimit countdownOptimizedEntry = 0 := by with_unfolding_all rfl
-  unfold nativeTailEntryBound
-  rw [selected,cursor]
-  change 3 + callSequenceCost riscvConfig 0 _ countdownOptimizedEntry (.list [4],1)
-    (countdownZeroLimit,nativeEntryFrameSize countdownZeroLimit countdownOptimizedEntry,nativeEntryFrame countdownZeroLimit countdownOptimizedEntry) * (limit+1) = _
-  rw [size,frame,comparison_stackCost]
 
 /-- Closed linear Stack bound for the branching loop. -/
 theorem branch_stackBound_closed (limit : Nat) :
@@ -164,21 +125,6 @@ theorem branch_stackBound_closed (limit : Nat) :
   change 3 + callSequenceCost riscvConfig 0 _ countdownOptimizedEntry (.list [4],1)
     (countdownZeroLimit,nativeEntryFrameSize countdownZeroLimit countdownOptimizedEntry,nativeEntryFrame countdownZeroLimit countdownOptimizedEntry) * (limit+1) = _
   rw [size,frame,branch_stackCost]
-
-/-- The initialized comparison Word table records the zero callee frame. -/
-theorem comparison_fixture_callee_frame (cfg : LabToTarget.Config) :
-    sptLookup 65 (comparisonFixtureWord cfg).stackSize = some 0 := by
-  change sptLookup 65 (sptMapi _ (sptFromAList (compile countdownRiscVBackend.wordToWordConf riscvConfig comparisonWordPrograms).2)) = _
-  rw [sptLookupMapi]
-  unfold comparisonWordPrograms comparisonCrepCode
-  rw [twoProgram_optimized_executable riscvConfig.isa (ofString "main") (entryName branchingHOL) branchCrepBody branching_scalar]
-  rw [twoLoops_exact riscvConfig.isa (ofString "main") (entryName branchingHOL) branchCrepBody (Ne.symm (entryName_fresh branchingHOL))]
-  rw [sptLookup_sptFromAList]
-  change some (WordToStack.Native.compileProgNative riscvConfig false
-    (fullCompileSingleWith regAllocExecutable riscvConfig.twoRegArith countdownZeroLimit 3 riscvConfig (comparisonRow,none)).2.2
-    1 countdownZeroLimit (.nil,0)).2.1 = some 0
-  rw [nativeEntryFrameSize_compile]
-  exact congrArg some comparison_callee_frame
 
 /-- The initialized branching-loop Word table records the zero callee frame. -/
 theorem branch_fixture_callee_frame (cfg : LabToTarget.Config) :

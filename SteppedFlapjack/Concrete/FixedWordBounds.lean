@@ -99,13 +99,6 @@ private theorem twoBound (arch : AsmArchitecture) (name callee : MlString) (body
   rw [twoLoops_exact arch name callee body fresh]
   rfl
 
-/-- Numeric Word visit bound for the original branching witness. -/
-theorem comparison_bound_closed : comparisonWordBound = 39132781 := by
-  have h := twoBound riscvConfig.isa (ofString "main") (entryName branchingHOL) branchCrepBody
-    (Ne.symm (entryName_fresh branchingHOL)) comparisonLoopVisits
-  simp only [frontend,entryWeight,compWeight] at h
-  simpa [comparisonWordBound,comparisonLoopVisits,comparisonLoopBudget] using h
-
 private def branchWord : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.seq
   (Flapjack.WordLangProgHOL.skip)
