@@ -95,8 +95,9 @@ admits global scalar reads and updates, nested struct literals and field paths,
 and heap stores of struct values. The initializer constructs related source and
 target states, and supported function declarations supply the frontend table.
 The explicit clock depends on the compiled code, fixture configuration and
-initial source clock. The theorem checks the actual lowered declaration table, that no functions
-are selected for inlining, an empty exception map, and machine encoding,
+initial source clock. The theorem checks that the lowered function table of `pan` has the canonical
+wrapper and lowered source entries, that no functions are selected for
+inlining, an empty exception map, and machine encoding,
 safety and capacity conditions. The Pancake-to-Crep relation and compiled
 body shapes follow from those checks and supported declarations.
 `beforeGlobals_initializedFunctions` derives the global state relation by

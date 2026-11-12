@@ -1,6 +1,6 @@
 import SteppedFlapjack.Concrete.HeapWordNativeFacts
 import SteppedFlapjack.Concrete.Phase7SourceBehaviour
-import SteppedFlapjack.Concrete.GlobalCountedMachine
+import SteppedFlapjack.Concrete.SingletonMachine
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
 open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.StackRemove SteppedFlapjack.PanToCrepSteps
@@ -14,7 +14,6 @@ def heapSourceProgram := heapHOLFunctions.map DeclHOL.function
 private def name : MlS := entryName (progToHOL heapWordWitness)
 private def entries : List (MlS × List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL) := [(name,[],progToHOL heapWordWitness,.one)]
 private def globals : PanGlobalsContextExact 64 := beforeGlobalsContext 0
-private def target := globalEntryTarget heapSourceProgram 7 globals entries
 private theorem tableSupported : FunctionTableSupported heapFunctions := by
   intro f hf
   simp only [heapFunctions,List.mem_cons,List.not_mem_nil,or_false] at hf
@@ -57,68 +56,11 @@ private theorem bitmaps : globalSourceBitmaps heapSourceProgram = [4] := by
   have hs : CallFreeSupported heapWordWitness := ⟨.seq (.store (.const _) (.const _)) (.ret (.load (.const _))),heapWordWitness_ranged⟩
   exact bitmapOfRaw heapSourceProgram heapWordWitness rawEq (supported_native_bitmap heapWordWitness hs)
 private def post := {sourceTemplate with clock := 8}
-private theorem addressEmpty (a : BitVec 64) : ¬ addresses heapTop 0 a := by
-  rw [mem_addresses]
-  simp
-private theorem beforeEq : beforeGlobals target 0 0 = post := by
-  have domain : (fun a => ordinaryAddress a ∧ ¬ addresses heapTop 0 a) = ordinaryAddress := by
-    funext a
-    exact propext (by simp [addressEmpty])
-  unfold target globalEntryTarget globalEntryTemplate
-  rw [bitmaps]
-  simp [post,installTargetFunctions,beforeGlobals,sourceTemplateFor,sourceTemplate,domain,initialWordFor_one]
-private instance : DecidablePred post.memaddrs := by change DecidablePred ordinaryAddress; infer_instance
-private instance : DecidablePred post.shMemaddrs := by change DecidablePred sharedAddress; infer_instance
-private theorem declEval : @evaluateDeclsHOLFinite 64 Unit _
-    (beforeGlobals target (panBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL ([] : List (DeclHOL 64))).map sizeOfShapeHOL).sum)
-      ((decShapesHOL ([] : List (DeclHOL 64))).map sizeOfShapeHOL).sum)
-    (fun _ => Classical.propDecidable _) [] = some post := by
-  change some (beforeGlobals target 0 0) = some post
-  rw [beforeEq]
-private theorem compiled : compileDecsExactHOL
-    (beforeGlobalsContext (panBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL ([] : List (DeclHOL 64))).map sizeOfShapeHOL).sum)) [] =
-    ([],[],[],globals) := by simp [compileDecsExactHOL,globals,beforeGlobalsContext,decShapesHOL]
-private theorem supported : Supported (globalEntryShapes post entries) heapWordWitness := heapWordWitness_supported.toSupported _
-private theorem table : GlobalSupportedEntries (globalEntryShapes post entries) entries := by
-  intro n ps body ret found
-  simp only [entries,List.lookup] at found
-  split at found
-  · simp only [Option.some.injEq,Prod.mk.injEq] at found
-    obtain ⟨rfl,rfl,rfl⟩ := found
-    exact ⟨[],heapWordWitness,rfl,rfl,supported.1,supported.2⟩
-  · simp at found
-private theorem canonicalRun : evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
-    (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) (globalEntryProduction post entries).structs
-    (countedFunctionsOfCode (globalEntryProduction post entries).code)
-    (globalEntryProduction post entries).baseAddress (globalEntryProduction post entries).topAddress
-    panSemBitVec64BytesInWord 10 (globalEntryProduction post entries).locals (globalEntryProduction post entries).globals
-    (globalEntryProduction post entries).memory (globalEntryProduction post entries).ffi heapWordWitness
-    (memoryAccess := some (panSemBitVec64MemoryAccess (globalEntryProduction post entries)))
-    (contracts := some (countedContractsOfCode (globalEntryProduction post entries).code [])) =
-      some (.returned (globalEntryProduction post entries).locals (globalEntryProduction post entries).globals
-        (updatePanValueMemory (globalEntryProduction post entries).memory 0xa1000100 (.word 7))
-        (globalEntryProduction post entries).ffi [.word 7],7) := by
-  with_unfolding_all rfl
 private def ctxt := frontendContext (progToHOL heapWordWitness)
 private theorem callFree : CallFreeSupported heapWordWitness := ⟨.seq (.store (.const _) (.const _)) (.ret (.load (.const _))),heapWordWitness_ranged⟩
-private theorem tableEq : globalSourcePrograms heapSourceProgram = twoPrograms (ofString "main") name (supportedCallee (progToHOL heapWordWitness)) := by
-  rw [programsEq,supported_crepPrograms heapWordWitness callFree]
-  rfl
 private theorem ctxtEq : ctxt = globalCompilerContext heapSourceProgram := by
   unfold ctxt frontendContext globalCompilerContext
   rw [compilerDeclEq]
-private theorem allRows : functionsHOL (globalCompilerDecls heapSourceProgram) =
-    (ofString "main",[],.seq (nestedSeqHOL []) (.call none name []),.one) ::
-      entries.map (fun e => (e.1,e.2.1,compileProgExactHOL globals e.2.2.1,e.2.2.2)) := by
-  rw [compilerDeclEq,lowered_declarations]
-  have rename := supported_fperm callFree (ofString "main") name
-  have global := supported_globals_fixed callFree globals
-  have globalEmpty := supported_globals_fixed callFree emptyGlobalsContext
-  simp only [name] at rename
-  simp [functionsHOL,entries,nestedSeqHOL,name,rename,global,globalEmpty]
-private theorem noInline : (functionsHOL ((globalCompilerDecls heapSourceProgram).filter inlinableHOL)).map Prod.fst = [] := by
-  rw [compilerDeclEq]
-  exact singleEntry_inline_selection_empty _ _
 open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.WordToWord Flapjack.Compiler.Backend.WordToStack.Native
 open Flapjack.Compiler.Backend.WordDepth Flapjack.Compiler.Backend.WordDepth.Executable Flapjack.Compiler.Backend.BackendProps
 private theorem safetyOfRaw (source : List (DeclHOL 64)) (program : Prog (RiscV.Word 64))
@@ -141,17 +83,6 @@ private theorem safety : fixtureStackSafe (globalSourceCode heapSourceProgram) =
 private theorem facts : (fixtureRemoveLabels (globalSourceCode heapSourceProgram)).isSome = true ∧
     (fixtureCodeBytes (globalSourceCode heapSourceProgram)).length ≤ 0xecc ∧ (fixtureCodeBytes (globalSourceCode heapSourceProgram)).length % 4 = 0 :=
   factsOfRaw heapSourceProgram heapWordWitness rawEq heapNative_compilerFacts
-private theorem allocated : ∀ a, addresses ((globalEntryTemplate heapSourceProgram 7).topAddr - panBytesInWord 64 *
-    BitVec.ofNat 64 ((decShapesHOL ([] : List (DeclHOL 64))).map sizeOfShapeHOL).sum)
-    ((decShapesHOL ([] : List (DeclHOL 64))).map sizeOfShapeHOL).sum a → (globalEntryTemplate heapSourceProgram 7).memaddrs a := by
-  intro a present
-  change addresses heapTop 0 a at present
-  exact False.elim (addressEmpty a present)
-private theorem sourceUnique : ((functionsHOL heapSourceProgram).map Prod.fst).Nodup := by
-  simp [heapSourceProgram,heapHOLFunctions,heapFunctions,funDeclToHOL,functionsHOL]
-private theorem sourceGood : pancakeGoodCodeHOL heapSourceProgram = true := by with_unfolding_all decide
-private theorem exceptionsEmpty : ctxt.eids = HolFiniteMapExact.empty := by
-  simp [ctxt,frontendContext,declarations,singleEntry_compiled_eids_empty,mkCtxtExactHOL]
 private def capacityOfWords (words : List (Nat × Nat × WordLangProgHOL (BitVec 64))) : Prop :=
   let entry := ((sptLookup 64 (sptFromAList words)).getD (1,.skip)).2
   let frame := (compileProgNative riscvConfig false entry 1 (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1
@@ -176,9 +107,17 @@ private theorem capacityProgram : capacityOfWords (supportedAllocated heapWordWi
 private theorem capacity : optionLe (optionMap₂ max (some (max 1 (1+globalSourceFrame heapSourceProgram)))
       (optionMap₂ (· + ·) (some 1) (fullCallGraphDepth (globalSourceFrames heapSourceProgram) 64 (sptFromAList (globalSourceWords heapSourceProgram))))) (some 2097172) :=
   capacityFromRaw heapSourceProgram heapWordWitness rawEq capacityProgram
+private theorem singletonSourceEq : singletonSourceProgram heapWordWitness = heapSourceProgram := by rfl
+private theorem singletonNameEq : singletonName heapWordWitness = name := by
+  simp [singletonName,name,simpFixed]
+private theorem singletonEntriesEq : singletonEntries heapWordWitness = entries := by
+  simp [singletonEntries,entries,singletonNameEq,simpFixed]
+private theorem singletonPostEq : singletonPost 1 7 = post := by
+  simp [singletonPost,post,sourceTemplateFor_one]
+private theorem singletonGlobalsEq : singletonGlobals = globals := by rfl
 open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.StackSteps
 noncomputable def heapUnifiedTicks : Nat :=
-  initializedGlobalTicks heapSourceProgram 7 [] post [] globals entries name (globalCompilerContext heapSourceProgram)
+  singletonTicks heapWordWitness 1 7
 private theorem machine : ∃ finalMachine finalFfi compilerFinal,
     Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig heapSourceProgram =
       some (fixtureCodeBytes (globalSourceCode heapSourceProgram),globalSourceBitmaps heapSourceProgram,compilerFinal) ∧
@@ -186,16 +125,33 @@ private theorem machine : ∃ finalMachine finalFfi compilerFinal,
       heapUnifiedTicks (configuredMachineState (globalSourceCode heapSourceProgram) (globalSourceBitmaps heapSourceProgram)) =
       (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFfi.ioEvents := by
   have bits : 0xa0020018 + (globalSourceBitmaps heapSourceProgram).length*8 ≤ 0xa0410000 := by rw [bitmaps]; decide
-  have all := initializedGlobal_counted_machine heapSourceProgram sourceUnique sourceGood 7 [] post [] [] [] globals
-    entries name heapWordWitness supported 7
-    (by simp) (by simp) declEval compiled allocated (by decide)
-    (by simp [entries]) table
+  have bitmapLength : 1 = (globalSourceBitmaps (singletonSourceProgram heapWordWitness)).length := by
+    rw [singletonSourceEq,bitmaps]
+    rfl
+  have normalizedRun : evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
+      (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).structs
+      (countedFunctionsOfCode (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).code)
+      (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).baseAddress
+      (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).topAddress panSemBitVec64BytesInWord 10
+      (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).locals
+      (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).globals
+      (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).memory
+      (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).ffi (panSimpProg heapWordWitness)
+      (memoryAccess := some (panSemBitVec64MemoryAccess (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness))))
+      (contracts := some (countedContractsOfCode (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).code [])) =
+        some (.returned (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).locals (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).globals
+          (updatePanValueMemory (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).memory 0xa1000100 (.word 7))
+          (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).ffi [.word 7],7) := by
+    rw [simpFixed]
+    with_unfolding_all rfl
+  have all := singleton_counted_machine heapWordWitness callFree 1 7 bitmapLength
     (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 10 7
-    (globalEntryProduction post entries).locals (globalEntryProduction post entries).globals
-    (updatePanValueMemory (globalEntryProduction post entries).memory 0xa1000100 (.word 7))
-    (globalEntryProduction post entries).ffi canonicalRun (by decide)
-    allRows noInline (by rw [← ctxtEq]; exact exceptionsEmpty)
-    bits safety facts capacity
+    (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).locals (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).globals
+    (updatePanValueMemory (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).memory 0xa1000100 (.word 7))
+    (globalEntryProduction (singletonPost 1 7) (singletonEntries heapWordWitness)).ffi 7 normalizedRun (by decide)
+    (by rw [singletonSourceEq]; exact bits) (by rw [singletonSourceEq]; exact safety)
+    (by rw [singletonSourceEq]; exact facts) (by rw [singletonSourceEq]; exact capacity)
+  rw [singletonSourceEq] at all
   obtain ⟨sourceFinal,machine,ffi,compilerFinal,compiledOutput,machineRun,events,ffiRel⟩ := all
   have sourceEvents : sourceFinal.ffi.ioEvents = [] := by
     have h := ffiRel.2.1
@@ -349,10 +305,10 @@ private theorem clockNumeric : heapUnifiedTicks = 8745709949718150348 := by
     (stackWeightOfRaw heapSourceProgram heapWordWitness rawEq stackWeight)
     (factorOfRaw heapSourceProgram heapWordWitness rawEq (targetFactor _))
   rw [ctxtEq] at h
+  unfold heapUnifiedTicks singletonTicks
+  rw [singletonSourceEq,singletonPostEq,singletonEntriesEq,singletonNameEq,singletonGlobalsEq]
   exact h
 private def originalProduction := functionSourceProduction heapFunctions 1 7
-private def originalSource := functionSourceExact heapFunctions 1 7
-private instance : DecidablePred originalSource.memaddrs := by change DecidablePred ordinaryAddress; infer_instance
 private theorem originalRun : evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
     (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) originalProduction.structs (countedFunctionsOfCode originalProduction.code)
     originalProduction.baseAddress originalProduction.topAddress panSemBitVec64BytesInWord 10
@@ -370,36 +326,18 @@ private theorem originalRun : evalPanValueFfiProgSteps (riscv64PanValueFfiContex
     panSemBitVec64WordModel,panSemWordModel,RiscV.panRiscVMemoryModel] using heapWordWitness_run
 private theorem sourceSemantics : semanticsDecls {sourceTemplate with clock := 0} (ofString "main") heapSourceProgram =
     .terminate .success sourceFfi.ioEvents := by
-  have related : PanSemStateRelExec originalProduction originalSource.toExact :=
-    functionSource_related heapFunctions 1 7 (table_names heapFunctions tableSupported)
-  have ranged : PanSemStateRelExecRanged originalProduction := by
-    simp [originalProduction,functionSourceProduction,sourceProduction,PanSemStateRelExecRanged,StructContextByteRanged,StructContext.toHOL]
-  have words : WordLocals originalProduction.locals := wordLocals_empty
-  have codeRanged := table_code_ranged heapFunctions 1 7 tableSupported
-  have codeShape := table_counted_shapes heapFunctions 1 7 tableSupported
-  obtain ⟨holResult,final,holRun,outcome,_,_⟩ := supportedCalls_counted_source heapWordWitness_supported.1
-    originalProduction originalSource related ranged words heapWordWitness_ranged codeRanged codeShape
-    (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 10 7 _ originalRun (by decide)
-  cases outcome with
-  | returned locals globals memory ffi word final nextRel nextRanged nextWords =>
-    have wf : heapHOLFunctions.all (fun f => f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
-        isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true := by
-      simp [heapHOLFunctions,heapFunctions,funDeclToHOL,shapeToHOL,isWfShapeExactHOL]
-    have found : (functionsHOL (heapHOLFunctions.map DeclHOL.function)).lookup (ofString "main") =
-        some ([],progToHOL heapWordWitness,.one) := by
-      simp [heapHOLFunctions,heapFunctions,funDeclToHOL,functionsHOL,shapeToHOL]
-    have initialEq : ({sourceTemplate with structs := [], code := (HolFiniteMapExact.empty.updateList
-        (functionsHOL (heapHOLFunctions.map DeclHOL.function)).reverse), clock := 7} : PanSemStateFiniteExact 64 Unit) = originalSource := by
-      simp [originalSource,functionSourceExact,sourceTemplateFor_one,sourceTemplate,heapHOLFunctions,List.map_map,Function.comp_def]
-    have behavior := functionOnly_body_semantics {sourceTemplate with clock := 0} (ofString "main") heapHOLFunctions
-      (progToHOL heapWordWitness) wf sourceUnique rfl rfl found 7 final 7 (by simpa [initialEq] using holRun)
-    have finalEvents : final.ffi.ioEvents = [] := by
-      have h := nextRel.2.2.2.2.2.2.2.2.2.2.1.2.1
-      change FfiEventListRel [] final.ffi.ioEvents at h
-      cases heq : final.ffi.ioEvents with
-      | nil => rfl
-      | cons e es => simp [heq,FfiEventListRel] at h
-    simpa [heapSourceProgram,sourceFfi,finalEvents] using behavior
+  obtain ⟨final,_,behavior,ffiRel⟩ := singleton_source_semantics heapWordWitness callFree 1 7
+    (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 10 7
+    originalProduction.locals originalProduction.globals
+    (updatePanValueMemory originalProduction.memory 0xa1000100 (.word 7)) originalProduction.ffi 7 originalRun (by decide)
+  have events : final.ffi.ioEvents = [] := by
+    have h := ffiRel.2.1
+    change FfiEventListRel [] final.ffi.ioEvents at h
+    cases heq : final.ffi.ioEvents with
+    | nil => rfl
+    | cons e es => simp [heq,FfiEventListRel] at h
+  simpa [singletonSourceProgram,singletonFunctions,heapSourceProgram,heapHOLFunctions,heapFunctions,
+    sourceTemplateFor_one,sourceFfi,events] using behavior
 /-- The heap store/load source and its compiled machine agree at a concrete clock. -/
 theorem heapFixture_machine_numeric : ∃ compilerFinal finalMachine finalFfi,
     Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig heapSourceProgram =

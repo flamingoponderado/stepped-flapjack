@@ -445,7 +445,11 @@ def globalCompilerContext (pan : List (DeclHOL 64)) : PanToCrepContextExact 64 :
   mkCtxtExactHOL HolFiniteMapExact.empty (makeFuncsExactHOL (functionsHOL (globalCompilerDecls pan))) 0
     (getEidsFromDeclsHOL (globalCompilerDecls pan))
 
-/-- A counted source reaches the machine from declaration-constructed source and target states. -/
+/-- A counted source reaches the machine from declaration-constructed source and target states.
+The `allRows` check states that the lowered function table of `pan` has the
+canonical wrapper followed by the lowered source entries. Together with the
+no-inline, exception, encoding, safety and capacity checks, it is computed from
+the concrete source and compiler configuration. -/
 private theorem initializedGlobal_counted_machine_fromTables
     (pan : List (DeclHOL 64)) (unique : ((functionsHOL pan).map Prod.fst).Nodup)
     (sourceGood : pancakeGoodCodeHOL pan = true)
