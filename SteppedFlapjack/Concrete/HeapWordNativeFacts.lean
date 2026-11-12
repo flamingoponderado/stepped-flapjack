@@ -5,6 +5,7 @@ import SteppedFlapjack.PanToCrepSteps.RowColoring
 import SteppedFlapjack.Concrete.FixtureCompilerFacts
 /-! Kernel-checked compiler and machine guards for the heap store/load witness. -/
 namespace SteppedFlapjack.Concrete
+open SteppedFlapjack.LoopLiveSteps
 open Flapjack Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps
 set_option maxRecDepth 100000
 set_option maxHeartbeats 4000000
@@ -59,6 +60,27 @@ private theorem heapLoop_eq : twoCallee riscvConfig.isa (ofString "main") (entry
   rw [heapCallee_eq]
   unfold twoCallee heapCallee
   with_unfolding_all rfl
+
+
+/-- The generated Crep table has the fixed tail entry and the heap body. -/
+theorem heapCrepTable : crepPrograms (progToHOL (panSimpProg heapWordWitness)) =
+    twoPrograms (ofString "main") (entryName (progToHOL (panSimpProg heapWordWitness)))
+      (.seq (.dec 1 (.const 0xa1000100) (.dec 2 (.const 7) (.seq (.store (.var 1) (.var 2)) .skip)))
+        (.return [.load (.const 0xa1000100)])) := by
+  have hs : CallFreeSupported heapWordWitness := ⟨.seq (.store (.const _) (.const _)) (.ret (.load (.const _))), heapWordWitness_ranged⟩
+  rw [supported_crepPrograms _ (supported_panSimp _ hs).1, heapCallee_eq]
+  rfl
+
+/-- The optimized Loop table has a concrete structural weight. -/
+theorem heapLoopWeight :
+    loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa
+      (crepPrograms (progToHOL (panSimpProg heapWordWitness))))) = 42 := by
+  have hs : CallFreeSupported heapWordWitness := ⟨.seq (.store (.const _) (.const _)) (.ret (.load (.const _))), heapWordWitness_ranged⟩
+  have hc := supported_crepPrograms (panSimpProg heapWordWitness) (supported_panSimp _ hs).1
+  have shape := supportedCallee_scalar (panSimpProg heapWordWitness) (supported_panSimp _ hs).1
+  have fresh : ofString "main" ≠ entryName (progToHOL (panSimpProg heapWordWitness)) := Ne.symm (entryName_fresh _)
+  rw [hc, ← twoLoopPrograms_eq riscvConfig.isa _ _ _ shape, twoLoops_exact _ _ _ _ fresh, heapLoop_eq]
+  with_unfolding_all decide
 
 
 private def heapRaw : List (Nat × Nat × WordLangProgHOL (BitVec 64)) :=
