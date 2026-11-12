@@ -20,7 +20,6 @@ import SteppedFlapjack.Concrete.NestedLoopRun
 import SteppedFlapjack.Concrete.NestedSourceHOL
 import SteppedFlapjack.Concrete.Phase7Witnesses
 import SteppedFlapjack.LabToTargetSteps.GoodCodeFilter
-import SteppedFlapjack.Concrete.FixtureMachineResults
 import SteppedFlapjack.Concrete.FixtureMachineGuards
 import SteppedFlapjack.Concrete.FixtureStackSafety
 import SteppedFlapjack.Concrete.FixtureCompilerFacts
@@ -40,7 +39,6 @@ import SteppedFlapjack.StackRemoveSteps.ExplicitFields
 import SteppedFlapjack.Concrete.CountdownStackBounds
 import SteppedFlapjack.Concrete.BranchingFrames
 import SteppedFlapjack.PanToCrepSteps.RowColoring
-import SteppedFlapjack.Concrete.TwoProgramNativeEntry
 import SteppedFlapjack.Concrete.FixtureWordStarter
 import SteppedFlapjack.Concrete.FixtureCrepMemory
 import SteppedFlapjack.Concrete.BranchingNativeInit

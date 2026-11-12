@@ -1,5 +1,5 @@
 import SteppedFlapjack.Concrete.Phase7Machine
-import SteppedFlapjack.Concrete.FixtureMachineResults
+import SteppedFlapjack.Concrete.FixtureMachineGuards
 import SteppedFlapjack.Concrete.BranchingFrames
 import SteppedFlapjack.Concrete.CountdownOptimized
 import SteppedFlapjack.Concrete.CountdownLabBounds

@@ -1,5 +1,8 @@
 import SteppedFlapjack.Concrete.Phase7InitializedWord
-import SteppedFlapjack.Concrete.TwoProgramNativeEntry
+import SteppedFlapjack.Concrete.CountdownStackSpan
+import SteppedFlapjack.Concrete.WordTables
+import SteppedFlapjack.Concrete.FixtureWordStarter
+import SteppedFlapjack.WordAllocSteps.CompiledCodeTail
 import SteppedFlapjack.Concrete.WordBitmap
 
 /-! The actual supported program uses the fixed native tail-entry wrapper. -/

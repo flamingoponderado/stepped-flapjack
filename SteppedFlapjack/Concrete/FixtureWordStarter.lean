@@ -15,51 +15,12 @@ namespace SteppedFlapjack.Concrete
 noncomputable def configuredWord (code : List (Nat × StackLang.HolProg 64)) (words : List (Nat × Nat × WordLangProgHOL (BitVec 64))) (cfg : LabToTarget.Config) (bs : List (BitVec 64)) :=
   makeInit riscvConfig (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (configuredStack code cfg bs) (sptFromAList words) (configuredWordOracle cfg bs)
 
-/-- The original one-bitmap Word initializer. -/
-noncomputable def fixtureWord (code : List (Nat × StackLang.HolProg 64))
-    (words : List (Nat × Nat × WordLangProgHOL (BitVec 64))) (cfg : LabToTarget.Config) :=
-  makeInit riscvConfig (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (fixtureStack code cfg)
-    (sptFromAList words) (fixtureWordOracle cfg)
-
-theorem configuredWord_one (code : List (Nat × StackLang.HolProg 64))
-    (words : List (Nat × Nat × WordLangProgHOL (BitVec 64))) (cfg : LabToTarget.Config) :
-    configuredWord code words cfg [4] = fixtureWord code words cfg := by
-  unfold configuredWord fixtureWord
-  rw [configuredStack_one,configuredWordOracle_one]
-
 /-- The initialized Stack state uses the backend garbage collector. -/
 theorem configuredGc (code : List (Nat × StackLang.HolProg 64)) (cfg : LabToTarget.Config) (bs : List (BitVec 64)) :
   (configuredStack code cfg bs).gcFun = WordGcFunctions.wordGcFun countdownRiscVBackend.dataConf := by
   unfold configuredStack
   rw [fullMakeInit_eq]
   rfl
-
-/-- The constructed Loop state has the initialized Stack memory domains. -/
-theorem configuredLoopDomains (program : Prog (RiscV.Word 64)) (fuel extra : Nat) (body : ProgHOL 64)
-    (crepPrograms : List (MlString × List Nat × CrepProgHOL 64))
-    (code : List (Nat × StackLang.HolProg 64)) (cfg : LabToTarget.Config)
-    (bs : List (BitVec 64)) (fits : 0xa0020018 + bs.length*8 ≤ sourceBase)
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
- let pan := panSimpSourceState program (clockedFixtureSource program fuel)
- let crep := crepStateFrom pan body
- let timed := {crep with clock := crep.clock + extra}
- (concreteDeclLoopState riscvConfig.isa timed crepPrograms).mdomain = (configuredStack code cfg bs).mdomain ∧
- (concreteDeclLoopState riscvConfig.isa timed crepPrograms).shMdomain = (configuredStack code cfg bs).shMdomain := by
-  classical
-  constructor
-  · funext a
-    apply Bool.eq_iff_iff.mpr
-    dsimp only [concreteDeclLoopState]
-    rw [decide_eq_true_eq]
-    exact (configuredStack_heapDomain code cfg bs fits good a).symm
-  · funext a
-    apply Bool.eq_iff_iff.mpr
-    dsimp only [concreteDeclLoopState]
-    rw [decide_eq_true_eq]
-    have h := congrFun (configuredStack_ambient code cfg bs fits good).2.2 a
-    change sharedAddress a ↔ (configuredStack code cfg bs).shMdomain a = true
-    rw [h]
-    simp
 
 /-- A Crep state with fixture domains and metadata produces the native initialized Word starter. -/
 theorem configuredStarter_general (source : CrepSemHOLState 64 Unit)
@@ -104,40 +65,6 @@ theorem configuredStarter_general (source : CrepSemHOLState 64 Unit)
   refine ⟨by rw [existing _ _ _ cur,existing _ _ _ length],fr,?_,?_⟩
   · exact ambient.2.1
   · exact ambient.1.symm
-
-/-- The constructed Word starter equals the actual native initializer. -/
-theorem configuredStarter (program : Prog (RiscV.Word 64)) (fuel extra : Nat) (body : ProgHOL 64)
-    (crepPrograms : List (MlString × List Nat × CrepProgHOL 64))
-    (code : List (Nat × StackLang.HolProg 64)) (words : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
-    (cfg : LabToTarget.Config) (bs : List (BitVec 64))
-    (fits : 0xa0020018 + bs.length*8 ≤ sourceBase) (good : StackToLab.Proofs.GoodCode.goodCode 24 code) (frame clock : Nat)
-    (frameLookup : sptLookup 64 (configuredWord code words cfg bs).stackSize = some frame) :
- let pan := panSimpSourceState program (clockedFixtureSource program fuel)
- let crep := crepStateFrom pan body
- let timed := {crep with clock := crep.clock + extra}
- {(phase3Starter riscvConfig.isa timed crepPrograms (configuredWord code words cfg bs) fixtureHeapLength 64 frame) with
-    memory := (configuredStack code cfg bs).memory, clock := clock, code := (configuredWord code words cfg bs).code} =
- {(configuredWord code words cfg bs) with clock := clock} := by
-  exact configuredStarter_general _ rfl rfl rfl rfl rfl crepPrograms code words cfg bs fits good frame clock frameLookup
-theorem fixtureStarter (program : Prog (RiscV.Word 64)) (fuel extra : Nat) (body : ProgHOL 64)
-    (crepPrograms : List (MlString × List Nat × CrepProgHOL 64))
-    (code : List (Nat × StackLang.HolProg 64)) (words : List (Nat × Nat × WordLangProgHOL (BitVec 64)))
-    (cfg : LabToTarget.Config) (good : StackToLab.Proofs.GoodCode.goodCode 24 code) (frame clock : Nat)
-    (frameLookup : sptLookup 64 (fixtureWord code words cfg).stackSize = some frame) :
- let pan := panSimpSourceState program (clockedFixtureSource program fuel)
- let crep := crepStateFrom pan body
- let timed := {crep with clock := crep.clock + extra}
- {(phase3Starter riscvConfig.isa timed crepPrograms (fixtureWord code words cfg) fixtureHeapLength 64 frame) with
-    memory := (fixtureStack code cfg).memory, clock := clock, code := (fixtureWord code words cfg).code} =
- {(fixtureWord code words cfg) with clock := clock} := by
-  have fits : 0xa0020018 + ([4] : List (BitVec 64)).length*8 ≤ sourceBase := by decide
-  have lookup : sptLookup 64 (configuredWord code words cfg [4]).stackSize = some frame := by
-    rw [configuredWord_one]
-    exact frameLookup
-  have h := configuredStarter program fuel extra body crepPrograms code words cfg [4] fits good frame clock lookup
-  rw [configuredWord_one,configuredStack_one] at h
-  exact h
-
 
 /-- The generated optimized entry and its native frame are present in initialized Word state. -/
 theorem functionOnly_initializedEntry (fs : List (FunDeclHOL 64)) (start : MlS) (body : ProgHOL 64)
