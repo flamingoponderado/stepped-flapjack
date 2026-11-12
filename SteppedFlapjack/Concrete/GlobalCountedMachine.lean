@@ -1,5 +1,6 @@
 import SteppedFlapjack.Concrete.GlobalSourceMachine
 import SteppedFlapjack.Concrete.GlobalFrontendShape
+import SteppedFlapjack.Concrete.GlobalDecodedLayout
 import SteppedFlapjack.PanToCrepSteps.GlobalInitializedEntry
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.LoopSemStateFiniteExact
@@ -349,7 +350,7 @@ private theorem initializedGlobal_machine
   simpa [emptyLocalsHOLFinite] using events.trans (congrArg (fun f => f.ioEvents) targetFfi.symm)
 
 /-- A counted Supported source reaches the machine after real global initialization. -/
-theorem initializedGlobal_counted_machine
+private theorem initializedGlobal_counted_machine_fromRel
     (pan : List (DeclHOL 64)) (unique : ((functionsHOL pan).map Prod.fst).Nodup)
     (sourceGood : pancakeGoodCodeHOL pan = true)
     (clock : Nat) (decs : List (DeclHOL 64)) (post : PanSemStateFiniteExact 64 Unit)
@@ -445,5 +446,103 @@ theorem initializedGlobal_counted_machine
         sizeBound found sourceTable holRun bound targetTable panCodeRel varsEmpty exceptionsEmpty sources codeRel entry
         bitmapFits safe facts capacity
     exact ⟨sourceFinal,machine,finalFfi,compilerFinal,compiledOutput,machineRun,events,rel.2.2.2.2.2.2.2.2.2.2.1⟩
+
+/-- A counted source reaches the machine from declaration-constructed source and target states. -/
+theorem initializedGlobal_counted_machine
+    (pan : List (DeclHOL 64)) (unique : ((functionsHOL pan).map Prod.fst).Nodup)
+    (sourceGood : pancakeGoodCodeHOL pan = true)
+    (clock : Nat) (decs : List (DeclHOL 64)) (post : PanSemStateFiniteExact 64 Unit)
+    [DecidablePred post.memaddrs] [DecidablePred post.shMemaddrs]
+    (initializers : List (ProgHOL 64)) (funs exns : List (DeclHOL 64)) (globals : PanGlobalsContextExact 64)
+    (entries : List (MlS × List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL)) (name : MlS)
+    (program : Prog (RiscV.Word 64)) (supported : Supported (globalEntryShapes post entries) program)
+    (panCtxt : PanToCrepContextExact 64) (value : BitVec 64)
+    (onlyDecls : ∀ d ∈ decs, isDeclHOL d = true)
+    (initializerShape : ∀ sh n e, DeclHOL.decl sh n e ∈ decs → FrontendValue panCtxt e)
+    (eval : @evaluateDeclsHOLFinite 64 Unit _
+      (beforeGlobals (globalEntryTarget pan clock globals entries)
+        (panBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL decs).map sizeOfShapeHOL).sum)
+        ((decShapesHOL decs).map sizeOfShapeHOL).sum) (fun _a => Classical.propDecidable _) decs = some post)
+    (compiled : compileDecsExactHOL
+      (beforeGlobalsContext (panBytesInWord 64 * BitVec.ofNat 64 ((decShapesHOL decs).map sizeOfShapeHOL).sum)) decs =
+        (initializers,funs,exns,globals))
+    (allocated : ∀ a, addresses ((globalEntryTemplate pan clock).topAddr - panBytesInWord 64 *
+      BitVec.ofNat 64 ((decShapesHOL decs).map sizeOfShapeHOL).sum)
+      ((decShapesHOL decs).map sizeOfShapeHOL).sum a → (globalEntryTemplate pan clock).memaddrs a)
+    (sizeBound : (panBytesInWord 64).toNat * ((decShapesHOL decs).map sizeOfShapeHOL).sum < 2 ^ 64)
+    (found : entries.lookup name = some ([],progToHOL program,.one))
+    (sourceTableSupported : ∀ name params body ret, entries.lookup name = some (params,body,ret) →
+      ∃ scope, GlobalCallSupportedIn (globalEntryShapes post entries) scope (progOfHOL body))
+    (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
+    (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (exceptions : InfoMap Shape)
+    (fuel count : Nat) (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))
+    (postMemory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (postFfi : FfiState Unit)
+    (run : evalPanValueFfiProgSteps context primitive handler (globalEntryProduction post entries).structs (countedFunctionsOfCode (globalEntryProduction post entries).code)
+      (globalEntryProduction post entries).baseAddress (globalEntryProduction post entries).topAddress panSemBitVec64BytesInWord fuel
+      (globalEntryProduction post entries).locals (globalEntryProduction post entries).globals (globalEntryProduction post entries).memory (globalEntryProduction post entries).ffi program
+      (memoryAccess := some (panSemBitVec64MemoryAccess (globalEntryProduction post entries)))
+      (contracts := some (countedContractsOfCode (globalEntryProduction post entries).code exceptions)) =
+        some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
+    (budget : count ≤ (callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).clock)
+    (targetTable : CallFrontendCode panCtxt (globalEntryTarget pan clock globals entries).code)
+    (panCodeRel : codeRelExactHOLW panCtxt (globalEntryTarget pan clock globals entries).code
+      (globalEntryCrep pan clock globals entries).code)
+    (varsEmpty : panCtxt.vars = HolFiniteMapExact.empty) (exceptionsEmpty : panCtxt.eids = HolFiniteMapExact.empty)
+    (sources : ∀ row ∈ globalSourcePrograms pan, ∃ (ctx : PanToCrepContextExact 64) (q : ProgHOL 64),
+      row.2.2 = compileProgExactHOLW ctx q ∧ CallFrontend ctx q)
+    (codeRel : let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms pan)) 0
+      crepToLoopCodeRelExact ctxt (globalEntryCrep pan clock globals entries).code
+        (sptFromAList (compileProgHOLExact riscvConfig.isa (globalSourcePrograms pan))))
+    (entry : let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms pan)) 0
+      let body := compileProgExactHOLW panCtxt (.seq (nestedSeqHOL initializers) (.call none name []))
+      (64,[],optimiseHOL (compileHOLExact ctxt .ln body)) ∈ compileProgHOLExact riscvConfig.isa (globalSourcePrograms pan))
+    (bitmapFits : 0xa0020018 + (globalSourceBitmaps pan).length*8 ≤ 0xa0410000)
+    (safe : fixtureStackSafe (globalSourceCode pan) = true)
+    (facts : (fixtureRemoveLabels (globalSourceCode pan)).isSome = true ∧
+      (fixtureCodeBytes (globalSourceCode pan)).length ≤ 0xecc ∧ (fixtureCodeBytes (globalSourceCode pan)).length % 4 = 0)
+    (capacity : optionLe (optionMap₂ max (some (max 1 (1+globalSourceFrame pan)))
+      (optionMap₂ (· + ·) (some 1) (fullCallGraphDepth (globalSourceFrames pan) 64 (sptFromAList (globalSourceWords pan))))) (some 2097172)) :
+    let code := globalSourceCode pan
+    let bs := globalSourceBitmaps pan
+    let words := globalSourceWords pan
+    let crep := globalEntryCrep pan clock globals entries
+    let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExact []) (crepToLoopMakeFuncsExactExecutable (globalSourcePrograms pan)) 0
+    let body := .seq (nestedSeqHOL initializers) (.call none name [])
+    let visitLimit := 2*decs.length+(callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).clock+3
+    let opt := loweredProgramOptLimit panCtxt body crep (globalSourcePrograms pan) visitLimit ctxt ctxt .ln
+    let allowance := (max 1 (wordCodeWeight (sptFromAList words)) + 1) * (6*opt+1) + 1
+    let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*opt+1 + allowance)
+    ∃ sourceFinal : PanSemStateFiniteExact 64 Unit, ∃ finalMachine finalFfi compilerFinal,
+      Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig pan =
+        some (fixtureCodeBytes code,bs,compilerFinal) ∧
+      evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
+        (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
+          bs code (fixtureStackOracle (fixtureCompilerConfig code)) n) (configuredMachineState code bs) =
+            (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFinal.ffi.ioEvents ∧ FfiStateRel postFfi sourceFinal.ffi := by
+  let target := globalEntryTarget pan clock globals entries
+  have outside : ¬ target.memaddrs target.topAddr := by
+    change ¬ ordinaryAddress heapTop
+    decide
+  have aligned : panGlobalsByteAlignedHOL target.topAddr := by
+    change panGlobalsByteAlignedHOL heapTop
+    change BitVec.ofNat 64 ((heapTop.toNat / 8) * 8) = heapTop
+    decide
+  obtain ⟨final,_,rel,_,finalFfi,_,_⟩ := beforeGlobals_initializedFunctions target decs post initializers funs exns globals entries
+    rfl outside aligned (by right; rfl) onlyDecls eval compiled allocated sizeBound
+  have ffiEq : (globalEntrySource post entries).ffi = sourceFfi := by
+    apply globalEntry_decodedFfi post final globals entries rel
+    exact finalFfi
+  have layout := globalEntry_decodedLayout post final globals entries rel
+  have relExec := globalEntryProduction_related post entries ffiEq
+  have ranged := globalEntryProduction_ranged post entries
+  have localsWord := globalEntryProduction_localsWord post entries
+  have globalShapes := globalEntryProduction_shapes post entries (globalEntryShapes post entries) (by intros; rfl)
+  have codeRanged := globalEntryProduction_codeRanged post entries
+  have codeShape := globalEntryProduction_codeShape post entries (globalEntryShapes post entries) sourceTableSupported
+  exact initializedGlobal_counted_machine_fromRel pan unique sourceGood clock decs post initializers funs exns globals entries name
+    program (globalEntryShapes post entries) supported layout panCtxt (globalEntryProduction post entries) value
+    onlyDecls initializerShape eval compiled allocated sizeBound found relExec ranged localsWord globalShapes codeRanged codeShape
+    context primitive handler exceptions fuel count postLocals postGlobals postMemory postFfi run budget
+    targetTable panCodeRel varsEmpty exceptionsEmpty sources codeRel entry bitmapFits safe facts capacity
 
 end SteppedFlapjack.Concrete

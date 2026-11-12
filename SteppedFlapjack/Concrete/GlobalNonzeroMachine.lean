@@ -11,73 +11,14 @@ private def fs : List (FunDeclOf 64) := [⟨funName,false,false,[],prog,.one⟩]
 private def slot : BitVec 64 := heapTop - 8
 private def domain (a : BitVec 64) : Prop := ordinaryAddress a ∧ a ≠ slot
 private instance (a : BitVec 64) : Decidable (domain a) := by unfold domain; infer_instance
-private def prodBase : PanSemState (RiscV.Word 64) (FfiState Unit) :=
-  {functionSourceProduction fs 1 2 with topAddress := slot, memaddrs := fun a => decide (domain a)}
 private def holBase : PanSemStateFiniteExact 64 Unit :=
   {functionSourceExact fs 1 2 with topAddr := slot, memaddrs := domain}
-private theorem names : ∀ f ∈ fs, NameRanged f.name := by
-  intro f hf
-  simp only [fs,List.mem_cons,List.not_mem_nil,or_false] at hf
-  subst f
-  simp [funName,NameRanged]
-private theorem baseRel : PanSemStateRelExec prodBase holBase.toExact := by
-  obtain ⟨hl,hg,hs,hc,he,hm,hmd,hsm,hck,hbe,hffi,hb,ht⟩ := functionSource_related fs 1 2 names
-  refine ⟨hl,hg,hs,hc,he,?_,?_,hsm,hck,hbe,hffi,hb,rfl⟩
-  · intro a ha
-    have present : domain a := of_decide_eq_true ha
-    have oldPresent : (functionSourceProduction fs 1 2).memaddrs a = true := by
-      simpa [functionSourceProduction,sourceProduction] using present.1
-    exact hm a oldPresent
-  · intro a
-    simp [prodBase,holBase]
-private def prod := {prodBase with globals := updatePanValueMap prodBase.globals "x" (.word 3)}
 private def hol := setGlobalHOLFinite (ofString "x") (panValueToHOL (.word 3)) holBase
-private theorem stateRel : PanSemStateRelExec prod hol.toExact := by
-  exact baseRel.updateGlobals "x" (by decide) _
 private def shapes (name : VarName) := if name = "x" then some ShapeHOL.one else none
 private theorem supported : Supported shapes prog := by
   refine ⟨.ret (.global (.global "x" .one (by decide) ?_)), ?_⟩
   · simp [shapes]
   · simp [prog,ProgByteRanged,ExpByteRanged]
-private theorem globalShapes : GlobalHOLShapes shapes prod.globals := by
-  intro name ranged
-  by_cases same : name = "x"
-  · subst name
-    simp [prod,prodBase,functionSourceProduction,sourceProduction,updatePanValueMap,shapes,shapeOfHOLExact]
-  · simp [prod,prodBase,functionSourceProduction,sourceProduction,updatePanValueMap,shapes,same]
-
-private theorem ranged : PanSemStateRelExecRanged prod := by
-  have base : PanSemStateRelExecRanged prodBase := by
-    simp [prodBase,functionSourceProduction,sourceProduction,PanSemStateRelExecRanged,StructContextByteRanged,StructContext.toHOL]
-  exact base.updateGlobals "x" (.word 3) (by simp [PanValueByteRanged])
-private theorem localsWord : WordLocals prod.locals := by
-  exact wordLocals_empty
-private theorem prodCode : prod.code = [(funName,[],prog,.one)] := by
-  simp [prod,prodBase,functionSourceProduction,fs,functionEntries]
-private theorem codeRanged : ∀ name entry, panSemCodeLookup prod.code name = some entry → PanLangEntryByteRanged entry := by
-  intro name entry found
-  rw [prodCode] at found
-  simp only [panSemCodeLookup,lookupInfo] at found
-  split at found
-  · simp only [Option.some.injEq] at found
-    subst entry
-    simp [PanLangEntryByteRanged,ListParamByteRanged,prog,ProgByteRanged,ExpByteRanged,ShapeByteRanged]
-  · simp at found
-private theorem codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode prod.code →
-    ∃ scope, GlobalCallSupportedIn shapes scope body := by
-  intro name params body member
-  rw [prodCode] at member
-  simp only [countedFunctionsOfCode,List.map,List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at member
-  obtain ⟨rfl,rfl,rfl⟩ := member
-  exact ⟨[],supported.1⟩
-private theorem countedRun : evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
-    (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) prod.structs (countedFunctionsOfCode prod.code)
-    prod.baseAddress prod.topAddress panSemBitVec64BytesInWord 5 prod.locals prod.globals prod.memory prod.ffi prog
-    (memoryAccess := some (panSemBitVec64MemoryAccess prod))
-    (contracts := some (countedContractsOfCode prod.code [])) =
-      some (.returned prod.locals prod.globals prod.memory prod.ffi [.word 3],2) := by
-  with_unfolding_all rfl
-
 private def decl : DeclHOL 64 := .decl .one (ofString "x") (.const 3)
 private def globals : PanGlobalsContextExact 64 :=
   {globals := HolFiniteMapExact.empty.updateEq (ofString "x",(.one,8)), globalsSize := 8, maxGlobalsSize := 8}
@@ -219,11 +160,47 @@ private theorem loopEntry : let ctxt := mkCtxtExact riscvConfig.isa (makeVmapExa
   rw [eq]
   simp [firstLoopName]
 
+private instance : DecidablePred post.memaddrs := by
+  have h := congrArg (fun (s : PanSemStateFiniteExact 64 Unit) => s.memaddrs) sourceEq
+  change post.memaddrs = domain at h
+  rw [h]
+  infer_instance
+private instance : DecidablePred post.shMemaddrs := by
+  change DecidablePred sharedAddress
+  infer_instance
+private theorem canonicalShapeX : globalEntryShapes post entries "x" = some .one := by
+  unfold globalEntryShapes globalEntrySource
+  rw [sourceEq]
+  simp [hol,holBase,functionSourceExact,sourceTemplateFor,sourceTemplate,setGlobalHOLFinite,
+    HolFiniteMapExact.lookup_update,FUPDATE,shapeOfHOLExact]
+private theorem canonicalSupported : Supported (globalEntryShapes post entries) prog := by
+  refine ⟨.ret (.global (.global "x" .one (by decide) canonicalShapeX)), ?_⟩
+  simp [prog,ProgByteRanged,ExpByteRanged]
+private theorem canonicalTable : ∀ name params body ret, entries.lookup name = some (params,body,ret) →
+    ∃ scope, GlobalCallSupportedIn (globalEntryShapes post entries) scope (progOfHOL body) := by
+  intro name params body ret found
+  simp only [entries,List.lookup] at found
+  split at found
+  · simp only [Option.some.injEq,Prod.mk.injEq] at found
+    obtain ⟨rfl,rfl,rfl⟩ := found
+    refine ⟨[],?_⟩
+    rw [progOfHOL_progToHOL prog supported.2]
+    exact canonicalSupported.1
+  · simp at found
+private theorem canonicalRun : evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
+    (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) (globalEntryProduction post entries).structs
+    (countedFunctionsOfCode (globalEntryProduction post entries).code)
+    (globalEntryProduction post entries).baseAddress (globalEntryProduction post entries).topAddress
+    panSemBitVec64BytesInWord 5 (globalEntryProduction post entries).locals (globalEntryProduction post entries).globals
+    (globalEntryProduction post entries).memory (globalEntryProduction post entries).ffi prog
+    (memoryAccess := some (panSemBitVec64MemoryAccess (globalEntryProduction post entries)))
+    (contracts := some (countedContractsOfCode (globalEntryProduction post entries).code [])) =
+      some (.returned (globalEntryProduction post entries).locals (globalEntryProduction post entries).globals
+        (globalEntryProduction post entries).memory (globalEntryProduction post entries).ffi [.word 3],2) := by
+  with_unfolding_all rfl
+
 private theorem sourceGood : pancakeGoodCodeHOL nonzeroScalarProgram = true := by with_unfolding_all decide
 private theorem unique : ((functionsHOL nonzeroScalarProgram).map Prod.fst).Nodup := by with_unfolding_all decide
-private theorem productionRel : PanSemStateRelExec prod (callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).toExact := by
-  rw [sourceEq]
-  exact stateRel
 private theorem budget : 2 ≤ (callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).clock := by
   rw [sourceEq]
   decide
@@ -252,16 +229,18 @@ private theorem nonzeroScalar_machine : ∃ finalMachine finalFfi compilerFinal,
       nonzeroScalarTicks (configuredMachineState (globalSourceCode nonzeroScalarProgram) (globalSourceBitmaps nonzeroScalarProgram)) =
       (.halt .success,finalMachine,finalFfi) ∧ finalFfi.ioEvents = sourceFfi.ioEvents := by
   have all := initializedGlobal_counted_machine nonzeroScalarProgram unique sourceGood 2 [decl] post inits [] [] globals
-    entries (ofString funName) prog shapes supported layout panCtxt prod 3
+    entries (ofString funName) prog canonicalSupported panCtxt 3
     (by intro d hd; simp at hd; subst d; rfl) initShape declEval compiled allocated (by decide)
-    (by simp [entries]) productionRel ranged localsWord globalShapes codeRanged codeShape
+    (by simp [entries]) canonicalTable
     (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 5 2
-    prod.locals prod.globals prod.memory prod.ffi countedRun budget targetTable panCode rfl rfl nonzeroScalar_sources
-    loopCodeRel loopEntry bitmapFits nonzeroScalar_safe nonzeroScalar_facts nonzeroScalar_capacity
+    (globalEntryProduction post entries).locals (globalEntryProduction post entries).globals
+    (globalEntryProduction post entries).memory (globalEntryProduction post entries).ffi canonicalRun budget
+    targetTable panCode rfl rfl nonzeroScalar_sources loopCodeRel loopEntry bitmapFits
+    nonzeroScalar_safe nonzeroScalar_facts nonzeroScalar_capacity
   obtain ⟨sourceFinal,machine,ffi,compilerFinal,compiledOutput,machineRun,events,ffiRel⟩ := all
   have sourceEvents : sourceFinal.ffi.ioEvents = [] := by
     have h := ffiRel.2.1
-    simp only [prod,prodBase,functionSourceProduction,sourceProduction,sourceFfiState,sourceFfi,List.map_nil] at h
+    simp only [globalEntryProduction,panSemExecStateOfHOLWithKeys,panSemStateOfExactWithKeys,sourceFfiState,sourceFfi,List.map_nil] at h
     cases heq : sourceFinal.ffi.ioEvents with
     | nil => rfl
     | cons e es => simp [heq,FfiEventListRel] at h
