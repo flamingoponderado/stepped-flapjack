@@ -24,24 +24,18 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
     (sourceInit : source = functionSourceExact sourceFs sourceN sourceClock)
     (targetCode : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
     (entries : List SimpVisits.SimpEntry)
-    (sourceCode : source.code = HolFiniteMapExact.empty.updateList entries.reverse)
+    (sourceEntries : entries = functionsHOL ((sourceFs.map funDeclToHOL).map DeclHOL.function))
     (originalFs : List (FunDeclHOL 64))
-    (originalEntries : entries = functionsHOL (originalFs.map DeclHOL.function))
+    (originalFunctions : originalFs = sourceFs.map funDeclToHOL)
     (originalUnique : ((functionsHOL (originalFs.map DeclHOL.function)).map Prod.fst).Nodup)
     (originalWellFormed : originalFs.all (fun f => f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
       isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true)
-    (entryShapes : ∀ entry ∈ entries, ∃ scope, ∃ program : Prog (RiscV.Word 64),
-      entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program)
     (fs : List (FunDeclHOL 64))
     (simplifiedFs : fs = originalFs.map (fun f => {f with body := panSimpCompileHOL f.body})) (start : MlS)
     (targetTable : targetCode = HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)
     (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],progToHOL (panSimpProg program),.one))
     (mainFound : source.code.lookup start = some ([],progToHOL program,.one))
     (unique : ((functionsHOL (fs.map DeclHOL.function)).map Prod.fst).Nodup)
-    (shapes : ∀ entry ∈ functionsHOL (fs.map DeclHOL.function),
-      ∃ names, ∃ body : Prog (RiscV.Word 64),
-        entry.2.1 = names.map (fun n => (Flapjack.Basis.Pure.MlString.ofString n,ShapeHOL.one)) ∧
-        entry.2.2.1 = progToHOL body ∧ CallSupportedIn names body ∧ ProgByteRanged body)
     (noInline : (functionsHOL ((compileTopExactHOL (fs.map DeclHOL.function) start).filter inlinableHOL)).map Prod.fst = [])
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (exnContracts : InfoMap Shape) (fuel count : Nat)
@@ -116,6 +110,21 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
             (.halt .success,finalMachine,finalFfi) ∧
       finalFfi.ioEvents = sourceFinal.ffi.ioEvents ∧ FfiStateRel postFfi sourceFinal.ffi ∧
       semanticsDecls baseState start (originalFs.map DeclHOL.function) = .terminate .success finalFfi.ioEvents := by
+  have sourceCode : source.code = HolFiniteMapExact.empty.updateList entries.reverse := by
+    rw [sourceInit,sourceEntries]
+    rfl
+  have originalEntries : entries = functionsHOL (originalFs.map DeclHOL.function) := by
+    rw [sourceEntries,originalFunctions]
+  have entryShapes : ∀ entry ∈ entries, ∃ scope, ∃ program : Prog (RiscV.Word 64),
+      entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program := by
+    rw [sourceEntries]
+    exact original_entry_shapes sourceFs tableSupported
+  have shapes : ∀ entry ∈ functionsHOL (fs.map DeclHOL.function),
+      ∃ names, ∃ body : Prog (RiscV.Word 64),
+        entry.2.1 = names.map (fun n => (ofString n,ShapeHOL.one)) ∧
+        entry.2.2.1 = progToHOL body ∧ CallSupportedIn names body ∧ ProgByteRanged body := by
+    rw [simplifiedFs,originalFunctions]
+    exact simplified_entry_shapes sourceFs tableSupported
   have codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry := by
     rw [productionInit]
     exact table_code_ranged sourceFs sourceN sourceClock tableSupported

@@ -96,4 +96,67 @@ theorem table_counted_shapes (fs : List (FunDeclOf 64)) (n clock : Nat) (h : Fun
   exact ⟨f.params.map Prod.fst,(h f hf).2.1⟩
 
 
+theorem functionEntriesHOL_map (fs : List (FunDeclOf 64)) :
+    functionsHOL ((fs.map funDeclToHOL).map DeclHOL.function) =
+      fs.map (fun f => (ofString f.name, f.params.map paramToHOL, progToHOL f.body, shapeToHOL f.returnShape)) := by
+  induction fs with
+  | nil => rfl
+  | cons f fs ih =>
+    simpa [functionsHOL,funDeclToHOL,List.map_map] using
+      congrArg (List.cons (ofString f.name, f.params.map paramToHOL, progToHOL f.body, shapeToHOL f.returnShape)) ih
+
+theorem original_entry_shapes (fs : List (FunDeclOf 64)) (h : FunctionTableSupported fs) :
+    ∀ entry ∈ functionsHOL ((fs.map funDeclToHOL).map DeclHOL.function),
+      ∃ scope, ∃ program : Prog (RiscV.Word 64),
+        entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program := by
+  rw [functionEntriesHOL_map]
+  intro entry he
+  obtain ⟨f,hf,rfl⟩ := List.mem_map.mp he
+  exact ⟨f.params.map Prod.fst,f.body,rfl,(h f hf).2.1,(h f hf).1.2.2.1⟩
+
+/-- Scalar parameters keep their names and scalar shapes in HOL. -/
+theorem scalarParams_toHOL (params : List (VarName × Shape))
+    (scalar : ∀ p ∈ params, p.2 = .one) :
+    params.map paramToHOL = (params.map Prod.fst).map (fun n => (ofString n,ShapeHOL.one)) := by
+  simp only [List.map_map]
+  apply List.map_congr_left
+  intro p hp
+  have hp' := scalar p hp
+  simp [paramToHOL,hp',shapeToHOL]
+
+/-- Simplification preserves scalar, call-aware function table shapes. -/
+theorem simplified_entry_shapes (sourceFs : List (FunDeclOf 64)) (supported : FunctionTableSupported sourceFs) :
+    ∀ entry ∈ functionsHOL (((sourceFs.map funDeclToHOL).map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function),
+      ∃ names, ∃ body : Prog (RiscV.Word 64),
+        entry.2.1 = names.map (fun n => (ofString n,ShapeHOL.one)) ∧
+        entry.2.2.1 = progToHOL body ∧ CallSupportedIn names body ∧ ProgByteRanged body := by
+  have eq : functionsHOL (((sourceFs.map funDeclToHOL).map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function) =
+      sourceFs.map (fun f => (ofString f.name, f.params.map paramToHOL, panSimpCompileHOL (progToHOL f.body), shapeToHOL f.returnShape)) := by
+    clear supported
+    induction sourceFs with
+    | nil => rfl
+    | cons f fs ih =>
+      simpa [functionsHOL,funDeclToHOL,List.map_map] using congrArg
+        (List.cons (ofString f.name, f.params.map paramToHOL, panSimpCompileHOL (progToHOL f.body), shapeToHOL f.returnShape)) ih
+  rw [eq]
+  intro entry he
+  obtain ⟨f,hf,rfl⟩ := List.mem_map.mp he
+  obtain ⟨ranged,shape,params,ret⟩ := supported f hf
+  have paramEq := scalarParams_toHOL f.params params
+  refine ⟨f.params.map Prod.fst,panSimpProg f.body,paramEq,?_,callSupported_panSimp shape,callSupported_panSimp_ranged shape ranged.2.2.1⟩
+  exact callSupported_panSimp_hol shape
+
+/-- Original supported functions have the scalar frontend table shape. -/
+theorem original_function_shapes (fs : List (FunDeclOf 64)) (supported : FunctionTableSupported fs) :
+    ∀ entry ∈ functionsHOL ((fs.map funDeclToHOL).map DeclHOL.function),
+      ∃ names, ∃ body : Prog (RiscV.Word 64),
+        entry.2.1 = names.map (fun n => (ofString n,ShapeHOL.one)) ∧
+        entry.2.2.1 = progToHOL body ∧ CallSupportedIn names body ∧ ProgByteRanged body := by
+  rw [functionEntriesHOL_map]
+  intro entry he
+  obtain ⟨f,hf,rfl⟩ := List.mem_map.mp he
+  obtain ⟨ranged,shape,params,_⟩ := supported f hf
+  have paramEq := scalarParams_toHOL f.params params
+  exact ⟨f.params.map Prod.fst,f.body,paramEq,rfl,shape,ranged.2.2.1⟩
+
 end SteppedFlapjack.Concrete

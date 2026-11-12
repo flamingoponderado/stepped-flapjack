@@ -156,18 +156,10 @@ theorem nestedHOLFunctionShapes : ∀ entry ∈ functionsHOL (nestedHOLFunctions
     ∃ names, ∃ program : Prog (RiscV.Word 64),
       entry.2.1 = names.map (fun n => (ofString n,ShapeHOL.one)) ∧
       entry.2.2.1 = progToHOL program ∧ CallSupportedIn names program ∧ ProgByteRanged program := by
-  intro entry member
-  simp [nestedHOLFunctions,functionsHOL] at member
-  rcases member with rfl | rfl | rfl
-  · refine ⟨[],nestedCallEntry,rfl,rfl,?_,?_⟩
-    · exact .call "answer" "middle" [] (by simp) (.base (.ret (.local "answer" (by simp))))
-    · simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged]
-  · refine ⟨[],.call none "leaf" [],rfl,by simp [progToHOL],?_,?_⟩
-    · exact .tail "leaf" [] (by simp)
-    · simp [ProgByteRanged,NameRanged]
-  · refine ⟨[],.return (.const 7),rfl,by simp [progToHOL,expToHOL],?_,?_⟩
-    · exact .base (.ret (.const _))
-    · simp [ProgByteRanged,ExpByteRanged]
+  have eq : nestedHOLFunctions = nestedSourceFunctions.map funDeclToHOL := by
+    simp [nestedHOLFunctions,nestedSourceFunctions,nestedCallEntry,funDeclToHOL,progToHOL,expToHOL,shapeToHOL]
+  rw [eq]
+  exact original_function_shapes nestedSourceFunctions nested_table_supported
 
 theorem nestedCall_noExceptions :
     getEidsFromDeclsHOL (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main")) =
@@ -215,16 +207,6 @@ theorem nestedCall_crep_clock_consumed :
     rw [compileProgDeclsHOLW,nestedCall_inline_selection_empty,CrepInlineRoute.compileInlTopHOLExact_nil]
     exact SteppedFlapjack.CrepToLoopSteps.callFrontend_crepTable _
       (SteppedFlapjack.CrepToLoopSteps.callFrontend_declaration_sources _ nestedCall_declaration_shapes)
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-theorem nestedEntryShapes : ∀ entry ∈ functionsHOL (nestedCallDeclarations.map declToHOL),
-    ∃ scope, ∃ program : Prog (RiscV.Word 64),
-      entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program := by
-  rw [← nestedHOLDeclarations]
-  intro entry member
-  obtain ⟨names,program,_,body,supported,ranged⟩ := nestedHOLFunctionShapes entry member
-  exact ⟨names,program,body,supported,ranged⟩
 
 
 end SteppedFlapjack.Concrete
