@@ -268,4 +268,33 @@ theorem globalStruct_lowered_run :
     (progToHOL globalStructWitness) globalStructHOL (some (.returned (.val (.word (8 : BitVec 64)))))
     globalStructContext globalStructTarget sourcePost ⟨globalStruct_stateRel,sourceRun,by simp⟩
   exact ⟨sourcePost,targetPost,sourceRun,targetRun,postRel⟩
+theorem globalStruct_stateRel_clock (clock : Nat) :
+    panGlobalsStateRelHOLExact true globalStructContext {globalStructHOL with clock := clock} {globalStructTarget with clock := clock} := by
+  have h := globalStruct_stateRel
+  simp only [panGlobalsStateRelHOLExact] at h ⊢
+  rcases h with ⟨a,b,c,d,e,_,rest⟩
+  exact ⟨a,b,c,d,e,by trivial,rest⟩
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+theorem globalStruct_source_run_clock (clock : Nat) : ∃ final,
+    ({globalStructHOL with clock := clock}).evaluateHOLFiniteState (progToHOL globalStructWitness) =
+      (some (.returned (.val (.word (8 : BitVec 64)))),final) := by
+  refine ⟨(setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 7,.word 8]))
+    {globalStructHOL with clock := clock}).emptyLocalsHOLFinite,?_⟩
+  simp [globalStructWitness,progToHOL,expToHOL,evaluateHOLFiniteState_seq_line780,
+      evaluateHOLFiniteState_assign,evaluateHOLFiniteState_return,evalHOLExact,evalListHOLExact,
+      globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,setKvarHOLFinite,isValidValueHOLFinite,
+      lookupKvarHOLExact,FUPDATE,shapeOfHOLExact,shapeEqHOL,shapeEqHOL.shapeEqListHOL,emptyLocalsHOLFinite]
+
+theorem globalStruct_lowered_run_clock (clock : Nat) : ∃ post,
+    ({globalStructTarget with clock := clock}).evaluateHOLFiniteState
+      (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) =
+        (some (.returned (.val (.word (8 : BitVec 64)))),post) := by
+  obtain ⟨sourcePost,sourceRun⟩ := globalStruct_source_run_clock clock
+  obtain ⟨targetPost,targetRun,_⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL
+    (progToHOL globalStructWitness) {globalStructHOL with clock := clock} (some (.returned (.val (.word (8 : BitVec 64)))))
+    globalStructContext {globalStructTarget with clock := clock} sourcePost ⟨globalStruct_stateRel_clock clock,sourceRun,by simp⟩
+  exact ⟨targetPost,targetRun⟩
+
 end SteppedFlapjack.Concrete

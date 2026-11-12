@@ -1,3 +1,5 @@
+import SteppedFlapjack.Concrete.GlobalStructActualOptimizedLoop
+import SteppedFlapjack.Concrete.GlobalStructActualLoop
 import SteppedFlapjack.Concrete.GlobalStructEntry
 import SteppedFlapjack.Concrete.GlobalStructCallee
 import SteppedFlapjack.PanToCrepSteps.GlobalNoInline

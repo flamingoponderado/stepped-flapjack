@@ -15,7 +15,7 @@ theorem globalStruct_initializer_context (ctxt : PanToCrepContextExact 64) (vmax
     globalStructCrepContext,mkCtxtExactHOL,vmax]
 
 def globalStructCallPrograms := compileProgDeclsHOLW (compileTopExactHOL globalStructProgram (ofString "main"))
-def globalStructCallPan := {globalStructTarget with clock := globalStructTarget.clock + 1}
+def globalStructCallPan := {globalStructTarget with clock := 1}
 def globalStructCallCrep := concreteDeclCrepState globalStructCallPan globalStructCallPrograms
 
 theorem globalStruct_crep_initializer_run : ∃ post,
@@ -27,7 +27,7 @@ theorem globalStruct_crep_initializer_run : ∃ post,
   let init := nestedSeqHOL (compileDecsExactHOL globalStructStart
     (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram) (resortDeclsHOL globalStructProgram))).1
   have run : globalStructCallPan.evaluateHOLFiniteState init = (none,globalStructCallPan) := by
-    simpa [globalStructCallPan,init] using globalStruct_initializer_run_clock (globalStructTarget.clock+1)
+    simpa [globalStructCallPan,init] using globalStruct_initializer_run_clock 1
   have sr : panToCrepStateRelFiniteExact globalStructCallPan globalStructCallCrep := by
     exact concreteDecl_panCrep_stateRel globalStructCallPan globalStructCallPrograms rfl rfl
   have cr : codeRelExactHOLW globalStructCrepContext globalStructCallPan.code globalStructCallCrep.code := by
@@ -50,23 +50,23 @@ theorem globalStruct_crep_callee_run (post : CrepSemHOLState 64 Unit)
     ∃ final, evalCrepSemHOLProgExact (decClockCrepSemHOL {post with locals := HolFiniteMapExact.empty})
       (compileProgExactHOLW globalStructCrepContext (compileProgExactHOL globalStructContext (progToHOL globalStructWitness))) =
         (some (.return [.word 8]),final) := by
-  obtain ⟨_,targetPost,_,targetRun,_⟩ := globalStruct_lowered_run
+  obtain ⟨targetPost,targetRun⟩ := globalStruct_lowered_run_clock 0
   let called := decClockCrepSemHOL {post with locals := HolFiniteMapExact.empty}
-  have sr : panToCrepStateRelFiniteExact globalStructTarget called := by
+  have sr : panToCrepStateRelFiniteExact {globalStructTarget with clock := 0} called := by
     rcases relation with ⟨mem,dom,sh,structs,globals,clk,be,ffi,base,top⟩
     simp only [panToCrepStateRelFiniteExact,called,decClockCrepSemHOL]
     simp only [globalStructCallPan] at *
     refine ⟨mem,dom,sh,structs,globals,?_,be,ffi,base,top⟩
     omega
-  have cr : codeRelExactHOLW globalStructCrepContext globalStructTarget.code called.code := by
+  have cr : codeRelExactHOLW globalStructCrepContext ({globalStructTarget with clock := 0}).code called.code := by
     simp [codeRelExactHOLW,globalStructTarget,sourceTemplate,HolFiniteMapExact.lookup_empty]
-  have er : panToCrepExcpRelFiniteExact globalStructCrepContext.eids globalStructTarget.eshapes := by
+  have er : panToCrepExcpRelFiniteExact globalStructCrepContext.eids ({globalStructTarget with clock := 0}).eshapes := by
     simpa [globalStructCrepContext,mkCtxtExactHOL,globalStructTarget,sourceTemplate] using (empty_panCrep_exceptions (width := 64))
-  have lr : panToCrepLocalsRelFiniteExact globalStructCrepContext globalStructTarget.locals called.locals := by
+  have lr : panToCrepLocalsRelFiniteExact globalStructCrepContext ({globalStructTarget with clock := 0}).locals called.locals := by
     apply empty_panCrep_locals
     rfl
   obtain ⟨res,final,crepRun,_,_,_,resultRel⟩ := pcCompileCorrect
-    (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) globalStructTarget
+    (compileProgExactHOL globalStructContext (progToHOL globalStructWitness)) {globalStructTarget with clock := 0}
     (some (.returned (.val (.word (8 : BitVec 64))))) targetPost called globalStructCrepContext
     ⟨targetRun,by simp,sr,cr,er,lr,frontendProgram_localised globalStruct_frontend⟩
   have eq : res = some (.return [.word 8]) := by simpa [pcCompileCorrectResultRel,flattenHOL] using resultRel
