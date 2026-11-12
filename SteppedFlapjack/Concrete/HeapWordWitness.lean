@@ -1,5 +1,6 @@
 import SteppedFlapjack.Concrete.SourceState
 import SteppedFlapjack.PanValueFfiSemantics
+import SteppedFlapjack.PanToCrepSteps.CountedAssign
 import Flapjack.Pancake.Semantics.CrepRuntimeTarget
 
 /-! A concrete source witness for ordinary heap word stores and loads. -/
@@ -33,4 +34,35 @@ theorem heapWordWitness_run :
           (updatePanValueMemory sourceProduction.memory 0xa1000100 (.word 7)) sourceProduction.ffi [.word 7], 7) := by
   with_unfolding_all rfl
 
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+/-- The store in the witness has a matching HOL memory update and preserves
+its executable/HOL state relation. -/
+theorem heapWordStore_corresponds :
+    let body := progToHOL heapWordWitness
+    let source := exactState body
+    let production := executableState body
+    ∃ memory,
+      source.evaluateHOLFiniteState (.store (expToHOL (.const 0xa1000100)) (expToHOL (.const 7))) =
+        (none,{source with memory := memory}) ∧
+      PanSemStateRelExec {production with memory := updatePanValueMemory production.memory 0xa1000100 (.word 7)}
+        {source with memory := memory}.toExact ∧
+      controlSteps (.store (expToHOL (.const 0xa1000100)) (expToHOL (.const 7))) source ≤ 3 := by
+  let body := progToHOL heapWordWitness
+  let source := exactState body
+  let production := executableState body
+  have rel : PanSemStateRelExec production source.toExact := source_related body
+  have ranged : PanSemStateRelExecRanged production := source_ranged body
+  let _ : DecidablePred source.memaddrs := by change DecidablePred ordinaryAddress; infer_instance
+  have aeval : evalPanSemStateExp production (.const 0xa1000100) = some (.word 0xa1000100) := by simp [evalPanSemStateExp_64_eq_previous,evalPanValueExp]
+  have veval : evalPanSemStateExp production (.const 7) = some (.word 7) := by simp [evalPanSemStateExp_64_eq_previous,evalPanValueExp]
+  have store : panValueStoreWithAccess production.memory panSemBitVec64BytesInWord 0xa1000100 (.word 7)
+      (some (panSemBitVec64MemoryAccess production)) =
+        some (updatePanValueMemory production.memory 0xa1000100 (.word 7)) := by
+    with_unfolding_all rfl
+  obtain ⟨memory,_,holRun,holRel,_,bound⟩ := counted_store_word production source rel ranged
+    (.const 0xa1000100) (.const 7) (by simp [ExpByteRanged]) (by simp [ExpByteRanged])
+    0xa1000100 7 aeval veval (updatePanValueMemory production.memory 0xa1000100 (.word 7)) store
+    (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 0
+  exact ⟨memory,holRun,holRel,by simpa [panValueExpStepCost] using bound⟩
 end SteppedFlapjack.Concrete
