@@ -2,6 +2,7 @@ import SteppedFlapjack.Concrete.GlobalStructEntry
 import SteppedFlapjack.Concrete.GlobalCountedMachine
 import SteppedFlapjack.Concrete.GlobalStructConfiguredWord
 import SteppedFlapjack.Concrete.GlobalNamedStruct
+import SteppedFlapjack.Concrete.GlobalStructInitializer
 /-! The initialized global-pair wrapper meets the counted machine theorem. -/
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
@@ -69,19 +70,24 @@ theorem pairEntry_codeShape : ∀ name params body, (name,params,body) ∈ count
 def pairEntryTarget : PanSemStateFiniteExact 64 Unit :=
   {globalStructTarget with clock := 16, code := (HolFiniteMapExact.empty.update (entryName (progToHOL globalStructWitness),([],compileProgExactHOL globalStructContext (progToHOL globalStructWitness),.one)))}
 
+private def pairInitializedEntries := functionsHOL (fpermDecsHOL (ofString "main") (newMainNameHOL globalStructProgram) globalStructProgram)
+private theorem pairInitializedEntries_eq : pairInitializedEntries = [(newMainNameHOL globalStructProgram,[],progToHOL globalStructWitness,ShapeHOL.one)] := by
+  simp only [pairInitializedEntries,globalStructProgram,globalStructDecl,fpermDecsHOL,functionsHOL,fpermName,if_true]
+  simp only [globalStructWitness,progToHOL,fpermHOL]
+private theorem pairInitializedSource_eq : installSourceFunctions globalStructHOL pairInitializedEntries = {pairEntrySource with clock := globalStructHOL.clock} := by
+  rw [pairInitializedEntries_eq]
+  simp [installSourceFunctions,globalStructHOL,globalStructBase,sourceTemplate,pairEntrySource,globalStructExactBase,exactState,singleEntrySourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.updateList,HolFiniteMapExact.update,FUPDATE_LIST, pairEntry_name]
+private theorem pairInitializedTarget_eq : installTargetFunctions globalStructTarget globalStructContext pairInitializedEntries = {pairEntryTarget with clock := globalStructTarget.clock} := by
+  rw [pairInitializedEntries_eq]
+  simp [installTargetFunctions,globalStructTarget,sourceTemplate,pairEntryTarget,HolFiniteMapExact.updateList,HolFiniteMapExact.update,FUPDATE_LIST,pairEntry_name]
 theorem pairEntry_globalRel : panGlobalsStateRelHOLExact true globalStructContext pairEntrySource pairEntryTarget := by
-  have h := globalStruct_stateRel_clock 16
-  simp only [panGlobalsStateRelHOLExact] at h ⊢
-  rcases h with ⟨a,b,c,d,e,f,g,i,j,k,l,m,n,o,_,rest⟩
-  refine ⟨a,b,c,d,e,by rfl,g,i,j,k,l,m,n,o,?_,rest⟩
-  intro name params body ret found
-  simp only [pairEntrySource,globalStructExactBase,exactState,singleEntrySourceTemplate,setGlobalHOLFinite,
-    HolFiniteMapExact.lookup_update,FUPDATE] at found
-  split at found
-  · simp only [Option.some.injEq,Prod.mk.injEq] at found
-    obtain ⟨rfl,rfl,rfl⟩ := found
-    simp [pairEntryTarget,HolFiniteMapExact.lookup_update,FUPDATE, *]
-  · simp [HolFiniteMapExact.lookup_empty] at found
+  have rel := pairConstructedInitializer
+  change panGlobalsStateRelHOLExact true globalStructContext
+    (installSourceFunctions globalStructHOL pairInitializedEntries) (installTargetFunctions globalStructTarget globalStructContext pairInitializedEntries) at rel
+  rw [pairInitializedSource_eq,pairInitializedTarget_eq] at rel
+  simp only [panGlobalsStateRelHOLExact] at rel ⊢
+  rcases rel with ⟨a,b,c,d,e,_,g,h,i,j,k,l,m,n,o,p,q,r,t⟩
+  exact ⟨a,b,c,d,e,rfl,g,h,i,j,k,l,m,n,o,p,q,r,t⟩
 
 
 def pairCrepContext : PanToCrepContextExact 64 := mkCtxtExactHOL HolFiniteMapExact.empty

@@ -99,6 +99,9 @@ the supported source table. Its explicit clock depends on the compiled code,
 fixture configuration and initial source clock. The theorem also requires
 relations between the source, lowered and Crep states, compiler-table
 conditions, and checkable machine encoding, safety and capacity conditions.
+`beforeGlobals_initializedFunctions` derives the global state relation by
+running declaration initializers and installing matching function tables; the
+pair witness uses this construction.
 `pairGeneral_namedSource` instantiates these conditions for a global pair: its
 initializer and renamed entry call return the second field, and the compiled
 machine runs the bytes produced by the Pancake compiler and halts with the

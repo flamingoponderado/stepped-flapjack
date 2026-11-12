@@ -124,7 +124,7 @@ theorem functionOnly_renamedTable {width : Nat} [NeZero width]
   rw [updateList_eq_updateListEq,fpermCodeHOL_updateListEq,fpermCodeHOL_empty]
   rw [← updateList_eq_updateListEq,functionsFpermDecsHOL,List.map_reverse]
 
-private theorem lookup_mapBodies {width : Nat} [NeZero width]
+theorem lookup_mapBodies {width : Nat} [NeZero width]
     (ctx : PanGlobalsContextExact width)
     (entries : List (MlS × List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL)) (name : MlS) :
     (entries.map (fun e => (e.1,e.2.1,compileProgExactHOL ctx e.2.2.1,e.2.2.2))).lookup name =
