@@ -924,15 +924,6 @@ private theorem tableWhileStep {σ : Type} (condition : ExpHOL 64) (body : ProgH
     | «continue» => have bound := loopBound (Or.inr rfl); simp only; omega
     | «break» | error | timeOut | returned _ | finalFfi _ | exception _ _ => simp only; omega
 
-/-- pan_simp's extra control visits are bounded by the weight of the simplified
-body, charged only on an abnormal exit. -/
-theorem supported_panSimp_controlSteps_simplified {σ : Type} (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
-    (s : PanSemStateFiniteExact 64 σ) :
-    controlSteps (progToHOL (panSimpProg program)) s ≤
-      controlSteps (progToHOL program) s +
-        exitOver (s.evaluateHOLFiniteState (progToHOL program)).1 (hw (progToHOL (panSimpProg program))) := by
-  exact callSupported_panSimp_controlSteps (.base supported.1) s
-
 /-- Compiled-code-only form: the overhead is at most the statement weight of
 the generated Crep body of the simplified program. -/
 theorem supported_panSimp_controlSteps_compiled {σ : Type} (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)

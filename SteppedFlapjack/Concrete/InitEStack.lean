@@ -40,23 +40,6 @@ def configuredWordOracle (cfg : LabToTarget.Config) (bs : List (BitVec 64)) :
 theorem configuredWordOracle_one (cfg : LabToTarget.Config) :
     configuredWordOracle cfg [4] = fixtureWordOracle cfg := by rfl
 
-/-- Stack-only initialization context for the concrete Lab layout. -/
-noncomputable def fixtureStackContext (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) : FullInitStackContext (fixtureStack code cfg) where
-  stackConf := countdownRiscVBackend.stackConf
-  dataConf := countdownRiscVBackend.dataConf
-  maxHeap := 2^53-1
-  sp := 24
-  offset := riscvConfig.addrOffset
-  bitmaps := [4]
-  inputCode := code
-  lab := fixtureLab code cfg
-  saveRegs := fixtureSavedRegs
-  dataSp := 0
-  coracle := fixtureStackOracle cfg
-  initAssumptions := fixtureLab_initAssumptions code cfg good
-  stackEq := rfl
-
 /-- Full initialization context for any fitting compiler bitmap list. -/
 noncomputable def configuredStackContext (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
     (bs : List (BitVec 64)) (fits : 0xa0020018 + bs.length*8 ≤ sourceBase)

@@ -73,33 +73,6 @@ theorem fixtureCodeStart_fits (code : List (Nat × HolProg 64))
   change 0x800f0134 - (fixtureCodeBytes code).length + (fixtureCodeBytes code).length ≤ 0xa0020018
   omega
 
-/-- For a fitting program the memory is exactly its word-backed loaded image. -/
-theorem fixtureLabMemoryFor_eq_loaded (code : List (Nat × HolProg 64))
-    (fits : (fixtureCodeBytes code).length ≤ 61440) (a : BitVec 64) :
-    fixtureLabMemoryFor code a = .word (fixtureLoadedWords (fixtureCodeStart code) (fixtureCodeBytes code) a) := by
-  by_cases domain : fixtureLabDomain a
-  · simp only [fixtureLabMemoryFor,if_pos domain]
-    exact (fixtureLoadedWords_domain (fixtureCodeStart code) (fixtureCodeBytes code)
-      (fixtureCodeStart_fits code fits) a domain).symm
-  · simp [fixtureLabMemoryFor,domain]
-
-/-- Loading code does not change the initializer's separated heap and bitmap. -/
-theorem fixtureLabMemoryFor_separated (code : List (Nat × HolProg 64)) : SetSep.star
-    (SetSep.star (Misc.wordList fixtureBitmapBase [(.word 4 : WordLocW 64)]) (Misc.wordListExists (fixtureBitmapBase+8) 0))
-    (Misc.wordListExists heapBase fixtureLabHeapWords)
-    (SetSep.fun2Set (fixtureLabMemoryFor code,fixtureLabDomain)) := by
-  have graph : SetSep.fun2Set (fixtureLabMemoryFor code,fixtureLabDomain) =
-      SetSep.fun2Set (fixtureLabMemory,fixtureLabDomain) := by
-    funext pair
-    apply propext
-    rcases pair with ⟨a,w⟩
-    simp only [SetSep.fun2SetThm]
-    constructor <;> intro ⟨h,domain⟩
-    · exact ⟨by simpa [fixtureLabMemoryFor,domain] using h,domain⟩
-    · exact ⟨by simpa [fixtureLabMemoryFor,domain] using h,domain⟩
-  rw [graph]
-  exact fixtureLabMemory_separated
-
 /-- Concrete heap and stack pointer registers for the Lab initializer. -/
 def fixtureLabRegs (r : Nat) : WordLocW 64 :=
   if r = 11 then .word heapBase else if r = 12 then .word (BitVec.ofNat 64 heapEnd)
@@ -257,16 +230,6 @@ theorem configuredLab_one (code : List (Nat × HolProg 64)) (cfg : LabToTarget.C
   rfl
 
 
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 2000000 in
-/-- The concrete Lab state meets the full initializer memory contract. -/
-theorem fixtureLab_memoryAssumption (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) :
-    StackToLab.Proofs.MakeInit.memoryAssumption countdownRiscVBackend.stackConf.regNames [4] 0 (fixtureLab code cfg) := by
-  have fits : 0xa0020018 + ([4] : List (BitVec 64)).length*8 ≤ sourceBase := by decide
-  have h := configuredLab_memoryAssumption code cfg [4] fits
-  rw [configuredLab_one] at h
-  exact h
-
 /-- Saved Lab registers used by the concrete initializer. -/
 noncomputable def fixtureSavedRegs (r : Nat) : Bool := decide (r = StackNames.findNameSpt countdownRiscVBackend.stackConf.regNames 24 ∨
   r = StackNames.findNameSpt countdownRiscVBackend.stackConf.regNames 25 ∨
@@ -330,15 +293,5 @@ theorem configuredLab_initAssumptions (code : List (Nat × HolProg 64)) (cfg : L
   · intro r hr
     simp only [List.mem_cons,List.not_mem_nil,or_false] at hr
     rcases hr with rfl | rfl | rfl <;> simp [fixtureSavedRegs]
-
-/-- The concrete Lab initializer meets its assumptions for well-formed Stack code. -/
-theorem fixtureLab_initAssumptions (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
-    Assumptions countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
-      [4] code (fixtureLab code cfg) fixtureSavedRegs 0 (fixtureStackOracle cfg) := by
-  have fits : 0xa0020018 + ([4] : List (BitVec 64)).length*8 ≤ sourceBase := by decide
-  have h := configuredLab_initAssumptions code cfg [4] fits good
-  rw [configuredLab_one] at h
-  exact h
 
 end SteppedFlapjack.Concrete

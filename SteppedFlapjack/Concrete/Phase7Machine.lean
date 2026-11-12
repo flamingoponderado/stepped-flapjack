@@ -14,7 +14,11 @@ open SteppedFlapjack.StackSteps
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 1000000 in
-/-- A counted function-only source return reaches the initialized machine with an explicit tick bound. -/
+/-- A counted function-only source return reaches the initialized machine with
+an explicit tick bound. The concrete checks require the compiler to select no
+functions for inlining and the source heap headers to use the compiled bitmap
+count. The call-graph capacity check can reject recursion and unresolved calls;
+these checks and the fixture layout are restrictions for init-e applicability. -/
 theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
     (supported : Supported program)     (production : PanSemState (RiscV.Word 64) (FfiState Unit)) (source : PanSemStateFiniteExact 64 Unit)
     [DecidablePred source.memaddrs]

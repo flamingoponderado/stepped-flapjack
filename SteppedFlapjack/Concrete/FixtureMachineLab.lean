@@ -306,26 +306,4 @@ theorem configuredMachine_guards (code : List (Nat × HolProg 64)) (cfg : Config
   · simp [fixtureMachineConfig,countdownMachineConfig]
 
 
-/-- Derive the complete Lab machine guards from concrete compiler facts and
-the already-proved machine initialization. -/
-theorem fixtureMachine_guards (code : List (Nat × HolProg 64)) (cfg : Config)
-    (code2 : LabProgHOL 64) (labs : Spt (Spt Nat))
-    (good : goodCode riscvConfig (.ln : Spt (Spt Nat)) (LabFilter.filterSkip (fixtureLab code cfg).code))
-    (names : findFfiNames (LabFilter.filterSkip (fixtureLab code cfg).code) = [])
-    (removed : removeLabels 5 riscvConfig 0 .ln [] (LabFilter.filterSkip (fixtureLab code cfg).code) = some (code2,labs))
-    (info : getShmemInfo code2 0 [] [] = ([],[]))
-    (noInstall : noInstallOrNoShareMem (LabFilter.filterSkip (fixtureLab code cfg).code) [])
-    (cfgLabs : cfg.labels = labs) (cfgPos : cfg.pos = (progToBytes code2).length) (cfgFfi : cfg.ffiNames = some [])
-    (fits : (fixtureCodeBytes code).length ≤ 61440) (aligned : (fixtureCodeBytes code).length % 4 = 0) :
-    LabMachineInitGuards (fixtureMachineConfig (fixtureCodeStart code)) (fixtureMachineState code)
-      (LabFilter.filterSkip (fixtureLab code cfg).code) code2 labs 5 0 0xecc (fixtureMachineAsm code)
-      (fixtureLabMemoryFor code) fixtureByteDomain fixtureSharedByteDomain
-      (fun n => (((fixtureLab code cfg).compileOracle n).1,
-        LabFilter.filterSkip ((fixtureLab code cfg).compileOracle n).2)) [] [] [] := by
-  have memEq := congrArg (fun lab => lab.memory) (configuredLab_one code cfg)
-  change configuredLabMemory code [4] = fixtureLabMemoryFor code at memEq
-  have h := configuredMachine_guards code cfg [4] (by decide) code2 labs good names removed info noInstall
-    cfgLabs cfgPos cfgFfi fits aligned
-  rwa [configuredMachineState_one, configuredMachineAsm_one, memEq, configuredByteDomain_one] at h
-
 end SteppedFlapjack.Concrete

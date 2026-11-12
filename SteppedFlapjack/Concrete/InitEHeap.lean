@@ -90,35 +90,6 @@ theorem configuredStack_ambient (code : List (Nat × HolProg 64)) (cfg : LabToTa
     by simpa [ctx,configuredStackContext,configuredLab,fixtureLab] using ambient.2.1,
     by simpa [ctx,configuredStackContext,configuredLab,fixtureLab] using ambient.2.2⟩
 
-/-- The singleton fixture inherits the configured heap and memory facts. -/
-theorem fixtureStack_heapBaseAndMemory (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
-    (fixtureStack code cfg).store.lookup .currHeap = some (.word heapBase) ∧
-      ∀ a, (fixtureStack code cfg).mdomain a = true → (fixtureStack code cfg).memory a = fixtureLabMemoryFor code a := by
-  have fits : 0xa0020018 + ([4] : List (BitVec 64)).length*8 ≤ sourceBase := by decide
-  have h := configuredStack_heapBaseAndMemory code cfg [4] fits good
-  rw [configuredStack_one] at h
-  have memory := congrArg (fun lab : LabSem.State 64 LabToTarget.Config Unit => lab.memory) (configuredLab_one code cfg)
-  change configuredLabMemory code [4] = fixtureLabMemoryFor code at memory
-  rw [memory] at h
-  exact h
-
-theorem fixtureStack_heapLength (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
-    (fixtureStack code cfg).store.lookup .heapLength = some (.word fixtureHeapLength) := by
-  have fits : 0xa0020018 + ([4] : List (BitVec 64)).length*8 ≤ sourceBase := by decide
-  have h := configuredStack_heapLength code cfg [4] fits good
-  rw [configuredStack_one] at h
-  exact h
-
-theorem fixtureStack_heapDomain (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) (a : BitVec 64) :
-    (fixtureStack code cfg).mdomain a = true ↔ ordinaryAddress a := by
-  have fits : 0xa0020018 + ([4] : List (BitVec 64)).length*8 ≤ sourceBase := by decide
-  have h := configuredStack_heapDomain code cfg [4] fits good a
-  rw [configuredStack_one] at h
-  exact h
-
 theorem fixtureStack_heapMemory (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
     (good : StackToLab.Proofs.GoodCode.goodCode 24 code) (a : BitVec 64)
     (member : ordinaryAddress a) : (fixtureStack code cfg).memory a = .word (initialWord a) := by
@@ -126,14 +97,5 @@ theorem fixtureStack_heapMemory (code : List (Nat × HolProg 64)) (cfg : LabToTa
   have h := configuredStack_heapMemory code cfg [4] fits good a member
   rw [configuredStack_one] at h
   simpa [initialWordFor_one] using h
-
-theorem fixtureStack_ambient (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
-    (fixtureStack code cfg).ffi = sourceFfi ∧ (fixtureStack code cfg).be = false ∧
-      (fixtureStack code cfg).shMdomain = (fun a => decide (sharedAddress a)) := by
-  have fits : 0xa0020018 + ([4] : List (BitVec 64)).length*8 ≤ sourceBase := by decide
-  have h := configuredStack_ambient code cfg [4] fits good
-  rw [configuredStack_one] at h
-  exact h
 
 end SteppedFlapjack.Concrete

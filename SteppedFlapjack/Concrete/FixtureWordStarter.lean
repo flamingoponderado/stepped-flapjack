@@ -119,27 +119,6 @@ theorem configuredStarter (program : Prog (RiscV.Word 64)) (fuel extra : Nat) (b
     memory := (configuredStack code cfg bs).memory, clock := clock, code := (configuredWord code words cfg bs).code} =
  {(configuredWord code words cfg bs) with clock := clock} := by
   exact configuredStarter_general _ rfl rfl rfl rfl rfl crepPrograms code words cfg bs fits good frame clock frameLookup
-/-- The singleton fixture uses the configured garbage collector. -/
-theorem fixtureGc (code : List (Nat × StackLang.HolProg 64)) (cfg : LabToTarget.Config) :
-    (fixtureStack code cfg).gcFun = WordGcFunctions.wordGcFun countdownRiscVBackend.dataConf := by
-  have h := configuredGc code cfg [4]
-  rw [configuredStack_one] at h
-  exact h
-
-theorem fixtureLoopDomains (program : Prog (RiscV.Word 64)) (fuel extra : Nat) (body : ProgHOL 64)
-    (crepPrograms : List (MlString × List Nat × CrepProgHOL 64))
-    (code : List (Nat × StackLang.HolProg 64)) (cfg : LabToTarget.Config)
-    (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
- let pan := panSimpSourceState program (clockedFixtureSource program fuel)
- let crep := crepStateFrom pan body
- let timed := {crep with clock := crep.clock + extra}
- (concreteDeclLoopState riscvConfig.isa timed crepPrograms).mdomain = (fixtureStack code cfg).mdomain ∧
- (concreteDeclLoopState riscvConfig.isa timed crepPrograms).shMdomain = (fixtureStack code cfg).shMdomain := by
-  have fits : 0xa0020018 + ([4] : List (BitVec 64)).length*8 ≤ sourceBase := by decide
-  have h := configuredLoopDomains program fuel extra body crepPrograms code cfg [4] fits good
-  rw [configuredStack_one] at h
-  exact h
-
 theorem fixtureStarter (program : Prog (RiscV.Word 64)) (fuel extra : Nat) (body : ProgHOL 64)
     (crepPrograms : List (MlString × List Nat × CrepProgHOL 64))
     (code : List (Nat × StackLang.HolProg 64)) (words : List (Nat × Nat × WordLangProgHOL (BitVec 64)))

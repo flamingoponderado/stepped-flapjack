@@ -64,7 +64,7 @@ Pancake → Crep → Loop → Word passes → Stack → Lab → RISC-V.
 ## Source-to-machine bound
 
 `SteppedFlapjack.Concrete.supported_counted_machine` composes the spans for a
-`Supported` singleton Pancake program. Given a returning run of
+`CallFreeSupported` singleton Pancake program. Given a returning run of
 `evalPanValueFfiProgSteps` with at most `n` steps, the theorem proves that the
 original Pancake compiler emits the bytes loaded into the fixture's RISC-V
 machine and that the machine halts successfully within
@@ -81,9 +81,9 @@ The result also states that `semanticsDecls` on the
 original declarations, starting with an empty code table and clock zero,
 terminates successfully with the machine's final I/O events.
 
-`Supported` currently covers a single parameter-free function with scoped
-scalar locals, scalar expressions, declarations, sequencing, conditionals,
-loops and word returns. Names must be representable as HOL byte strings. The
+`CallFreeSupported` covers a parameter-free function with scoped scalar locals,
+scalar expressions, declarations, sequencing, conditionals, loops and word
+returns. Names must be representable as HOL byte strings. The
 counted source run uses the init-e-shaped fixture state in `Concrete.SourceState`;
 its memory, FFI and layout are fixed by that fixture. The theorem additionally
 requires concrete checks on the generated native code: its callee frame fits
@@ -93,6 +93,22 @@ buffer. It derives the compiler's bitmap and good-code conditions. These checks
 refer to the program and configuration and can be discharged for a concrete
 program; they do not quantify over a machine tick bound.
 
+`Supported` also admits ordinary and tail calls. For function-only programs,
+`FunctionTableSupported` requires scalar parameters and return shapes, scoped
+call-aware bodies, and byte-representable names. `countedCalls_initializedMachine`
+uses those declarations and a counted source return to derive the actual
+compiler output, matching source and machine behavior, and an explicit machine
+tick expression. Its concrete checks include code size, alignment, native
+stack safety and call-graph capacity; the capacity check can reject recursion.
+It also requires that the compiler select no functions for inlining and that
+the source heap headers use the bitmap count computed by the compiler. These
+conditions and the fixed fixture layout are gaps relative to init-e's actual
+initialization and guest.
+The current call-aware Word-to-Stack bound is exponential in the source-derived
+bound, so the linear bound required by the roadmap remains to be proved.
+`nested_initialized_machine` instantiates this composition with two call levels
+and a six-step source execution.
+
 `countdownFixture_machine`, `naturalCountdownFixture_machine`,
 `comparisonFixture_machine` and `branchingLoopFixture_machine` instantiate the
 common theorem and discharge those checks. For countdown input `n < 2^64`,
@@ -100,9 +116,9 @@ the machine clock is `167602730287449600 * (6*n+9) + 1592247331570371948`.
 The comparison and branching-loop clocks are `90715439766875148` and
 `36771214184170446348` respectively.
 
-This fragment and fixture do not yet cover init-e's full guest: its multiple
-functions, calls, globals, heap and shared-memory operations, exceptions, FFI,
-primitive behavior and host input are part of the widening work in the
+This fragment and fixture do not yet cover init-e's full guest: globals, heap
+and shared-memory operations, exceptions, FFI, primitive behavior and host
+input are part of the widening work in the
 [roadmap](https://github.com/flamingoponderado/stepped-flapjack/issues/19).
 The eventual theorem must apply to init-e's `Guest.Software.guestAst` and
 `InitE.sourceBehaviour` with its actual initialization and host input.

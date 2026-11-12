@@ -68,10 +68,6 @@ theorem fixtureLabDomain_aligned (a : BitVec 64) (h : fixtureLabDomain a) : holB
 noncomputable def fixtureSharedByteDomain : BitVec 64 → Bool :=
   byteClosure (fun a => decide (sharedAddress a))
 
-theorem fixtureByteDomain_closed (a : BitVec 64) :
-    fixtureByteDomain (holByteAlign a) = true → fixtureByteDomain a = true :=
-  byteClosure_closed _ a
-
 theorem fixtureSharedByteDomain_closed (a : BitVec 64) :
     fixtureSharedByteDomain (holByteAlign a) = true → fixtureSharedByteDomain a = true :=
   byteClosure_closed _ a
@@ -139,15 +135,6 @@ theorem configuredByteDomain_in_program (bs : List (BitVec 64)) (pc a : BitVec 6
         omega
   exact ⟨by omega,notShared⟩
 
-/-- All fixture data bytes lie in program memory when code starts below the bitmap. -/
-theorem fixtureByteDomain_in_program (pc a : BitVec 64)
-    (pcBound : pc.toNat ≤ 0xa0020018) (inData : fixtureByteDomain a = true) :
-    (fixtureMachineConfig pc).progAddresses a := by
-  apply configuredByteDomain_in_program [4] pc a (by decide) pcBound
-  rw [configuredByteDomain_one]
-  exact inData
-
-
 /-- The code and service-address region is outside the init-e shared ranges. -/
 theorem fixtureSharedByteDomain_false_between (a : BitVec 64)
     (lo : 0x80000000 ≤ a.toNat) (hi : a.toNat < 0xa0410000) :
@@ -197,13 +184,6 @@ theorem fixtureMachineConfig_startPc (pc : BitVec 64)
   · simp
   · simp [fixtureMachineConfig,countdownMachineConfig]
   · rfl
-
-
-/-- Addresses below the bitmap cannot belong to the fixture data domain. -/
-theorem fixtureByteDomain_false_below (a : BitVec 64) (below : a.toNat < 0xa0020018) :
-    fixtureByteDomain a = false := by
-  have h := configuredByteDomain_false_below [4] a below
-  rwa [configuredByteDomain_one] at h
 
 
 /-- The fixture machine has identity ordinary interference and no FFI entries. -/

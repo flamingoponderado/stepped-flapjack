@@ -61,25 +61,6 @@ theorem bitmapInitialWords_singleton : bitmapInitialWords [4] initialWord = fixt
 noncomputable def fixtureLoadedWords (address : BitVec 64) (bytes : List (BitVec 8)) : BitVec 64 → BitVec 64 :=
   countdownWriteCode address bytes fixtureInitialWords
 
-/-- The bytes loaded at the entry point are exactly the compiler output. -/
-theorem fixtureLoadedWords_get (address : BitVec 64) (bytes : List (BitVec 8)) (i : Nat) (hi : i < bytes.length)
-    (size : bytes.length < 2^64) :
-    countdownBytesOfWords (fixtureLoadedWords address bytes) (address + BitVec.ofNat 64 i) = bytes[i] :=
-  countdownWriteCode_get bytes address fixtureInitialWords i hi size
-
-/-- Loading code below the bitmap preserves the init-e heap and bitmap. -/
-theorem fixtureLoadedWords_domain (address : BitVec 64) (bytes : List (BitVec 8))
-    (fits : address.toNat + bytes.length ≤ 0xa0020018)
-    (a : BitVec 64) (domain : fixtureLabDomain a) :
-    WordLocW.word (fixtureLoadedWords address bytes a) = fixtureLabMemory a := by
-  have domain' : bitmapDomain ([4] : List (BitVec 64)).length a ∨
-      (sourceBase ≤ a.toNat ∧ a.toNat < ramEnd ∧ a.toNat % 8 = 0) := by
-    simpa [bitmapDomain_singleton,fixtureLabDomain] using domain
-  have h := bitmapLoadedWords_domain address bytes [4] initialWord fits a domain'
-  rw [bitmapInitialWords_singleton,bitmapMemory_singleton] at h
-  exact h
-
-
 /-- Loading a program below the bitmap retains the separated concrete bitmap and heap. -/
 theorem bitmapLoadedMemory_separated (address : BitVec 64) (bytes : List (BitVec 8))
     (bs : List (BitVec 64)) (base : BitVec 64 → BitVec 64)

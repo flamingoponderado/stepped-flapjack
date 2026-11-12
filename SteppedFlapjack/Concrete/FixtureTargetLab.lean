@@ -62,15 +62,6 @@ theorem configuredTargetLab_one (code : List (Nat × HolProg 64)) (cfg : LabToTa
   unfold configuredTargetLab fixtureTargetLab
   rw [memEq, domEq, configuredLab_one]
 
-theorem fixtureTargetLab_shape (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (ms : RiscV.L3.riscv_state) :
- fixtureTargetLab code cfg ms = {(fixtureLab code cfg) with
-  ioRegs := targetIoRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms,
-  ioFpRegs := targetIoFpRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms,
-  ccRegs := targetCcRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms,
-  ccFpRegs := targetCcFpRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms} := by
- have h := configuredTargetLab_shape code cfg [4] ms
- rw [configuredTargetLab_one, configuredLab_one] at h
- exact h
 open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInit
 open Flapjack.Compiler.Backend.StackRemove.Proofs
 open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics

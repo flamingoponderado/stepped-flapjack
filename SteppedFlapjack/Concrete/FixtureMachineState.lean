@@ -77,16 +77,6 @@ theorem configuredMachineState_targetRel (code : List (Nat × HolProg 64)) (bs :
     change i < 0 at hi
     omega
 
-set_option maxRecDepth 10000 in
-/-- Machine registers and memory satisfy the target relation whenever the entry
-address meets the target's ordinary instruction-alignment condition. -/
-theorem fixtureMachineState_targetRel (code : List (Nat × HolProg 64))
-    (aligned : holAligned 2 (fixtureCodeStart code) = true) :
-    targetStateRel riscvTarget (fixtureMachineAsm code) (fixtureMachineState code) := by
-  have h := configuredMachineState_targetRel code [4] aligned
-  rwa [configuredMachineAsm_one, configuredMachineState_one] at h
-
-
 /-- Each byte of a small compiled program lies between its entry and buffer. -/
 theorem fixtureCodeAddress_bounds (code : List (Nat × HolProg 64))
     (fits : (fixtureCodeBytes code).length ≤ 61440) (i : Nat) (hi : i < (fixtureCodeBytes code).length) :
@@ -177,37 +167,6 @@ theorem configuredMachine_codeBuffer (code : List (Nat × HolProg 64)) (bs : Lis
     cases h
 
 
-set_option maxRecDepth 10000 in
-/-- The actual compiled byte stream is loaded at the concrete machine entry. -/
-theorem fixtureMachine_codeLoaded (code : List (Nat × HolProg 64))
-    (fits : (fixtureCodeBytes code).length ≤ 61440) :
-    bytesInMemHOL (fixtureCodeStart code) (fixtureCodeBytes code) (fixtureMachineBytes code)
-      (fixtureMachineConfig (fixtureCodeStart code)).progAddresses
-      (fun a => fixtureByteDomain a = true) := by
-  have h := configuredMachine_codeLoaded code [4] fits
-  rwa [configuredMachineBytes_one, configuredByteDomain_one] at h
-
-
-/-- The machine semantics sees exactly the loaded compiler byte stream. -/
-theorem fixtureMachine_targetCodeLoaded (code : List (Nat × HolProg 64))
-    (fits : (fixtureCodeBytes code).length ≤ 61440) :
-    codeLoaded (fixtureCodeBytes code) (fixtureMachineConfig (fixtureCodeStart code))
-      (fixtureMachineState code) := by
-  have h := configuredMachine_targetCodeLoaded code [4] fits
-  rwa [configuredMachineState_one] at h
-
-
-/-- Every byte in the reserved code buffer is program memory outside data. -/
-theorem fixtureMachine_codeBuffer (code : List (Nat × HolProg 64))
-    (fits : (fixtureCodeBytes code).length ≤ 61440) :
-    ∀ n, n < 0xecc →
-      (fixtureMachineAsm code).memDomain
-        (BitVec.ofNat 64 (n+(fixtureCodeBytes code).length) + fixtureCodeStart code) ∧
-      fixtureByteDomain (BitVec.ofNat 64 (n+(fixtureCodeBytes code).length) + fixtureCodeStart code) ≠ true := by
-  have h := configuredMachine_codeBuffer code [4] fits
-  rwa [configuredMachineAsm_one, configuredByteDomain_one] at h
-
-
 /-- Encoded instruction-size alignment gives the bit-mask contracts required
 by the assembler and target machine. -/
 theorem fixtureCodeStart_masks (code : List (Nat × HolProg 64))
@@ -267,19 +226,5 @@ theorem configuredMachine_goodInit (code : List (Nat × HolProg 64)) (bs : List 
     exact configuredLabMemory_eq_loaded code bs fits _
   · omega
 
-
-set_option maxRecDepth 10000 in
-/-- A fitting, instruction-aligned compiler output satisfies the complete
-machine initialization contract with the byte-closed fixture domains. -/
-theorem fixtureMachine_goodInit (code : List (Nat × HolProg 64))
-    (fits : (fixtureCodeBytes code).length ≤ 61440)
-    (aligned : (fixtureCodeBytes code).length % 4 = 0) :
-    goodInitState (fixtureMachineConfig (fixtureCodeStart code)) (fixtureMachineState code)
-      (fixtureCodeBytes code) 0xecc (fixtureMachineAsm code) (fixtureLabMemoryFor code)
-      fixtureByteDomain fixtureSharedByteDomain := by
-  have memEq := congrArg (fun lab => lab.memory) (configuredLab_one code countdownRiscVBackend.labConf)
-  change configuredLabMemory code [4] = fixtureLabMemoryFor code at memEq
-  have h := configuredMachine_goodInit code [4] (by decide) fits aligned
-  rwa [configuredMachineState_one, configuredMachineAsm_one, memEq, configuredByteDomain_one] at h
 
 end SteppedFlapjack.Concrete

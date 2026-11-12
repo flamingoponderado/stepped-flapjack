@@ -189,20 +189,4 @@ theorem bitmapMemory_singleton : bitmapMemory [4] (fun a => .word (initialWord a
     change ¬ bitmapDomain 1 a at domain
     simp only [bitmapMemory,fixtureLabMemory,List.length_cons,List.length_nil,domain,eq,if_false]
 
-/-- The real initializer memory layout holds without enumerating the large heap. -/
-theorem fixtureLabMemory_separated : SetSep.star
-    (SetSep.star (Misc.wordList fixtureBitmapBase [(.word 4 : WordLocW 64)]) (Misc.wordListExists (fixtureBitmapBase+8) 0))
-    (Misc.wordListExists heapBase fixtureLabHeapWords)
-    (SetSep.fun2Set (fixtureLabMemory,fixtureLabDomain)) := by
-  have fits : 0xa0020018 + ([4] : List (BitVec 64)).length * 8 ≤ sourceBase := by decide
-  have separated := bitmapMemory_separated [4] (fun a => .word (initialWord a)) fits
-  rw [bitmapMemory_singleton] at separated
-  have domain : (fun a => bitmapDomain ([4] : List (BitVec 64)).length a ∨ addresses heapBase fixtureLabHeapWords a) = fixtureLabDomain := by
-    funext a
-    simp [bitmapDomain_singleton,fixtureLabDomain,← fixtureLabHeap_addresses]
-  rw [domain] at separated
-  have zero := (WordListExists.wordListExistsThm (β := WordLocW 64) (fixtureBitmapBase+8) 0).1
-  rw [zero,SetSep.starComm _ SetSep.emp,StackHeap.starEmptyLeft]
-  simpa using separated
-
 end SteppedFlapjack.Concrete
