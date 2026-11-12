@@ -1654,8 +1654,8 @@ private theorem storeBridge {scope : List VarName} {address value : Exp (RiscV.W
         | some memory =>
           simp only [ae,ve,store,Option.map_some,Option.some.injEq,Prod.mk.injEq] at run
           obtain ⟨rfl,rfl⟩ := run
-          obtain ⟨holMemory,_,hol,finalRel,finalRanged,bound⟩ := counted_store_word production source rel ranged
-            address value addrRanged valueRanged addr word ae' ve' memory store context primitive handler functions fuel
+          obtain ⟨holMemory,_,hol,finalRel,finalRanged,bound⟩ := counted_store_value production source rel ranged
+            address value addrRanged valueRanged addr (.word word) ae' ve' memory store context primitive handler functions fuel
           have clockEq : source.clock = production.clock := rel.2.2.2.2.2.2.2.2.1
           refine ⟨none,{source with memory := holMemory},?_,?_,?_,?_⟩
           · simpa [progToHOL] using hol

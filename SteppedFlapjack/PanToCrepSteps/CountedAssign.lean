@@ -64,19 +64,19 @@ theorem counted_assign_local {σ : Type}
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
-/-- A successful word store preserves executable/HOL state relations; its
+/-- A successful value store preserves executable/HOL state relations; its
 source-expression costs bound the HOL control visit. -/
-theorem counted_store_word {σ : Type}
+theorem counted_store_value {σ : Type}
     (production : PanSemState (RiscV.Word 64) (FfiState σ))
     (exact : PanSemStateFiniteExact 64 σ) [DecidablePred exact.memaddrs]
     (rel : PanSemStateRelExec production exact.toExact) (ranged : PanSemStateRelExecRanged production)
     (address value : Exp (RiscV.Word 64))
     (addressRanged : ExpByteRanged address) (valueRanged : ExpByteRanged value)
-    (addr word : RiscV.Word 64)
+    (addr : RiscV.Word 64) (stored : PanValue (RiscV.Word 64))
     (addressEval : evalPanSemStateExp production address = some (.word addr))
-    (valueEval : evalPanSemStateExp production value = some (.word word))
+    (valueEval : evalPanSemStateExp production value = some stored)
     (updated : RiscV.Word 64 → Option (PanValue (RiscV.Word 64)))
-    (store : panValueStoreWithAccess production.memory panSemBitVec64BytesInWord addr (.word word)
+    (store : panValueStoreWithAccess production.memory panSemBitVec64BytesInWord addr stored
       (some (panSemBitVec64MemoryAccess production)) = some updated)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) σ)
@@ -100,7 +100,7 @@ theorem counted_store_word {σ : Type}
     simpa only [evalPanSemStateExp_64_eq_previous] using addressEval
   have valuePrevious : evalPanValueExp production.structs production.locals production.globals production.memory
       production.baseAddress production.topAddress panSemBitVec64BytesInWord value
-      (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (.word word) := by
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some stored := by
     simpa only [evalPanSemStateExp_64_eq_previous] using valueEval
   have addrCounted : evalPanValueExpCounted production.structs production.locals production.globals production.memory
       production.baseAddress production.topAddress panSemBitVec64BytesInWord address
@@ -108,19 +108,19 @@ theorem counted_store_word {σ : Type}
     simp [evalPanValueExpCounted,addrPrevious]
   have valueCounted : evalPanValueExpCounted production.structs production.locals production.globals production.memory
       production.baseAddress production.topAddress panSemBitVec64BytesInWord value
-      (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (.word word,panValueExpStepCost value) := by
+      (memoryAccess := some (panSemBitVec64MemoryAccess production)) = some (stored,panValueExpStepCost value) := by
     simp [evalPanValueExpCounted,valuePrevious]
   have addrAgree := evalPanSemStateExp_agree production exact rel ranged address addressRanged
   have valueAgree := evalPanSemStateExp_agree production exact rel ranged value valueRanged
   have addrHOL : @evalHOLExact 64 σ _ exact.toExact (fun a => Classical.propDecidable (exact.memaddrs a)) (expToHOL address) = some (.val (.word addr)) := by
     rw [evalHOLFinite_eq_classical,← addrAgree,addressEval]
     simp
-  have valueHOL : @evalHOLExact 64 σ _ exact.toExact (fun a => Classical.propDecidable (exact.memaddrs a)) (expToHOL value) = some (.val (.word word)) := by
+  have valueHOL : @evalHOLExact 64 σ _ exact.toExact (fun a => Classical.propDecidable (exact.memaddrs a)) (expToHOL value) = some (panValueToHOL stored) := by
     rw [evalHOLFinite_eq_classical,← valueAgree,valueEval]
     simp
-  have bridge := panSemStateRelExec_storeWithAccess production exact.toExact rel addr (.word word)
+  have bridge := panSemStateRelExec_storeWithAccess production exact.toExact rel addr stored
   rw [store] at bridge
-  cases hmem : @panMemStoresHOL 64 _ addr (flattenHOL (panValueToHOL (.word word))) exact.memaddrs
+  cases hmem : @panMemStoresHOL 64 _ addr (flattenHOL (panValueToHOL stored)) exact.memaddrs
       (fun a => Classical.propDecidable (exact.memaddrs a)) exact.memory with
   | none => rw [hmem] at bridge; contradiction
   | some memory =>
@@ -129,15 +129,16 @@ theorem counted_store_word {σ : Type}
     · simp [evalPanValueFfiProgSteps,panValueStoreResult,addrCounted,valueCounted,store]
     · rw [evaluateHOLFiniteState_store,addrHOL,valueHOL]
       simp only
-      have hstore : @panMemStoresHOL 64 _ addr (flattenHOL (.val (.word word))) exact.memaddrs
+      have hstore : @panMemStoresHOL 64 _ addr (flattenHOL (panValueToHOL stored)) exact.memaddrs
           (fun a => Classical.propDecidable (exact.memaddrs a)) exact.memory = some memory := by
-        simpa [panValueToHOL] using hmem
+        exact hmem
       rw [hstore]
     · simpa only [PanSemStateFiniteExact.toExact] using bridge
     · exact ranged
     · rw [controlSteps.eq_def]
       simp only
       omega
+
 
 /-- For any related executable and HOL states, a successful word-valued
 return has the same result and its actual counted cost bounds the HOL visit. -/

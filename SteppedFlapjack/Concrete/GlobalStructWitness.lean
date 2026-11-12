@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.SourceState
+import SteppedFlapjack.PanToCrepSteps.CountedGlobalAssign
 import SteppedFlapjack.PanValueFfiSemantics
 import Flapjack.Pancake.Proofs.PanGlobals.CompileCorrect.Assembly
 import Flapjack.Pancake.PanStructs.CompileDeclsExact
@@ -279,5 +280,34 @@ theorem globalStruct_source_run_clock (clock : Nat) : ∃ final,
       globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,setKvarHOLFinite,isValidValueHOLFinite,
       lookupKvarHOLExact,FUPDATE,shapeOfHOLExact,shapeEqHOL,shapeEqHOL.shapeEqListHOL,emptyLocalsHOLFinite]
 
+
+open SteppedFlapjack.PanToCrepSteps
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+/-- The concrete global pair assignment satisfies the general counted bridge. -/
+theorem pair_assignment_bridge (body : ProgHOL 64) :
+    let p := {globalStructProductionBase body with globals := updatePanValueMap (globalStructProductionBase body).globals "pair" (.rStruct [.word 0,.word 0])}
+    let s := setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) (globalStructExactBase body)
+    evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none)
+      p.structs [] p.baseAddress p.topAddress panSemBitVec64BytesInWord 1 p.locals p.globals p.memory p.ffi
+      (.assign .global "pair" (.rStruct [.const 7,.const 8])) (memoryAccess := some (panSemBitVec64MemoryAccess p)) =
+      some (.normal p.locals (updatePanValueMap p.globals "pair" (.rStruct [.word 7,.word 8])) p.memory p.ffi,4) ∧
+    s.evaluateHOLFiniteState (.assign .global (ofString "pair") (.rstruct [.const 7,.const 8])) =
+      (none,setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 7,.word 8])) s) ∧
+    controlSteps (.assign .global (ofString "pair") (.rstruct [.const 7,.const 8])) s ≤ 4 := by
+  let : DecidablePred (setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) (globalStructExactBase body)).memaddrs := by
+    change DecidablePred globalStructSourceDomain
+    infer_instance
+  dsimp only []
+  have result := counted_assign_global _ _ (globalStructInitial_related body) (globalStructInitial_ranged body)
+    "pair" (by decide) (.rStruct [.const 7,.const 8]) (by simp [ExpByteRanged,ListExpByteRanged])
+    (.rStruct [.word 7,.word 8]) (by simp [evalPanSemStateExp_64_eq_previous,evalPanValueExp,evalPanValueExp.evalPanValueExps])
+    (by simp [globalStructExactBase,exactState,sourceTemplate,setGlobalHOLFinite,isValidValueHOLFinite,lookupKvarHOLExact,FUPDATE,shapeOfHOLExact,shapeEqHOL,shapeEqHOL.shapeEqListHOL])
+    (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 0
+  refine ⟨?_,?_,?_⟩
+  · simpa [panValueExpStepCost,panValueExpStepCost.panValueExpsStepCost] using result.1
+  · simpa only [expToHOL,List.map] using result.2.1
+  · simpa [panValueExpStepCost,panValueExpStepCost.panValueExpsStepCost,expToHOL] using result.2.2.2.2
 
 end SteppedFlapjack.Concrete

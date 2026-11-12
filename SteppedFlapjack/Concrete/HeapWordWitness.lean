@@ -86,9 +86,9 @@ theorem heapWordStore_corresponds :
       (some (panSemBitVec64MemoryAccess production)) =
         some (updatePanValueMemory production.memory 0xa1000100 (.word 7)) := by
     with_unfolding_all rfl
-  obtain ⟨memory,_,holRun,holRel,_,bound⟩ := counted_store_word production source rel ranged
+  obtain ⟨memory,_,holRun,holRel,_,bound⟩ := counted_store_value production source rel ranged
     (.const 0xa1000100) (.const 7) (by simp [ExpByteRanged]) (by simp [ExpByteRanged])
-    0xa1000100 7 aeval veval (updatePanValueMemory production.memory 0xa1000100 (.word 7)) store
+    0xa1000100 (.word 7) aeval veval (updatePanValueMemory production.memory 0xa1000100 (.word 7)) store
     (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 0
   exact ⟨memory,holRun,holRel,by simpa [panValueExpStepCost] using bound⟩
 end SteppedFlapjack.Concrete
