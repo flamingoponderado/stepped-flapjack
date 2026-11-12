@@ -105,8 +105,9 @@ machine runs the bytes produced by the Pancake compiler and halts with the
 same I/O events as the named-struct source. Its clock
 is 374,713,592,693,268,806,748 ticks for the concrete code and a 16-step
 initial source clock.
-`heapFixture_machine` carries a concrete heap store and load through the
-function-only composition with an explicit clock expression.
+`heapFixture_machine_numeric` carries a concrete heap store and load through the
+function-only composition with a kernel-checked bound of
+29,426,197,640,928,697,548 ticks.
 
 The current fragment has scalar locals, parameters and return values. The
 fixture reserves globals below the init-e heap endpoint; it does not yet cover

@@ -31,7 +31,7 @@ private theorem heapSource_run :
 
 
 
-private theorem heap_simpDeclarations : heapSimpFunctions.map DeclHOL.function = declarations (progToHOL (panSimpProg heapWordWitness)) := by
+theorem heap_simpDeclarations : heapSimpFunctions.map DeclHOL.function = declarations (progToHOL (panSimpProg heapWordWitness)) := by
   simp [heapSimpFunctions,heapHOLFunctions,heapFunctions,declarations,singleEntryProgram,funDeclToHOL,progToHOL,expToHOL,shapeToHOL,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL,seqCallRetHOL,heapWordWitness,panSimpProg,seqAssoc,retToTail,smartSeq,seqCallRet]
 
 
@@ -76,7 +76,7 @@ private theorem heapFound : heapSource.code.lookup (ofString "main") = some ([],
     HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,ofString]
 
 
-private theorem heapRaw_same : loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa
+theorem heapRaw_same : loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa
     (compileProgDeclsHOLW (compileTopExactHOL (heapSimpFunctions.map DeclHOL.function) (ofString "main")))) =
     supportedWordPrograms heapWordWitness := by
   unfold supportedWordPrograms crepPrograms
@@ -84,14 +84,14 @@ private theorem heapRaw_same : loopToWordCompileHOL (compileProgHOLExact riscvCo
 
 
 
-private theorem heapAllocator_same : compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig
+theorem heapAllocator_same : compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig
     (loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa
       (compileProgDeclsHOLW (compileTopExactHOL (heapSimpFunctions.map DeclHOL.function) (ofString "main"))))) =
     supportedAllocated heapWordWitness := by
   exact congrArg (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig) heapRaw_same
 
 
-private theorem heapNative_same :
+theorem heapNative_same :
     compileNative riscvConfig false (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig
       (loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa
         (compileProgDeclsHOLW (compileTopExactHOL (heapSimpFunctions.map DeclHOL.function) (ofString "main")))))).2 =
