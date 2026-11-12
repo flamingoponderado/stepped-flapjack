@@ -1,10 +1,34 @@
-import SteppedFlapjack.Concrete.GlobalStructWitness
+import SteppedFlapjack.Concrete.GlobalStructCrep
 import SteppedFlapjack.Concrete.Phase7SourceBehaviour
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
 
 def globalStructDeclared : PanSemStateFiniteExact 64 Unit :=
   {globalStructHOL with code := HolFiniteMapExact.empty.update (ofString "main",([],progToHOL globalStructWitness,.one))}
+
+open SteppedFlapjack.PanToCrepSteps
+
+theorem globalStruct_sourceTable : GlobalSingleCallTable globalStructContext globalStructDeclared.code := by
+  intro name values body locals shape found
+  have raw := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some globalStructDeclared.code.lookup name values body locals shape found
+  by_cases eq : name = ofString "main"
+  · subst name
+    cases values with
+    | nil =>
+      simp [lookupCodeHOLExact,globalStructDeclared,globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,
+        HolFiniteMapExact.lookup_update,FUPDATE] at raw
+      obtain ⟨rfl,_,_⟩ := raw
+      exact ⟨globalStructCrepContext,globalStruct_sourceFrontend⟩
+    | cons v vs =>
+      simp [lookupCodeHOLExact,globalStructDeclared,globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,
+        HolFiniteMapExact.lookup_update,FUPDATE] at raw
+  · simp [lookupCodeHOLExact,globalStructDeclared,globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,
+      HolFiniteMapExact.lookup_update,FUPDATE,HolFiniteMapExact.lookup_empty,Ne.symm eq] at raw
+
+/-- The real main call is accepted by the source call fragment. -/
+theorem globalStruct_sourceCall : GlobalSingleCall globalStructContext globalStructCrepContext
+    (.call none (ofString "main") []) := by
+  exact .tail (by simp)
 
 local instance : DecidablePred globalStructBase.memaddrs := by
   change DecidablePred globalStructSourceDomain

@@ -203,4 +203,302 @@ theorem globalFrontend_correct_with_steps {σ : Type}
     ctxt (compileProgExactHOL globals p) (globalFrontend_compiled shape) target targetFinal result crep
     sourceLimit targetRun nonerror loweredBound stateRel codeRel excpRel localsRel
   exact ⟨targetFinal,crepResult,crepFinal,targetRun,globalFinal,crepRun,finalRel,resultRel,steps⟩
+private theorem compiledArgs (g : PanGlobalsContextExact 64) (args : List (ExpHOL 64)) :
+    compileExpExactHOLList g args = args.map (compileExpExactHOL g) := by
+  induction args with
+  | nil => simp [compileExpExactHOLList]
+  | cons e es ih => simp [compileExpExactHOLList,ih]
+
+/-- A tail call into a global-aware callee preserves its control-visit count. -/
+private theorem globalFrontend_tailReached {σ : Type} (globals : PanGlobalsContextExact 64)
+    (function : MlS) (args : List (ExpHOL 64)) (callee : ProgHOL 64) (ctxt : PanToCrepContextExact 64)
+    (calleeShape : GlobalFrontend globals ctxt callee)
+    (source sourceFinal target : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
+    (values : List (ValueHOL 64)) (locals : HolFiniteMapExact MlS (ValueHOL 64)) (returnShape : ShapeHOL)
+    (sourceArgs : @evalListHOLFinite 64 σ _ source (fun a => Classical.propDecidable (source.memaddrs a)) args = some values)
+    (sourceFound : lookupCodeHOLFinite source.code.lookup function values = some (callee,locals,returnShape))
+    (clock : source.clock ≠ 0)
+    (run : source.evaluateHOLFiniteState (.call none function args) = (result,sourceFinal))
+    (nonerror : result ≠ some .error) (rel : panGlobalsStateRelHOLExact true globals source target) :
+    controlSteps (compileProgExactHOL globals (.call none function args)) target =
+      controlSteps (.call none function args) source := by
+  have targetArgs := PanGlobalsOptMmapEvalCorrect.optMmapEvalCorrectHOL globals source target args values ⟨rel,sourceArgs⟩
+  rw [← compiledArgs] at targetArgs
+  have targetFound := PanGlobalsStateRelationCode.stateRelLookupCodeHOL globals source target true
+    function values callee locals returnShape ⟨rel,sourceFound⟩
+  have clockRel : source.clock = target.clock := rel.2.2.2.2.2.1
+  have targetClock : target.clock ≠ 0 := clockRel ▸ clock
+  have decremented := PanGlobalsStateRelationClock.stateRelDecClockHOL globals source target true rel
+  have entryRel := (PanGlobalsStateRelationLocals.stateRelChangeLocalsHOL globals source.decClockHOLFinite
+    target.decClockHOLFinite true locals).1 decremented
+  change panGlobalsStateRelHOLExact true globals (callEntryStateHOLFinite source locals) (callEntryStateHOLFinite target locals) at entryRel
+  rcases bodyRun : (callEntryStateHOLFinite source locals).evaluateHOLFiniteState callee with ⟨bodyResult,bodyFinal⟩
+  have bodyNonerror : bodyResult ≠ some .error := by
+    intro bad
+    simp only [evaluateHOLFiniteState_call,sourceArgs,sourceFound,if_neg clock,bodyRun,bad] at run
+    exact nonerror (Prod.mk.inj run).1.symm
+  have equal := globalFrontend_controlSteps calleeShape _ bodyFinal _ bodyResult bodyRun bodyNonerror entryRel
+  simp only [compileProgExactHOL]
+  rw [controlSteps_tailCall _ _ source values callee locals returnShape sourceArgs sourceFound clock,
+    controlSteps_tailCall _ _ target values (compileProgExactHOL globals callee) locals returnShape targetArgs targetFound targetClock,equal]
+
+/-- Returning calls preserve visits when both callee and continuation use
+    supported global operations. -/
+private theorem globalFrontend_returningCallControl {σ : Type} (globals : PanGlobalsContextExact 64)
+    (dest function : MlS) (args : List (ExpHOL 64)) (callee cont : ProgHOL 64)
+    (calleeCtxt contCtxt : PanToCrepContextExact 64)
+    (calleeShape : GlobalFrontend globals calleeCtxt callee) (contShape : GlobalFrontend globals contCtxt cont)
+    (source sourceFinal target : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
+    (values : List (ValueHOL 64)) (locals : HolFiniteMapExact MlS (ValueHOL 64)) (returnShape : ShapeHOL)
+    (value : ValueHOL 64) (bodyFinal : PanSemStateFiniteExact 64 σ)
+    (sourceArgs : @evalListHOLFinite 64 σ _ source (fun a => Classical.propDecidable (source.memaddrs a)) args = some values)
+    (sourceFound : lookupCodeHOLFinite source.code.lookup function values = some (callee,locals,returnShape))
+    (clock : source.clock ≠ 0)
+    (bodyRun : (callEntryStateHOLFinite source locals).evaluateHOLFiniteState callee = (some (.returned value),bodyFinal))
+    (valid : shapeEqHOL (shapeOfHOLExact value) .one = true)
+    (returnValid : shapeEqHOL (shapeOfHOLExact value) returnShape = true)
+    (run : source.evaluateHOLFiniteState (.decCall dest .one function args cont) = (result,sourceFinal))
+    (nonerror : result ≠ some .error) (rel : panGlobalsStateRelHOLExact true globals source target) :
+    controlSteps (compileProgExactHOL globals (.decCall dest .one function args cont)) target =
+      controlSteps (.decCall dest .one function args cont) source := by
+  have targetArgs := PanGlobalsOptMmapEvalCorrect.optMmapEvalCorrectHOL globals source target args values ⟨rel,sourceArgs⟩
+  rw [← compiledArgs] at targetArgs
+  have targetFound := PanGlobalsStateRelationCode.stateRelLookupCodeHOL globals source target true
+    function values callee locals returnShape ⟨rel,sourceFound⟩
+  have clockRel : source.clock = target.clock := rel.2.2.2.2.2.1
+  have targetClock : target.clock ≠ 0 := clockRel ▸ clock
+  have decremented := PanGlobalsStateRelationClock.stateRelDecClockHOL globals source target true rel
+  have entryRel := (PanGlobalsStateRelationLocals.stateRelChangeLocalsHOL globals source.decClockHOLFinite
+    target.decClockHOLFinite true locals).1 decremented
+  change panGlobalsStateRelHOLExact true globals (callEntryStateHOLFinite source locals) (callEntryStateHOLFinite target locals) at entryRel
+  have calleeBound := globalFrontend_controlSteps calleeShape _ bodyFinal _ (some (.returned value)) bodyRun (by simp) entryRel
+  obtain ⟨targetBodyFinal,targetRun,postRel⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL callee
+    (callEntryStateHOLFinite source locals) (some (.returned value)) globals (callEntryStateHOLFinite target locals) bodyFinal
+    ⟨entryRel,bodyRun,by simp⟩
+  simp only [goodResHOL] at postRel
+  have localsEq : source.locals = target.locals := rel.2.1 rfl
+  have restored := (PanGlobalsStateRelationLocals.stateRelChangeLocalsHOL globals bodyFinal targetBodyFinal true source.locals).2 postRel
+  have nextRel := PanGlobalsStateRelationLocals.stateRelSetVarHOL globals {bodyFinal with locals := source.locals}
+    {targetBodyFinal with locals := source.locals} true dest value restored
+  have nextNonerror : ((setVarHOLFinite dest value {bodyFinal with locals := source.locals}).evaluateHOLFiniteState cont).1 ≠ some .error := by
+    rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at run
+    simp only [sourceArgs,sourceFound,if_neg clock,bodyRun,valid,returnValid,Bool.true_and,if_true] at run
+    exact fun bad => nonerror ((Prod.mk.inj run).1.symm.trans bad)
+  rcases nextRun : (setVarHOLFinite dest value {bodyFinal with locals := source.locals}).evaluateHOLFiniteState cont with ⟨nextResult,nextFinal⟩
+  have continuationCost := globalFrontend_controlSteps contShape _ nextFinal _ nextResult nextRun (by simpa [nextRun] using nextNonerror) nextRel
+  have fixed : fixClockHOLFinite (callEntryStateHOLFinite source locals) (some (PanSemResultExact.returned value),bodyFinal) =
+    (some (PanSemResultExact.returned value),bodyFinal) := by rw [← bodyRun,fixClockHOLFinite_evaluateState]
+  have fixedTarget : fixClockHOLFinite (callEntryStateHOLFinite target locals) (some (PanSemResultExact.returned value),targetBodyFinal) =
+    (some (PanSemResultExact.returned value),targetBodyFinal) := by rw [← targetRun,fixClockHOLFinite_evaluateState]
+  simp only [compileProgExactHOL]
+  rw [controlSteps_decCall_return _ _ _ _ _ source values callee locals returnShape value bodyFinal
+    sourceArgs sourceFound clock bodyRun valid returnValid,
+    controlSteps_decCall_return _ _ _ _ _ target values (compileProgExactHOL globals callee) locals returnShape value targetBodyFinal
+    targetArgs targetFound targetClock targetRun valid returnValid]
+  simp only [fixed,fixedTarget,localsEq]
+  simp only [localsEq] at continuationCost
+  rw [calleeBound,continuationCost]
+/-- A terminal global-aware callee contributes no continuation visits. -/
+private theorem globalFrontend_terminalCallControl {σ : Type} (globals : PanGlobalsContextExact 64)
+    (dest function : MlS) (args : List (ExpHOL 64)) (callee cont : ProgHOL 64) (calleeCtxt : PanToCrepContextExact 64)
+    (calleeShape : GlobalFrontend globals calleeCtxt callee)
+    (source target : PanSemStateFiniteExact 64 σ) (values : List (ValueHOL 64))
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (returnShape : ShapeHOL)
+    (result : Option (PanSemResultExact 64)) (bodyFinal : PanSemStateFiniteExact 64 σ)
+    (sourceArgs : @evalListHOLFinite 64 σ _ source (fun a => Classical.propDecidable (source.memaddrs a)) args = some values)
+    (sourceFound : lookupCodeHOLFinite source.code.lookup function values = some (callee,locals,returnShape))
+    (clock : source.clock ≠ 0)
+    (bodyRun : (callEntryStateHOLFinite source locals).evaluateHOLFiniteState callee = (result,bodyFinal))
+    (nonerror : result ≠ some .error) (terminal : ∀ value, result ≠ some (.returned value))
+    (rel : panGlobalsStateRelHOLExact true globals source target) :
+    controlSteps (compileProgExactHOL globals (.decCall dest .one function args cont)) target =
+      controlSteps (.decCall dest .one function args cont) source := by
+  have targetArgs := PanGlobalsOptMmapEvalCorrect.optMmapEvalCorrectHOL globals source target args values ⟨rel,sourceArgs⟩
+  rw [← compiledArgs] at targetArgs
+  have targetFound := PanGlobalsStateRelationCode.stateRelLookupCodeHOL globals source target true
+    function values callee locals returnShape ⟨rel,sourceFound⟩
+  have clockRel : source.clock = target.clock := rel.2.2.2.2.2.1
+  have targetClock : target.clock ≠ 0 := clockRel ▸ clock
+  have decremented := PanGlobalsStateRelationClock.stateRelDecClockHOL globals source target true rel
+  have entryRel := (PanGlobalsStateRelationLocals.stateRelChangeLocalsHOL globals source.decClockHOLFinite
+    target.decClockHOLFinite true locals).1 decremented
+  change panGlobalsStateRelHOLExact true globals (callEntryStateHOLFinite source locals) (callEntryStateHOLFinite target locals) at entryRel
+  have calleeBound := globalFrontend_controlSteps calleeShape _ bodyFinal _ result bodyRun nonerror entryRel
+  obtain ⟨targetBodyFinal,targetRun,_⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL callee
+    (callEntryStateHOLFinite source locals) result globals (callEntryStateHOLFinite target locals) bodyFinal
+    ⟨entryRel,bodyRun,nonerror⟩
+  simp only [compileProgExactHOL]
+  rw [controlSteps_decCall_terminal _ _ _ _ _ source values callee locals returnShape result bodyFinal
+    sourceArgs sourceFound clock bodyRun terminal,
+    controlSteps_decCall_terminal _ _ _ _ _ target values (compileProgExactHOL globals callee) locals returnShape result targetBodyFinal
+    targetArgs targetFound targetClock targetRun terminal,calleeBound]
+/-- A call whose reached callee and continuation are in the global frontend
+    preserves the source control budget, including zero-clock calls. -/
+theorem globalFrontend_decCallControl {σ : Type} (globals : PanGlobalsContextExact 64)
+    (dest function : MlS) (args : List (ExpHOL 64)) (cont : ProgHOL 64) (contCtxt : PanToCrepContextExact 64)
+    (contShape : GlobalFrontend globals contCtxt cont)
+    (source sourceFinal target : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
+    (table : ∀ values callee locals returnShape, lookupCodeHOLFinite source.code.lookup function values = some (callee,locals,returnShape) →
+      ∃ ctxt, GlobalFrontend globals ctxt callee)
+    (run : source.evaluateHOLFiniteState (.decCall dest .one function args cont) = (result,sourceFinal))
+    (nonerror : result ≠ some .error) (rel : panGlobalsStateRelHOLExact true globals source target) :
+    controlSteps (compileProgExactHOL globals (.decCall dest .one function args cont)) target =
+      controlSteps (.decCall dest .one function args cont) source := by
+  classical
+  cases argsEval : @evalListHOLFinite 64 σ _ source (fun a => Classical.propDecidable (source.memaddrs a)) args with
+  | none =>
+    simp only [evaluateHOLFiniteState_decCall_fixClockRewrite,argsEval] at run
+    exact absurd (Prod.mk.inj run).1.symm nonerror
+  | some values =>
+    cases found : lookupCodeHOLFinite source.code.lookup function values with
+    | none =>
+      simp only [evaluateHOLFiniteState_decCall_fixClockRewrite,argsEval,found] at run
+      exact absurd (Prod.mk.inj run).1.symm nonerror
+    | some entry =>
+      obtain ⟨callee,locals,rsh⟩ := entry
+      by_cases noClock : source.clock = 0
+      · have targetArgs := PanGlobalsOptMmapEvalCorrect.optMmapEvalCorrectHOL globals source target args values ⟨rel,argsEval⟩
+        rw [← compiledArgs] at targetArgs
+        have targetFound := PanGlobalsStateRelationCode.stateRelLookupCodeHOL globals source target true
+          function values callee locals rsh ⟨rel,found⟩
+        have clockRel : source.clock = target.clock := rel.2.2.2.2.2.1
+        have targetClock : target.clock = 0 := clockRel ▸ noClock
+        simp only [compileProgExactHOL]
+        rw [controlSteps.eq_def,controlSteps.eq_def (.decCall _ _ _ _ _)]
+        simp only [argsEval,targetArgs,found,targetFound,if_pos noClock,if_pos targetClock]
+      · obtain ⟨calleeCtxt,calleeShape⟩ := table _ _ _ _ found
+        rcases bodyRun : (callEntryStateHOLFinite source locals).evaluateHOLFiniteState callee with ⟨bodyResult,bodyFinal⟩
+        have bodyNonerror : bodyResult ≠ some .error := by
+          intro bad
+          simp only [evaluateHOLFiniteState_decCall_fixClockRewrite,argsEval,found,if_neg noClock,bodyRun,bad] at run
+          exact nonerror (Prod.mk.inj run).1.symm
+        by_cases returned : ∃ value, bodyResult = some (.returned value)
+        · obtain ⟨value,rfl⟩ := returned
+          have valid : shapeEqHOL (shapeOfHOLExact value) .one = true ∧ shapeEqHOL (shapeOfHOLExact value) rsh = true := by
+            by_contra invalid
+            have bad : (shapeEqHOL (shapeOfHOLExact value) .one && shapeEqHOL (shapeOfHOLExact value) rsh) = false := by
+              cases h₁ : shapeEqHOL (shapeOfHOLExact value) .one <;>
+                cases h₂ : shapeEqHOL (shapeOfHOLExact value) rsh <;> simp_all
+            simp only [evaluateHOLFiniteState_decCall_fixClockRewrite,argsEval,found,if_neg noClock,bodyRun,bad,Bool.false_eq_true,if_false] at run
+            exact nonerror (Prod.mk.inj run).1.symm
+          exact globalFrontend_returningCallControl globals dest function args callee cont calleeCtxt contCtxt
+            calleeShape contShape source sourceFinal target result values locals rsh value bodyFinal argsEval found noClock
+            bodyRun valid.1 valid.2 run nonerror rel
+        · have terminal : ∀ value, bodyResult ≠ some (.returned value) := by
+            intro value h; exact returned ⟨value,h⟩
+          exact globalFrontend_terminalCallControl globals dest function args callee cont calleeCtxt calleeShape
+            source target values locals rsh bodyResult bodyFinal argsEval found noClock bodyRun bodyNonerror terminal rel
+
+/-- A tail call into any global-aware callee in the source table preserves
+    control visits, including the zero-clock case. -/
+theorem globalFrontend_tailCallControl {σ : Type} (globals : PanGlobalsContextExact 64)
+    (function : MlS) (args : List (ExpHOL 64))
+    (source sourceFinal target : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
+    (table : ∀ values callee locals returnShape, lookupCodeHOLFinite source.code.lookup function values = some (callee,locals,returnShape) →
+      ∃ ctxt, GlobalFrontend globals ctxt callee)
+    (run : source.evaluateHOLFiniteState (.call none function args) = (result,sourceFinal))
+    (nonerror : result ≠ some .error) (rel : panGlobalsStateRelHOLExact true globals source target) :
+    controlSteps (compileProgExactHOL globals (.call none function args)) target =
+      controlSteps (.call none function args) source := by
+  classical
+  cases argsEval : @evalListHOLFinite 64 σ _ source (fun a => Classical.propDecidable (source.memaddrs a)) args with
+  | none =>
+    simp only [evaluateHOLFiniteState_call,argsEval] at run
+    exact absurd (Prod.mk.inj run).1.symm nonerror
+  | some values =>
+    cases found : lookupCodeHOLFinite source.code.lookup function values with
+    | none =>
+      simp only [evaluateHOLFiniteState_call,argsEval,found] at run
+      exact absurd (Prod.mk.inj run).1.symm nonerror
+    | some entry =>
+      obtain ⟨callee,locals,rsh⟩ := entry
+      by_cases noClock : source.clock = 0
+      · have targetArgs := PanGlobalsOptMmapEvalCorrect.optMmapEvalCorrectHOL globals source target args values ⟨rel,argsEval⟩
+        rw [← compiledArgs] at targetArgs
+        have targetFound := PanGlobalsStateRelationCode.stateRelLookupCodeHOL globals source target true
+          function values callee locals rsh ⟨rel,found⟩
+        have clockRel : source.clock = target.clock := rel.2.2.2.2.2.1
+        have targetClock : target.clock = 0 := clockRel ▸ noClock
+        simp only [compileProgExactHOL]
+        rw [controlSteps.eq_def,controlSteps.eq_def (.call none _ _)]
+        simp only [argsEval,targetArgs,found,targetFound,if_pos noClock,if_pos targetClock]
+      · obtain ⟨ctxt,calleeShape⟩ := table _ _ _ _ found
+        exact globalFrontend_tailReached globals function args callee ctxt calleeShape source sourceFinal target result
+          values locals rsh argsEval found noClock run nonerror rel
+/-- A call whose continuation is call-free; reached callees are checked
+    separately against the global frontend table. -/
+inductive GlobalSingleCall (globals : PanGlobalsContextExact 64) : PanToCrepContextExact 64 → ProgHOL 64 → Prop
+  | tail {ctxt function args} : (∀ e ∈ args, GlobalScalar globals ctxt e) →
+      GlobalSingleCall globals ctxt (.call none function args)
+  | decCall {ctxt dest function args cont} : (∀ e ∈ args, GlobalScalar globals ctxt e) →
+      GlobalFrontend globals (decCallCtxt ctxt dest .one) cont →
+      GlobalSingleCall globals ctxt (.decCall dest .one function args cont)
+
+/-- All reached source callees belong to the global frontend fragment. -/
+def GlobalSingleCallTable (globals : PanGlobalsContextExact 64)
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL)) : Prop :=
+  ∀ name values body locals returnShape, lookupCodeHOLFinite code.lookup name values = some (body,locals,returnShape) →
+    ∃ ctxt, GlobalFrontend globals ctxt body
+
+theorem globalSingleCall_frontend {globals : PanGlobalsContextExact 64} {ctxt : PanToCrepContextExact 64}
+    {p : ProgHOL 64} (shape : GlobalSingleCall globals ctxt p) :
+    CallFrontend ctxt (compileProgExactHOL globals p) := by
+  apply globalCallFrontend_compiled
+  cases shape with
+  | tail args => exact .tail args
+  | decCall args cont => exact .decCall args (.base cont)
+
+theorem globalSingleCall_controlSteps {globals : PanGlobalsContextExact 64} {ctxt : PanToCrepContextExact 64}
+    {p : ProgHOL 64} (shape : GlobalSingleCall globals ctxt p)
+    {σ : Type} (source sourceFinal target : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
+    (table : GlobalSingleCallTable globals source.code)
+    (run : source.evaluateHOLFiniteState p = (result,sourceFinal)) (nonerror : result ≠ some .error)
+    (rel : panGlobalsStateRelHOLExact true globals source target) :
+    controlSteps (compileProgExactHOL globals p) target = controlSteps p source := by
+  cases shape with
+  | @tail function args h =>
+    exact globalFrontend_tailCallControl globals function args source sourceFinal target result (table function) run nonerror rel
+  | @decCall dest function args cont h body =>
+    exact globalFrontend_decCallControl globals dest function args cont _ body source sourceFinal target result
+      (table function) run nonerror rel
+
+/-- Global-aware single calls reach Crep with an explicit bound depending on
+    the generated entry, the compiled code table, and the source visit budget. -/
+theorem globalSingleCall_correct_with_steps {σ : Type}
+    (globals : PanGlobalsContextExact 64) (ctxt : PanToCrepContextExact 64) (p : ProgHOL 64)
+    (shape : GlobalSingleCall globals ctxt p)
+    (source sourceFinal target : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
+    (crep : CrepSemHOLState 64 σ) (programs : List (MlS × List Nat × CrepProgHOL 64)) (sourceLimit : Nat)
+    (sourceTable : GlobalSingleCallTable globals source.code)
+    (compiledTable : crep.code = alistToFmapCodeExact programs) (targetTable : CallFrontendCode ctxt target.code)
+    (run : source.evaluateHOLFiniteState p = (result,sourceFinal)) (nonerror : result ≠ some .error)
+    (sourceBound : controlSteps p source ≤ sourceLimit)
+    (globalRel : panGlobalsStateRelHOLExact true globals source target)
+    (stateRel : panToCrepStateRelFiniteExact target crep)
+    (codeRel : codeRelExactHOLW ctxt target.code crep.code)
+    (excpRel : panToCrepExcpRelFiniteExact ctxt.eids target.eshapes)
+    (localsRel : panToCrepLocalsRelFiniteExact ctxt target.locals crep.locals) :
+    ∃ targetFinal crepResult crepFinal,
+      target.evaluateHOLFiniteState (compileProgExactHOL globals p) = (result,targetFinal) ∧
+      panGlobalsStateRelHOLExact (goodResHOL result) globals sourceFinal targetFinal ∧
+      evalCrepSemHOLProgExact crep (compileProgExactHOLW ctxt (compileProgExactHOL globals p)) = (crepResult,crepFinal) ∧
+      panToCrepStateRelFiniteExact targetFinal crepFinal ∧
+      pcCompileCorrectResultRel ctxt targetFinal crepFinal result crepResult ∧
+      SteppedFlapjack.CrepSteps.steps (compileProgExactHOLW ctxt (compileProgExactHOL globals p)) crep ≤
+        max (SteppedFlapjack.CrepSteps.statementWeight (compileProgExactHOLW ctxt (compileProgExactHOL globals p)))
+          (SteppedFlapjack.CrepSteps.codeWeight programs) * sourceLimit := by
+  obtain ⟨targetFinal,targetRun,globalFinal⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL
+    p source result globals target sourceFinal ⟨globalRel,run,nonerror⟩
+  have hshape := globalSingleCall_frontend shape
+  have visitEq := globalSingleCall_controlSteps shape source sourceFinal target result sourceTable run nonerror globalRel
+  have bound := callFrontend_compiled_steps ctxt (compileProgExactHOL globals p) hshape target targetFinal result crep
+    programs compiledTable targetTable targetRun nonerror stateRel codeRel excpRel localsRel
+  have correct : pcCompileCorrectAt (compileProgExactHOL globals p) target :=
+    (pcCompileCorrectAt_iff_HOL _ _).mpr (pcCompileCorrect_all _ _)
+  obtain ⟨crepResult,crepFinal,crepRun,finalRel,_,_,resultRel⟩ :=
+    correct result targetFinal crep ctxt targetRun nonerror stateRel codeRel excpRel localsRel (callFrontend_localised hshape)
+  refine ⟨targetFinal,crepResult,crepFinal,targetRun,globalFinal,crepRun,finalRel,resultRel,?_⟩
+  rw [visitEq] at bound
+  exact bound.trans (Nat.mul_le_mul_left _ sourceBound)
+
 end SteppedFlapjack.PanToCrepSteps
