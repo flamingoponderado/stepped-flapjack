@@ -65,26 +65,6 @@ theorem configuredMachine_allGuards (code : List (Nat × HolProg 64)) (bs : List
 
 
 
-/-- Good compiled code, operation safety, and checked compiler output imply
-all original machine initialization guards. -/
-theorem fixtureMachine_allGuards (code : List (Nat × HolProg 64))
-    (good : goodCode riscvConfig (.ln : Spt (Spt Nat))
-      (LabFilter.filterSkip (fixtureLab code (fixtureCompilerConfig code)).code))
-    (safe : fixtureStackSafe code = true)
-    (facts : (fixtureRemoveLabels code).isSome = true ∧
-      (fixtureCodeBytes code).length ≤ 0xecc ∧ (fixtureCodeBytes code).length % 4 = 0) :
-    LabMachineInitGuards (fixtureMachineConfig (fixtureCodeStart code)) (fixtureMachineState code)
-      (LabFilter.filterSkip (fixtureLab code (fixtureCompilerConfig code)).code)
-      (fixtureCompiled code).1 (fixtureCompiled code).2 5 0 0xecc (fixtureMachineAsm code)
-      (fixtureLabMemoryFor code) fixtureByteDomain fixtureSharedByteDomain
-      (fun n => (((fixtureLab code (fixtureCompilerConfig code)).compileOracle n).1,
-        LabFilter.filterSkip ((fixtureLab code (fixtureCompilerConfig code)).compileOracle n).2)) [] [] [] := by
-  have memEq := congrArg (fun lab => lab.memory) (configuredLab_one code (fixtureCompilerConfig code))
-  change configuredLabMemory code [4] = fixtureLabMemoryFor code at memEq
-  have h := configuredMachine_allGuards code [4] (by decide) good safe facts
-  rwa [configuredMachineState_one, configuredMachineAsm_one, memEq, configuredByteDomain_one] at h
-
-
 /-- The concrete buffer dominates every line of a fitting compiled program,
 so each Lab step costs at most 948 machine ticks. -/
 theorem fixtureLabMachineFactor (code : List (Nat × HolProg 64))
@@ -99,29 +79,6 @@ theorem fixtureLabMachineFactor (code : List (Nat × HolProg 64))
     exact (SteppedFlapjack.LabToTargetSteps.lineBytes_length_le_progToBytes member).trans length
   unfold SteppedFlapjack.LabToTargetSteps.labTickBound SteppedFlapjack.LabToTargetSteps.lineByteBound
   simp only [List.length_nil,Nat.zero_add,Nat.max_eq_right lines]
-
-
-/-- Transfer a successful concrete Lab run to the loaded machine at 948 times
-its explicit Lab clock, preserving its complete FFI state. -/
-theorem fixtureLabMachineReturn (code : List (Nat × HolProg 64))
-    (good : goodCode riscvConfig (.ln : Spt (Spt Nat))
-      (LabFilter.filterSkip (fixtureLab code (fixtureCompilerConfig code)).code))
-    (safe : fixtureStackSafe code = true)
-    (facts : (fixtureRemoveLabels code).isSome = true ∧
-      (fixtureCodeBytes code).length ≤ 0xecc ∧ (fixtureCodeBytes code).length % 4 = 0)
-    (clock : Nat) (post : LabSem.State 64 Config Unit)
-    (run : LabSem.evaluate {(fixtureTargetLab code (fixtureCompilerConfig code) (fixtureMachineState code))
-      with clock := clock} = (.halt .success,post)) :
-    ∃ machinePost, evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
-      (948 * clock) (fixtureMachineState code) = (.halt .success,machinePost,post.ffi) := by
-  have removed : removeLabels 5 riscvConfig 0 .ln []
-      (LabFilter.filterSkip (fixtureLab code (fixtureCompilerConfig code)).code) =
-      some ((fixtureCompiled code).1,(fixtureCompiled code).2) := fixtureRemoveLabels_eq code facts.1
-  have guards := fixtureMachine_allGuards code good safe facts
-  have result := fixtureLabToMachineExplicit code (fixtureCompilerConfig code)
-    (fixtureCompiled code).1 (fixtureCompiled code).2 removed guards clock .success post run
-  rw [fixtureLabMachineFactor code facts.2.1] at result
-  exact result
 
 
 /-- The exact byte stream loaded into the fixture machine is produced by the
@@ -171,21 +128,5 @@ theorem fixturePancakeCompiler_outputFor (declarations : List (Flapjack.Pancake.
   rw [labEq]
   exact ⟨_,rfl⟩
 
-
-/-- The Pancake compiler emits exactly the code bytes loaded in the machine. -/
-theorem fixturePancakeCompiler_output (body : Flapjack.Pancake.PanLang.ProgHOL 64)
-    (words : List (Nat × Nat × WordLangProgHOL (BitVec 64))) (code : List (Nat × HolProg 64))
-    (compiled : panToWordCompileProgHOL riscvConfig.isa
-      (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main") body) = words)
-    (codeEq : (WordToStack.Native.compileNative riscvConfig false
-      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).2.2.2 = code)
-    (bitmap : (WordToStack.Native.compileNative riscvConfig false
-      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig words).2).1 = [4])
-    (safe : fixtureStackSafe code = true) (success : (fixtureRemoveLabels code).isSome = true) :
-    ∃ final, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
-      (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main") body) =
-        some (fixtureCodeBytes code,[4],final) := by
-  exact fixturePancakeCompiler_outputFor (singleEntryProgram (Flapjack.Basis.Pure.MlString.ofString "main") body)
-    [4] words code compiled codeEq bitmap safe success
 
 end SteppedFlapjack.Concrete
