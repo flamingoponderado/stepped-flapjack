@@ -1,3 +1,4 @@
+import SteppedFlapjack.Concrete.GlobalStructConfiguredWord
 import SteppedFlapjack.Concrete.GlobalStructNativeFacts
 import SteppedFlapjack.Concrete.GlobalStructActualWord
 import SteppedFlapjack.Concrete.GlobalStructActualOptimizedLoop
