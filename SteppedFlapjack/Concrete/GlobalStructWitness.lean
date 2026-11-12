@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.SourceState
+import SteppedFlapjack.Concrete.GlobalShapes
 import SteppedFlapjack.PanToCrepSteps.CountedGlobalAssign
 import SteppedFlapjack.PanValueFfiSemantics
 import Flapjack.Pancake.Proofs.PanGlobals.CompileCorrect.Assembly
@@ -309,5 +310,16 @@ theorem pair_assignment_bridge (body : ProgHOL 64) :
   · simpa [panValueExpStepCost,panValueExpStepCost.panValueExpsStepCost] using result.1
   · simpa only [expToHOL,List.map] using result.2.1
   · simpa [panValueExpStepCost,panValueExpStepCost.panValueExpsStepCost,expToHOL] using result.2.2.2.2
+
+/-- The typed global-read invariant applies to the concrete pair. -/
+example (value : PanValue (RiscV.Word 64))
+    (run : evalPanSemStateExp globalStructInitial (.rField 1 (.var .global "pair")) = some value) :
+    ∃ word, value = .word word := by
+  let shapes : VarName → Option ShapeHOL := fun n => (globalStructInitial.globals n).map (fun v => shapeOfHOLExact (panValueToHOL v))
+  have layout : shapes "pair" = some (.comb [.one,.one]) := by
+    simp [shapes,globalStructInitial,updatePanValueMap,shapeOfHOLExact]
+  have path : GlobalRead shapes (.rField 1 (.var .global "pair")) .one :=
+    .field (.global "pair" _ (by decide) layout) 1 .one rfl
+  exact globalRead_word path globalStructInitial (by intro n hn; rfl) value run
 
 end SteppedFlapjack.Concrete

@@ -1,4 +1,4 @@
-import SteppedFlapjack.Concrete.CountedScalar
+import SteppedFlapjack.Concrete.GlobalShapes
 import SteppedFlapjack.PanToCrepSteps.CountedGlobalAssign
 import Flapjack.Pancake.Semantics.PanSem.TotalEvalRanged
 import Flapjack.Pancake.Semantics.PanSem.TotalEvalCallBridge
@@ -258,6 +258,29 @@ inductive CountedOutcome {σ : Type} (initial : PanSemState (RiscV.Word 64) (Ffi
       (rel : PanSemStateRelExec {initial with locals := locals, globals := globals, memory := memory, ffi := ffi, clock := final.clock} final.toExact)
       (ranged : PanSemStateRelExecRanged {initial with locals := locals, globals := globals, memory := memory, ffi := ffi, clock := final.clock})
       (words : WordLocals locals) : CountedOutcome initial (.error locals globals memory ffi) (some .error) final
+
+/-- The global shape map associated with a counted result. -/
+def CountedOutcomeShapes {σ : Type} (shapes : VarName → Option ShapeHOL) :
+    PanValueFfiControlResult (RiscV.Word 64) σ → Prop
+  | .normal _ globals _ _ | .error _ globals _ _ | .returned _ globals _ _ _ => GlobalHOLShapes shapes globals
+  | _ => True
+
+/-- A related counted outcome retains the initial global shapes across its HOL run. -/
+theorem countedOutcome_shapes {σ : Type} (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (source final : PanSemStateFiniteExact 64 σ) [DecidablePred source.memaddrs]
+    (rel : PanSemStateRelExec production source.toExact) (program : ProgHOL 64)
+    (result : PanValueFfiControlResult (RiscV.Word 64) σ) (holResult : Option (PanSemResultExact 64))
+    (run : source.evaluateHOLFiniteState program = (holResult,final))
+    (outcome : CountedOutcome production result holResult final)
+    (shapes : VarName → Option ShapeHOL) (valid : GlobalHOLShapes shapes production.globals) :
+    CountedOutcomeShapes shapes result := by
+  cases outcome with
+  | normal locals globals memory ffi final nextRel ranged words =>
+    exact globalHOLShapes_transport production _ source final rel nextRel program none run shapes valid
+  | returned locals globals memory ffi word final nextRel ranged words =>
+    exact globalHOLShapes_transport production _ source final rel nextRel program _ run shapes valid
+  | error locals globals memory ffi final nextRel ranged words =>
+    exact globalHOLShapes_transport production _ source final rel nextRel program _ run shapes valid
 
 /-- Runtime fields may be threaded between statements without changing the
 persistent source machine context carried by the result relation. -/
@@ -1855,12 +1878,16 @@ theorem globalSupportedCalls_counted_source {scope : List VarName} {program : Pr
     (budget : count ≤ source.clock) :
     ∃ holResult sourceFinal, source.evaluateHOLFiniteState (progToHOL program) = (holResult,sourceFinal) ∧
       CountedOutcome production result holResult sourceFinal ∧
-      controlSteps (progToHOL program) source ≤ count + countedErrorBonus result ∧ source.clock ≤ sourceFinal.clock + count := by
+      controlSteps (progToHOL program) source ≤ count + countedErrorBonus result ∧ source.clock ≤ sourceFinal.clock + count ∧
+      CountedOutcomeShapes (fun name => (production.globals name).map (fun v => shapeOfHOLExact (panValueToHOL v))) result := by
   let contracts := some (countedContractsOfCode production.code exceptions)
   have codeOk : CallCodeInvariant contracts production.code (countedFunctionsOfCode production.code) :=
     ⟨⟨exceptions,rfl,rfl,codeRanged⟩,codeShape⟩
-  exact supportedCallsBridge contracts fuel supported production source rel ranged words byteRanged
-    context primitive handler (countedFunctionsOfCode production.code) fuel count result run budget (by rfl) codeOk
+  obtain ⟨holResult,sourceFinal,holRun,outcome,bound,clockBound⟩ :=
+    supportedCallsBridge contracts fuel supported production source rel ranged words byteRanged
+      context primitive handler (countedFunctionsOfCode production.code) fuel count result run budget (by rfl) codeOk
+  exact ⟨holResult,sourceFinal,holRun,outcome,bound,clockBound,
+    countedOutcome_shapes production source sourceFinal rel (progToHOL program) result holResult holRun outcome _ (by intro name hr; rfl)⟩
 
 /-- A counted run over a call-aware function table agrees with the HOL source
 execution and has an explicit control-visit bound. -/
@@ -1890,8 +1917,10 @@ theorem supportedCalls_counted_source {scope : List VarName} {program : Prog (Ri
     intro name params body member
     obtain ⟨scope, h⟩ := codeShape name params body member
     exact ⟨scope,h.toGlobal⟩
-  exact globalSupportedCalls_counted_source supported.toGlobal production source rel ranged words byteRanged codeRanged
-    codeShapeGlobal context primitive handler exceptions fuel count result run budget
+  obtain ⟨holResult,sourceFinal,holRun,outcome,bound,clockBound,_⟩ :=
+    globalSupportedCalls_counted_source supported.toGlobal production source rel ranged words byteRanged codeRanged
+      codeShapeGlobal context primitive handler exceptions fuel count result run budget
+  exact ⟨holResult,sourceFinal,holRun,outcome,bound,clockBound⟩
 
 
 /-- A counted run of a supported body is a corresponding HOL run when the
