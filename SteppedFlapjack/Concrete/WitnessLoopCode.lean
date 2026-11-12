@@ -6,7 +6,7 @@ namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.Compiler.Encoders.Asm
 open SteppedFlapjack.CrepToLoopSteps
 
-theorem supported_compiled_scalar (program : Prog (RiscV.Word 64)) (supported : Supported program) (target : CrepProgHOL 64)
+theorem supported_compiled_scalar (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program) (target : CrepProgHOL 64)
     (code : crepPrograms (progToHOL program) = twoPrograms (ofString "main") (entryName (progToHOL program)) target) :
     ScalarProgram target := by
   let body := progToHOL program

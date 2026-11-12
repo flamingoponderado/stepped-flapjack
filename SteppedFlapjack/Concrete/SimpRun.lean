@@ -12,7 +12,7 @@ theorem entryName_body_independent (a b : ProgHOL 64) : entryName a = entryName 
 def panSimpSourceState {σ : Type} (program : Prog (RiscV.Word 64)) (source : PanSemStateFiniteExact 64 σ) :=
   {source with code := HolFiniteMapExact.empty.update (entryName (progToHOL (panSimpProg program)),([],progToHOL (panSimpProg program),.one))}
 
-theorem supported_panSimp_state_rel {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
+theorem supported_panSimp_state_rel {σ : Type} (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
  (source : PanSemStateFiniteExact 64 σ)
  (sourceCode : source.code = HolFiniteMapExact.empty.update (entryName (progToHOL program),([],progToHOL program,.one))) :
  PanSimp.stateRel source (panSimpSourceState program source) (panSimpSourceState program source).code := by
@@ -37,14 +37,14 @@ theorem supported_panSimp_state_rel {σ : Type} (program : Prog (RiscV.Word 64))
 
 /-- On the same source state, simplification preserves every supported run,
 including errors, because the pass only reassociates sequences. -/
-theorem supported_panSimp_same_state {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
+theorem supported_panSimp_same_state {σ : Type} (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (source : PanSemStateFiniteExact 64 σ) :
     source.evaluateHOLFiniteState (progToHOL (panSimpProg program)) = source.evaluateHOLFiniteState (progToHOL program) := by
   rw [← supported_seqAssocHOL program supported,evaluateSeqAssocHOL]
   rw [evaluateHOLFiniteState_seq_line780,evaluateHOLFiniteState_skip]
 /-- Simplification preserves every supported result when its generated code
 is installed, including errors, and updates only the final code table. -/
-theorem supported_panSimp_run {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
+theorem supported_panSimp_run {σ : Type} (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (source sourceFinal : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
     (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal)) :
     (panSimpSourceState program source).evaluateHOLFiniteState (progToHOL (panSimpProg program)) =
@@ -57,7 +57,7 @@ theorem supported_panSimp_run {σ : Type} (program : Prog (RiscV.Word 64)) (supp
 
 /-- The actual declaration-level simplifier installs exactly the supported
 simplified singleton body used by the later compiler passes. -/
-theorem supported_panSimp_declarations (program : Prog (RiscV.Word 64)) (supported : Supported program) :
+theorem supported_panSimp_declarations (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program) :
     panSimpDeclsHOL (declarations (progToHOL program)) =
       declarations (progToHOL (panSimpProg program)) := by
   simp [declarations,singleEntryProgram,panSimpDeclsHOL,(supported_panSimp program supported).2]

@@ -67,7 +67,7 @@ theorem supportedIn_frontend_shape {scope : List VarName} {program : Prog (RiscV
     intro ctxt relation
     simpa [progToHOL] using (FrontendProgram.ret (scalar_frontend_shape relation e))
 
-theorem supported_frontend_shape {program : Prog (RiscV.Word 64)} (supported : Supported program)
+theorem supported_frontend_shape {program : Prog (RiscV.Word 64)} (supported : CallFreeSupported program)
     (ctxt : PanToCrepContextExact 64) : FrontendProgram ctxt (progToHOL program) :=
   supportedIn_frontend_shape supported.1 ctxt (by intro name member; simp at member)
 
@@ -219,7 +219,7 @@ theorem supportedIn_globals_fixed {scope : List VarName} {program : Prog (RiscV.
     aesop (add safe scalar_globals_fixed)
 
 theorem supported_globals_fixed {program : Prog (RiscV.Word 64)}
-    (supported : Supported program) (globals : PanGlobalsContextExact 64) :
+    (supported : CallFreeSupported program) (globals : PanGlobalsContextExact 64) :
     compileProgExactHOL globals (progToHOL program) = progToHOL program :=
   supportedIn_globals_fixed supported.1 globals
 

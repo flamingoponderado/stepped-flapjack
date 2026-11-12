@@ -38,8 +38,17 @@ inductive CallSupportedIn : List VarName → Prog (RiscV.Word 64) → Prop
 
 /-- A parameter-free body begins with no locals and its identifiers are
 representable by HOL byte strings. -/
-def Supported (program : Prog (RiscV.Word 64)) : Prop :=
+def CallFreeSupported (program : Prog (RiscV.Word 64)) : Prop :=
   SupportedIn [] program ∧ ProgByteRanged program
+
+/-- Parameter-free call-aware source bodies with byte-representable identifiers. -/
+def Supported (program : Prog (RiscV.Word 64)) : Prop :=
+  CallSupportedIn [] program ∧ ProgByteRanged program
+
+/-- The original call-free fragment is included in the call-aware fragment. -/
+theorem CallFreeSupported.toSupported {program : Prog (RiscV.Word 64)}
+    (supported : CallFreeSupported program) : Supported program :=
+  ⟨.base supported.1, supported.2⟩
 
 /-- Distinct Lean names can collapse to the same HOL byte string, so the
 representability condition above is necessary for an unrestricted bridge. -/
@@ -54,7 +63,7 @@ theorem supportedIn_fperm {scope : List VarName} {program : Prog (RiscV.Word 64)
   induction supported <;> simp_all [progToHOL,fpermHOL]
 
 theorem supported_fperm {program : Prog (RiscV.Word 64)}
-    (supported : Supported program) (a b : MlString) :
+    (supported : CallFreeSupported program) (a b : MlString) :
     fpermHOL a b (progToHOL program) = progToHOL program :=
   supportedIn_fperm supported.1 a b
 
@@ -74,14 +83,14 @@ def naturalCountdownHOL (n : Nat) : ProgHOL 64 := progToHOL (naturalCountdown n)
 def branching : Prog (RiscV.Word 64) :=
   .ite (.cmp .lower (.const 0) (.const 1)) (.return (.const 7)) (.return (.const 9))
 
-theorem countdown_supported (n : Nat) : Supported (countdown n) := by
+theorem countdown_supported (n : Nat) : CallFreeSupported (countdown n) := by
   constructor
   · exact .decl "x" (.const _) (.seq .skip (.seq
     (.while (.local "x" (by simp)) (.assign "x" (by simp)
       (.op .sub (.local "x" (by simp)) (.const _)))) (.ret (.const _))))
   · simp [countdown,PanToCrepSteps.countdownBody,ProgByteRanged,ExpByteRanged,ListExpByteRanged,ShapeByteRanged,NameRanged]
 
-theorem naturalCountdown_supported (n : Nat) : Supported (naturalCountdown n) := by
+theorem naturalCountdown_supported (n : Nat) : CallFreeSupported (naturalCountdown n) := by
   constructor
   · exact .decl "x" (.const _) (.seq
       (.while (.local "x" (by simp)) (.assign "x" (by simp)
@@ -89,7 +98,7 @@ theorem naturalCountdown_supported (n : Nat) : Supported (naturalCountdown n) :=
   · simp [naturalCountdown,PanToCrepSteps.countdownBody,ProgByteRanged,ExpByteRanged,
       ListExpByteRanged,ShapeByteRanged,NameRanged]
 
-theorem branching_supported : Supported branching := by
+theorem branching_supported : CallFreeSupported branching := by
   constructor
   · exact .ite (.cmp .lower (.const _) (.const _)) (.ret (.const _)) (.ret (.const _))
   · simp [branching,ProgByteRanged,ExpByteRanged]

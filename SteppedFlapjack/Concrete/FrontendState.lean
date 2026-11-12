@@ -43,7 +43,7 @@ def crepStateFrom {σ : Type} (source : PanSemStateFiniteExact 64 σ) (body : Pr
 
 /-- Global lowering relates any representable no-global source configuration
 to its generated callee, when the original singleton code table is installed. -/
-theorem source_globals_related_from {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
+theorem source_globals_related_from {σ : Type} (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (source : PanSemStateFiniteExact 64 σ)
     (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
     (structs : source.structs = []) (topOutside : ¬ source.memaddrs source.topAddr)
@@ -63,7 +63,7 @@ theorem source_globals_related_from {σ : Type} (program : Prog (RiscV.Word 64))
 
 /-- Renaming-free single-function bodies have a concrete global-lowering relation
 using the actual generated function table. -/
-theorem source_globals_related (program : Prog (RiscV.Word 64)) (supported : Supported program) :
+theorem source_globals_related (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program) :
     panGlobalsStateRelHOLExact true emptyGlobalsContext (exactState (progToHOL program))
       (callEntryStateHOLFinite (loweredState (progToHOL program)) HolFiniteMapExact.empty) := by
   apply source_globals_related_from program supported (exactState (progToHOL program)) rfl rfl rfl
@@ -95,7 +95,7 @@ def frontendContext (body : ProgHOL 64) : PanToCrepContextExact 64 :=
 /-- The compiler-generated tables satisfy the exact Pancake-to-Crep code relation
 for every supported singleton body. No inliner-shape hypothesis is needed:
 the two generated functions are both non-inline. -/
-theorem supported_code_related (program : Prog (RiscV.Word 64)) (supported : Supported program) :
+theorem supported_code_related (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program) :
     codeRelExactHOLW (frontendContext (progToHOL program))
       (loweredState (progToHOL program)).code (crepState (progToHOL program)).code := by
   let body := progToHOL program
@@ -133,7 +133,7 @@ theorem supported_code_related (program : Prog (RiscV.Word 64)) (supported : Sup
 /-- The generated call supplies the compiled callee and relations for any
 source machine state with empty local, global, structure and exception contexts. -/
 theorem supported_callee_relations_from {σ : Type}
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (source : PanSemStateFiniteExact 64 σ)
     (locals : source.locals = HolFiniteMapExact.empty)
     (globals : source.globals = HolFiniteMapExact.empty)
@@ -189,7 +189,7 @@ theorem supported_callee_relations_from {σ : Type}
 
 
 /-- The init-e-shaped fixture instantiates the configurable source-state theorem. -/
-theorem supported_callee_relations (program : Prog (RiscV.Word 64)) (supported : Supported program) :
+theorem supported_callee_relations (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program) :
     let body := progToHOL program
     let caller := frontendContext body
     let callee := ctxtFcExactHOL caller.funcs caller.eids [] [] []

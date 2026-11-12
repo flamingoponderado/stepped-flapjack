@@ -30,7 +30,7 @@ set_option maxHeartbeats 1000000 in
 /-- A counted supported return reaches the optimized Word entry at a bound
 calculated from the generated code and the concrete source visit budget. -/
 theorem supported_counted_word {C : Type}
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (fuel count n : Nat)
     (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))

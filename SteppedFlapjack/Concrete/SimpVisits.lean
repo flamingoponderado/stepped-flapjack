@@ -926,7 +926,7 @@ private theorem tableWhileStep {σ : Type} (condition : ExpHOL 64) (body : ProgH
 
 /-- pan_simp's extra control visits are bounded by the weight of the simplified
 body, charged only on an abnormal exit. -/
-theorem supported_panSimp_controlSteps_simplified {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
+theorem supported_panSimp_controlSteps_simplified {σ : Type} (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (s : PanSemStateFiniteExact 64 σ) :
     controlSteps (progToHOL (panSimpProg program)) s ≤
       controlSteps (progToHOL program) s +
@@ -935,7 +935,7 @@ theorem supported_panSimp_controlSteps_simplified {σ : Type} (program : Prog (R
 
 /-- Compiled-code-only form: the overhead is at most the statement weight of
 the generated Crep body of the simplified program. -/
-theorem supported_panSimp_controlSteps_compiled {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
+theorem supported_panSimp_controlSteps_compiled {σ : Type} (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (context : PanToCrepContextExact 64) (s : PanSemStateFiniteExact 64 σ) :
     controlSteps (progToHOL (panSimpProg program)) s ≤
       controlSteps (progToHOL program) s +

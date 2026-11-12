@@ -124,7 +124,7 @@ private theorem supportedControlCode {scope : List VarName} {program : Prog (Ris
   | «while» scalar body ih => exact controlWhile scalar body ih
   | ret scalar => exact controlReturn
 
-theorem supported_control_code_irrel {σ : Type} {program : Prog (RiscV.Word 64)} (supported : Supported program)
+theorem supported_control_code_irrel {σ : Type} {program : Prog (RiscV.Word 64)} (supported : CallFreeSupported program)
     (source : PanSemStateFiniteExact 64 σ)
     (code : HolFiniteMapExact MlString (List (MlString × ShapeHOL) × ProgHOL 64 × ShapeHOL)) :
     controlSteps (progToHOL program) {source with code := code} = controlSteps (progToHOL program) source :=

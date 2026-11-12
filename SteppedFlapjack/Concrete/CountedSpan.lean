@@ -977,7 +977,7 @@ theorem countedCalls_functionOnlyWord {C : Type} {scope : List VarName} {program
 /-- Every counted supported run, including errors, reaches the actual
 simplified and global-lowered callee with the same source result. -/
 theorem supported_counted_frontend_prefix {σ : Type}
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
     (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
@@ -1052,7 +1052,7 @@ concrete code-derived bound. The exit relation records whether the function
 returned a word, fell through, or errored; fallthrough and source errors
 produce an error at the generated call entry. -/
 theorem supported_counted_full_frontend_exit {σ : Type}
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
     (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
@@ -1111,7 +1111,7 @@ theorem supported_counted_full_frontend_exit {σ : Type}
 
 /-- A result-independent bound calculated from the generated code and source budget. -/
 theorem supported_counted_full_frontend_uniform {σ : Type}
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
     (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)
@@ -1157,7 +1157,7 @@ theorem supported_counted_full_frontend_uniform {σ : Type}
 /-- A counted source run bounded by `n` reaches the actual generated entry
 point within a bound calculated from `n` and the generated function body. -/
 theorem supported_counted_full_frontend {σ : Type}
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (production : PanSemState (RiscV.Word 64) (FfiState σ)) (source : PanSemStateFiniteExact 64 σ)
     [DecidablePred source.memaddrs] (rel : PanSemStateRelExec production source.toExact)
     (ranged : PanSemStateRelExecRanged production) (words : WordLocals production.locals)

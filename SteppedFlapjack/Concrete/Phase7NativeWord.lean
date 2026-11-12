@@ -13,7 +13,7 @@ set_option maxHeartbeats 1000000 in
 /-- A counted supported source return reaches the actual selected native Word
 entry, preserving FFI and satisfying the compiled-code visit bound. -/
 theorem supported_counted_nativeWord
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (fuel count n : Nat)
     (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))

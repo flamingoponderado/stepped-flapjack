@@ -12,7 +12,7 @@ open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapj
 def supportedEntry : WordLangProgHOL (BitVec 64) := loopToWordCompFuncHOL 64 [] branchingLoopEntry
 
 /-- The compiler-generated optimized entry and frame are independent of the callee. -/
-theorem supported_nativeEntry_facts (program : Prog (RiscV.Word 64)) (supported : Supported program)
+theorem supported_nativeEntry_facts (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (cfg : LabToTarget.Config) :
     let words := supportedWordPrograms program
     let code := (supportedNative program).2.2.2
@@ -47,7 +47,7 @@ theorem supported_nativeEntry_facts (program : Prog (RiscV.Word 64)) (supported 
   · rw [alloc]
     simpa [supportedWordPrograms,body,simple,code] using twoProgram_optimizedEntry_frame riscvConfig.isa (ofString "main") (entryName body) callee fresh shape (supportedNative program).2.2.2 cfg
 /-- The generated native program uses exactly the initializer bitmap. -/
-theorem supported_native_bitmap (program : Prog (RiscV.Word 64)) (supported : Supported program) :
+theorem supported_native_bitmap (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program) :
     (supportedNative program).1 = [4] := by
   let simple := panSimpProg program
   let body := progToHOL simple

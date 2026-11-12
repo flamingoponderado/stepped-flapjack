@@ -27,7 +27,7 @@ set_option maxHeartbeats 1000000 in
 /-- The counted source return reaches the actual initialized native Stack
 entry with a compiled-code bound and matching FFI state. -/
 theorem supported_counted_nativeStack
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (fuel count n : Nat)
     (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))

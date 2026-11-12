@@ -7,7 +7,7 @@ def errorLoop : Prog (RiscV.Word 64) :=
     (.ite (.var .local "x") (.assign .local "x" (.const 0))
       (.return (.shift .lsl (.const 1) (.const 64)))))
 
-theorem errorLoop_supported : Supported errorLoop := by
+theorem errorLoop_supported : CallFreeSupported errorLoop := by
   constructor
   · exact .decl "x" (.const _) (.while (.const _) (.ite (.local "x" (by simp))
       (.assign "x" (by simp) (.const _)) (.ret (.shift .lsl (.const _) (.const _)))))

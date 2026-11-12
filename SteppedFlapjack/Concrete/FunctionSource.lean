@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.SourceState
+import SteppedFlapjack.Concrete.CountedSource
 import SteppedFlapjack.Concrete.Phase7SourceClock
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.PanSemStateFiniteExact
@@ -57,6 +58,42 @@ theorem functionSource_related (fs : List (FunDeclOf 64)) (n clock : Nat)
   · exact hffi
   · exact hbase
   · exact htop
+
+
+/-- Scalar, call-aware functions with representable names and shapes. -/
+def FunctionTableSupported (fs : List (FunDeclOf 64)) : Prop :=
+  ∀ f ∈ fs, FunDeclByteRanged f ∧ CallSupportedIn (f.params.map Prod.fst) f.body ∧
+    (∀ p ∈ f.params, p.2 = .one) ∧ f.returnShape = .one
+
+theorem functionEntries_map (fs : List (FunDeclOf 64)) :
+    functionEntries (fs.map Decl.function) = fs.map (fun f => (f.name,f.params,f.body,f.returnShape)) := by
+  induction fs with
+  | nil => rfl
+  | cons f fs ih => simp [functionEntries,ih]
+
+theorem table_names (fs : List (FunDeclOf 64)) (h : FunctionTableSupported fs) :
+    ∀ f ∈ fs, NameRanged f.name := by
+  intro f hf
+  exact (h f hf).1.1
+
+theorem table_code_ranged (fs : List (FunDeclOf 64)) (n clock : Nat) (h : FunctionTableSupported fs) :
+    ∀ name entry, panSemCodeLookup (functionSourceProduction fs n clock).code name = some entry →
+      PanLangEntryByteRanged entry := by
+  have ranged : ∀ d ∈ fs.map Decl.function, DeclByteRanged d := by
+    intro d hd
+    obtain ⟨f,hf,rfl⟩ := List.mem_map.mp hd
+    exact (h f hf).1
+  simpa [functionSourceProduction,PanSemCodeRanged] using
+    (panSemCodeRanged_of_functionEntries sourceProduction (fs.map Decl.function) ranged)
+
+theorem table_counted_shapes (fs : List (FunDeclOf 64)) (n clock : Nat) (h : FunctionTableSupported fs) :
+    ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode (functionSourceProduction fs n clock).code →
+      ∃ scope, CallSupportedIn scope body := by
+  intro name params body hm
+  simp only [functionSourceProduction,countedFunctionsOfCode,functionEntries_map,List.map_map,List.mem_map] at hm
+  obtain ⟨f,hf,heq⟩ := hm
+  cases heq
+  exact ⟨f.params.map Prod.fst,(h f hf).2.1⟩
 
 
 end SteppedFlapjack.Concrete

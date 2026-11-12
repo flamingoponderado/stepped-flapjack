@@ -14,7 +14,7 @@ def supportedCallee (body : ProgHOL 64) : CrepProgHOL 64 :=
   compileProgExactHOLW (ctxtFcExactHOL caller.funcs caller.eids [] [] []) body
 
 /-- The actual generated singleton program contains its entry and compiled body. -/
-theorem supported_crepPrograms (program : Prog (RiscV.Word 64)) (supported : Supported program) :
+theorem supported_crepPrograms (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program) :
     crepPrograms (progToHOL program) =
       twoPrograms (ofString "main") (entryName (progToHOL program)) (supportedCallee (progToHOL program)) := by
   let body := progToHOL program
@@ -31,14 +31,14 @@ theorem supported_crepPrograms (program : Prog (RiscV.Word 64)) (supported : Sup
     compileCallNoReturnExactHOLW, compileExpExactHOLWList, crepVarsHOL, renameEq', globalEq, ctxtFcExactHOL, panToCrepMakeVmapHOLExact, mkCtxtExactHOL, maxList]
 
 /-- A supported singleton generates a scalar Crep callee. -/
-theorem supportedCallee_scalar (program : Prog (RiscV.Word 64)) (supported : Supported program) :
+theorem supportedCallee_scalar (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program) :
     ScalarProgram (supportedCallee (progToHOL program)) :=
   supported_compiled_scalar program supported _ (supported_crepPrograms program supported)
 
 /-- A returning supported Crep entry reaches its actual optimized Loop entry
 at a bound calculated from the compiled callee and the Crep visit limit. -/
 theorem supported_entry_loop {σ : Type} (arch : AsmArchitecture)
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (source : PanSemStateFiniteExact 64 σ) (entryFinal : CrepSemHOLState 64 σ)
     (values : List (HolWordLab 64)) (limit : Nat)
     (memory : BitVec 64 → WordLocW 64)
@@ -100,7 +100,7 @@ def supportedCrepBudget (program : Prog (RiscV.Word 64)) (n : Nat) : Nat :=
 /-- The counted source run reaches the actual generated Loop entry. Its
 extra clock and visit bounds are calculated from the generated code. -/
 theorem supported_counted_loop (arch : AsmArchitecture)
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (fuel count n : Nat)
     (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))

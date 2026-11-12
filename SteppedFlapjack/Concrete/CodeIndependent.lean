@@ -168,7 +168,7 @@ theorem supportedIn_code_irrel {σ : Type} {scope : List VarName} {program : Pro
   supportedCode supported source code
 
 /-- Supported bodies do not inspect or change the code table, even on error. -/
-theorem supported_code_irrel {σ : Type} {program : Prog (RiscV.Word 64)} (supported : Supported program)
+theorem supported_code_irrel {σ : Type} {program : Prog (RiscV.Word 64)} (supported : CallFreeSupported program)
     (source : PanSemStateFiniteExact 64 σ)
     (code : HolFiniteMapExact MlString (List (MlString × ShapeHOL) × ProgHOL 64 × ShapeHOL)) :
     ({source with code := code} : PanSemStateFiniteExact 64 σ).evaluateHOLFiniteState (progToHOL program) =

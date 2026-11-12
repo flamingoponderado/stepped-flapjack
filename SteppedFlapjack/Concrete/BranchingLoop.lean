@@ -10,7 +10,7 @@ def branchingLoop : Prog (RiscV.Word 64) :=
   (.ite (.cmp .equal (.var .local "x") (.const 2))
    (.assign .local "x" (.const 1)) (.assign .local "x" (.const 0)))) (.return (.const 7)))
 
-theorem branchingLoop_supported : Supported branchingLoop := by
+theorem branchingLoop_supported : CallFreeSupported branchingLoop := by
   constructor
   · exact .decl "x" (.const _) (.seq
       (.while (.local "x" (by simp)) (.ite

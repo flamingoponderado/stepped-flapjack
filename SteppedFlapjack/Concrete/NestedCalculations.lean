@@ -194,9 +194,6 @@ theorem nested_initialized_machine :
     infer_instance
   have shape : CallSupportedIn [] nestedCallEntry :=
     .call "answer" "middle" [] (by simp) (.base (.ret (.local "answer" (by simp))))
-  have codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry := by
-    simpa [production,nestedCountedProduction,PanSemCodeRanged] using
-      panSemCodeRanged_of_functionEntries sourceProduction nestedCallDeclarations nestedCall_declarations_ranged
   have sourceCode : source.code = HolFiniteMapExact.empty.updateList (functionsHOL (nestedCallDeclarations.map declToHOL)).reverse := by
     exact nestedEntryCode
   have sourceRun := nestedCounted_run memory (riscv64PanValueFfiContext (fun _ => false))
@@ -205,10 +202,9 @@ theorem nested_initialized_machine :
     simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL]
     decide
   have sourceGood : pancakeGoodCodeHOL (nestedCallDeclarations.map declToHOL) = true := by decide +kernel
-  have span := countedCalls_initializedMachine shape production source nestedSourceFunctions n 6 nestedSourceFunctions_ranged
+  have span := countedCalls_initializedMachine ⟨shape, by simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged]⟩ production source nestedSourceFunctions n 6 nested_table_supported
     (by rfl) (by simpa [source] using (nestedSourceExact_eq n 6).symm)
-    (by simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged])
-    codeRanged (by simpa [production] using nestedCounted_shapes) source.code
+    source.code
     (functionsHOL (nestedCallDeclarations.map declToHOL)) sourceCode
     nestedHOLFunctions (by rw [nestedHOLDeclarations])
     (by simpa only [nestedHOLDeclarations] using unique)

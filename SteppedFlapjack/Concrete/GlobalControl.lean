@@ -517,7 +517,7 @@ theorem callSupported_globals_control {scope : List VarName} {σ : Type}
 /-- A non-error supported run has the same number of control visits after
 global lowering, including every reached iteration of nested loops. -/
 theorem supported_globals_control {σ : Type} {program : Prog (RiscV.Word 64)}
-    (supported : Supported program) (globals : PanGlobalsContextExact 64)
+    (supported : CallFreeSupported program) (globals : PanGlobalsContextExact 64)
     (source sourceFinal target : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
     (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal))
     (nonerror : result ≠ some .error) (rel : panGlobalsStateRelHOLExact true globals source target) :

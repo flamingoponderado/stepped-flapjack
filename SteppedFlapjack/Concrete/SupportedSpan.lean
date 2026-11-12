@@ -12,7 +12,7 @@ open SteppedFlapjack.PanToCrepSteps
 
 /-- The actual globals-pass call entry preserves every supported outcome,
 including errors, with the generated code table installed. -/
-theorem supported_globals_run_from {σ : Type} (program : Prog (RiscV.Word 64)) (supported : Supported program)
+theorem supported_globals_run_from {σ : Type} (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (source sourceFinal : PanSemStateFiniteExact 64 σ) (result : Option (PanSemResultExact 64))
     (locals : source.locals = HolFiniteMapExact.empty)
     (run : source.evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal)) :
@@ -63,7 +63,7 @@ def bodyExitEntry (exit : Option (BitVec 64)) : Option (CrepResultHOLExact 64) :
 
 /-- Compile a supported callee and lift either of its non-error exits through the entry. -/
 theorem supported_entry_crep_exit_from {σ : Type}
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (source : PanSemStateFiniteExact 64 σ)
     (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
     (structs : source.structs = []) (exceptions : source.eshapes = HolFiniteMapExact.empty)
@@ -112,7 +112,7 @@ theorem supported_entry_crep_exit_from {σ : Type}
       (some (.return [.word word])) targetFinal _ lookup nonzero (by simpa [target,flattenHOL] using targetRun) bound
     exact ⟨targetFinal.emptyLocals,by simpa [CrepSteps.tailExit,bodyExitEntry] using wrapper.1,wrapper.2,by simpa [CrepSemHOLState.emptyLocals] using finalRel.2.2.2.2.2.2.2.1.symm⟩
 theorem supported_entry_crep_error_from {σ : Type}
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (source : PanSemStateFiniteExact 64 σ)
     (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
     (structs : source.structs = []) (exceptions : source.eshapes = HolFiniteMapExact.empty)

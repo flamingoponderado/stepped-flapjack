@@ -44,7 +44,7 @@ theorem functionOnly_body_semantics (state : PanSemStateFiniteExact 64 Unit) (st
 
 /-- The original declarations exhibit the same successful return and event
 trace as a supported body run in the source fixture. -/
-theorem supported_body_semantics (program : Prog (RiscV.Word 64)) (supported : Supported program)
+theorem supported_body_semantics (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (n : Nat) (final : PanSemStateFiniteExact 64 Unit) (word : BitVec 64)
     (run : (clockedFixtureSource program n).evaluateHOLFiniteState (progToHOL program) =
       (some (.returned (.val (.word word))),final)) :
@@ -67,7 +67,7 @@ theorem supported_body_semantics (program : Prog (RiscV.Word 64)) (supported : S
   simpa [functions,declarations,singleEntryProgram] using result
 /-- A counted supported source return determines the declaration behavior
 and relates its events to the executable result. -/
-theorem supported_counted_semantics (program : Prog (RiscV.Word 64)) (supported : Supported program)
+theorem supported_counted_semantics (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (fuel count n : Nat)
     (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))

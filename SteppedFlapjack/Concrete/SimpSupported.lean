@@ -110,20 +110,20 @@ private theorem retHOLIdentity {scope : List VarName} {program : Prog (RiscV.Wor
 
 /-- Simplification of a supported program remains supported, and its HOL
 output agrees exactly with simplifying the representable source program. -/
-theorem supported_panSimp (program : Prog (RiscV.Word 64)) (supported : Supported program) :
-    Supported (panSimpProg program) ∧
+theorem supported_panSimp (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program) :
+    CallFreeSupported (panSimpProg program) ∧
       panSimpCompileHOL (progToHOL program) = progToHOL (panSimpProg program) := by
   have shape := assocSupported supported.1 .skip .skip
   have ranged := assocRanged supported.1 supported.2 .skip (by simp [ProgByteRanged])
   have identity := retSupportedIdentity shape
   constructor
-  · simpa [panSimpProg,identity] using (show Supported (seqAssoc .skip program) from ⟨shape,ranged⟩)
+  · simpa [panSimpProg,identity] using (show CallFreeSupported (seqAssoc .skip program) from ⟨shape,ranged⟩)
   · have converted := assocHOL supported.1 .skip
     simp only [progToHOL] at converted
     rw [panSimpCompileHOL,← converted,retHOLIdentity shape,panSimpProg,identity]
 
 /-- On supported programs, reassociation already is the full simplifier. -/
-theorem supported_seqAssocHOL (program : Prog (RiscV.Word 64)) (supported : Supported program) :
+theorem supported_seqAssocHOL (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program) :
     seqAssocHOL .skip (progToHOL program) = progToHOL (panSimpProg program) := by
   have shape := assocSupported supported.1 .skip .skip
   have identity := retSupportedIdentity shape

@@ -45,25 +45,26 @@ def nestedSourceFunctions : List (FunDeclOf 64) :=
    ⟨"middle",false,false,[],.call none "leaf" [],.one⟩,
    ⟨"leaf",false,false,[],.return (.const 7),.one⟩]
 
-theorem nestedSourceFunctions_ranged : ∀ f ∈ nestedSourceFunctions, NameRanged f.name := by
-  simp [nestedSourceFunctions,NameRanged]
+theorem nested_table_supported : FunctionTableSupported nestedSourceFunctions := by
+  intro f hf
+  simp only [nestedSourceFunctions,List.mem_cons,List.not_mem_nil,or_false] at hf
+  rcases hf with rfl | rfl | rfl
+  · refine ⟨?_, .call "answer" "middle" [] (by simp) (.base (.ret (.local "answer" (by simp)))), ?_, rfl⟩
+    · simp [FunDeclByteRanged,ListParamByteRanged,nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged]
+    · simp
+  · refine ⟨?_, .tail "leaf" [] (by simp), ?_, rfl⟩
+    · simp [FunDeclByteRanged,ListParamByteRanged,ProgByteRanged,ShapeByteRanged,NameRanged]
+    · simp
+  · refine ⟨?_, .base (.ret (.const _)), ?_, rfl⟩
+    · simp [FunDeclByteRanged,ListParamByteRanged,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged]
+    · simp
+
 
 theorem nestedSourceExact_eq (n clock : Nat) :
     functionSourceExact nestedSourceFunctions n clock = {nestedSourceState n with clock := clock} := by
   simp only [functionSourceExact, nestedSourceState]
   congr 1
   simpa [nestedSourceFunctions,nestedCallDeclarations,declToHOL,funDeclToHOL,nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate] using nestedEntryCode.symm
-
-theorem nestedCounted_shapes :
-    ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode nestedCountedProduction.code →
-      ∃ scope, CallSupportedIn scope body := by
-  intro name params body member
-  simp [countedFunctionsOfCode,nestedCountedProduction,functionEntries,nestedCallDeclarations] at member
-  rcases member with ⟨rfl,rfl,rfl⟩ | ⟨rfl,rfl,rfl⟩ | ⟨rfl,rfl,rfl⟩
-  · refine ⟨[],CallSupportedIn.call "answer" "middle" [] (by simp) ?_⟩
-    exact .base (.ret (.local "answer" (by simp)))
-  · exact ⟨[],.tail "leaf" [] (by simp)⟩
-  · exact ⟨[],.base (.ret (.const _))⟩
 
 theorem nestedCounted_run (memory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (context : PanValueFfiContext (RiscV.Word 64))
     (primitive : PanPrimitiveHandler (RiscV.Word 64)) (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :

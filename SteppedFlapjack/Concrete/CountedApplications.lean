@@ -28,7 +28,7 @@ theorem clockedFixture_premises (program : Prog (RiscV.Word 64)) (n : Nat) :
     simp [clockedFixtureProduction,executableState,singleEntrySourceProduction,sourceProduction] at found
 
 /-- Specialize the general span to the init-e-shaped fixture at a chosen clock. -/
-theorem fixture_counted_span (program : Prog (RiscV.Word 64)) (supported : Supported program)
+theorem fixture_counted_span (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (fuel count n : Nat)
     (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))

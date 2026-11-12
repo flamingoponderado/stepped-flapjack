@@ -3,7 +3,7 @@ namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
 
 def badShift : Prog (RiscV.Word 64) := .return (.shift .lsl (.const 1) (.const 64))
-theorem badShift_supported : Supported badShift := by
+theorem badShift_supported : CallFreeSupported badShift := by
   constructor
   · exact .ret (.shift .lsl (.const _) (.const _))
   · simp [badShift,ProgByteRanged,ExpByteRanged]

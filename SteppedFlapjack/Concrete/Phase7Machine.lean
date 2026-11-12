@@ -15,17 +15,13 @@ open SteppedFlapjack.StackSteps
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 1000000 in
 /-- A counted function-only source return reaches the initialized machine with an explicit tick bound. -/
-theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (RiscV.Word 64)}
-    (supported : CallSupportedIn scope program)     (production : PanSemState (RiscV.Word 64) (FfiState Unit)) (source : PanSemStateFiniteExact 64 Unit)
+theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
+    (supported : Supported program)     (production : PanSemState (RiscV.Word 64) (FfiState Unit)) (source : PanSemStateFiniteExact 64 Unit)
     [DecidablePred source.memaddrs]
     (sourceFs : List (FunDeclOf 64)) (sourceN sourceClock : Nat)
-    (namesRanged : ∀ f ∈ sourceFs, NameRanged f.name)
+    (tableSupported : FunctionTableSupported sourceFs)
     (productionInit : production = functionSourceProduction sourceFs sourceN sourceClock)
     (sourceInit : source = functionSourceExact sourceFs sourceN sourceClock)
-    (byteRanged : ProgByteRanged program)
-    (codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry)
-    (codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
-      ∃ scope, CallSupportedIn scope body)
     (targetCode : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL))
     (entries : List SimpVisits.SimpEntry)
     (sourceCode : source.code = HolFiniteMapExact.empty.updateList entries.reverse)
@@ -120,6 +116,13 @@ theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (
             (.halt .success,finalMachine,finalFfi) ∧
       finalFfi.ioEvents = sourceFinal.ffi.ioEvents ∧ FfiStateRel postFfi sourceFinal.ffi ∧
       semanticsDecls baseState start (originalFs.map DeclHOL.function) = .terminate .success finalFfi.ioEvents := by
+  have codeRanged : ∀ name entry, panSemCodeLookup production.code name = some entry → PanLangEntryByteRanged entry := by
+    rw [productionInit]
+    exact table_code_ranged sourceFs sourceN sourceClock tableSupported
+  have codeShape : ∀ name params body, (name,params,body) ∈ countedFunctionsOfCode production.code →
+      ∃ scope, CallSupportedIn scope body := by
+    rw [productionInit]
+    exact table_counted_shapes sourceFs sourceN sourceClock tableSupported
   have ranged : PanSemStateRelExecRanged production := by
     rw [productionInit]
     simp [functionSourceProduction,sourceProduction,PanSemStateRelExecRanged,StructContextByteRanged,StructContext.toHOL]
@@ -141,7 +144,7 @@ theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (
     decide
   have rel : PanSemStateRelExec production source.toExact := by
     rw [productionInit,sourceInit]
-    exact functionSource_related sourceFs sourceN sourceClock namesRanged
+    exact functionSource_related sourceFs sourceN sourceClock (table_names sourceFs tableSupported)
   have codeRel : PanSimp.CodeRel source.code targetCode := by
     rw [sourceCode, originalEntries, targetTable, simplifiedFs]
     apply source_simp_function_code {source with code := HolFiniteMapExact.empty} originalFs rfl
@@ -178,7 +181,7 @@ theorem countedCalls_initializedMachine {scope : List VarName} {program : Prog (
     simpa [bitmaps,native,optimized,raw,programs] using bitmapFits
   have fits : 0xa0020018 + bitmaps.length*8 ≤ sourceBase := by simp only [sourceBase]; omega
   obtain ⟨sourceFinal,post,sourceRun,wordRun,_,wordFfi,ffiRel⟩ :=
-    countedCalls_initializedWord supported production source rel ranged words_ byteRanged codeRanged codeShape
+    countedCalls_initializedWord supported.1 production source rel ranged words_ supported.2 codeRanged codeShape
       targetCode codeRel entries sourceCode entryShapes fs start targetTable found mainFound locals globals structs
       exceptions unique shapes noInline topOutside aligned context primitive handler exnContracts fuel count
       postLocals postGlobals postMemory postFfi value run budget phase3WordConfig code cfg bitmaps fits good
@@ -231,7 +234,7 @@ set_option maxHeartbeats 1000000 in
 /-- A supported counted source return reaches a successfully halting RISC-V
 machine at a code-derived clock, with matching source and machine observable events. -/
 theorem supported_counted_machine
-    (program : Prog (RiscV.Word 64)) (supported : Supported program)
+    (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program)
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) (fuel count n : Nat)
     (postLocals postGlobals : VarName → Option (PanValue (RiscV.Word 64)))
