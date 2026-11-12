@@ -1,5 +1,6 @@
 import SteppedFlapjack.Concrete.GlobalNonzeroNativeFacts
 import SteppedFlapjack.Concrete.FunctionSource
+import SteppedFlapjack.Concrete.Phase7SourceBehaviour
 namespace SteppedFlapjack.Concrete
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString
 open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.StackRemove SteppedFlapjack.PanToCrepSteps
@@ -237,39 +238,21 @@ private theorem declaredRun : declared.evaluateHOLFiniteState (progToHOL prog) =
 /-- The original source declarations initialize x to three and terminate successfully. -/
 private theorem nonzeroScalar_source_semantics : semanticsDecls nonzeroScalarSourceBase (ofString "main") nonzeroScalarProgram =
     .terminate .success sourceFfi.ioEvents := by
+  have names : decsStcnamesHOLExact [] nonzeroScalarProgram = some [] := by
+    simp [nonzeroScalarProgram,decsStcnamesHOLExact]
+  have classicalRun : @evaluateDeclsHOLFinite 64 Unit _ {nonzeroScalarSourceBase with structs := []}
+      (fun a => Classical.propDecidable (nonzeroScalarSourceBase.memaddrs a)) nonzeroScalarProgram = some declared := by
+    have decEq : (fun a => Classical.propDecidable (nonzeroScalarSourceBase.memaddrs a)) =
+        (inferInstance : DecidablePred nonzeroScalarSourceBase.memaddrs) := by
+      funext a
+      exact Subsingleton.elim _ _
+    rw [decEq]
+    exact declsRun
   have code : declared.code.lookup (ofString "main") = some ([],progToHOL prog,.one) := by
     simp [declared,HolFiniteMapExact.lookup_update,FUPDATE]
-  have lookup : lookupCodeHOLFinite declared.code.lookup (ofString "main") [] =
-      some (progToHOL prog,HolFiniteMapExact.empty,.one) := by
-    apply SemInitSupport.lookup_init
-    exact code
-  have entry : callEntryStateHOLFinite {declared with clock := declared.clock+1} HolFiniteMapExact.empty = declared := by
-    simp [callEntryStateHOLFinite,declared,nonzeroScalarSourceBase,sourceTemplate,setGlobalHOLFinite]
-  have callRun : evaluateHOLFiniteState {declared with clock := declared.clock+1} (.call none (ofString "main") []) =
-      (some (.returned (.val (.word 3))),emptyLocalsHOLFinite (emptyLocalsHOLFinite declared)) := by
-    rw [evaluateHOLFiniteState_call]
-    simp only [evalListHOLFinite,evalListHOLExact,lookup,show declared.clock+1 ≠ 0 by omega,↓reduceIte,entry,declaredRun]
-    simp [shapeOfHOLExact,shapeEqHOL,emptyLocalsHOLFinite]
-  have behavior := source_semantics_of_return declared (emptyLocalsHOLFinite (emptyLocalsHOLFinite declared))
-    (ofString "main") (declared.clock+1) (.val (.word 3)) callRun
-  have declarations : semanticsDecls nonzeroScalarSourceBase (ofString "main") nonzeroScalarProgram = semantics declared (ofString "main") := by
-    have names : decsStcnamesHOLExact [] nonzeroScalarProgram = some [] := by
-      simp [nonzeroScalarProgram,decsStcnamesHOLExact]
-    unfold semanticsDecls
-    rw [names]
-    simp only
-    have initialEq : {nonzeroScalarSourceBase with structs := []} = nonzeroScalarSourceBase := by rfl
-    rw [initialEq]
-    have classicalRun : @evaluateDeclsHOLFinite 64 Unit _ nonzeroScalarSourceBase
-        (fun a => Classical.propDecidable (nonzeroScalarSourceBase.memaddrs a)) nonzeroScalarProgram = some declared := by
-      have decEq : (fun a => Classical.propDecidable (nonzeroScalarSourceBase.memaddrs a)) =
-          (inferInstance : DecidablePred nonzeroScalarSourceBase.memaddrs) := by
-        funext a
-        exact Subsingleton.elim _ _
-      rw [decEq]
-      exact declsRun
-    rw [classicalRun]
-  rw [declarations]
+  have behavior := declaration_body_semantics nonzeroScalarSourceBase declared nonzeroScalarProgram
+    (ofString "main") (progToHOL prog) [] names classicalRun (by rfl) code declared.clock
+    (emptyLocalsHOLFinite declared) 3 (by simpa using declaredRun)
   simpa [emptyLocalsHOLFinite,declared,nonzeroScalarSourceBase,sourceTemplate,setGlobalHOLFinite] using behavior
 
 private theorem sourceClock : (callEntryStateHOLFinite (installSourceFunctions post entries) HolFiniteMapExact.empty).clock = 2 := by

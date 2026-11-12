@@ -52,38 +52,22 @@ theorem globalStruct_declared_run :
 
 theorem globalStruct_semantics :
     semanticsDecls globalStructBase (ofString "main") globalStructProgram = .terminate .success sourceFfi.ioEvents := by
+  have names : decsStcnamesHOLExact [] globalStructProgram = some [] := by
+    simp [globalStructProgram,globalStructDecl,decsStcnamesHOLExact]
+  have classicalRun : @evaluateDeclsHOLFinite 64 Unit _ {globalStructBase with structs := []}
+      (fun address => Classical.propDecidable (globalStructBase.memaddrs address)) globalStructProgram = some globalStructDeclared := by
+    have decEq : (fun address => Classical.propDecidable (globalStructBase.memaddrs address)) =
+        (inferInstance : DecidablePred globalStructBase.memaddrs) := by
+      funext address
+      exact Subsingleton.elim _ _
+    rw [decEq]
+    exact globalStruct_decls_run
   have code : globalStructDeclared.code.lookup (ofString "main") = some ([],progToHOL globalStructWitness,.one) := by
     simp [globalStructDeclared,globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE]
-  have lookup : lookupCodeHOLFinite globalStructDeclared.code.lookup (ofString "main") [] =
-      some (progToHOL globalStructWitness,HolFiniteMapExact.empty,.one) := by
-    apply SemInitSupport.lookup_init
-    exact code
   let final := (setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 7,.word 8])) globalStructDeclared).emptyLocalsHOLFinite
-  have entry : callEntryStateHOLFinite {globalStructDeclared with clock := globalStructDeclared.clock+1} HolFiniteMapExact.empty = globalStructDeclared := by
-    simp [callEntryStateHOLFinite,globalStructDeclared,globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite]
-  have callRun : evaluateHOLFiniteState {globalStructDeclared with clock := globalStructDeclared.clock+1} (.call none (ofString "main") []) =
-      (some (.returned (.val (.word (8 : BitVec 64)))),emptyLocalsHOLFinite final) := by
-    rw [evaluateHOLFiniteState_call]
-    simp only [evalListHOLFinite,evalListHOLExact,lookup,show globalStructDeclared.clock+1 ≠ 0 by omega,↓reduceIte,entry,globalStruct_declared_run]
-    simp [shapeOfHOLExact,shapeEqHOL,final,emptyLocalsHOLFinite]
-  have behavior := source_semantics_of_return globalStructDeclared (emptyLocalsHOLFinite final) (ofString "main") (globalStructDeclared.clock+1) (.val (.word (8 : BitVec 64))) callRun
-  have declarations : semanticsDecls globalStructBase (ofString "main") globalStructProgram = semantics globalStructDeclared (ofString "main") := by
-    have names : decsStcnamesHOLExact [] globalStructProgram = some [] := by
-      simp [globalStructProgram,globalStructDecl,decsStcnamesHOLExact]
-    unfold semanticsDecls
-    rw [names]
-    simp only
-    have initialEq : {globalStructBase with structs := []} = globalStructBase := by rfl
-    rw [initialEq]
-    have classicalRun : @evaluateDeclsHOLFinite 64 Unit _ globalStructBase
-        (fun address => Classical.propDecidable (globalStructBase.memaddrs address)) globalStructProgram = some globalStructDeclared := by
-      have decEq : (fun address => Classical.propDecidable (globalStructBase.memaddrs address)) =
-          (inferInstance : DecidablePred globalStructBase.memaddrs) := by
-        funext address
-        exact Subsingleton.elim _ _
-      rw [decEq]
-      exact globalStruct_decls_run
-    rw [classicalRun]
-  rw [declarations]
+  have behavior := declaration_body_semantics globalStructBase globalStructDeclared globalStructProgram
+    (ofString "main") (progToHOL globalStructWitness) [] names classicalRun (by rfl) code globalStructDeclared.clock
+    final 8 (by simpa [final] using globalStruct_declared_run)
   simpa [final,emptyLocalsHOLFinite,globalStructDeclared,globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite] using behavior
+
 end SteppedFlapjack.Concrete

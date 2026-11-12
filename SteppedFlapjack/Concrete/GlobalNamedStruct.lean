@@ -101,37 +101,20 @@ theorem namedGlobalStruct_declared_run :
 /-- The named source declaration initializes its global and terminates. -/
 theorem namedGlobalStruct_semantics :
     semanticsDecls globalStructBase (ofString "main") namedGlobalStructProgram = .terminate .success sourceFfi.ioEvents := by
+  have classicalRun : @evaluateDeclsHOLFinite 64 Unit _ {globalStructBase with structs := namedStructContext}
+      (fun address => Classical.propDecidable (globalStructBase.memaddrs address)) namedGlobalStructProgram = some namedStructDeclared := by
+    have decEq : (fun address => Classical.propDecidable (globalStructBase.memaddrs address)) =
+        (inferInstance : DecidablePred namedStructBase.memaddrs) := by
+      funext address
+      exact Subsingleton.elim _ _
+    rw [decEq]
+    exact namedGlobalStruct_decls_run
   have code : namedStructDeclared.code.lookup (ofString "main") = some ([],namedGlobalStructBody,.one) := by
     simp [namedStructDeclared,namedStructHOL,namedStructBase,globalStructBase,sourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE]
-  have lookup : lookupCodeHOLFinite namedStructDeclared.code.lookup (ofString "main") [] =
-      some (namedGlobalStructBody,HolFiniteMapExact.empty,.one) := by
-    apply SemInitSupport.lookup_init
-    exact code
   let final := (setGlobalHOLFinite (ofString "pair") (.nStruct (ofString "Pair") [(ofString "first",.val (.word 7)),(ofString "second",.val (.word 8))]) namedStructDeclared).emptyLocalsHOLFinite
-  have entry : callEntryStateHOLFinite {namedStructDeclared with clock := namedStructDeclared.clock+1} HolFiniteMapExact.empty = namedStructDeclared := by
-    simp [callEntryStateHOLFinite,namedStructDeclared,namedStructHOL,namedStructBase,globalStructBase,sourceTemplate,setGlobalHOLFinite]
-  have callRun : evaluateHOLFiniteState {namedStructDeclared with clock := namedStructDeclared.clock+1} (.call none (ofString "main") []) =
-      (some (.returned (.val (.word (8 : BitVec 64)))),emptyLocalsHOLFinite final) := by
-    rw [evaluateHOLFiniteState_call]
-    simp only [evalListHOLFinite,evalListHOLExact,lookup,show namedStructDeclared.clock+1 ≠ 0 by omega,↓reduceIte,entry,namedGlobalStruct_declared_run]
-    simp [shapeOfHOLExact,shapeEqHOL,final,emptyLocalsHOLFinite]
-  have behavior := source_semantics_of_return namedStructDeclared (emptyLocalsHOLFinite final) (ofString "main") (namedStructDeclared.clock+1) (.val (.word (8 : BitVec 64))) callRun
-  have declarations : semanticsDecls globalStructBase (ofString "main") namedGlobalStructProgram = semantics namedStructDeclared (ofString "main") := by
-    unfold semanticsDecls
-    rw [namedGlobalStruct_names]
-    simp only
-    have initialEq : {globalStructBase with structs := namedStructContext} = namedStructBase := rfl
-    rw [initialEq]
-    have classicalRun : @evaluateDeclsHOLFinite 64 Unit _ namedStructBase
-        (fun address => Classical.propDecidable (namedStructBase.memaddrs address)) namedGlobalStructProgram = some namedStructDeclared := by
-      have decEq : (fun address => Classical.propDecidable (namedStructBase.memaddrs address)) =
-          (inferInstance : DecidablePred namedStructBase.memaddrs) := by
-        funext address
-        exact Subsingleton.elim _ _
-      rw [decEq]
-      exact namedGlobalStruct_decls_run
-    rw [classicalRun]
-  rw [declarations]
+  have behavior := declaration_body_semantics globalStructBase namedStructDeclared namedGlobalStructProgram
+    (ofString "main") namedGlobalStructBody namedStructContext namedGlobalStruct_names classicalRun (by rfl) code
+    namedStructDeclared.clock final 8 (by simpa [final] using namedGlobalStruct_declared_run)
   simpa [final,emptyLocalsHOLFinite,namedStructDeclared,namedStructHOL,namedStructBase,globalStructBase,sourceTemplate,setGlobalHOLFinite] using behavior
 
 /-- Source simplification retains the concrete named-pair declarations. -/
