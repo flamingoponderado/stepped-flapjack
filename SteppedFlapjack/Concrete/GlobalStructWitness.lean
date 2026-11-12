@@ -13,28 +13,56 @@ def globalStructWitness : Prog (RiscV.Word 64) :=
   .seq (.assign .global "pair" (.rStruct [.const 7,.const 8]))
     (.return (.rField 1 (.var .global "pair")))
 
-def globalStructInitial : PanSemState (RiscV.Word 64) (FfiState Unit) :=
-  {sourceProduction with globals := updatePanValueMap sourceProduction.globals "pair" (.rStruct [.word 0,.word 0])}
+/-- Global lowering reserves two words below the existing init-e heap endpoint. -/
+def globalStructSourceTop : BitVec 64 := heapTop - 16
 
-/-- The same global pair is present in related executable and HOL states. -/
+def globalStructSourceDomain (a : BitVec 64) : Prop :=
+  ordinaryAddress a ∧ a.toNat < globalStructSourceTop.toNat
+
+instance (a : BitVec 64) : Decidable (globalStructSourceDomain a) := by
+  unfold globalStructSourceDomain
+  infer_instance
+
+def globalStructBase : PanSemStateFiniteExact 64 Unit :=
+  {sourceTemplate with topAddr := globalStructSourceTop, memaddrs := globalStructSourceDomain}
+
+def globalStructProductionBase (body : ProgHOL 64) : PanSemState (RiscV.Word 64) (FfiState Unit) :=
+  {executableState body with topAddress := globalStructSourceTop, memaddrs := fun a => decide (globalStructSourceDomain a)}
+
+def globalStructExactBase (body : ProgHOL 64) : PanSemStateFiniteExact 64 Unit :=
+  {exactState body with topAddr := globalStructSourceTop, memaddrs := globalStructSourceDomain}
+
+def globalStructInitial : PanSemState (RiscV.Word 64) (FfiState Unit) :=
+  {sourceProduction with topAddress := globalStructSourceTop, memaddrs := fun a => decide (globalStructSourceDomain a), globals := updatePanValueMap sourceProduction.globals "pair" (.rStruct [.word 0,.word 0])}
+
+theorem globalStructBase_related (body : ProgHOL 64) :
+    PanSemStateRelExec (globalStructProductionBase body) (globalStructExactBase body).toExact := by
+  obtain ⟨hl,hg,hs,hc,he,hm,hmd,hsm,hck,hbe,hffi,hb,ht⟩ := source_related body
+  refine ⟨hl,hg,hs,hc,he,?_,?_,hsm,hck,hbe,hffi,hb,rfl⟩
+  · intro a _; rfl
+  · intro a; simp [globalStructProductionBase,globalStructExactBase]
+
+/-- The global pair is present in related executable and HOL source states. -/
 theorem globalStructInitial_related (body : ProgHOL 64) :
     PanSemStateRelExec
-      {executableState body with globals := updatePanValueMap (executableState body).globals "pair" (.rStruct [.word 0,.word 0])}
-      (setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) (exactState body)).toExact := by
-  exact (source_related body).updateGlobals "pair" (by decide) _
+      {globalStructProductionBase body with globals := updatePanValueMap (globalStructProductionBase body).globals "pair" (.rStruct [.word 0,.word 0])}
+      (setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) (globalStructExactBase body)).toExact := by
+  exact (globalStructBase_related body).updateGlobals "pair" (by decide) _
 
 theorem globalStructInitial_ranged (body : ProgHOL 64) :
     PanSemStateRelExecRanged
-      {executableState body with globals := updatePanValueMap (executableState body).globals "pair" (.rStruct [.word 0,.word 0])} := by
-  exact (source_ranged body).updateGlobals "pair" _ (by simp [PanValueByteRanged])
+      {globalStructProductionBase body with globals := updatePanValueMap (globalStructProductionBase body).globals "pair" (.rStruct [.word 0,.word 0])} := by
+  have ranged : PanSemStateRelExecRanged (globalStructProductionBase body) := by
+    simpa [globalStructProductionBase,PanSemStateRelExecRanged] using source_ranged body
+  exact ranged.updateGlobals "pair" _ (by simp [PanValueByteRanged])
 
-/-- The two resulting global updates preserve the same state relation. -/
+/-- Updating the pair preserves the executable/HOL source relation. -/
 theorem globalStructUpdate_related (body : ProgHOL 64) :
     PanSemStateRelExec
-      {{executableState body with globals := updatePanValueMap (executableState body).globals "pair" (.rStruct [.word 0,.word 0])} with
-        globals := updatePanValueMap (updatePanValueMap (executableState body).globals "pair" (.rStruct [.word 0,.word 0])) "pair" (.rStruct [.word 7,.word 8])}
+      {{globalStructProductionBase body with globals := updatePanValueMap (globalStructProductionBase body).globals "pair" (.rStruct [.word 0,.word 0])} with
+        globals := updatePanValueMap (updatePanValueMap (globalStructProductionBase body).globals "pair" (.rStruct [.word 0,.word 0])) "pair" (.rStruct [.word 7,.word 8])}
       (setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 7,.word 8]))
-        (setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) (exactState body))).toExact := by
+        (setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) (globalStructExactBase body))).toExact := by
   exact (globalStructInitial_related body).updateGlobals "pair" (by decide) _
 
 theorem globalStructWitness_ranged : ProgByteRanged globalStructWitness := by
@@ -56,7 +84,7 @@ theorem globalStructWitness_run :
 
 /-- The HOL state corresponding to the concrete initial global pair. -/
 def globalStructHOL : PanSemStateFiniteExact 64 Unit :=
-  setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) sourceTemplate
+  setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 0,.word 0])) globalStructBase
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
@@ -68,12 +96,12 @@ theorem globalStructWitness_hol :
   refine ⟨(setGlobalHOLFinite (ofString "pair") (panValueToHOL (.rStruct [.word 7,.word 8])) globalStructHOL).emptyLocalsHOLFinite,?_,?_⟩
   · simp [globalStructWitness,progToHOL,expToHOL,evaluateHOLFiniteState_seq_line780,
       evaluateHOLFiniteState_assign,evaluateHOLFiniteState_return,evalHOLExact,evalListHOLExact,
-      globalStructHOL,sourceTemplate,setGlobalHOLFinite,setKvarHOLFinite,isValidValueHOLFinite,
+      globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,setKvarHOLFinite,isValidValueHOLFinite,
       lookupKvarHOLExact,FUPDATE,
       shapeOfHOLExact,shapeEqHOL,shapeEqHOL.shapeEqListHOL,emptyLocalsHOLFinite]
   · rw [show progToHOL globalStructWitness = .seq (.assign .global (ofString "pair") (.rstruct [.const 7,.const 8])) (.return (.rfield 1 (.var .global (ofString "pair")))) from by simp [globalStructWitness,progToHOL,expToHOL], SteppedFlapjack.PanToCrepSteps.controlSteps_seq]
     simp [evaluateHOLFiniteState_assign,evalHOLExact,
-      evalListHOLExact,globalStructHOL,sourceTemplate,setGlobalHOLFinite,setKvarHOLFinite,
+      evalListHOLExact,globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,setKvarHOLFinite,
       isValidValueHOLFinite,lookupKvarHOLExact,
       FUPDATE,shapeOfHOLExact,shapeEqHOL,shapeEqHOL.shapeEqListHOL,SteppedFlapjack.PanToCrepSteps.controlSteps.eq_def]
 
@@ -120,30 +148,29 @@ theorem globalStructWitness_lowering :
     compileExpExactHOLList,progToHOL,expToHOL,sizeOfShapeHOL,cakeBytesInWord,
     HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL]
 
-def globalStructTarget : PanSemStateFiniteExact 64 Unit :=
-  { sourceTemplate with topAddr := heapTop + 16, memaddrs := fun a => ordinaryAddress a ∨ a = heapTop ∨ a = heapTop + 8 }
+def globalStructTarget : PanSemStateFiniteExact 64 Unit := sourceTemplate
 
 theorem globalStructTarget_layout :
     globalStructTarget.topAddr - 16 = globalStructHOL.topAddr ∧
-    globalStructTarget.memaddrs heapTop ∧ globalStructTarget.memaddrs (heapTop + 8) ∧
+    globalStructTarget.memaddrs globalStructSourceTop ∧ globalStructTarget.memaddrs (globalStructSourceTop + 8) ∧
     ¬ globalStructTarget.memaddrs globalStructTarget.topAddr ∧
-    globalStructTarget.memory heapTop = .word 0 ∧ globalStructTarget.memory (heapTop + 8) = .word 0 := by
-  simp only [globalStructTarget,globalStructHOL,sourceTemplate,setGlobalHOLFinite,HolWordLab.word.injEq]
+    globalStructTarget.memory globalStructSourceTop = .word 0 ∧ globalStructTarget.memory (globalStructSourceTop + 8) = .word 0 := by
+  simp only [globalStructTarget,globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,HolWordLab.word.injEq]
   decide
 
-theorem globalStructSlots_disjoint (slot : BitVec 64) (h : ordinaryAddress slot) :
-    ¬ addresses heapTop 2 slot := by
+theorem globalStructSlots_disjoint (slot : BitVec 64) (h : globalStructSourceDomain slot) :
+    ¬ addresses globalStructSourceTop 2 slot := by
   intro hs
   rw [mem_addresses] at hs
   obtain ⟨i,hi,heq⟩ := hs
   have cases : i = 0 ∨ i = 1 := by omega
   rcases cases with rfl | rfl
-  · have eq : slot = heapTop := by simpa [bytesInWord] using heq
+  · have eq : slot = globalStructSourceTop := by simpa [bytesInWord] using heq
     subst slot
-    exact (by decide : ¬ ordinaryAddress heapTop) h
-  · have eq : slot = heapTop + 8 := by simpa [bytesInWord] using heq
+    exact (by decide : ¬ globalStructSourceDomain globalStructSourceTop) h
+  · have eq : slot = globalStructSourceTop + 8 := by simpa [bytesInWord] using heq
     subst slot
-    exact (by decide : ¬ ordinaryAddress (heapTop + 8)) h
+    exact (by decide : ¬ globalStructSourceDomain (globalStructSourceTop + 8)) h
 
 def globalStructKnownCtx : PanGlobalsContextExact 64 :=
   {globals := HolFiniteMapExact.empty.updateEq (ofString "pair",(.comb [.one,.one],16)),
@@ -153,10 +180,9 @@ theorem globalStructContext_eq : globalStructContext = globalStructKnownCtx := b
   simp [globalStructContext,globalStructStart,globalStructDecl,globalStructKnownCtx,
     compileDecsExactHOL,compileDecsGlobalAddressExact_eq,sizeOfShapeHOL,cakeBytesInWord]
 
-theorem globalStructTarget_aligned : panGlobalsByteAlignedHOL (heapTop + 16) := by
+theorem globalStructTarget_aligned : panGlobalsByteAlignedHOL heapTop := by
   unfold panGlobalsByteAlignedHOL
   decide
-
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
 theorem globalStruct_stateRel : panGlobalsStateRelHOLExact true globalStructContext globalStructHOL globalStructTarget := by
@@ -175,28 +201,26 @@ theorem globalStruct_stateRel : panGlobalsStateRelHOLExact true globalStructCont
   · intro name value found
     by_cases same : name = ofString "pair"
     · subst name
-      simp [globalStructHOL,sourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE] at found
+      simp [globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE] at found
       subst value
       refine ⟨16,?_,?_,?_,?_,?_⟩
       · simp [globalStructKnownCtx,HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL,shapeOfHOLExact]
       · simp [shapeOfHOLExact,isWfShapeNilHOL,isWfShapeExactHOL]
       · rw [globalStructTarget_layout.1]
-        have top : globalStructHOL.topAddr = heapTop := rfl
+        have top : globalStructHOL.topAddr = globalStructSourceTop := rfl
         rw [top]
-        have hsecond : globalStructTarget.memaddrs (heapTop + (8#64)) := by
-          change ordinaryAddress (heapTop + 8) ∨ heapTop + 8 = heapTop ∨ heapTop + 8 = heapTop + 8
-          exact Or.inr (Or.inr rfl)
-        have hword : globalStructTarget.memory (heapTop + (8#64)) = .word 0 := globalStructTarget_layout.2.2.2.2.2
+        have hsecond : globalStructTarget.memaddrs (globalStructSourceTop + (8#64)) := globalStructTarget_layout.2.2.1
+        have hword : globalStructTarget.memory (globalStructSourceTop + (8#64)) = .word 0 := globalStructTarget_layout.2.2.2.2.2
         simp [shapeOfHOLExact,memLoadHOLExact,memLoadsHOLExact,bytesInWordHOL,
           globalStructTarget_layout.2.1,hsecond,globalStructTarget_layout.2.2.2.2.1,hword]
       · intro slot member
-        change ordinaryAddress slot at member
+        change globalStructSourceDomain slot at member
         simp only [shapeOfHOLExact,sizeOfShapeHOL,sizeOfShapesHOL,List.map_cons,List.map_nil]
         change ¬ addresses (globalStructTarget.topAddr - 16) 2 slot
         rw [globalStructTarget_layout.1]
         exact globalStructSlots_disjoint slot member
       · simp [panGlobalsByteAlignedHOL,panByteAlignHOL]
-    · simp [globalStructHOL,sourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE,Ne.symm same] at found
+    · simp [globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE,Ne.symm same] at found
   · intro name shape address found
     by_cases same : name = ofString "pair"
     · subst name
@@ -204,20 +228,20 @@ theorem globalStruct_stateRel : panGlobalsStateRelHOLExact true globalStructCont
       obtain ⟨rfl,rfl⟩ := found
       decide
     · simp [globalStructKnownCtx,HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL,same] at found
-  · intro address h; exact Or.inl h
+  · intro address h; exact h.1
   · rfl
   · intro address h; rfl
   · rfl
   · intro function parameters program returnShape found
-    simp [globalStructHOL,sourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.empty] at found
+    simp [globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.empty] at found
   · intro name name' shape address shape' address' distinct found found' entry entry' slot
     by_cases same : name = ofString "pair"
     · by_cases same' : name' = ofString "pair"
       · exact False.elim (distinct (same.trans same'.symm))
-      · simp [globalStructHOL,sourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE,Ne.symm same'] at found'
-    · simp [globalStructHOL,sourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE,Ne.symm same] at found
+      · simp [globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE,Ne.symm same'] at found'
+    · simp [globalStructHOL,globalStructBase,sourceTemplate,setGlobalHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE,Ne.symm same] at found
   · exact globalStructTarget_layout.2.2.2.1
-  · change panGlobalsByteAlignedHOL (heapTop + 16)
+  · change panGlobalsByteAlignedHOL heapTop
     exact globalStructTarget_aligned
   · right; rfl
 

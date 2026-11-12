@@ -55,19 +55,19 @@ def globalStructClockedCrep : CrepSemHOLState 64 Unit :=
   {globalStructCrepState with clock := globalStructCrepState.clock + globalStructLoopClock}
 
 noncomputable def globalStructWordState : WordSemStateFiniteExact 64 Unit Unit :=
-  concreteDeclWordState riscvConfig.isa globalStructClockedCrep [] globalStructWordTemplate (fixtureHeapLength + 8)
+  concreteDeclWordState riscvConfig.isa globalStructClockedCrep [] globalStructWordTemplate fixtureHeapLength
 
 theorem globalStruct_heapEquation : globalStructClockedCrep.topAddr =
-    globalStructClockedCrep.baseAddr + 2 * (fixtureHeapLength + 8) := by
-  change heapTop + 16 = heapBase + 2 * (fixtureHeapLength + 8)
+    globalStructClockedCrep.baseAddr + 2 * fixtureHeapLength := by
+  change heapTop = heapBase + 2 * fixtureHeapLength
   decide
 
 theorem globalStruct_wordData : LoopWordDataRel
     {globalStructLoopState with clock := globalStructLoopState.clock + globalStructLoopClock} globalStructWordState := by
   have data := (concreteDecl_word_data riscvConfig.isa globalStructClockedCrep []
-    globalStructWordTemplate (fixtureHeapLength + 8) globalStruct_heapEquation).1
+    globalStructWordTemplate fixtureHeapLength globalStruct_heapEquation).1
   change LoopWordDataRel (concreteDeclLoopState riscvConfig.isa globalStructClockedCrep [])
-    (concreteDeclWordState riscvConfig.isa globalStructClockedCrep [] globalStructWordTemplate (fixtureHeapLength + 8))
+    (concreteDeclWordState riscvConfig.isa globalStructClockedCrep [] globalStructWordTemplate fixtureHeapLength)
   exact data
 
 
