@@ -63,6 +63,25 @@ private theorem supported_goodPanops {scope : List VarName} {program : Prog (Ris
   induction supported <;> simp_all [progToHOL,expsOfHOL,everyExpListHOL,everyExpList_append]
   all_goals exact scalar_goodPanops (by assumption)
 
+/-- Call-aware scalar programs meet the compiler operation-arity check. -/
+private theorem args_good {scope : List VarName} (args : List (Exp (RiscV.Word 64)))
+    (scalar : ∀ e ∈ args, Scalar scope e) : everyExpListHOL panopArityTwoHOL (args.map expToHOL) = true := by
+  induction args with
+  | nil => simp [everyExpListHOL]
+  | cons e es ih => simp [everyExpListHOL,scalar_goodPanops (scalar e (by simp)),ih (fun e he => scalar e (by simp [he]))]
+
+theorem call_good {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) : everyExpListHOL panopArityTwoHOL (expsOfHOL (progToHOL program)) = true := by
+  induction supported with
+  | base h => exact supported_goodPanops h
+  | tail name args scalar => simpa [progToHOL,expsOfHOL] using args_good args scalar
+  | call dest name args scalar cont ih => simp [progToHOL,expsOfHOL,everyExpList_append,args_good args scalar,ih]
+  | decl name scalar body ih => simp [progToHOL,expsOfHOL,everyExpListHOL,scalar_goodPanops scalar,ih]
+  | seq a b iha ihb => simp [progToHOL,expsOfHOL,everyExpList_append,iha,ihb]
+  | ite scalar a b iha ihb => simp [progToHOL,expsOfHOL,everyExpListHOL,everyExpList_append,scalar_goodPanops scalar,iha,ihb]
+  | «while» scalar body ih => simp [progToHOL,expsOfHOL,everyExpListHOL,scalar_goodPanops scalar,ih]
+
+
 /-- Supported source programs meet the compiler's source good-code check. -/
 theorem supported_pancakeGoodCode (program : Prog (RiscV.Word 64)) (supported : CallFreeSupported program) :
     pancakeGoodCodeHOL (declarations (progToHOL program)) = true := by

@@ -242,4 +242,13 @@ theorem call_panToWord (fs : List (FunDeclOf 64)) (supported : FunctionTableSupp
   dsimp only
   rw [call_structs_top fs supported]
 
+/-- Supported function declarations satisfy the source compiler good-code check. -/
+theorem table_good (fs : List (FunDeclOf 64)) (supported : FunctionTableSupported fs) :
+    pancakeGoodCodeHOL ((fs.map funDeclToHOL).map DeclHOL.function) = true := by
+  simp only [pancakeGoodCodeHOL,List.all_eq_true,List.mem_map]
+  intro d hd
+  obtain ⟨f,hf,rfl⟩ := hd
+  obtain ⟨f,hf,rfl⟩ := hf
+  simpa [goodPanopsHOL,funDeclToHOL] using call_good (supported f hf).2.1
+
 end SteppedFlapjack.Concrete

@@ -150,22 +150,6 @@ theorem nested_compilerFacts : (fixtureRemoveLabels nestedCode).isSome = true �
     simp_rw [LabToTarget.progToBytesMap]
     with_unfolding_all decide
 
-/-- The original Pancake compiler emits exactly the bytes and bitmaps used by the witness. -/
-theorem nested_compilerOutput :
-    ∃ final, Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
-      (nestedCallDeclarations.map declToHOL) = some (fixtureCodeBytes nestedCode,nestedBitmaps,final) := by
-  have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
-    funext a b c d e f g
-    exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
-  have codeEq : (WordToStack.Native.compileNative riscvConfig false
-      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig nestedRawWords).2).2.2.2 = nestedCode := by
-    simp [nestedCode,nestedNative,nestedOptimizedWords,compileWith_eq_compile _ allocator,phase3WordConfig_eq]
-  have bitmapEq : (WordToStack.Native.compileNative riscvConfig false
-      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig nestedRawWords).2).1 = nestedBitmaps := by
-    simp [nestedBitmaps,nestedNative,nestedOptimizedWords,compileWith_eq_compile _ allocator,phase3WordConfig_eq]
-  exact fixturePancakeCompiler_outputFor (nestedCallDeclarations.map declToHOL) nestedBitmaps nestedRawWords nestedCode
-    nested_panToWord codeEq bitmapEq nested_nativeSafe nested_compilerFacts.1
-
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
 /-- The concrete nested-call machine run follows from compiler and layout checks;
@@ -201,7 +185,6 @@ theorem nested_initialized_machine :
   have unique : ((functionsHOL (nestedCallDeclarations.map declToHOL)).map Prod.fst).Nodup := by
     simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL]
     decide
-  have sourceGood : pancakeGoodCodeHOL (nestedCallDeclarations.map declToHOL) = true := by decide +kernel
   have span := countedCalls_initializedMachine ⟨shape, by simp [nestedCallEntry,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged]⟩ production source nestedSourceFunctions n 6 nested_table_supported
     (by rfl) (by simpa [source] using (nestedSourceExact_eq n 6).symm)
     source.code
@@ -210,12 +193,10 @@ theorem nested_initialized_machine :
     (by simpa only [nestedHOLDeclarations] using unique)
     nestedHOLFunctions (by simp [nestedHOLFunctions,nestedCallEntry,progToHOL,expToHOL,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL]) (ofString "main") rfl
     (by simpa only [nestedHOLDeclarations] using sourceCode)
-    (by rw [nestedHOLDeclarations]; simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL,nestedCallEntry,panSimpProg,retToTail,seqAssoc,smartSeq,progToHOL,expToHOL,shapeToHOL])
     (by simp [source,nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,FUPDATE,ofString])
     (by simpa only [nestedHOLDeclarations] using nestedCall_inline_selection_empty)
     (riscv64PanValueFfiContext (fun _ => false)) (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] 8 6
     _ _ _ _ 7 (by simpa [production,panSemBitVec64MemoryAccess] using sourceRun) (by rfl)
-    (by simpa only [nestedHOLDeclarations] using sourceGood)
     (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,nestedBitmaps] using nested_bitmapFits)
     (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,nestedCode] using nested_nativeSafe)
     (by simpa [nestedHOLDeclarations,nestedCallCrepPrograms,nestedRawWords,nestedOptimizedWords,nestedNative,nestedCode] using nested_compilerFacts)
@@ -226,7 +207,7 @@ theorem nested_initialized_machine :
       rw [nestedHOLDeclarations]
       change nestedBitmaps.length = nestedBitmaps.length
       rfl)
-  obtain ⟨sourceFinal,finalMachine,finalFfi,sourceResult,machineRun,events,ffiRel,semantics⟩ := span
+  obtain ⟨sourceFinal,finalMachine,finalFfi,compilerFinal,compiled,sourceResult,machineRun,events,ffiRel,semantics⟩ := span
   have sourceEvents : sourceFinal.ffi.ioEvents = [] := by
     have h := ffiRel.2.1
     simp only [nestedCountedProduction,sourceProduction,sourceFfiState,sourceFfi,List.map_nil] at h
@@ -247,8 +228,8 @@ theorem nested_initialized_machine :
       ofString,MlString.explode_implode]
   simp only [source,nestedSourceState,sourceTemplateFor,sourceTemplate,concreteDeclCrepState,noGlobalsLoweredPreCall,
     concreteDeclLoopState,fresh] at machineRun
-  obtain ⟨compilerFinal,compiled⟩ := nested_compilerOutput
-  rw [nested_bitmaps] at compiled
+  rw [nestedHOLDeclarations, ← nestedCallCrepPrograms, ← nestedRawWords, ← nestedOptimizedWords,
+    ← nestedNative, ← nestedCode, ← nestedBitmaps, nested_bitmaps] at compiled
   refine ⟨compilerFinal,compiled,finalMachine,finalFfi,?_,outputEvents,?_⟩
   · simp only [List.flatMap_nil,Nat.reduceAdd] at machineRun
     rw [← nestedCallCrepPrograms, ← nestedRawWords, ← nestedOptimizedWords, ← nestedNative,

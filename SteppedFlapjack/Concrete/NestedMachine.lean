@@ -59,29 +59,6 @@ def nestedFrameSizes : Spt Nat :=
     (compileProgNative riscvConfig false body argc (riscvConfig.regCount-(5+riscvConfig.avoidRegs.length)) (.nil,0)).2.1)
     (sptFromAList nestedOptimizedWords)
 
-theorem nested_panToWord :
-    panToWordCompileProgHOL riscvConfig.isa (nestedCallDeclarations.map declToHOL) = nestedRawWords := by
-  have funcs : nestedHOLFunctions = nestedSourceFunctions.map funDeclToHOL := by
-    simp [nestedHOLFunctions,nestedSourceFunctions,nestedCallEntry,funDeclToHOL,progToHOL,expToHOL,shapeToHOL]
-  have fixed : nestedHOLFunctions.map (fun f => {f with body := panSimpCompileHOL f.body}) = nestedHOLFunctions := by
-    simp [nestedHOLFunctions,nestedCallEntry,progToHOL,expToHOL,panSimpCompileHOL,seqAssocHOL,smartSeqHOL,retToTailHOL]
-  have result := call_panToWord nestedSourceFunctions nested_table_supported
-  rw [← funcs,fixed,nestedHOLDeclarations] at result
-  exact result
-
-/-- The actual source compiler output satisfies the Stack code contract. -/
-theorem nested_nativeGoodCode : StackToLab.Proofs.GoodCode.goodCode 24
-    (compileNative riscvConfig false nestedOptimizedWords).2.2.2 := by
-  have unique : ((functionsHOL (nestedCallDeclarations.map declToHOL)).map Prod.fst).Nodup := by
-    simp [nestedCallDeclarations,declToHOL,funDeclToHOL,functionsHOL]
-    decide
-  have good := source_nativeGoodCode (nestedCallDeclarations.map declToHOL) unique
-  rw [nested_panToWord] at good
-  have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
-    funext a b c d e f g
-    exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
-  simpa [nestedOptimizedWords,nestedRawWords,compileWith_eq_compile _ allocator,phase3WordConfig_eq] using good
-
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 3000000 in
 /-- A generated, initialized Word return reaches RISC-V at a concrete bound. -/

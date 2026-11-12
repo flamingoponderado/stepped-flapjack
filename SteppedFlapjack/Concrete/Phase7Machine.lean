@@ -32,7 +32,6 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
     (simplifiedFs : fs = originalFs.map (fun f => {f with body := panSimpCompileHOL f.body})) (start : MlS)
     (startMain : start = ofString "main")
     (targetTable : targetCode = HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)
-    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],progToHOL (panSimpProg program),.one))
     (mainFound : source.code.lookup start = some ([],progToHOL program,.one))
     (noInline : (functionsHOL ((compileTopExactHOL (fs.map DeclHOL.function) start).filter inlinableHOL)).map Prod.fst = [])
     (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
@@ -46,7 +45,6 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
       (contracts := some (countedContractsOfCode production.code exnContracts)) =
         some (.returned postLocals postGlobals postMemory postFfi [.word value],count))
     (budget : count ≤ source.clock)
-    (sourceGood : pancakeGoodCodeHOL (originalFs.map DeclHOL.function) = true)
     (bitmapFits : let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)))
       let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
       let bitmaps := (compileNative riscvConfig false optimized).1
@@ -98,7 +96,9 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
     let optLimit := loopVisitWeight opt + optFactor * (2 * loopLimit)
     let allowance := (max 1 (wordCodeWeight (sptFromAList optimized)) + 1) ^ (6*optLimit+2)
     let n := 1 + max 1 (stackCodeWeight (sptFromAList code)) * (6*optLimit+1 + allowance)
-    ∃ (sourceFinal : PanSemStateFiniteExact 64 Unit), ∃ finalMachine finalFfi,
+    ∃ (sourceFinal : PanSemStateFiniteExact 64 Unit), ∃ finalMachine finalFfi compilerFinal,
+      Flapjack.Pancake.Proofs.PanToTarget.compileProgAsmFast countdownRiscVBackend riscvConfig
+        (originalFs.map DeclHOL.function) = some (fixtureCodeBytes code,bitmaps,compilerFinal) ∧
       source.evaluateHOLFiniteState (progToHOL program) = (some (.returned (.val (.word value))),sourceFinal) ∧
       evaluateTargetHOL (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi
         (948 * StackToLabSteps.stackLabTickLimit countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
@@ -110,6 +110,9 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
       loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa (compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start))) := by
     rw [originalFunctions,simplifiedFs,originalFunctions,startMain]
     exact call_panToWord sourceFs tableSupported
+  have sourceGood : pancakeGoodCodeHOL (originalFs.map DeclHOL.function) = true := by
+    rw [originalFunctions]
+    exact table_good sourceFs tableSupported
   have originalWellFormed : originalFs.all (fun f => f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
       isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true := by
     rw [originalFunctions]
@@ -166,6 +169,12 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
     apply source_simp_function_code {source with code := HolFiniteMapExact.empty} originalFs rfl
     · simpa [structs] using originalWellFormed
     · exact originalUnique
+  have found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],progToHOL (panSimpProg program),.one) := by
+    have h := codeRel.2 start [] (progToHOL program) .one mainFound
+    rw [targetTable] at h
+    change FLOOKUP (FUPDATE_LIST FEMPTY (functionsHOL (fs.map DeclHOL.function)).reverse) start = _ at h
+    rw [FLOOKUP_FUPDATE_LIST_reverse_eq_lookup,callSupported_panSimp_hol supported.1] at h
+    exact h
   let programs := compileProgDeclsHOLW (compileTopExactHOL (fs.map DeclHOL.function) start)
   let raw := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa programs)
   let optimized := (compileWith Flapjack.RegAlloc.regAllocExecutable phase3WordConfig riscvConfig raw).2
@@ -189,6 +198,18 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
   have allocator : Flapjack.RegAlloc.regAllocExecutable = Flapjack.RegAlloc.regAlloc := by
     funext a b c d e f g
     exact Flapjack.RegAlloc.regAllocExecutable_eq a b c d e f g
+  have codeEq : (compileNative riscvConfig false
+      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig raw).2).2.2.2 = code := by
+    simp [code,native,optimized,compileWith_eq_compile _ allocator,phase3WordConfig_eq]
+  have bitmapEq : (compileNative riscvConfig false
+      (WordToWord.compile countdownRiscVBackend.wordToWordConf riscvConfig raw).2).1 = bitmaps := by
+    simp [bitmaps,native,optimized,compileWith_eq_compile _ allocator,phase3WordConfig_eq]
+  have safe' : fixtureStackSafe code = true := by
+    simpa [code,native,optimized,raw,programs] using safe
+  have success' : (fixtureRemoveLabels code).isSome = true := by
+    simpa [code,native,optimized,raw,programs] using facts.1
+  obtain ⟨compilerFinal,compiled⟩ := fixturePancakeCompiler_outputFor
+    (originalFs.map DeclHOL.function) bitmaps raw code rawEq codeEq bitmapEq safe' success'
   have good : StackToLab.Proofs.GoodCode.goodCode 24 code := by
     have h := source_nativeGoodCode (originalFs.map DeclHOL.function) originalUnique
     rw [rawEq, ← phase3WordConfig_eq] at h
@@ -244,7 +265,7 @@ theorem countedCalls_initializedMachine {program : Prog (RiscV.Word 64)}
     exact sourceRun
   have semantics := functionOnly_body_semantics baseState start originalFs (progToHOL program)
     originalWellFormed originalUnique rfl (by simpa [baseState] using locals) foundOriginal source.clock sourceFinal value sourceRun'
-  exact ⟨sourceFinal,finalMachine,finalFfi,sourceRun,machineRun,finalEvents,ffiRel,by simpa [finalEvents] using semantics⟩
+  exact ⟨sourceFinal,finalMachine,finalFfi,compilerFinal,compiled,sourceRun,machineRun,finalEvents,ffiRel,by simpa [finalEvents] using semantics⟩
 
 set_option maxHeartbeats 1000000 in
 /-- A supported counted source return reaches a successfully halting RISC-V
