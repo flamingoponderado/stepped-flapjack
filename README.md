@@ -80,11 +80,12 @@ It also requires that the compiler select no functions for inlining and that
 the source heap headers use the bitmap count computed by the compiler. These
 conditions and the fixed fixture layout are gaps relative to init-e's actual
 initialization and guest.
-The machine clock is `callPipelineTicks`, with an affine identity in the counted
-source steps for a fixed initial source clock. Its coefficient still includes
-`callClockFactor`, which grows exponentially in that initial clock. When the
-initial clock is selected from the source-step bound, the overall expression
-therefore does not yet meet the roadmap’s code-only affine requirement.
+The machine clock is `callPipelineTicks`. Its coefficient in the counted
+source-step bound depends on the compiled code and function table. The
+Crep-to-Loop factor is independent of the initial source clock; that clock
+appears separately and linearly in the complete expression. Thus choosing an
+initial clock that is affine in the source-step bound retains an affine machine
+tick bound.
 `nested_initialized_machine` instantiates this composition with two call levels
 and a six-step source execution.
 
