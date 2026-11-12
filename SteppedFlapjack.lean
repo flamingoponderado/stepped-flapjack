@@ -1,3 +1,8 @@
+import SteppedFlapjack.Concrete.GlobalStructSourceSemantics
+import SteppedFlapjack.Concrete.GlobalStructWordAllocated
+import SteppedFlapjack.Concrete.GlobalStructWordOptimized
+import SteppedFlapjack.Concrete.GlobalStructWordSimp
+import SteppedFlapjack.Concrete.GlobalStructWord
 import SteppedFlapjack.Concrete.GlobalStructLoop
 import SteppedFlapjack.Concrete.GlobalStructCrep
 import SteppedFlapjack.Concrete.GlobalStructWitness
@@ -492,8 +497,13 @@ phase 4 of flapjack#1251:
 
 - `SteppedFlapjack.Concrete.HeapWordWitness`: a seven-step source witness for an aligned heap word store and load.
 - `SteppedFlapjack.Concrete.GlobalStructWitness`: a concrete global-pair source, HOL, and globals-lowering witness.
+- `SteppedFlapjack.Concrete.GlobalStructSourceSemantics`: initialization and termination of the full source declaration.
 - `SteppedFlapjack.Concrete.GlobalStructCrep`: the same witness through Crep with a concrete visit bound.
 - `SteppedFlapjack.Concrete.GlobalStructLoop`: the witness through optimized Loop with code-derived bounds.
+- `SteppedFlapjack.Concrete.GlobalStructWord`: the same witness through Loop-to-Word with an explicit bound.
+- `SteppedFlapjack.Concrete.GlobalStructWordSimp`: the same witness through Word simplification.
+- `SteppedFlapjack.Concrete.GlobalStructWordOptimized`: the witness through the subsequent Word optimization passes.
+- `SteppedFlapjack.Concrete.GlobalStructWordAllocated`: the witness through register allocation.
 - `SteppedFlapjack.CrepToLoopSteps.ScalarPrefix`:
   generalized scalar compilation prefixes and explicit structural Loop visit bounds;
 - `SteppedFlapjack.PanValueExpCounted`, `SteppedFlapjack.PanExpressionEvaluator`:
