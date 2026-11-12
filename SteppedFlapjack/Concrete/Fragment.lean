@@ -17,6 +17,7 @@ inductive Scalar (scope : List VarName) : Exp (RiscV.Word 64) → Prop
 nested conditionals and loops. Declarations bind only their own body. -/
 inductive SupportedIn : List VarName → Prog (RiscV.Word 64) → Prop
   | skip {scope} : SupportedIn scope .skip
+  | store {scope address value} : Scalar scope address → Scalar scope value → SupportedIn scope (.store address value)
   | assign {scope} (name) {e} : name ∈ scope → Scalar scope e → SupportedIn scope (.assign .local name e)
   | decl {scope} (name) {e body} : Scalar scope e → SupportedIn (name :: scope) body →
       SupportedIn scope (.dec name .one e body)
@@ -73,6 +74,7 @@ theorem supported_calls_irrel {σ : Type} (context : PanValueFfiContext (RiscV.W
     intro scope p shape locals globals memory ffi
     cases shape with
     | skip => simp [evalPanValueFfiProgSteps]
+    | store address value => simp [evalPanValueFfiProgSteps]
     | assign name member scalar => simp [evalPanValueFfiProgSteps]
     | decl name scalar body =>
       simp only [evalPanValueFfiProgSteps, ih _ _ body]

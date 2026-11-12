@@ -33,6 +33,11 @@ def heapWordWitness : Prog (RiscV.Word 64) :=
   .seq (.store (.const 0xa1000100) (.const 7))
     (.return (.load .one (.const 0xa1000100)))
 
+/-- Both the store and subsequent load are in the public supported fragment. -/
+theorem heapWordWitness_supported : Supported heapWordWitness := by
+  refine ⟨.base (.seq (.store (.const _) (.const _)) (.ret (.load (.const _)))), ?_⟩
+  simp [heapWordWitness,ProgByteRanged,ExpByteRanged,ShapeByteRanged]
+
 /-- The witness is representable by the compiler's byte-string source syntax. -/
 theorem heapWordWitness_ranged : ProgByteRanged heapWordWitness := by
   simp [heapWordWitness,ProgByteRanged,ExpByteRanged,ShapeByteRanged]

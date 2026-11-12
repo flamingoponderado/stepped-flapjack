@@ -19,7 +19,7 @@ theorem supported_structs_fixed {scope : List VarName} {program : Prog (RiscV.Wo
     (supported : SupportedIn scope program) (ctxt : ContextExact) :
     compileProgExact ctxt (progToHOL program) = progToHOL program := by
   induction supported generalizing ctxt <;> simp_all [progToHOL,shapeToHOL,compileProgExact,compileShapeExact]
-  all_goals exact scalar_structs_fixed (by assumption) ctxt
+  all_goals first | exact scalar_structs_fixed (by assumption) ctxt | constructor <;> exact scalar_structs_fixed (by assumption) ctxt
 
 /-- The executable allocation agrees with the original compiler. -/
 theorem supportedAllocated_eq (program : Prog (RiscV.Word 64)) :
@@ -41,7 +41,7 @@ private theorem everyExpList_append (a b : List (ExpHOL 64)) :
 private theorem supported_goodPanops {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : SupportedIn scope program) : everyExpListHOL panopArityTwoHOL (expsOfHOL (progToHOL program)) = true := by
   induction supported <;> simp_all [progToHOL,expsOfHOL,everyExpListHOL,everyExpList_append]
-  all_goals exact scalar_goodPanops (by assumption)
+  all_goals first | exact scalar_goodPanops (by assumption) | constructor <;> exact scalar_goodPanops (by assumption)
 
 /-- Call-aware scalar programs meet the compiler operation-arity check. -/
 private theorem args_good {scope : List VarName} (args : List (Exp (RiscV.Word 64)))

@@ -19,6 +19,7 @@ def hw : ProgHOL width → Nat
 /-- HOL images of supported, loop-exit-free bodies, including calls. -/
 private inductive Plain : ProgHOL width → Prop
   | skip : Plain .skip
+  | store (address value) : Plain (.store address value)
   | assign (k n e) : Plain (.assign k n e)
   | ret (e) : Plain (.return e)
   | tail (name args) : Plain (.call none name args)
@@ -56,6 +57,10 @@ private theorem plain_no_loop_exit {p : ProgHOL width} (plain : Plain p) :
       (s.evaluateHOLFiniteState p).1 ≠ some .break ∧ (s.evaluateHOLFiniteState p).1 ≠ some .continue := by
   induction plain with
   | skip => intro s; simp
+  | store address value =>
+    intro s
+    rw [evaluateHOLFiniteState_store]
+    repeat' (first | split | simp)
   | assign k n e =>
     intro s
     rw [evaluateHOLFiniteState_assign]
@@ -301,6 +306,10 @@ private theorem seqAssoc_eq_skip {a : ProgHOL width} (plain : Plain a) :
     ∀ pre : ProgHOL width, seqAssocHOL pre a = .skip → pre = .skip := by
   induction plain with
   | skip => intro pre h; simpa [seqAssocHOL] using h
+  | store address value =>
+    intro pre h
+    rw [show seqAssocHOL pre (.store address value : ProgHOL width) = smartSeqHOL pre (.store address value) by simp [seqAssocHOL]] at h
+    cases smart_eq_skip h
   | assign k n e =>
     intro pre h
     rw [show seqAssocHOL pre (.assign k n e : ProgHOL width) = smartSeqHOL pre (.assign k n e) by simp [seqAssocHOL]] at h
@@ -374,6 +383,7 @@ private theorem hwPre_le {p : ProgHOL width} (plain : Plain p) :
     ∀ pre : ProgHOL width, hwPre pre ≤ hw (seqAssocHOL pre p) := by
   induction plain with
   | skip => intro pre; simp only [show seqAssocHOL pre (.skip : ProgHOL width) = pre by simp [seqAssocHOL], hwPre]; split <;> omega
+  | store address value => intro pre; simp only [seqAssocHOL]; rw [smart_hw]; omega
   | assign k n e => intro pre; rw [seqAssoc_assign, smart_hw]; omega
   | ret e => intro pre; rw [seqAssoc_ret, smart_hw]; omega
   | tail name args => intro pre; simp only [seqAssocHOL]; rw [smart_hw]; omega
@@ -413,6 +423,7 @@ private theorem abnormal_visits {p : ProgHOL width} (plain : Plain p) :
     | some x => simp [hw,hwPre,hs]; omega
   induction plain with
   | skip => intro pre s _ _; simp [show seqAssocHOL pre (.skip : ProgHOL width) = pre by simp [seqAssocHOL]]
+  | store address value => intro pre s hs ab; unfold delta; simp only [seqAssocHOL]; exact leaf _ _ s hs ab
   | assign k n e => intro pre s hs ab; unfold delta; rw [seqAssoc_assign]; exact leaf _ _ s hs ab
   | ret e => intro pre s hs ab; unfold delta; rw [seqAssoc_ret]; exact leaf _ _ s hs ab
   | tail name args => intro pre s hs ab; unfold delta; simp only [seqAssocHOL]; exact leaf _ _ s hs ab
@@ -469,6 +480,10 @@ private theorem seqAssoc_visits_delta {p : ProgHOL width} (plain : Plain p) :
       subst this
       simp [controlSteps_skip, after, prePart, isSkip]
     | false => simp [prePart, hpre]; omega
+  | store address value =>
+    intro pre s
+    unfold delta; simp only [seqAssocHOL]
+    exact smart_bound pre _ _ _ (fun t => Nat.le_add_right _ _) s
   | assign k n e =>
     intro pre s
     unfold delta; rw [seqAssoc_assign]
@@ -986,6 +1001,8 @@ private theorem plainTableBound {σ : Type} (factor : Nat) (positive : 1 ≤ fac
     | skip =>
       rw [controlSteps_skip,controlSteps_skip]
       simpa using positive
+    | store address value =>
+      simpa only [controlSteps.eq_def,Nat.add_zero,Nat.mul_one] using positive
     | assign k name e =>
       simpa only [controlSteps.eq_def,Nat.add_zero,Nat.mul_one] using positive
     | ret e =>

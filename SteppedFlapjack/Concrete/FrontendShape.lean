@@ -47,6 +47,9 @@ theorem supportedIn_frontend_shape {scope : List VarName} {program : Prog (RiscV
       FrontendProgram ctxt (progToHOL program) := by
   induction supported with
   | skip => intro ctxt relation; simpa [progToHOL] using (FrontendProgram.skip (ctxt := ctxt))
+  | store address value =>
+    intro ctxt relation
+    simpa [progToHOL] using (FrontendProgram.store (scalar_frontend_shape relation address) (scalar_frontend_shape relation value))
   | assign name member e =>
     intro ctxt relation
     obtain ⟨reg,found⟩ := relation name member

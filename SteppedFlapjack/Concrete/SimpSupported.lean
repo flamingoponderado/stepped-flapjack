@@ -11,6 +11,7 @@ private theorem assocSupported {scope : List VarName} {program : Prog (RiscV.Wor
     (supported : SupportedIn scope program) : ∀ pre, SupportedIn scope pre → SupportedIn scope (seqAssoc pre program) := by
   induction supported with
   | skip => intro pre hpre; simpa [seqAssoc] using hpre
+  | store address value => intro pre hpre; simpa only [seqAssoc] using smartSupported hpre (.store address value)
   | assign name member scalar => intro pre hpre; simpa only [seqAssoc] using smartSupported hpre (.assign name member scalar)
   | ret scalar => intro pre hpre; simpa only [seqAssoc] using smartSupported hpre (.ret scalar)
   | decl name scalar body ih =>
@@ -29,7 +30,7 @@ private theorem assocSupported {scope : List VarName} {program : Prog (RiscV.Wor
 private theorem retSupportedIdentity {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : SupportedIn scope program) : retToTail program = program := by
   induction supported with
-  | skip | assign | ret => simp [retToTail]
+  | skip | store | assign | ret => simp [retToTail]
   | decl name scalar body ih => simp [retToTail,ih]
   | seq a b iha ihb =>
     simp only [retToTail,iha,ihb]
@@ -46,6 +47,7 @@ private theorem assocRanged {scope : List VarName} {program : Prog (RiscV.Word 6
       ∀ pre, ProgByteRanged pre → ProgByteRanged (seqAssoc pre program) := by
   induction supported with
   | skip => intro _ pre hpre; simpa [seqAssoc] using hpre
+  | store address value => intro ranged pre hpre; simpa only [seqAssoc] using smartRanged pre _ hpre ranged
   | assign name member scalar => intro ranged pre hpre; simpa only [seqAssoc] using smartRanged pre _ hpre ranged
   | ret scalar => intro ranged pre hpre; simpa only [seqAssoc] using smartRanged pre _ hpre ranged
   | decl name scalar body ih =>
@@ -91,7 +93,7 @@ private theorem assocHOL {scope : List VarName} {program : Prog (RiscV.Word 64)}
       seqAssocHOL (progToHOL pre) (progToHOL program) := by
   induction supported with
   | skip => intro pre; simp [seqAssoc,seqAssocHOL,progToHOL]
-  | assign | ret => intro pre; simp [seqAssoc,seqAssocHOL,progToHOL,smartHOL]
+  | store | assign | ret => intro pre; simp [seqAssoc,seqAssocHOL,progToHOL,smartHOL]
   | decl name scalar body ih => intro pre; simp [seqAssoc,seqAssocHOL,progToHOL,shapeToHOL,smartHOL,ih]
   | seq a b iha ihb => intro pre; simp [seqAssoc,seqAssocHOL,progToHOL,iha,ihb]
   | ite scalar a b iha ihb => intro pre; simp [seqAssoc,seqAssocHOL,progToHOL,smartHOL,iha,ihb]
@@ -100,7 +102,7 @@ private theorem assocHOL {scope : List VarName} {program : Prog (RiscV.Word 64)}
 private theorem retHOLIdentity {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : SupportedIn scope program) : retToTailHOL (progToHOL program) = progToHOL program := by
   induction supported with
-  | skip | assign | ret => simp [progToHOL,retToTailHOL]
+  | skip | store | assign | ret => simp [progToHOL,retToTailHOL]
   | decl name scalar body ih => simp [progToHOL,retToTailHOL,ih]
   | seq a b iha ihb =>
     simp only [progToHOL,retToTailHOL,iha,ihb]
@@ -142,6 +144,7 @@ private theorem assocBaseCallSupported {scope : List VarName} {program : Prog (R
     ∀ pre, CallSupportedIn scope pre → CallSupportedIn scope (seqAssoc pre program) := by
   induction supported with
   | skip => intro pre hpre; simpa [seqAssoc] using hpre
+  | store address value => intro pre hpre; simpa only [seqAssoc] using smartCallSupported hpre (.base (.store address value))
   | assign name member scalar => intro pre hpre; simpa only [seqAssoc] using smartCallSupported hpre (.base (.assign name member scalar))
   | ret scalar => intro pre hpre; simpa only [seqAssoc] using smartCallSupported hpre (.base (.ret scalar))
   | decl name scalar body ih =>

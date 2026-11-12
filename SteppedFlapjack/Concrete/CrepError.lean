@@ -49,6 +49,95 @@ private theorem errorSkip {scope : List VarName} : ErrorBridge scope .skip := by
  intro σ ctxt source sourceFinal target registered present stateRel codeRel excpRel localsRel run
  simp [progToHOL,evaluateHOLFiniteState_skip] at run
 
+private theorem errorStore {scope : List VarName} {address value : Exp (RiscV.Word 64)}
+    (ha : Scalar scope address) (hv : Scalar scope value) : ErrorBridge scope (.store address value) := by
+  intro σ ctxt source sourceFinal target registered present stateRel codeRel excpRel localsRel run
+  have locals := ScalarLocalsRel.of_existing registered present localsRel
+  obtain ⟨ca,caEq,caEval⟩ := scalar_compile_eval_all ha ctxt source target locals stateRel
+  obtain ⟨cv,cvEq,cvEval⟩ := scalar_compile_eval_all hv ctxt source target locals stateRel
+  have comp : compileProgExactHOLW ctxt (progToHOL (.store address value)) =
+      .dec (ctxt.vmax+1) ca (.dec (ctxt.vmax+2) cv
+        (.seq (.store (.var (ctxt.vmax+1)) (.var (ctxt.vmax+2))) .skip)) := by
+    simp [progToHOL,compileProgExactHOLW,compileStoreExactHOLW,caEq,cvEq,
+      nestedDecsHOL,storesHOL,crepNestedSeqHOL]
+  have src : source.evaluateHOLFiniteState (.store (expToHOL address) (expToHOL value)) = (some .error,sourceFinal) := by
+    simpa [progToHOL] using run
+  have targetError : ∃ final, evalCrepSemHOLProgExact target (compileProgExactHOLW ctxt (progToHOL (.store address value))) = (some .error,final) := by
+    rw [comp]
+    cases addressRun : evalCrepSemHOLExp target ca with
+    | none =>
+      exact ⟨target, by simp [evalCrepSemHOLProgExact_dec_holShape,addressRun]⟩
+    | some addressWord =>
+      cases addressWord with
+      | word addr =>
+        let entered := {target with locals := target.locals.updateEq (ctxt.vmax+1,.word addr)}
+        have maxBound : ctxtMaxFiniteExact ctxt.vmax ctxt.vars := localsRel.2.1
+        have enteredLocals : ScalarLocalsRel scope ctxt source entered := by
+          intro name member
+          obtain ⟨reg,found,values⟩ := locals name member
+          have bound : reg ≤ ctxt.vmax := maxBound.2 _ _ _ found reg (by simp)
+          have fresh : ctxt.vmax+1 ≠ reg := by omega
+          refine ⟨reg,found,?_⟩
+          simpa [entered,HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL,Ne.symm fresh] using values
+        have enteredState : panToCrepStateRelFiniteExact source entered := by
+          simpa [entered,panToCrepStateRelFiniteExact] using stateRel
+        obtain ⟨cv',cv'Eq,cv'Eval⟩ := scalar_compile_eval_all hv ctxt source entered enteredLocals enteredState
+        have same : cv' = cv := by
+          rw [cvEq] at cv'Eq
+          simpa using cv'Eq.symm
+        subst cv'
+        cases valueRun : evalCrepSemHOLExp entered cv with
+        | none =>
+          let final := {entered with locals := entered.locals.resVarEq (ctxt.vmax+1,target.locals.lookup (ctxt.vmax+1))}
+          refine ⟨final,?_⟩
+          rw [evalCrepSemHOLProgExact_dec_holShape,addressRun]
+          change (match evalCrepSemHOLProgExact entered (.dec (ctxt.vmax+2) cv _) with
+            | (res,st) => (res,{st with locals := st.locals.resVarEq (ctxt.vmax+1,target.locals.lookup (ctxt.vmax+1))})) = _
+          rw [evalCrepSemHOLProgExact_dec_holShape,valueRun]
+        | some valueWord =>
+          cases valueWord with
+          | word word =>
+            have addressHOL : @evalHOLExact 64 σ _ source.toExact (fun a => Classical.propDecidable (source.memaddrs a)) (expToHOL address) = some (.val (.word addr)) := by
+              rw [caEval,addressRun]; simp
+            have valueHOL : @evalHOLExact 64 σ _ source.toExact (fun a => Classical.propDecidable (source.memaddrs a)) (expToHOL value) = some (.val (.word word)) := by
+              rw [cv'Eval,valueRun]; simp
+            have absent : ¬ source.memaddrs addr := by
+              rw [evaluateHOLFiniteState_store,addressHOL,valueHOL] at src
+              by_contra h
+              simp [flattenHOL,panMemStoresHOL,panMemStoreHOL,h] at src
+            have absentTarget : ¬ target.memaddrs addr := by simpa [← stateRel.2.1] using absent
+            let enteredValue := {entered with locals := entered.locals.updateEq (ctxt.vmax+2,.word word)}
+            have addressLookup : enteredValue.locals.lookup (ctxt.vmax+1) = some (.word addr) := by
+              simp [enteredValue,entered,HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL]
+            have valueLookup : enteredValue.locals.lookup (ctxt.vmax+2) = some (.word word) := by
+              simp [enteredValue,HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL]
+            have evalAddress : evalCrepSemHOLExp enteredValue (.var (ctxt.vmax+1)) = some (.word addr) := by
+              simpa [evalCrepSemHOLExp] using addressLookup
+            have evalValue : evalCrepSemHOLExp enteredValue (.var (ctxt.vmax+2)) = some (.word word) := by
+              simpa [evalCrepSemHOLExp] using valueLookup
+            have storeRun : evalCrepSemHOLProgExact enteredValue (.store (.var (ctxt.vmax+1)) (.var (ctxt.vmax+2))) = (some .error,enteredValue) := by
+              rw [evalCrepSemHOLProgExact_store_holShape,evalAddress,evalValue]
+              simp [panMemStoreHOL,enteredValue,entered,absentTarget]
+            let inner := {enteredValue with locals := enteredValue.locals.resVarEq (ctxt.vmax+2,entered.locals.lookup (ctxt.vmax+2))}
+            let final := {inner with locals := inner.locals.resVarEq (ctxt.vmax+1,target.locals.lookup (ctxt.vmax+1))}
+            refine ⟨final,?_⟩
+            rw [evalCrepSemHOLProgExact_dec_holShape,addressRun]
+            change (match evalCrepSemHOLProgExact entered (.dec (ctxt.vmax+2) cv _) with
+              | (res,st) => (res,{st with locals := st.locals.resVarEq (ctxt.vmax+1,target.locals.lookup (ctxt.vmax+1))})) = _
+            rw [evalCrepSemHOLProgExact_dec_holShape,valueRun]
+            change (match (match evalCrepSemHOLProgExact enteredValue (.seq (.store (.var (ctxt.vmax+1)) (.var (ctxt.vmax+2))) .skip) with
+              | (res,st) => (res,{st with locals := st.locals.resVarEq (ctxt.vmax+2,entered.locals.lookup (ctxt.vmax+2))})) with
+              | (res,st) => (res,{st with locals := st.locals.resVarEq (ctxt.vmax+1,target.locals.lookup (ctxt.vmax+1))})) = _
+            rw [evalCrepSemHOLProgExact_seq_holShape,storeRun]
+            rfl
+  obtain ⟨final,runTarget⟩ := targetError
+  refine ⟨final,runTarget,?_⟩
+  have static := CrepSteps.staticProgram_statementWeight
+    (frontendLoopFree_static (FrontendProgram.store (scalar_frontend_shape registered ha) (scalar_frontend_shape registered hv)) rfl) target
+  have positive := CrepSteps.statementWeight_pos (compileProgExactHOLW ctxt (progToHOL (.store address value)))
+  simp only [progToHOL,controlSteps.eq_def,Nat.add_zero] at *
+  omega
+
 private theorem errorReturn {scope : List VarName} {expression : Exp (RiscV.Word 64)}
  (scalar : Scalar scope expression) : ErrorBridge scope (.return expression) := by
  intro σ ctxt source sourceFinal target registered present stateRel codeRel excpRel localsRel run
@@ -336,6 +425,7 @@ private theorem supportedErrorBridge {scope : List VarName} {program : Prog (Ris
     (supported : SupportedIn scope program) : ErrorBridge scope program := by
   induction supported with
   | skip => exact errorSkip
+  | store address value => exact errorStore address value
   | assign name member scalar => exact errorAssign name member scalar
   | decl name scalar body ih => exact errorDecl name scalar ih
   | seq a b iha ihb => exact errorSeq a iha ihb

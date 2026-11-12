@@ -117,6 +117,7 @@ private theorem supportedControlCode {scope : List VarName} {program : Prog (Ris
     (supported : SupportedIn scope program) : ControlCode program := by
   induction supported with
   | skip => exact controlSkip
+  | store address value => intro σ source code; simp [progToHOL,controlSteps.eq_def]
   | assign name member scalar => exact controlAssign name
   | decl name scalar body ih => exact controlDecl name scalar ih
   | seq a b iha ihb => exact controlSeq a iha ihb

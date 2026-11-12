@@ -369,7 +369,7 @@ private theorem supportedIn_globalControl {scope : List VarName} {program : Prog
     (supported : SupportedIn scope program) (P : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL) → Prop)
     (limit : Nat) : GlobalControl P limit program := by
   induction supported with
-  | skip | assign | ret =>
+  | skip | store | assign | ret =>
     intro σ globals source sourceFinal target result budget tableInvariant run nonerror rel
     simp [progToHOL,controlSteps.eq_def]
   | decl name scalar body ih => exact globalDecl name scalar ih

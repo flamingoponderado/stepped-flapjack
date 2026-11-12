@@ -1589,6 +1589,83 @@ private theorem decCallBridge {scope : List VarName} (dest name : FunName)
               simp [sourceNext,setVarHOLFinite,restoredSource] at clock
               omega
 
+private theorem storeBridge {scope : List VarName} {address value : Exp (RiscV.Word 64)}
+    (addressScalar : Scalar scope address) (valueScalar : Scalar scope value)
+    {invariant : PanSemCodeMap (RiscV.Word 64) → List (FunName × List VarName × Prog (RiscV.Word 64)) → Prop}
+    {contracts : Option PanValueCallContracts} {limit : Nat} : Bridge invariant contracts limit (.store address value) := by
+  intro σ production source dec rel ranged words byteRanged context primitive handler functions fuel count result run budget fuelBound codeOk
+  have addrRanged : ExpByteRanged address := byteRanged.1
+  have valueRanged : ExpByteRanged value := byteRanged.2
+  have addrAgree := evalPanSemStateExp_agree production source rel ranged address addrRanged
+  have valueAgree := evalPanSemStateExp_agree production source rel ranged value valueRanged
+  cases fuel with
+  | zero => simp [evalPanValueFfiProgSteps] at run
+  | succ fuel =>
+    simp only [evalPanValueFfiProgSteps,panValueStoreResult,evalPanValueExpCounted] at run
+    cases ae : evalPanValueExp production.structs production.locals production.globals production.memory
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord address
+        (memoryAccess := some (panSemBitVec64MemoryAccess production)) with
+    | none =>
+      simp only [ae,Option.map_none,Option.some.injEq,Prod.mk.injEq] at run
+      obtain ⟨rfl,rfl⟩ := run
+      have ah : @evalHOLExact 64 σ _ source.toExact (fun a => Classical.propDecidable (source.memaddrs a)) (expToHOL address) = none := by
+        rw [evalHOLFinite_eq_classical,← addrAgree,evalPanSemStateExp_64_eq_previous,ae]; rfl
+      apply errorLeaf production source rel ranged words (.store address value) 0
+      · simp [progToHOL,evaluateHOLFiniteState_store,ah]
+      · rw [progToHOL,controlSteps.eq_def]; rfl
+    | some av =>
+      have ae' : evalPanSemStateExp production address = some av := by simpa only [evalPanSemStateExp_64_eq_previous] using ae
+      obtain ⟨addr,rfl⟩ := scalar_eval_word addressScalar production words av ae'
+      have ah : @evalHOLExact 64 σ _ source.toExact (fun a => Classical.propDecidable (source.memaddrs a)) (expToHOL address) = some (.val (.word addr)) := by
+        rw [evalHOLFinite_eq_classical,← addrAgree,ae']; simp
+      cases ve : evalPanValueExp production.structs production.locals production.globals production.memory
+          production.baseAddress production.topAddress panSemBitVec64BytesInWord value
+          (memoryAccess := some (panSemBitVec64MemoryAccess production)) with
+      | none =>
+        simp only [ae,ve,Option.map_some,Option.map_none,Option.some.injEq,Prod.mk.injEq] at run
+        obtain ⟨rfl,rfl⟩ := run
+        have vh : @evalHOLExact 64 σ _ source.toExact (fun a => Classical.propDecidable (source.memaddrs a)) (expToHOL value) = none := by
+          rw [evalHOLFinite_eq_classical,← valueAgree,evalPanSemStateExp_64_eq_previous,ve]; rfl
+        apply errorLeaf production source rel ranged words (.store address value) (panValueExpStepCost address)
+        · simp [progToHOL,evaluateHOLFiniteState_store,ah,vh]
+        · rw [progToHOL,controlSteps.eq_def]; rfl
+      | some vv =>
+        have ve' : evalPanSemStateExp production value = some vv := by simpa only [evalPanSemStateExp_64_eq_previous] using ve
+        obtain ⟨word,rfl⟩ := scalar_eval_word valueScalar production words vv ve'
+        have vh : @evalHOLExact 64 σ _ source.toExact (fun a => Classical.propDecidable (source.memaddrs a)) (expToHOL value) = some (.val (.word word)) := by
+          rw [evalHOLFinite_eq_classical,← valueAgree,ve']; simp
+        cases store : panValueStoreWithAccess production.memory panSemBitVec64BytesInWord addr (.word word)
+            (some (panSemBitVec64MemoryAccess production)) with
+        | none =>
+          simp only [ae,ve,store,Option.map_some,Option.some.injEq,Prod.mk.injEq] at run
+          obtain ⟨rfl,rfl⟩ := run
+          have bridge := panSemStateRelExec_storeWithAccess production source.toExact rel addr (.word word)
+          rw [store] at bridge
+          have fail : @panMemStoresHOL 64 _ addr (flattenHOL (.val (.word word))) source.memaddrs
+              (fun a => Classical.propDecidable (source.memaddrs a)) source.memory = none := by
+            cases h : @panMemStoresHOL 64 _ addr (flattenHOL (.val (.word word))) source.memaddrs
+                (fun a => Classical.propDecidable (source.memaddrs a)) source.memory with
+            | none => rfl
+            | some m => simp [h] at bridge
+          apply errorLeaf production source rel ranged words (.store address value)
+            (panValueExpStepCost address + panValueExpStepCost value + 1)
+          · simp [progToHOL,evaluateHOLFiniteState_store,ah,vh,fail]
+          · rw [progToHOL,controlSteps.eq_def]; rfl
+        | some memory =>
+          simp only [ae,ve,store,Option.map_some,Option.some.injEq,Prod.mk.injEq] at run
+          obtain ⟨rfl,rfl⟩ := run
+          obtain ⟨holMemory,_,hol,finalRel,finalRanged,bound⟩ := counted_store_word production source rel ranged
+            address value addrRanged valueRanged addr word ae' ve' memory store context primitive handler functions fuel
+          have clockEq : source.clock = production.clock := rel.2.2.2.2.2.2.2.2.1
+          refine ⟨none,{source with memory := holMemory},?_,?_,?_,?_⟩
+          · simpa [progToHOL] using hol
+          · apply CountedOutcome.normal
+            · simpa [clockEq] using finalRel
+            · simpa [clockEq] using finalRanged
+            · exact words
+          · simpa [progToHOL,countedErrorBonus] using bound
+          · simp
+
 private theorem supportedBridge {invariant : PanSemCodeMap (RiscV.Word 64) → List (FunName × List VarName × Prog (RiscV.Word 64)) → Prop} {contracts : Option PanValueCallContracts} (limit : Nat) {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : SupportedIn scope program) : Bridge invariant contracts limit program := by
   induction limit generalizing scope program with
@@ -1600,6 +1677,7 @@ private theorem supportedBridge {invariant : PanSemCodeMap (RiscV.Word 64) → L
   | succ limit ih =>
     cases supported with
     | skip => exact skipBridge
+    | store address value => exact storeBridge address value
     | assign name member scalar => exact assignBridge name scalar
     | decl name scalar shape => exact declBridge name scalar (ih shape)
     | seq a b => exact seqBridge (ih a) (ih b)
