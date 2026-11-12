@@ -220,4 +220,118 @@ theorem globalStruct_nativeFrames : globalStructNativeFrameSizes = sptFromAList 
   rw [globalStruct_optimizedTable]
   with_unfolding_all rfl
 
+private theorem row0_exact : coloredRow row0 cols0 =
+  Flapjack.WordLangProgHOL.seq
+  (Flapjack.WordLangProgHOL.move 1 [(0, 0)])
+  (Flapjack.WordLangProgHOL.seq
+    (Flapjack.WordLangProgHOL.get 2 (Flapjack.WordStore.heapLength))
+    (Flapjack.WordLangProgHOL.seq
+      (Flapjack.WordLangProgHOL.inst
+        (Flapjack.WordLangInst.arith
+          (Flapjack.WordLangArith.shift (Flapjack.Shift.lsl) 2 2 (Flapjack.WordRegImm.imm 0x0000000000000001#64))))
+      (Flapjack.WordLangProgHOL.seq
+        (Flapjack.WordLangProgHOL.opCurrHeap (Flapjack.BinOp.add) 2 2)
+        (Flapjack.WordLangProgHOL.seq
+          (Flapjack.WordLangProgHOL.inst
+            (Flapjack.WordLangInst.arith
+              (Flapjack.WordLangArith.binop (Flapjack.BinOp.add) 2 2 (Flapjack.WordRegImm.imm 0xfffffffffffffff0#64))))
+          (Flapjack.WordLangProgHOL.seq
+            (Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 4 0x0000000000000000#64))
+            (Flapjack.WordLangProgHOL.seq
+              (Flapjack.WordLangProgHOL.move 0 [(2, 2)])
+              (Flapjack.WordLangProgHOL.seq
+                (Flapjack.WordLangProgHOL.inst
+                  (Flapjack.WordLangInst.mem
+                    (Flapjack.WordMemOp.store)
+                    4
+                    (Flapjack.WordLangAddr.addr 2 0x0000000000000000#64)))
+                (Flapjack.WordLangProgHOL.seq
+                  (Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 4 0x0000000000000000#64))
+                  (Flapjack.WordLangProgHOL.seq
+                    (Flapjack.WordLangProgHOL.move 0 [(2, 2)])
+                    (Flapjack.WordLangProgHOL.seq
+                      (Flapjack.WordLangProgHOL.inst
+                        (Flapjack.WordLangInst.mem
+                          (Flapjack.WordMemOp.store)
+                          4
+                          (Flapjack.WordLangAddr.addr 2 0x0000000000000008#64)))
+                      (Flapjack.WordLangProgHOL.seq
+                        (Flapjack.WordLangProgHOL.move 1 [(0, 0)])
+                        (Flapjack.WordLangProgHOL.call none (some 65) [0] none)))))))))))) := by with_unfolding_all rfl
+
+private theorem row1_exact : coloredRow row1 cols1 =
+  Flapjack.WordLangProgHOL.seq
+  (Flapjack.WordLangProgHOL.move 1 [(0, 0)])
+  (Flapjack.WordLangProgHOL.seq
+    (Flapjack.WordLangProgHOL.get 2 (Flapjack.WordStore.heapLength))
+    (Flapjack.WordLangProgHOL.seq
+      (Flapjack.WordLangProgHOL.inst
+        (Flapjack.WordLangInst.arith
+          (Flapjack.WordLangArith.shift (Flapjack.Shift.lsl) 2 2 (Flapjack.WordRegImm.imm 0x0000000000000001#64))))
+      (Flapjack.WordLangProgHOL.seq
+        (Flapjack.WordLangProgHOL.opCurrHeap (Flapjack.BinOp.add) 2 2)
+        (Flapjack.WordLangProgHOL.seq
+          (Flapjack.WordLangProgHOL.inst
+            (Flapjack.WordLangInst.arith
+              (Flapjack.WordLangArith.binop (Flapjack.BinOp.add) 4 2 (Flapjack.WordRegImm.imm 0xfffffffffffffff0#64))))
+          (Flapjack.WordLangProgHOL.seq
+            (Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 6 0x0000000000000007#64))
+            (Flapjack.WordLangProgHOL.seq
+              (Flapjack.WordLangProgHOL.move 0 [(4, 4)])
+              (Flapjack.WordLangProgHOL.seq
+                (Flapjack.WordLangProgHOL.inst
+                  (Flapjack.WordLangInst.mem
+                    (Flapjack.WordMemOp.store)
+                    6
+                    (Flapjack.WordLangAddr.addr 4 0x0000000000000000#64)))
+                (Flapjack.WordLangProgHOL.seq
+                  (Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 6 0x0000000000000008#64))
+                  (Flapjack.WordLangProgHOL.seq
+                    (Flapjack.WordLangProgHOL.move 0 [(4, 4)])
+                    (Flapjack.WordLangProgHOL.seq
+                      (Flapjack.WordLangProgHOL.inst
+                        (Flapjack.WordLangInst.mem
+                          (Flapjack.WordMemOp.store)
+                          6
+                          (Flapjack.WordLangAddr.addr 4 0x0000000000000008#64)))
+                      (Flapjack.WordLangProgHOL.seq
+                        (Flapjack.WordLangProgHOL.move 1 [(2, 2)])
+                        (Flapjack.WordLangProgHOL.seq
+                          (Flapjack.WordLangProgHOL.inst
+                            (Flapjack.WordLangInst.mem
+                              (Flapjack.WordMemOp.load)
+                              2
+                              (Flapjack.WordLangAddr.addr 2 0xfffffffffffffff8#64)))
+                          (Flapjack.WordLangProgHOL.seq
+                            (Flapjack.WordLangProgHOL.move 0 [(2, 2)])
+                            (Flapjack.WordLangProgHOL.return 0 [2])))))))))))))) := by with_unfolding_all rfl
+
+open Flapjack.Compiler.Backend.WordDepth Flapjack.Compiler.Backend.WordDepth.Executable Flapjack.Compiler.Backend.BackendProps
+theorem globalStruct_nativeCallDepth : fullCallGraphDepth globalStructNativeFrameSizes 64 (sptFromAList globalStructOptimizedWords) = some 0 := by
+  rw [globalStruct_nativeFrames, globalStruct_optimizedTable, row0_exact, row1_exact]
+  simp [Flapjack.Compiler.Backend.WordDepth.Executable.fullCallGraphDepth,
+    Flapjack.Compiler.Backend.WordDepth.Executable.callGraphDepth,
+    sptLookup_sptFromAList, sptAListLookup]
+  split <;> simp_all [sptLookup_sptFromAList, sptAListLookup]
+  all_goals obtain ⟨rfl,rfl⟩ := ‹_ ∧ _›
+  all_goals simp [Flapjack.Compiler.Backend.WordDepth.Executable.callGraphDepth,
+    sptSize, sptFromAList, sptInsert]
+  all_goals with_unfolding_all rfl
+theorem globalStruct_nativeCapacity : optionLe
+    (optionMap₂ max (some (max 1 (1+globalStructNativeEntryFrame)))
+      (optionMap₂ (· + ·) (some 1) (fullCallGraphDepth globalStructNativeFrameSizes 64 (sptFromAList globalStructOptimizedWords))))
+    (some 2097172) := by
+  rw [globalStruct_nativeEntryFrame,globalStruct_nativeCallDepth]
+  decide
+theorem globalStruct_nativeCompilerFacts : (fixtureRemoveLabels globalStructNativeCode).isSome = true ∧
+    (fixtureCodeBytes globalStructNativeCode).length ≤ 0xecc ∧ (fixtureCodeBytes globalStructNativeCode).length % 4 = 0 := by
+  constructor
+  · unfold fixtureRemoveLabels globalStructNativeCode
+    rw [globalStruct_optimizedTable,row0_exact,row1_exact]
+    with_unfolding_all decide
+  · unfold fixtureCodeBytes globalStructNativeCode
+    rw [globalStruct_optimizedTable,row0_exact,row1_exact]
+    simp_rw [LabToTarget.progToBytesMap]
+    with_unfolding_all decide
+
 end SteppedFlapjack.Concrete
