@@ -86,6 +86,10 @@ theorem globalCompile_frontendScalar {width : Nat} [NeZero width]
   induction scalar with
   | const value => simpa [compileExpExactHOL] using (FrontendScalar.const (ctxt := ctxt) value)
   | «local» name reg h => simpa [compileExpExactHOL] using (FrontendScalar.local name reg h)
+  | localPath name shapes registers found size path =>
+    have mapped := path.globalCompile globals
+    simp only [compileExpExactHOL] at mapped
+    exact FrontendScalar.localPath name shapes registers found size mapped
   | baseAddr => simpa [compileExpExactHOL] using (FrontendScalar.baseAddr (ctxt := ctxt))
   | topAddr => simpa [compileExpExactHOL] using (FrontendScalar.op (ctxt := ctxt) .sub .topAddr (.const _))
   | bytesInWord => simpa [compileExpExactHOL] using (FrontendScalar.bytesInWord (ctxt := ctxt))

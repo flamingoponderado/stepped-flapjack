@@ -14,6 +14,9 @@ theorem frontendScalar_compiled {width : Nat} [NeZero width]
   induction scalar with
   | const value => exact ⟨.const value,by simp [compileExpExactHOLW],.direct (.const _)⟩
   | «local» name reg found => exact ⟨.var reg,by simp [compileExpExactHOLW,found],.direct (.var _)⟩
+  | localPath name shapes registers found size path =>
+    obtain ⟨reg, _, compiled⟩ := PanToCrepSteps.localPath_compiles ctxt name shapes registers found size path
+    exact ⟨.var reg, compiled, .direct (.var _)⟩
   | baseAddr => exact ⟨.baseAddr,by simp [compileExpExactHOLW],.direct .baseAddr⟩
   | topAddr => exact ⟨.topAddr,by simp [compileExpExactHOLW],.direct .topAddr⟩
   | bytesInWord => exact ⟨.const (BitVec.ofNat width (width / 8)),by simp [compileExpExactHOLW],.direct (.const _)⟩
