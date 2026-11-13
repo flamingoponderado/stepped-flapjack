@@ -434,6 +434,7 @@ private theorem frontendProgramBound {width : Nat} [NeZero width]
   | «break» => intro n st t k; exact programBound_static .break rfl n st t k
   | «continue» => intro n st t k; exact programBound_static .continue rfl n st t k
   | tick => intro n st t k; exact programBound_static .tick rfl n st t k
+  | storeStruct a fields => intro n st t k; exact programBound_static (.storeStruct a fields) rfl n st t k
   | store a v => intro n st t k; exact programBound_static (.store a v) rfl n st t k
   | assign reg found e => intro n st t k; exact programBound_static (.assign reg found e) rfl n st t k
   | decl e body ih => intro n st t k; exact programBound_decl _ _ _ _ n st t k e (ih n st t k)

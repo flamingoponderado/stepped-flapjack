@@ -20,6 +20,13 @@ private theorem skipCode : CodeIndependent .skip := by
   intro σ source code
   simp [progToHOL,evaluateHOLFiniteState_skip]
 
+private theorem storeCode {scope : List VarName} {address value : Exp (RiscV.Word 64)}
+    (ha : Scalar scope address) (hv : Scalar scope value) : CodeIndependent (.store address value) := by
+  intro σ source code
+  simp only [progToHOL,evaluateHOLFiniteState_store]
+  rw [scalar_eval_code_irrel ha source code,scalar_eval_code_irrel hv source code]
+  repeat' split <;> simp_all
+
 private theorem returnCode {scope : List VarName} {expression : Exp (RiscV.Word 64)}
     (scalar : Scalar scope expression) : CodeIndependent (.return expression) := by
   intro σ source code
@@ -151,6 +158,7 @@ private theorem supportedCode {scope : List VarName} {program : Prog (RiscV.Word
     (supported : SupportedIn scope program) : CodeIndependent program := by
   induction supported with
   | skip => exact skipCode
+  | store address value => exact storeCode address value
   | assign name member scalar => exact assignCode name scalar
   | decl name scalar body ih => exact declCode name scalar ih
   | seq a b iha ihb => exact seqCode iha ihb

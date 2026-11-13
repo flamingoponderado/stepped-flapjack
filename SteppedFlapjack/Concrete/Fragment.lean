@@ -8,14 +8,16 @@ open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 inductive Scalar (scope : List VarName) : Exp (RiscV.Word 64) → Prop
   | const (value) : Scalar scope (.const value)
   | local (name) : name ∈ scope → Scalar scope (.var .local name)
+  | load {address} : Scalar scope address → Scalar scope (.load .one address)
   | op (operator) {a b} : Scalar scope a → Scalar scope b → Scalar scope (.op operator [a,b])
   | cmp (operator) {a b} : Scalar scope a → Scalar scope b → Scalar scope (.cmp operator a b)
   | shift (operator) {a b} : Scalar scope a → Scalar scope b → Scalar scope (.shift operator a b)
 
-/-- Supported function bodies have scalar locals and expressions, including
+/-- ScalarSupported function bodies have scalar locals and expressions, including
 nested conditionals and loops. Declarations bind only their own body. -/
 inductive SupportedIn : List VarName → Prog (RiscV.Word 64) → Prop
   | skip {scope} : SupportedIn scope .skip
+  | store {scope address value} : Scalar scope address → Scalar scope value → SupportedIn scope (.store address value)
   | assign {scope} (name) {e} : name ∈ scope → Scalar scope e → SupportedIn scope (.assign .local name e)
   | decl {scope} (name) {e body} : Scalar scope e → SupportedIn (name :: scope) body →
       SupportedIn scope (.dec name .one e body)
@@ -42,12 +44,12 @@ def CallFreeSupported (program : Prog (RiscV.Word 64)) : Prop :=
   SupportedIn [] program ∧ ProgByteRanged program
 
 /-- Parameter-free call-aware source bodies with byte-representable identifiers. -/
-def Supported (program : Prog (RiscV.Word 64)) : Prop :=
+def ScalarSupported (program : Prog (RiscV.Word 64)) : Prop :=
   CallSupportedIn [] program ∧ ProgByteRanged program
 
 /-- The original call-free fragment is included in the call-aware fragment. -/
-theorem CallFreeSupported.toSupported {program : Prog (RiscV.Word 64)}
-    (supported : CallFreeSupported program) : Supported program :=
+theorem CallFreeSupported.toScalarSupported {program : Prog (RiscV.Word 64)}
+    (supported : CallFreeSupported program) : ScalarSupported program :=
   ⟨.base supported.1, supported.2⟩
 
 open SteppedFlapjack.PanToCrepSteps
@@ -72,6 +74,7 @@ theorem supported_calls_irrel {σ : Type} (context : PanValueFfiContext (RiscV.W
     intro scope p shape locals globals memory ffi
     cases shape with
     | skip => simp [evalPanValueFfiProgSteps]
+    | store address value => simp [evalPanValueFfiProgSteps]
     | assign name member scalar => simp [evalPanValueFfiProgSteps]
     | decl name scalar body =>
       simp only [evalPanValueFfiProgSteps, ih _ _ body]

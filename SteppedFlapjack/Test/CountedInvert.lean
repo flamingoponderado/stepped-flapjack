@@ -25,9 +25,9 @@ example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitive
       evalPanValueExp,panValueExpStepCost,panValuePayloadWithinLimit,panValuePayloadSizeFuel]
   have words : WordLocals (executableState branchingHOL).locals := by
     simpa [executableState,singleEntrySourceProduction,sourceProduction] using wordLocals_empty
-  obtain ⟨word,valueEq,_,hol,_,_,bound⟩ := counted_scalar_return_invert (executableState branchingHOL)
-    (exactState branchingHOL) (source_related _) (source_ranged _) words (.const 7)
-    (Scalar.const (scope := []) _) (by simp [ExpByteRanged]) (.word 7) (fun _ => none)
+  obtain ⟨word,valueEq,_,hol,_,_,bound⟩ := counted_word_return_invert (executableState branchingHOL)
+    (exactState branchingHOL) (source_related _) (source_ranged _) (.const 7)
+    (fun value run => scalar_eval_word (Scalar.const (scope := []) _) (executableState branchingHOL) words value run) (by simp [ExpByteRanged]) (.word 7) (fun _ => none)
     context primitive handler [] 1 2 run
   cases valueEq
   exact ⟨by simpa [expToHOL] using hol,by simpa [expToHOL] using bound⟩
@@ -81,8 +81,8 @@ example : ∃ word,
   have run : panValueDecAccepted p.structs p.baseAddress p.topAddress panSemBitVec64BytesInWord p.locals p.globals p.memory
       (.const 2) (some (panSemBitVec64MemoryAccess p)) .one = some (.word 2,1) := by
     simp [panValueDecAccepted,evalPanValueExpCounted,evalPanValueExp,panValueExpStepCost,panValueShape,panShapeMatches]
-  have result := counted_scalar_initializer_invert p (exactState branchingHOL) (source_related _) (source_ranged _) words
-    (.const 2) (Scalar.const (scope := []) _) (by simp [ExpByteRanged]) (.word 2) 1 run
+  have result := counted_scalar_initializer_invert p (exactState branchingHOL) (source_related _) (source_ranged _)
+    (.const 2) (fun value run => scalar_eval_word (Scalar.const (scope := []) _) p words value run) (by simp [ExpByteRanged]) (.word 2) 1 run
   simpa [expToHOL] using result
 /-- The counted bridge applies to the two-branch loop run. -/
 example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))

@@ -19,6 +19,7 @@ theorem branchCondition_simp_fixed {width : Nat} [NeZero width]
     {e : CrepExpHOL width} (shape : CompiledScalar e) : crepSimpExpHOL e = e := by
   induction shape with
   | direct h => exact directExpression_simp_fixed h
+  | load address ih => simp [crepSimpExpHOL,ih]
   | op operator a b iha ihb => simp [crepSimpExpHOL,iha,ihb]
   | shift operator a b iha ihb => simp [crepSimpExpHOL,iha,ihb]
   | cmp operator a b iha ihb => simp [crepSimpExpHOL,iha,ihb]

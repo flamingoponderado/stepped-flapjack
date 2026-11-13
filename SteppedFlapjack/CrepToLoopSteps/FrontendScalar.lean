@@ -17,6 +17,16 @@ theorem frontendScalar_compiled {width : Nat} [NeZero width]
   | baseAddr => exact ⟨.baseAddr,by simp [compileExpExactHOLW],.direct .baseAddr⟩
   | topAddr => exact ⟨.topAddr,by simp [compileExpExactHOLW],.direct .topAddr⟩
   | bytesInWord => exact ⟨.const (BitVec.ofNat width (width / 8)),by simp [compileExpExactHOLW],.direct (.const _)⟩
+  | fieldPath shapes address path ih =>
+    obtain ⟨compiled, eq, shape⟩ := ih
+    obtain ⟨offset, fieldEq⟩ := PanToCrepSteps.scalarPathField_compiles ctxt shapes _ _ compiled eq path
+    refine ⟨_,fieldEq,?_⟩
+    split <;> rename_i h
+    · exact .load shape
+    · exact .load (.op .add shape (.direct (.const _)))
+  | load address ih =>
+    obtain ⟨compiled, eq, shape⟩ := ih
+    exact ⟨.load compiled,by simp [compileExpExactHOLW,eq,sizeOfShapeHOL,loadShapeBytesHOLW],.load shape⟩
   | op operator a b iha ihb =>
     obtain ⟨ca,ea,ha⟩ := iha
     obtain ⟨cb,eb,hb⟩ := ihb

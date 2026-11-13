@@ -116,15 +116,7 @@ private theorem updateList_eq_updateListEq {α β : Type} [DecidableEq α]
   simp only [HolFiniteMapExact.lookup_updateList,HolFiniteMapExact.lookup_updateListEq]
   rw [FUPDATE_LIST_HOL_eq_FUPDATE_LIST]
 
-/-- Function renaming commutes with initialization of a declaration code table. -/
-theorem functionOnly_renamedTable {width : Nat} [NeZero width]
-    (declarations : List (DeclHOL width)) (a b : MlS) :
-    fpermCodeHOL a b (HolFiniteMapExact.empty.updateList (functionsHOL declarations).reverse) =
-      HolFiniteMapExact.empty.updateList (functionsHOL (fpermDecsHOL a b declarations)).reverse := by
-  rw [updateList_eq_updateListEq,fpermCodeHOL_updateListEq,fpermCodeHOL_empty]
-  rw [← updateList_eq_updateListEq,functionsFpermDecsHOL,List.map_reverse]
-
-private theorem lookup_mapBodies {width : Nat} [NeZero width]
+theorem lookup_mapBodies {width : Nat} [NeZero width]
     (ctx : PanGlobalsContextExact width)
     (entries : List (MlS × List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL)) (name : MlS) :
     (entries.map (fun e => (e.1,e.2.1,compileProgExactHOL ctx e.2.2.1,e.2.2.2))).lookup name =
@@ -148,45 +140,6 @@ private theorem lookup_none_not_mem {α β : Type} [BEq α] [LawfulBEq α]
     have neq : (key == name) = false := by simp [absent.1]
     simp only [List.lookup_cons,neq]
     exact ih absent.2
-
-/-- Every renamed source function resolves to its actual global-lowered body. -/
-theorem functionOnly_compiled_code_lookup {width : Nat} [NeZero width]
-    (fs : List (FunDeclHOL width)) (start : MlS) (body : ProgHOL width) (shape : ShapeHOL)
-    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],body,shape))
-    (name : MlS) (parameters : List (MlS × ShapeHOL)) (program : ProgHOL width) (returnShape : ShapeHOL)
-    (sourceFound : (fpermCodeHOL start (newMainNameHOL (fs.map DeclHOL.function))
-      (HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)).lookup name =
-        some (parameters,program,returnShape)) :
-    (HolFiniteMapExact.empty.updateList
-      (functionsHOL (compileTopExactHOL (fs.map DeclHOL.function) start)).reverse).lookup name =
-        some (parameters,compileProgExactHOL emptyGlobalsContext program,returnShape) := by
-  let declarations := fs.map DeclHOL.function
-  let fresh := newMainNameHOL declarations
-  have freshNone : (HolFiniteMapExact.empty.updateList (functionsHOL declarations).reverse).lookup fresh = none := by
-    change FLOOKUP (FUPDATE_LIST FEMPTY (functionsHOL declarations).reverse) fresh = none
-    rw [FLOOKUP_FUPDATE_LIST_reverse_eq_lookup]
-    exact lookup_none_not_mem _ _ (PanGlobalsDeclListExact.new_main_name_correctHOL declarations)
-  have startNone : (fpermCodeHOL start fresh
-      (HolFiniteMapExact.empty.updateList (functionsHOL declarations).reverse)).lookup start = none := by
-    rw [flookupFpermCodeHOL']
-    simpa [fpermName,freshNone]
-  have nameNe : name ≠ start := by
-    intro eq
-    subst name
-    rw [startNone] at sourceFound
-    cases sourceFound
-  rw [functionOnly_renamedTable] at sourceFound
-  have sourceLookup : (functionsHOL (fpermDecsHOL start fresh declarations)).lookup name =
-      some (parameters,program,returnShape) := by
-    change FLOOKUP (FUPDATE_LIST FEMPTY (functionsHOL (fpermDecsHOL start fresh declarations)).reverse) name = _ at sourceFound
-    rwa [FLOOKUP_FUPDATE_LIST_reverse_eq_lookup] at sourceFound
-  change FLOOKUP (FUPDATE_LIST FEMPTY (functionsHOL (compileTopExactHOL declarations start)).reverse) name = _
-  rw [FLOOKUP_FUPDATE_LIST_reverse_eq_lookup,
-    functionOnly_compileTop_functions fs start body shape found]
-  have nebeq : (name == start) = false := by simp [nameNe]
-  simp only [List.lookup_cons,nebeq]
-  rw [lookup_mapBodies,sourceLookup]
-  rfl
 
 private theorem mappedFunctions_noExceptions {width : Nat} [NeZero width]
     (ds : List (DeclHOL width)) (ctxt : PanGlobalsContextExact width) :
@@ -215,27 +168,6 @@ theorem functionOnly_noExceptions {width : Nat} [NeZero width]
   apply HolFiniteMapExact.ext_lookup
   intro key
   simp [getEidsFromDeclsHOL,getEidsEntriesHOL_eq_lengthBased,none,alistToFmap,FEMPTY]
-
-/-- Function-only initialized programs establish the actual global-entry relation. -/
-theorem functionOnly_source_initialization {σ : Type}
-    (fs : List (FunDeclHOL 64)) (start : MlS) (body : ProgHOL 64) (shape : ShapeHOL)
-    (found : (functionsHOL (fs.map DeclHOL.function)).lookup start = some ([],body,shape))
-    (source : PanSemStateFiniteExact 64 σ)
-    (locals : source.locals = HolFiniteMapExact.empty) (globals : source.globals = HolFiniteMapExact.empty)
-    (structs : source.structs = []) (topOutside : ¬ source.memaddrs source.topAddr)
-    (aligned : panGlobalsByteAlignedHOL source.topAddr)
-    (sourceCode : source.code = fpermCodeHOL start (newMainNameHOL (fs.map DeclHOL.function))
-      (HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)) :
-    let pre := noGlobalsLoweredPreCall source (HolFiniteMapExact.empty.updateList
-      (functionsHOL (compileTopExactHOL (fs.map DeclHOL.function) start)).reverse)
-    pre.evaluateHOLFiniteState (nestedSeqHOL []) = (none,pre) ∧ pre.clock ≠ 0 ∧
-      panGlobalsStateRelHOLExact true emptyGlobalsContext source (callEntryStateHOLFinite pre HolFiniteMapExact.empty) := by
-  refine ⟨evaluateHOLFiniteState_skip _,by simp [noGlobalsLoweredPreCall],?_⟩
-  apply noGlobals_source_callEntry_rel source _ locals globals structs topOutside aligned
-  intro name params program returnShape h
-  rw [sourceCode] at h
-  exact functionOnly_compiled_code_lookup fs start body shape found name params program returnShape h
-
 
 /-- For the concrete no-global program, the lowered table is the table
 actually produced by global compilation, not an independently chosen code

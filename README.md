@@ -63,39 +63,64 @@ Pancake → Crep → Loop → Word passes → Stack → Lab → RISC-V.
 
 ## Source-to-machine bound
 
-`SteppedFlapjack.Concrete.countedCalls_initializedMachine` composes the spans
+`SteppedFlapjack.Concrete.initializedGlobal_counted_machine` composes the spans
 from a counted Pancake source return to a successfully halting initialized
-RISC-V machine. It proves the emitted compiler bytes and bitmaps, source
-semantics, and matching I/O events at an explicit machine clock.
+RISC-V machine. It proves the emitted compiler bytes and bitmaps and matching
+I/O events at an explicit machine clock. Declaration semantics for the original
+source is established separately and connected to the same machine events.
 
-`Supported` admits ordinary and tail calls as well as scalar declarations,
-sequencing, conditionals, loops, and word returns. For function-only programs,
-`FunctionTableSupported` requires scalar parameters and return shapes, scoped
-call-aware bodies, and byte-representable names. `countedCalls_initializedMachine`
-uses those declarations and a counted source return to derive the actual
-compiler output, matching source and machine behavior, and an explicit machine
-tick expression. Its concrete checks include code size, alignment, native
-stack safety and call-graph capacity; the capacity check can reject recursion.
-It also requires that the compiler select no functions for inlining and that
-the source heap headers use the bitmap count computed by the compiler. These
-conditions and the fixed fixture layout are gaps relative to init-e's actual
-initialization and guest.
-The machine clock is `callPipelineTicks`. Its coefficient in the counted
-source-step bound depends on the compiled code and function table. The
-Crep-to-Loop factor is independent of the initial source clock; that clock
-appears separately and linearly in the complete expression. Thus choosing an
-initial clock that is affine in the source-step bound retains an affine machine
-tick bound.
-`nested_initialized_machine` instantiates this composition with two call levels
-and a six-step source execution.
+The supported fragment includes ordinary and tail calls, scalar declarations,
+word loads and stores, sequencing, conditionals, loops, and word returns. Its
+concrete checks include code size, alignment, native stack safety and call-graph
+capacity; the capacity check can reject recursion. The theorem also requires
+that the compiler select no functions for inlining and that the source heap
+headers use the compiler's bitmap count. These conditions and the fixed fixture
+layout are gaps relative to init-e's actual initialization and guest.
+`nested_initialized_machine` instantiates the common theorem with two call
+levels and a six-step source execution, using 5,924,092,061,654,822,880 ticks.
 
-The kernel-checked witness clocks are `8402039033998605948` ticks for the
-comparison program and `12798071459382541821948` ticks for the branching loop.
+`SteppedFlapjack.Concrete.initializedGlobal_counted_machine` connects a counted
+run of `Supported shapes program` to the initialized machine. The fragment
+admits global scalar reads and updates, nested struct literals and field paths,
+and heap stores of struct values. The initializer constructs related source and
+target states, and supported function declarations supply the frontend table.
+The explicit clock depends on the compiled code, fixture configuration and
+initial source clock. The theorem checks that the lowered function table of `pan` has the canonical
+wrapper and lowered source entries, that no functions are selected for
+inlining, an empty exception map, and machine encoding,
+safety and capacity conditions. The Pancake-to-Crep relation and compiled
+body shapes follow from those checks and supported declarations.
+`beforeGlobals_initializedFunctions` derives the global state relation by
+running declaration initializers and installing matching function tables; the
+pair witness uses this construction. `globalInitializedEntry_return` includes
+the generated initializer and a source body in one lowered entry,
+with an explicit initializer visit bound. `nonzeroGlobal_entry` instantiates it
+with a pair initialized to `(3, 4)` and returns `4`.
+`nonzeroScalar_source_machine` carries a separately compiled scalar global initialized
+to `3` through the counted source execution and the initialized RISC-V machine.
+It returns `3` and has a kernel-checked bound of
+20,435,390,013,946,508,748 ticks.
+`pairGeneral_namedSource` instantiates these conditions for a global pair: its
+initializer and renamed entry call return the second field, and the compiled
+machine runs the bytes produced by the Pancake compiler and halts with the
+same I/O events as the named-struct source. Its clock
+is 304,799,299,979,875,449,948 ticks for the concrete code and an eight-step
+initial source clock.
+`heapFixture_machine_numeric` carries a concrete heap store and load through the
+shared initialized-machine theorem with a kernel-checked bound of
+8,745,709,949,718,150,348 ticks.
+
+The current fragment has scalar locals, parameters and return values. The
+fixture reserves globals below the init-e heap endpoint; it does not yet cover
+the complete init-e initialization or guest.
+
+The kernel-checked witness clocks are `2587607680003341948` ticks for the
+comparison program and `1720804472507697866748` ticks for the branching loop.
 Both `countdownFixture_machine` and `naturalCountdownFixture_machine` state the
-bound `44195828396580057600 * (6*n+9) + 59847410146165518348` machine ticks.
+bound `7369523319287001600 * (6*n+9) + 23021105068872462348` machine ticks.
 
-This fragment and fixture do not yet cover init-e's full guest: globals, heap
-and shared-memory operations, exceptions, FFI, primitive behavior and host
+This fragment and fixture do not yet cover init-e's full guest: shared-memory
+operations, exceptions, FFI, primitive behavior and host
 input are part of the widening work in the
 [roadmap](https://github.com/flamingoponderado/stepped-flapjack/issues/19).
 The eventual theorem must apply to init-e's `Guest.Software.guestAst` and

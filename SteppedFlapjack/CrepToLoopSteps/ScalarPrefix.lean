@@ -8,6 +8,7 @@ open Flapjack Flapjack.Pancake.PanLang SteppedFlapjack.LoopToWordSteps
 shifts and comparisons. -/
 inductive CompiledScalar {width : Nat} [NeZero width] : CrepExpHOL width → Prop
   | direct {e} : DirectExpression e → CompiledScalar e
+  | load {address} : CompiledScalar address → CompiledScalar (.load address)
   | op (operator) {a b} : CompiledScalar a → CompiledScalar b → CompiledScalar (.op operator [a,b])
   | shift (operator) {a b} : CompiledScalar a → CompiledScalar b → CompiledScalar (.shift operator a b)
   | cmp (operator) {a b} : CompiledScalar a → CompiledScalar b → CompiledScalar (.cmp operator a b)
@@ -31,6 +32,10 @@ theorem compiledScalar_prefix {width : Nat} [NeZero width] {e : CrepExpHOL width
     intro ctxt tmp live
     obtain ⟨value,compiled⟩ := directExpression_noCode direct ctxt tmp live
     exact ⟨[],value,tmp,live,compiled,by simp [PrefixShape]⟩
+  | load address ih =>
+    intro ctxt tmp live
+    obtain ⟨code,value,next,outLive,compiled,prefixShape⟩ := ih ctxt tmp live
+    exact ⟨code,.load value,next,outLive,by simp [compileExpHOLExact,compiled],prefixShape⟩
   | @shift operator a b ha hb iha ihb =>
     intro ctxt tmp live
     obtain ⟨ca,va,na,la,ea,pa⟩ := iha ctxt tmp live
@@ -106,6 +111,9 @@ private theorem prefixMass_scalar {width : Nat} [NeZero width] {e : CrepExpHOL w
     obtain ⟨v,hv⟩ := directExpression_noCode h c t l
     obtain ⟨w,hw⟩ := directExpression_noCode h d u m
     simp [hv,hw]
+  | load address ih =>
+    intro c d t u l m
+    simpa only [compileExpHOLExact] using ih c d t u l m
   | @shift op a b ha hb ia ib =>
     intro c d t u l m
     have x := ia c d t u l m

@@ -1,3 +1,28 @@
+import SteppedFlapjack.Concrete.GlobalStructClock
+import SteppedFlapjack.Concrete.GlobalStructCountedMachine
+import SteppedFlapjack.Concrete.GlobalCountedMachine
+import SteppedFlapjack.Concrete.GlobalConfiguredWord
+import SteppedFlapjack.LoopToWordSteps.GlobalFrontendSpan
+import SteppedFlapjack.CrepToLoopSteps.GlobalFrontendSpan
+import SteppedFlapjack.Concrete.GlobalStructConfiguredWord
+import SteppedFlapjack.Concrete.GlobalStructNativeFacts
+import SteppedFlapjack.Concrete.GlobalStructActualWord
+import SteppedFlapjack.Concrete.GlobalStructActualOptimizedLoop
+import SteppedFlapjack.Concrete.GlobalStructActualLoop
+import SteppedFlapjack.Concrete.GlobalStructEntry
+import SteppedFlapjack.Concrete.GlobalStructCallee
+import SteppedFlapjack.PanToCrepSteps.GlobalNoInline
+import SteppedFlapjack.Concrete.GlobalNamedStruct
+import SteppedFlapjack.Concrete.GlobalStructSourceSemantics
+import SteppedFlapjack.Concrete.GlobalStructCrep
+import SteppedFlapjack.Concrete.GlobalStructWitness
+import SteppedFlapjack.Concrete.GlobalNonzeroMachine
+import SteppedFlapjack.Concrete.GlobalNonzeroNativeFacts
+import SteppedFlapjack.Concrete.GlobalNonzeroEntry
+import SteppedFlapjack.Concrete.GlobalStructInitializer
+import SteppedFlapjack.Concrete.HeapWordMachine
+import SteppedFlapjack.Concrete.HeapWordNativeFacts
+import SteppedFlapjack.Concrete.HeapWordWitness
 import SteppedFlapjack.WordToStackSteps.ClockSlack
 import SteppedFlapjack.WordToStackSteps.BudgetSimulation
 import SteppedFlapjack.WordToStackSteps.BudgetTailCall
@@ -16,7 +41,6 @@ import SteppedFlapjack.WordToStackSteps.RaiseClock
 import SteppedFlapjack.StackSteps.TableBound
 import SteppedFlapjack.LoopToWordSteps.WholeCallProgram
 import SteppedFlapjack.CrepToLoopSteps.CallFrontendShape
-import SteppedFlapjack.Concrete.NestedLoopRun
 import SteppedFlapjack.Concrete.NestedSourceHOL
 import SteppedFlapjack.Concrete.Phase7Witnesses
 import SteppedFlapjack.LabToTargetSteps.GoodCodeFilter
@@ -486,6 +510,11 @@ import SteppedFlapjack.StackRemoveSteps.CompCorrect.Leaf
 The step-counted structured Pancake source semantics, split out of Flapjack in
 phase 4 of flapjack#1251:
 
+- `SteppedFlapjack.Concrete.HeapWordWitness`: a seven-step source witness for an aligned heap word store and load.
+- `SteppedFlapjack.Concrete.GlobalStructWitness`: a concrete global-pair source, HOL, and globals-lowering witness.
+- `SteppedFlapjack.Concrete.GlobalStructSourceSemantics`: initialization and termination of the full source declaration.
+- `SteppedFlapjack.Concrete.GlobalNamedStruct`: a named source struct and its actual struct-compiler lowering.
+- `SteppedFlapjack.Concrete.GlobalStructCrep`: the same witness through Crep with a concrete visit bound.
 - `SteppedFlapjack.CrepToLoopSteps.ScalarPrefix`:
   generalized scalar compilation prefixes and explicit structural Loop visit bounds;
 - `SteppedFlapjack.PanValueExpCounted`, `SteppedFlapjack.PanExpressionEvaluator`:

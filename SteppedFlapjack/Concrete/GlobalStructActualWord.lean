@@ -1,0 +1,13 @@
+import SteppedFlapjack.Concrete.GlobalStructActualOptimizedLoop
+import SteppedFlapjack.Concrete.WordStarter
+import SteppedFlapjack.Concrete.CountdownWordSpan
+import SteppedFlapjack.LoopToWordSteps.WholeWordSpan
+namespace SteppedFlapjack.Concrete
+open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString Flapjack.LoopSemStateFiniteExact
+open Flapjack.Compiler.Encoders.RiscV.Target Flapjack.Compiler.Backend.WordToWord Flapjack.WordSemStateFiniteExact
+open Flapjack.Pancake.CrepToLoop.Proofs.NCompileCorrect
+open SteppedFlapjack.PanToCrepSteps SteppedFlapjack.CrepToLoopSteps SteppedFlapjack.LoopLiveSteps SteppedFlapjack.LoopToWordSteps SteppedFlapjack.WordSimpSteps SteppedFlapjack.WordAllocSteps
+
+def globalStructActualWordPrograms := loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa globalStructCallPrograms)
+
+end SteppedFlapjack.Concrete

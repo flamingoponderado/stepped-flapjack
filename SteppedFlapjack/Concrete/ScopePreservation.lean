@@ -19,6 +19,16 @@ private theorem scopeSkip {scope : List VarName} : ScopeBridge scope .skip := by
   obtain ⟨rfl,rfl⟩ := run
   exact present
 
+private theorem scopeStore {scope : List VarName} {address value : Exp (RiscV.Word 64)} : ScopeBridge scope (.store address value) := by
+  intro σ source final result present run
+  simp only [progToHOL,evaluateHOLFiniteState_store] at run
+  split at run
+  all_goals try (split at run)
+  all_goals try (split at run)
+  all_goals simp only [Prod.mk.injEq] at run
+  all_goals obtain ⟨rfl,rfl⟩ := run
+  all_goals simp_all [ScalarScopeResult,ScalarScopePresent]
+
 private theorem scopeReturn {scope : List VarName} {expression : Exp (RiscV.Word 64)} : ScopeBridge scope (.return expression) := by
   intro σ source final result present run
   simp only [progToHOL,evaluateHOLFiniteState_return] at run
@@ -145,6 +155,7 @@ private theorem supportedScopeBridge {scope : List VarName} {program : Prog (Ris
     (supported : SupportedIn scope program) : ScopeBridge scope program := by
   induction supported with
   | skip => exact scopeSkip
+  | store address value => exact scopeStore
   | assign name member scalar => exact scopeAssign name scalar
   | decl name scalar body ih => exact scopeDecl name scalar ih
   | seq a b iha ihb => exact scopeSeq iha ihb

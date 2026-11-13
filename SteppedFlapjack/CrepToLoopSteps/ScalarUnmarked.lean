@@ -20,6 +20,10 @@ theorem scalar_prefix_unmarked {e : CrepExpHOL width} (shape : CompiledScalar e)
     intro ctxt tmp live p member
     obtain ⟨value,compiled⟩ := directExpression_noCode shape ctxt tmp live
     simp [compiled] at member
+  | load address ih =>
+    intro ctxt tmp live p member
+    apply ih ctxt tmp live p
+    simpa [compileExpHOLExact] using member
   | @shift op a b ha hb iha ihb =>
     intro ctxt tmp live p member
     rcases ca : compileExpHOLExact ctxt tmp live a with ⟨ac,av,an,al⟩
