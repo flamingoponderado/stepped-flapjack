@@ -330,7 +330,7 @@ private theorem frontendBound {g : PanGlobalsContextExact 64}
     {ctxt : PanToCrepContextExact 64} {p : ProgHOL 64} (shape : GlobalFrontend g ctxt p)
     (limit : Nat) : Bound g P limit p := by
   induction shape with
-  | skip | «break» | «continue» | tick | store | storeValue | storeStruct | assignLocal | ret =>
+  | skip | «break» | «continue» | tick | store | storeValue | assignLocal | ret =>
     intro σ source sourceFinal target result budget table run nonerror rel
     simp [compileProgExactHOL,controlSteps.eq_def]
   | assignGlobal found e =>

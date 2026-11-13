@@ -115,8 +115,6 @@ inductive GlobalFrontend {width : Nat} [NeZero width] (globals : PanGlobalsConte
   | tick {ctxt} : GlobalFrontend globals ctxt .tick
   | store {ctxt a v} : GlobalScalar globals ctxt a → GlobalScalar globals ctxt v → GlobalFrontend globals ctxt (.store a v)
   | storeValue {ctxt a v} : GlobalScalar globals ctxt a → GlobalValue globals ctxt v → GlobalFrontend globals ctxt (.store a v)
-  | storeStruct {ctxt a fields} : GlobalScalar globals ctxt a →
-      (∀ e ∈ fields, GlobalValue globals ctxt e) → GlobalFrontend globals ctxt (.store a (.rstruct fields))
   | assignLocal {ctxt name e} (reg : Nat) : ctxt.vars.lookup name = some (.one,[reg]) →
       GlobalScalar globals ctxt e → GlobalFrontend globals ctxt (.assign .local name e)
   | assignGlobal {ctxt name offset e} : globals.globals.lookup name = some (.one,offset) →
@@ -132,6 +130,11 @@ inductive GlobalFrontend {width : Nat} [NeZero width] (globals : PanGlobalsConte
   | while {ctxt e body} : GlobalScalar globals ctxt e → GlobalFrontend globals ctxt body → GlobalFrontend globals ctxt (.while e body)
   | ret {ctxt e} : GlobalScalar globals ctxt e → GlobalFrontend globals ctxt (.return e)
 
+theorem GlobalFrontend.storeStruct {width : Nat} [NeZero width] {globals : PanGlobalsContextExact width}
+    {ctxt : PanToCrepContextExact width} {a : ExpHOL width} {fields : List (ExpHOL width)}
+    (address : GlobalScalar globals ctxt a) (values : ∀ e ∈ fields, GlobalValue globals ctxt e) :
+    GlobalFrontend globals ctxt (.store a (.rstruct fields)) := .storeValue address (.tuple values)
+
 /-- Global reads and writes, including nested struct assignment, are accepted by
     the existing general Crep frontend after the actual globals pass. -/
 theorem globalFrontend_compiled {width : Nat} [NeZero width]
@@ -145,9 +148,6 @@ theorem globalFrontend_compiled {width : Nat} [NeZero width]
   | store a v => simpa only [compileProgExactHOL] using FrontendProgram.store (globalScalar_compiled a) (globalScalar_compiled v)
   | storeValue a value =>
     simpa [compileProgExactHOL] using FrontendProgram.storeValue (globalScalar_compiled a) (globalValue_compiled value)
-  | storeStruct a fields =>
-    simpa only [compileProgExactHOL,compileExpExactHOL] using
-      FrontendProgram.storeStruct (globalScalar_compiled a) (globalValue_list_compiled _ fields)
   | assignLocal reg found e => simpa only [compileProgExactHOL] using FrontendProgram.assign reg found (globalScalar_compiled e)
   | assignGlobal found e =>
     simp only [compileProgExactHOL,found]

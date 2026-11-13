@@ -47,9 +47,8 @@ theorem frontend_scalar_program {width : Nat} [NeZero width] {ctxt : PanToCrepCo
   | «break» => simpa [compileProgExactHOLW] using (ScalarProgram.break 0 : ScalarProgram (.break 0 : CrepProgHOL width))
   | «continue» => simpa [compileProgExactHOLW] using (ScalarProgram.continue 0 : ScalarProgram (.continue 0 : CrepProgHOL width))
   | tick => simpa [compileProgExactHOLW] using (ScalarProgram.tick : ScalarProgram (.tick : CrepProgHOL width))
-  | @storeStruct ctxt a fields ha hf =>
+  | @storeValue ctxt a value ha hv =>
     obtain ⟨address,ca,sa⟩ := frontendScalar_compiled ha
-    have hv : FrontendValue ctxt (.rstruct fields) := .tuple hf
     obtain ⟨values,sh,cv,size⟩ := frontendValue_compile hv
     have sv := frontendValue_scalars hv
     rw [cv] at sv
