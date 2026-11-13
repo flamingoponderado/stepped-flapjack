@@ -52,7 +52,7 @@ theorem returningNone_consumed {width : Nat} [NeZero width] {C F : Type}
     xs args1 prog ss envs guards nonzero run bodyRun notError
   rcases outcomes with ⟨location, returned, hr⟩ | ⟨location, value, he⟩ | ht | hs | ⟨event, hf⟩
   · subst bodyResult
-    have ih := returningOriginalIH_of_blocks ac values names retCode l1 l2 dest args source retBlock code
+    have ih := returningOriginalIH ac values names retCode l1 l2 dest args source
     obtain ⟨_, _, popped, _, _, _, _, _, pop, domain, validReturn, _, _⟩ :=
       sourceReturningContinuation ac values names retCode l1 l2 dest args source sourcePost bodyPost result
         xs args1 prog ss envs location returned guards ih nonzero run notError bodyRun
@@ -105,7 +105,9 @@ theorem returningNone_bounded {width : Nat} [NeZero width] {C F : Type}
     source sourcePost result limit premises.1 notTimeout (used.trans stepBound)
   have related := stateRel_setClocks ac k f frame source target lens 0 limit premises.2.2.1
   have normalizedCode : ∀ loc arity p, sptLookup loc ({source with clock := limit}).code = some (arity, p) → LoopBlock p := code
-  have sim := zeroReturningNone ac values names retCode l1 l2 dest args {source with clock := limit} retBlock normalizedCode
+  have sim := zeroReturningNone ac values names retCode l1 l2 dest args {source with clock := limit}
+    (fun t _ _ => loopBlock_zero ac retCode t retBlock)
+    (fun loc arity p lookup t _ _ => loopBlock_zero ac p t (normalizedCode loc arity p lookup))
   obtain ⟨targetPost, targetResult, targetRun, conclusion⟩ := sim k f frame
     {sourcePost with clock := limit - (source.clock - sourcePost.clock)} {target with clock := limit} result
     bs bsPost n nPost compiled lens ⟨normalized, premises.2.1, related, premises.2.2.2⟩

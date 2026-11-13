@@ -63,46 +63,40 @@ Pancake → Crep → Loop → Word passes → Stack → Lab → RISC-V.
 
 ## Source-to-machine bound
 
-`SteppedFlapjack.Concrete.supported_counted_machine` composes the spans for a
-`Supported` singleton Pancake program. Given a returning run of
-`evalPanValueFfiProgSteps` with at most `n` steps, the theorem proves that the
-original Pancake compiler emits the bytes loaded into the fixture's RISC-V
-machine and that the machine halts successfully within
+`SteppedFlapjack.Concrete.countedCalls_initializedMachine` composes the spans
+from a counted Pancake source return to a successfully halting initialized
+RISC-V machine. It proves the emitted compiler bytes and bitmaps, source
+semantics, and matching I/O events at an explicit machine clock.
 
-```text
-supportedMachineFactor program * n + supportedMachineOffset program
-```
+`Supported` admits ordinary and tail calls as well as scalar declarations,
+sequencing, conditionals, loops, and word returns. For function-only programs,
+`FunctionTableSupported` requires scalar parameters and return shapes, scoped
+call-aware bodies, and byte-representable names. `countedCalls_initializedMachine`
+uses those declarations and a counted source return to derive the actual
+compiler output, matching source and machine behavior, and an explicit machine
+tick expression. Its concrete checks include code size, alignment, native
+stack safety and call-graph capacity; the capacity check can reject recursion.
+It also requires that the compiler select no functions for inlining and that
+the source heap headers use the bitmap count computed by the compiler. These
+conditions and the fixed fixture layout are gaps relative to init-e's actual
+initialization and guest.
+The machine clock is `callPipelineTicks`. Its coefficient in the counted
+source-step bound depends on the compiled code and function table. The
+Crep-to-Loop factor is independent of the initial source clock; that clock
+appears separately and linearly in the complete expression. Thus choosing an
+initial clock that is affine in the source-step bound retains an affine machine
+tick bound.
+`nested_initialized_machine` instantiates this composition with two call levels
+and a six-step source execution.
 
-machine ticks. Both constants depend on the generated code and the fixed
-backend configuration; `supportedMachineTicks_affine` proves this formula for
-the composed clock. The factor combines the Lab factor 948 with the
-flattening, Lab, uniform, native call-sequence, Word, Loop and Crep costs.
-The result also states that `semanticsDecls` on the
-original declarations, starting with an empty code table and clock zero,
-terminates successfully with the machine's final I/O events.
+The kernel-checked witness clocks are `8402039033998605948` ticks for the
+comparison program and `12798071459382541821948` ticks for the branching loop.
+Both `countdownFixture_machine` and `naturalCountdownFixture_machine` state the
+bound `44195828396580057600 * (6*n+9) + 59847410146165518348` machine ticks.
 
-`Supported` currently covers a single parameter-free function with scoped
-scalar locals, scalar expressions, declarations, sequencing, conditionals,
-loops and word returns. Names must be representable as HOL byte strings. The
-counted source run uses the init-e-shaped fixture state in `Concrete.SourceState`;
-its memory, FFI and layout are fixed by that fixture. The theorem additionally
-requires concrete checks on the generated native code: its callee frame fits
-the initialized stack, its Stack instructions are FFI- and shared-operation
-free, label removal succeeds, and the emitted bytes fit the aligned code
-buffer. It derives the compiler's bitmap and good-code conditions. These checks
-refer to the program and configuration and can be discharged for a concrete
-program; they do not quantify over a machine tick bound.
-
-`countdownFixture_machine`, `naturalCountdownFixture_machine`,
-`comparisonFixture_machine` and `branchingLoopFixture_machine` instantiate the
-common theorem and discharge those checks. For countdown input `n < 2^64`,
-the machine clock is `167602730287449600 * (6*n+9) + 1592247331570371948`.
-The comparison and branching-loop clocks are `90715439766875148` and
-`36771214184170446348` respectively.
-
-This fragment and fixture do not yet cover init-e's full guest: its multiple
-functions, calls, globals, heap and shared-memory operations, exceptions, FFI,
-primitive behavior and host input are part of the widening work in the
+This fragment and fixture do not yet cover init-e's full guest: globals, heap
+and shared-memory operations, exceptions, FFI, primitive behavior and host
+input are part of the widening work in the
 [roadmap](https://github.com/flamingoponderado/stepped-flapjack/issues/19).
 The eventual theorem must apply to init-e's `Guest.Software.guestAst` and
 `InitE.sourceBehaviour` with its actual initialization and host input.

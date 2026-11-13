@@ -53,8 +53,9 @@ theorem tailEntry_decl_crep_bound {width : Nat} [NeZero width] {F : Type}
   have initBound := CrepSteps.branchProgram_static crepInitShape crep
   have panCount : controlSteps (.dec name .one initializer (.seq init (.seq (.while condition body) tail)))
       (callEntryStateHOLFinite panMiddle panLocals) ≤ globalEntrySteps panInit callee [] pan := by
-    simp only [globalEntrySteps,panInitRun]
-    rw [tailEntrySteps_reached callee [] panMiddle [] _ panLocals returnShape (by rfl) panLookup panClock]
+    rw [globalEntrySteps,controlSteps_seq panInit (.call none callee []) pan,panInitRun]
+    dsimp only
+    rw [controlSteps_tailCall callee [] panMiddle [] _ panLocals returnShape (by rfl) panLookup panClock]
     omega
   rw [CrepSteps.steps_seq,crepInitRun]
   simp only

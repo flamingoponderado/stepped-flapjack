@@ -34,10 +34,15 @@ theorem callSequence_zero {width : Nat} [NeZero width] {C F : Type}
     exact tailCall_zero_of_code ac dest args source code
   | returning values names retCode l1 l2 dest args retBlock =>
     intro source noInstall noInstallCode code
-    exact zeroReturningNone ac values names retCode l1 l2 dest args source retBlock code
+    exact zeroReturningNone ac values names retCode l1 l2 dest args source
+      (fun t _ _ => loopBlock_zero ac retCode t retBlock)
+      (fun loc arity p lookup t _ _ => loopBlock_zero ac p t (code loc arity p lookup))
   | handler values names retCode l1 l2 dest args var handlerCode h1 h2 retBlock handlerBlock =>
     intro source noInstall noInstallCode code
-    exact zeroReturningHandlerCase ac values names retCode l1 l2 dest args var h1 h2 handlerCode source retBlock handlerBlock code
+    exact zeroReturningHandlerCase ac values names retCode l1 l2 dest args var h1 h2 handlerCode source
+      (fun t _ _ => loopBlock_zero ac retCode t retBlock)
+      (fun t _ _ => loopBlock_zero ac handlerCode t handlerBlock)
+      (fun loc arity p lookup t _ _ => loopBlock_zero ac p t (code loc arity p lookup))
   | @seq a b ha hb iha ihb =>
     intro source noInstall noInstallCode code
     simp only [noInstallSubprogsHOL, notCreatedSubprogsWithMemOp, Bool.and_eq_true] at noInstall

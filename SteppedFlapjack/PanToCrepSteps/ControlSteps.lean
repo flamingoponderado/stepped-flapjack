@@ -2,14 +2,13 @@ import Flapjack.Pancake.Semantics.PanSem.EvaluateInd
 import SteppedFlapjack.PanToCrepSteps.Shape
 import SteppedFlapjack.CrepSteps.BranchStatic
 
-/-! Exact Pancake evaluator visits for the call-free control fragment. -/
+/-! Exact Pancake evaluator visits for the scalar control and call fragment. -/
 namespace SteppedFlapjack.PanToCrepSteps
-open Flapjack Flapjack.Pancake.PanLang
+open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 
 open Classical in
-/-- Counts reached source statements in the call-free control fragment.
-Expressions are atomic. Declarations count their reached bodies. Calls are
-counted as one and do not include their recursive executions. -/
+/-- Counts reached source statements. Expressions are atomic; direct calls without exception handlers and declaration calls include their
+reached callee and continuation bodies. -/
 noncomputable def controlSteps {width : Nat} [NeZero width] {σ : Type}
     (p : ProgHOL width) (s : PanSemStateFiniteExact width σ) : Nat :=
   let visit : ProgHOL width → PanSemStateFiniteExact width σ → Nat := fun q t =>
@@ -37,6 +36,33 @@ noncomputable def controlSteps {width : Nat} [NeZero width] {σ : Type}
           | _ => 0
         else 0
       | _ => 0
+  | .call none function arguments
+  | .call (some (_, none)) function arguments =>
+      match @evalListHOLFinite width σ _ s (fun address => Classical.propDecidable (s.memaddrs address)) arguments with
+      | none => 0
+      | some values =>
+          match lookupCodeHOLFinite s.code.lookup function values with
+          | none => 0
+          | some (body, locals, _) =>
+              if s.clock = 0 then 0 else visit body (callEntryStateHOLFinite s locals)
+  | .decCall name shape function arguments continuation =>
+      match @evalListHOLFinite width σ _ s (fun address => Classical.propDecidable (s.memaddrs address)) arguments with
+      | none => 0
+      | some values =>
+          match lookupCodeHOLFinite s.code.lookup function values with
+          | none => 0
+          | some (body, locals, returnShape) =>
+              if s.clock = 0 then 0 else
+                let entry := callEntryStateHOLFinite s locals
+                let result := entry.evaluateHOLFiniteState body
+                let fixed := fixClockHOLFinite entry result
+                visit body entry + match result.1 with
+                  | some (.returned value) =>
+                      if shapeEqHOL (shapeOfHOLExact value) shape &&
+                          shapeEqHOL (shapeOfHOLExact value) returnShape then
+                        visit continuation (setVarHOLFinite name value {fixed.2 with locals := s.locals})
+                      else 0
+                  | _ => 0
   | _ => 0
 termination_by (s.clock,sizeOf p)
 decreasing_by all_goals exact _h
@@ -148,6 +174,109 @@ theorem controlSteps_while {width : Nat} [NeZero width] {σ : Type}
       | none => simp only [dif_pos smallerLoop]
       | some r => cases r <;> simp only [dif_pos smallerLoop]
   | _ => rfl
+
+/-- A direct tail call counts the reached callee, in addition to its call node. -/
+theorem controlSteps_tailCall {width : Nat} [NeZero width] {σ : Type}
+    (function : MlS) (arguments : List (ExpHOL width)) (s : PanSemStateFiniteExact width σ)
+    (values : List (ValueHOL width)) (body : ProgHOL width)
+    (locals : HolFiniteMapExact MlS (ValueHOL width)) (returnShape : ShapeHOL)
+    (args : @evalListHOLFinite width σ _ s (fun address => Classical.propDecidable (s.memaddrs address)) arguments = some values)
+    (found : lookupCodeHOLFinite s.code.lookup function values = some (body,locals,returnShape))
+    (clock : s.clock ≠ 0) :
+    controlSteps (.call none function arguments) s =
+      1 + controlSteps body (callEntryStateHOLFinite s locals) := by
+  have smaller : Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b)
+      ((callEntryStateHOLFinite s locals).clock,sizeOf body)
+      (s.clock,sizeOf (.call none function arguments : ProgHOL width)) := by
+    apply Prod.Lex.left
+    simp only [callEntryStateHOLFinite]
+    omega
+  rw [controlSteps.eq_def]
+  simp only [args,found,clock,if_false,dif_pos smaller]
+
+/-- A non-tail call without an exception handler counts its reached callee. -/
+theorem controlSteps_returningCall {width : Nat} [NeZero width] {σ : Type}
+    (destination : Option (VarKind × MlS)) (function : MlS) (arguments : List (ExpHOL width))
+    (s : PanSemStateFiniteExact width σ) (values : List (ValueHOL width)) (body : ProgHOL width)
+    (locals : HolFiniteMapExact MlS (ValueHOL width)) (returnShape : ShapeHOL)
+    (args : @evalListHOLFinite width σ _ s (fun address => Classical.propDecidable (s.memaddrs address)) arguments = some values)
+    (found : lookupCodeHOLFinite s.code.lookup function values = some (body,locals,returnShape))
+    (clock : s.clock ≠ 0) :
+    controlSteps (.call (some (destination,none)) function arguments) s =
+      1 + controlSteps body (callEntryStateHOLFinite s locals) := by
+  have smaller : Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b)
+      ((callEntryStateHOLFinite s locals).clock,sizeOf body)
+      (s.clock,sizeOf (.call (some (destination,none)) function arguments : ProgHOL width)) := by
+    apply Prod.Lex.left
+    simp only [callEntryStateHOLFinite]
+    omega
+  rw [controlSteps.eq_def]
+  simp only [args,found,clock,if_false,dif_pos smaller]
+
+/-- An ordinary declaration call counts both the reached callee and its
+continuation when the callee returns a value of the expected shapes. -/
+theorem controlSteps_decCall_return {width : Nat} [NeZero width] {σ : Type}
+    (name function : MlS) (shape : ShapeHOL) (arguments : List (ExpHOL width))
+    (continuation : ProgHOL width) (s : PanSemStateFiniteExact width σ)
+    (values : List (ValueHOL width)) (body : ProgHOL width)
+    (locals : HolFiniteMapExact MlS (ValueHOL width)) (returnShape : ShapeHOL)
+    (value : ValueHOL width) (post : PanSemStateFiniteExact width σ)
+    (args : @evalListHOLFinite width σ _ s (fun address => Classical.propDecidable (s.memaddrs address)) arguments = some values)
+    (found : lookupCodeHOLFinite s.code.lookup function values = some (body,locals,returnShape))
+    (clock : s.clock ≠ 0)
+    (run : (callEntryStateHOLFinite s locals).evaluateHOLFiniteState body = (some (PanSemResultExact.returned value),post))
+    (valid : shapeEqHOL (shapeOfHOLExact value) shape = true)
+    (returnValid : shapeEqHOL (shapeOfHOLExact value) returnShape = true) :
+    let entry := callEntryStateHOLFinite s locals
+    let fixed := fixClockHOLFinite entry (some (PanSemResultExact.returned value),post)
+    controlSteps (.decCall name shape function arguments continuation) s =
+      1 + controlSteps body entry +
+        controlSteps continuation (setVarHOLFinite name value {fixed.2 with locals := s.locals}) := by
+  have entrySmall : Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b)
+      ((callEntryStateHOLFinite s locals).clock,sizeOf body)
+      (s.clock,sizeOf (.decCall name shape function arguments continuation : ProgHOL width)) := by
+    apply Prod.Lex.left
+    simp only [callEntryStateHOLFinite]
+    omega
+  have continuationSmall : Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b)
+      ((setVarHOLFinite name value {(fixClockHOLFinite (callEntryStateHOLFinite s locals)
+        (some (PanSemResultExact.returned value),post)).2 with locals := s.locals}).clock,sizeOf continuation)
+      (s.clock,sizeOf (.decCall name shape function arguments continuation : ProgHOL width)) := by
+    apply Prod.Lex.left
+    have bound := fixClockHOLFinite_clock_le (callEntryStateHOLFinite s locals) (some (PanSemResultExact.returned value),post)
+    simp only [setVarHOLFinite,callEntryStateHOLFinite] at bound ⊢
+    omega
+  rw [controlSteps.eq_def]
+  simp only [args,found,clock,if_false,run,valid,returnValid,Bool.true_and,if_true,
+    dif_pos entrySmall,dif_pos continuationSmall]
+  omega
+
+open Flapjack.PanSemStateFiniteExact in
+/-- A terminal callee outcome does not visit a declaration-call continuation. -/
+theorem controlSteps_decCall_terminal {width : Nat} [NeZero width] {σ : Type}
+    (name function : MlS) (shape : ShapeHOL) (arguments : List (ExpHOL width))
+    (continuation : ProgHOL width) (s : PanSemStateFiniteExact width σ)
+    (values : List (ValueHOL width)) (body : ProgHOL width)
+    (locals : HolFiniteMapExact MlS (ValueHOL width)) (returnShape : ShapeHOL)
+    (result : Option (PanSemResultExact width)) (post : PanSemStateFiniteExact width σ)
+    (args : @evalListHOLFinite width σ _ s (fun address => Classical.propDecidable (s.memaddrs address)) arguments = some values)
+    (found : lookupCodeHOLFinite s.code.lookup function values = some (body,locals,returnShape))
+    (clock : s.clock ≠ 0)
+    (run : (callEntryStateHOLFinite s locals).evaluateHOLFiniteState body = (result,post))
+    (terminal : ∀ value, result ≠ some (.returned value)) :
+    controlSteps (.decCall name shape function arguments continuation) s =
+      1 + controlSteps body (callEntryStateHOLFinite s locals) := by
+  have smaller : Prod.Lex (fun a b : Nat => a < b) (fun a b : Nat => a < b)
+      ((callEntryStateHOLFinite s locals).clock,sizeOf body)
+      (s.clock,sizeOf (.decCall name shape function arguments continuation : ProgHOL width)) := by
+    apply Prod.Lex.left
+    simp only [callEntryStateHOLFinite]
+    omega
+  rw [controlSteps.eq_def]
+  simp only [args,found,clock,if_false,run,dif_pos smaller]
+  cases result with
+  | none => simp
+  | some r => cases r <;> simp_all
 
 /-- Actual compiled Crep visits are bounded by a syntax factor times the
 Pancake source control visits for each supported loop-free branch. -/

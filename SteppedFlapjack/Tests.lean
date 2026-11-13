@@ -1,4 +1,7 @@
-import SteppedFlapjack.Concrete.ScalarEntry
+import SteppedFlapjack.Concrete.BranchEntryLoop
+import SteppedFlapjack.CrepSteps.TailEntry
+import SteppedFlapjack.CrepToLoopSteps.TailEntryLoop
+import SteppedFlapjack.CrepToLoopSteps.ScalarSequenceBound
 import SteppedFlapjack.Test.ScalarLoopTree
 import SteppedFlapjack.Test.ScalarExecutable
 import SteppedFlapjack.Test.ScalarPrefix

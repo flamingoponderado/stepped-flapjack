@@ -93,6 +93,33 @@ def initialWord (a : BitVec 64) : BitVec 64 :=
     fixtureHeaders[(a.toNat - sourceBase) / 8]?.getD 0
   else 0
 
+/-- Initializer headers computed from the number of compiler bitmap words. -/
+def fixtureHeadersFor (bitmapWords : Nat) : List (BitVec 64) :=
+  let bitmapEnd := (0xa0020018 : BitVec 64) + BitVec.ofNat 64 (bitmapWords * 8)
+  [0xa0020018, bitmapEnd, bitmapEnd, 0x800f0134, 0x800f1000]
+
+/-- Source heap contents for the concrete bitmap length selected by compilation. -/
+def initialWordFor (bitmapWords : Nat) (a : BitVec 64) : BitVec 64 :=
+  if sourceBase ≤ a.toNat ∧ a.toNat < sourceBase + 40 then
+    (fixtureHeadersFor bitmapWords)[(a.toNat - sourceBase) / 8]?.getD 0
+  else 0
+
+/-- The existing one-word fixture is the corresponding general layout. -/
+theorem initialWordFor_one : initialWordFor 1 = initialWord := by
+  have headers : fixtureHeadersFor 1 = fixtureHeaders := by decide
+  funext a
+  simp [initialWordFor,initialWord,headers]
+
+/-- The five initializer words point to the full bitmap and code regions. -/
+theorem initialWordFor_headers (bitmapWords : Nat) :
+    let bitmapEnd := (0xa0020018 : BitVec 64) + BitVec.ofNat 64 (bitmapWords * 8)
+    initialWordFor bitmapWords heapBase = 0xa0020018 ∧
+    initialWordFor bitmapWords (heapBase+8) = bitmapEnd ∧
+    initialWordFor bitmapWords (heapBase+16) = bitmapEnd ∧
+    initialWordFor bitmapWords (heapBase+24) = 0x800f0134 ∧
+    initialWordFor bitmapWords (heapBase+32) = 0x800f1000 := by
+  simp [initialWordFor,fixtureHeadersFor,heapBase,sourceBase]
+
 /-- This oracle is sufficient for the FFI-free witnesses; it is not init-e's host oracle. -/
 def sourceFfi : HolFfiState Unit :=
   { oracle := fun _ s _ bytes => .ret s bytes, ffiState := (), ioEvents := [] }
@@ -111,6 +138,13 @@ def sourceTemplate : PanSemStateFiniteExact 64 Unit where
   ffi := sourceFfi
   baseAddr := heapBase
   topAddr := heapTop
+
+/-- Source fixture using the bitmap length of the actual compiled program. -/
+def sourceTemplateFor (bitmapWords : Nat) : PanSemStateFiniteExact 64 Unit :=
+  {sourceTemplate with memory := fun a => .word (initialWordFor bitmapWords a)}
+
+theorem sourceTemplateFor_one : sourceTemplateFor 1 = sourceTemplate := by
+  simp [sourceTemplateFor,sourceTemplate,initialWordFor_one]
 
 def sourceProduction : PanSemState (RiscV.Word 64) (FfiState Unit) where
   locals := fun _ => none

@@ -89,34 +89,4 @@ theorem loopStackReady_wordBlock {width : Nat} [NeZero width] {p : HolLoopProg w
     simp only [hc]
     exact .seq .tick (.seq (.loop _ _ hword) .tick)
 
-/-- No dynamic installation is introduced by this source fragment. -/
-theorem loopStackReady_noInstall {width : Nat} [NeZero width] {p : HolLoopProg width}
-    (shape : LoopStackReady p) (ctxt : Spt Nat) :
-    ∀ labels : Nat × Nat, noInstallSubprogsHOL (LoopToWord.compHOL ctxt p labels).1 = true := by
-  induction shape with
-  | leaf h => exact stackReady_noInstall (.leaf h) ctxt
-  | @seq a b ha hb iha ihb =>
-    intro labels
-    simp only [LoopToWord.compHOL,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp,Bool.and_eq_true]
-    exact ⟨iha labels,ihb (LoopToWord.compHOL ctxt a labels).2⟩
-  | mark h ih =>
-    intro labels
-    simpa only [LoopToWord.compHOL] using ih labels
-  | @ite cmp r ri live a b ha hb iha ihb =>
-    intro labels
-    rcases h1 : LoopToWord.compHOL ctxt a labels with ⟨wa,la⟩
-    rcases h2 : LoopToWord.compHOL ctxt b la with ⟨wb,lb⟩
-    have hwa : noInstallSubprogsHOL wa = true := by simpa only [h1] using iha labels
-    have hwb : noInstallSubprogsHOL wb = true := by simpa only [h2] using ihb la
-    unfold noInstallSubprogsHOL at hwa hwb
-    unfold LoopToWord.compHOL
-    simp [h1,h2,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp,hwa,hwb]
-  | @loop live liveOut p hp ih =>
-    intro labels
-    rcases hc : LoopToWord.compHOL ctxt p labels with ⟨wordBody,next⟩
-    have hword : noInstallSubprogsHOL wordBody = true := by simpa only [hc] using ih labels
-    unfold noInstallSubprogsHOL at hword
-    unfold LoopToWord.compHOL
-    simp [hc,noInstallSubprogsHOL,notCreatedSubprogsWithMemOp,hword]
-
 end SteppedFlapjack.LoopToWordSteps

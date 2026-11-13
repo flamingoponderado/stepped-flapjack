@@ -53,7 +53,7 @@ theorem returningHandler_consumed {width : Nat} [NeZero width] {C F : Type}
     xs args1 prog ss envs guards nonzero run bodyRun notError
   rcases outcomes with ⟨location, returned, hr⟩ | ⟨location, value, he⟩ | ht | hs | ⟨event, hf⟩
   · subst bodyResult
-    have ih := handlerOriginalIH_of_blocks ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source retBlock handlerBlock code
+    have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
     obtain ⟨_, _, popped, _, _, _, _, _, pop, domain, validReturn, _, _⟩ :=
       sourceHandlerReturningContinuation ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source sourcePost bodyPost result
         xs args1 prog ss envs location returned guards ih nonzero run notError bodyRun
@@ -63,7 +63,7 @@ theorem returningHandler_consumed {width : Nat} [NeZero width] {C F : Type}
     exact WordSteps.returningCall_consumed dest args values names retCode l1 l2 (some (handlerVar,handlerCode,h1,h2)) source bodyPost popped sourcePost result
       xs args1 returned ss prog envs bodyShape (loopBlock_loop retBlock) get badFalse find valid cut nonzero bodyRun lengthEq pop domain run
   · subst bodyResult
-    have ih := handlerOriginalIH_of_blocks ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source retBlock handlerBlock code
+    have ih := handlerOriginalIH ac values names retCode handlerCode l1 l2 dest args handlerVar h1 h2 source
     obtain ⟨validException, domain, _, _⟩ := sourceHandlerExceptionContinuation ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode source sourcePost bodyPost result xs args1 prog ss envs location value guards ih nonzero run notError bodyRun
     have locationEq : location = .loc h1 h2 := by tauto
     subst location
@@ -109,7 +109,10 @@ theorem returningHandler_bounded {width : Nat} [NeZero width] {C F : Type}
     source sourcePost result limit premises.1 notTimeout (used.trans stepBound)
   have related := stateRel_setClocks ac k f frame source target lens 0 limit premises.2.2.1
   have normalizedCode : ∀ loc arity p, sptLookup loc ({source with clock := limit}).code = some (arity, p) → LoopBlock p := code
-  have sim := zeroReturningHandlerCase ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode {source with clock := limit} retBlock handlerBlock normalizedCode
+  have sim := zeroReturningHandlerCase ac values names retCode l1 l2 dest args handlerVar h1 h2 handlerCode {source with clock := limit}
+    (fun t _ _ => loopBlock_zero ac retCode t retBlock)
+    (fun t _ _ => loopBlock_zero ac handlerCode t handlerBlock)
+    (fun loc arity p lookup t _ _ => loopBlock_zero ac p t (normalizedCode loc arity p lookup))
   obtain ⟨targetPost, targetResult, targetRun, conclusion⟩ := sim k f frame
     {sourcePost with clock := limit - (source.clock - sourcePost.clock)} {target with clock := limit} result
     bs bsPost n nPost compiled lens ⟨normalized, premises.2.1, related, premises.2.2.2⟩

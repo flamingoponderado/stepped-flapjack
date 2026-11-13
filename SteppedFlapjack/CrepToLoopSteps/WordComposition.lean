@@ -39,7 +39,7 @@ theorem directProgram_word_bound {width : Nat} [NeZero width] {C F : Type}
         {word with clock := word.clock + extra} ≤ 2 * CrepSteps.steps p source := by
   obtain ⟨extra,loopResult,loopPost,loopRun,loopPostRel,_,_,_,loopResultMap,_,loopBound⟩ :=
     directProgram_correct_with_steps shape source result sourcePost loop crepCtxt live run nonerror
-      stateRel memRel globalsRel codeRel localsRel
+      stateRel memRel globalsRel codeRel (by trivial) localsRel
   have loopNonerror : loopResult ≠ some .error := by
     rw [loopResultMap]
     cases result with

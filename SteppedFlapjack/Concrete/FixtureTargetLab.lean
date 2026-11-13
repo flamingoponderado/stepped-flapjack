@@ -29,29 +29,51 @@ noncomputable def fixtureTargetLab (code : List (Nat × HolProg 64)) (cfg : LabT
   0x800f0134 0xecc
   (fixtureLab code cfg).compileOracle
 
-theorem fixtureTargetLab_shape (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (ms : RiscV.L3.riscv_state) :
- fixtureTargetLab code cfg ms = {(fixtureLab code cfg) with
-  ioRegs := targetIoRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms,
-  ioFpRegs := targetIoFpRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms,
-  ccRegs := targetCcRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms,
-  ccFpRegs := targetCcFpRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms} := by
- unfold fixtureTargetLab LabToTarget.makeInit fixtureLab
- congr 1
- all_goals try (with_unfolding_all rfl)
- funext r
- simp only [fixtureAsm,fixtureLabRegs]
- repeat' first | split | simp_all
+/-- Machine-side Lab initialization for the actual compiler bitmap list. -/
+noncomputable def configuredTargetLab (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
+    (bs : List (BitVec 64)) (ms : RiscV.L3.riscv_state) :=
+  LabToTarget.makeInit (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi fixtureAsm
+    (configuredLabMemory code bs) (fun a => decide (configuredLabDomain bs a))
+    (fun a => decide (sharedAddress a)) ms (configuredLab code cfg bs).code (LabToTarget.compile riscvConfig)
+    0x800f0134 0xecc (configuredLab code cfg bs).compileOracle
+
+theorem configuredTargetLab_shape (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
+    (bs : List (BitVec 64)) (ms : RiscV.L3.riscv_state) :
+    configuredTargetLab code cfg bs ms = {(configuredLab code cfg bs) with
+      ioRegs := targetIoRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms,
+      ioFpRegs := targetIoFpRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms,
+      ccRegs := targetCcRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms,
+      ccFpRegs := targetCcFpRegs (fixtureMachineConfig (fixtureCodeStart code)) sourceFfi ms} := by
+  unfold configuredTargetLab LabToTarget.makeInit configuredLab fixtureLab
+  congr 1
+  all_goals try (with_unfolding_all rfl)
+  funext r
+  simp only [fixtureAsm,fixtureLabRegs]
+  repeat' first | split | simp_all
+
+theorem configuredTargetLab_one (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
+    (ms : RiscV.L3.riscv_state) : configuredTargetLab code cfg [4] ms = fixtureTargetLab code cfg ms := by
+  have labEq := configuredLab_one code cfg
+  have memEq := congrArg (fun lab => lab.memory) labEq
+  have domEq := congrArg (fun lab => lab.memDomain) labEq
+  change configuredLabMemory code [4] = fixtureLabMemoryFor code at memEq
+  change (fun a => decide (configuredLabDomain [4] a)) =
+    (fun a => decide (fixtureLabDomain a)) at domEq
+  unfold configuredTargetLab fixtureTargetLab
+  rw [memEq, domEq, configuredLab_one]
+
 open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInit
 open Flapjack.Compiler.Backend.StackRemove.Proofs
 open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
 
-theorem fixtureTargetLab_stack (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (ms : RiscV.L3.riscv_state) :
- (fullMakeInit countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
-  [4] code (fixtureTargetLab code cfg ms) fixtureSavedRegs 0 (fixtureStackOracle cfg)).1 = fixtureStack code cfg := by
- rw [fixtureTargetLab_shape]
- unfold fixtureStack
- rw [fullMakeInit_eq,fullMakeInit_eq]
- rfl
+theorem configuredTargetLab_stack (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config)
+    (bs : List (BitVec 64)) (ms : RiscV.L3.riscv_state) :
+    (fullMakeInit countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
+      bs code (configuredTargetLab code cfg bs ms) fixtureSavedRegs 0 (fixtureStackOracle cfg)).1 = configuredStack code cfg bs := by
+  rw [configuredTargetLab_shape]
+  unfold configuredStack
+  rw [fullMakeInit_eq,fullMakeInit_eq]
+  rfl
 
 private theorem fixtureSavedRegs_member (r : Nat) (h : fixtureSavedRegs r = true) : r ∈ countdownMachineConfig.calleeSavedRegs := by
  have r24 : StackNames.findNameSpt countdownRiscVBackend.stackConf.regNames 24 = 24 := by with_unfolding_all rfl
@@ -59,12 +81,13 @@ private theorem fixtureSavedRegs_member (r : Nat) (h : fixtureSavedRegs r = true
  have r26 : StackNames.findNameSpt countdownRiscVBackend.stackConf.regNames 26 = 26 := by with_unfolding_all rfl
  simpa [fixtureSavedRegs,r24,r25,r26,countdownMachineConfig] using h
 
-theorem fixtureTargetLab_assumptions (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (ms : RiscV.L3.riscv_state)
+theorem configuredTargetLab_assumptions (code : List (Nat × HolProg 64)) (cfg : LabToTarget.Config) (bs : List (BitVec 64)) (ms : RiscV.L3.riscv_state)
+ (fits : 0xa0020018 + bs.length*8 ≤ sourceBase)
  (good : StackToLab.Proofs.GoodCode.goodCode 24 code) :
  Assumptions countdownRiscVBackend.stackConf countdownRiscVBackend.dataConf (2^53-1) 24 riscvConfig.addrOffset
- [4] code (fixtureTargetLab code cfg ms) fixtureSavedRegs 0 (fixtureStackOracle cfg) := by
- have prev := fixtureLab_initAssumptions code cfg good
- rw [fixtureTargetLab_shape]
+ bs code (configuredTargetLab code cfg bs ms) fixtureSavedRegs 0 (fixtureStackOracle cfg) := by
+ have prev := configuredLab_initAssumptions code cfg bs fits good
+ rw [configuredTargetLab_shape]
  unfold Assumptions at prev ⊢
  rcases prev with ⟨a,b,c,d,e,f,g,h,_,_,rest⟩
  refine ⟨a,b,c,d,e,f,g,h,?_,?_,rest⟩

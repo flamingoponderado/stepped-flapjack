@@ -90,7 +90,7 @@ theorem directCrep_riscvWithin {F : Type}
   have qShape : StackReady q := compiledCrep ▸ compile_stackReady shape crepCtxt live
   obtain ⟨extra,loopResult,loopPost,loopRun,loopPostRel,_,_,_,resultMap,_,loopBound⟩ :=
     directProgram_correct_with_steps shape source result sourcePost loop crepCtxt live sourceRun
-      (completeCrep_nonerror complete) sourceRel memRel globalsRel codeRel localsRel
+      (completeCrep_nonerror complete) sourceRel memRel globalsRel codeRel (by trivial) localsRel
   have loopComplete : CompleteLoopResult loopResult := resultMap ▸ completeCrep_loop complete
   have loopNotError : loopResult ≠ some .error := by cases loopComplete <;> simp
   have shiftedRel : loopToWordStateRelHOLExact {loop with clock := loop.clock + extra}

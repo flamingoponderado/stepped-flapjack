@@ -1,5 +1,7 @@
 import SteppedFlapjack.Concrete.CountdownEncoding
-import SteppedFlapjack.Concrete.BranchingLabBounds
+import SteppedFlapjack.Concrete.FixtureTargetLab
+import SteppedFlapjack.StackToLabSteps.ExplicitSpan
+import SteppedFlapjack.Concrete.BranchingFrames
 import SteppedFlapjack.Concrete.FixtureMachineLab
 
 /-! Kernel-checked label removal and size facts for concrete witness programs. -/

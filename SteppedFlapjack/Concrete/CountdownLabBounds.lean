@@ -1,7 +1,8 @@
 import SteppedFlapjack.StackToLabSteps.ConstantPrefix
 import SteppedFlapjack.Concrete.CountdownInitE
 import SteppedFlapjack.Concrete.CountdownStackBounds
-import SteppedFlapjack.Concrete.FixtureLabNumeric
+import SteppedFlapjack.Concrete.FixtureTargetLab
+import SteppedFlapjack.StackToLabSteps.ExplicitSpan
 open Flapjack.Compiler.Backend.WordToStack.Native Flapjack.Compiler.Encoders.Asm SteppedFlapjack.WordToStackSteps
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Encoders.RiscV.Target
@@ -136,13 +137,11 @@ private theorem countdownZeroLabFactor (cfg : LabToTarget.Config) :
   rw [countdown_optimized_literal]
   decide +kernel
 
-/-- The initialized countdown Lab clock is a numeric affine function of the
-source count. -/
-theorem countdownLabTick_closed (n : Nat) (cfg : LabToTarget.Config) :
-    fixtureLabTickLimit (countdownNativeStackCode n) cfg (9543650688*n+29426459323) =
-      1060776773971200*n + 3270750953752551 := by
-  have factor := (actualFactor n cfg).trans (countdownZeroLabFactor cfg)
-  rw [fixtureLabTick_numeric _ _ _ factor]
-  omega
+/-- The static Lab cost of the countdown native table is independent of its literal. -/
+theorem countdown_nativeFactor (n : Nat) (cfg : LabToTarget.Config) :
+    costFromFields riscvConfig.addrOffset 0 (.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg 64)
+      (sptFromAList (code1 countdownRiscVBackend.dataConf (countdownNativeStackCode n))) [4]
+      (coracle1 (fixtureStackOracle cfg)) = 1950 := by
+  exact (actualFactor n cfg).trans (countdownZeroLabFactor cfg)
 
 end SteppedFlapjack.Concrete

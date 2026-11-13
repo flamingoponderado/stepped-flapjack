@@ -1,4 +1,6 @@
 import SteppedFlapjack.CrepToLoopSteps.WholeCodeRel
+import SteppedFlapjack.CrepToLoopSteps.TailCallSteps
+import SteppedFlapjack.CrepToLoopSteps.ScalarLoopShape
 import Flapjack.Compiler.Backend.WordAlloc.Proofs.SSALoopIteration
 import Flapjack.Misc.BalancedMap.Core
 import SteppedFlapjack.LoopLiveSteps.ExecutableBranch
@@ -8,6 +10,125 @@ namespace SteppedFlapjack.CrepToLoopSteps
 open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 open Flapjack.Compiler.Encoders.Asm
 open SteppedFlapjack.LoopToWordSteps SteppedFlapjack.LoopLiveSteps
+
+/-- Recursive scalar Loop bodies are included in the call-aware optimizer shape. -/
+theorem scalarLoop_simpleShape {width : Nat} [NeZero width] {p : HolLoopProg width}
+    (shape : ScalarLoop p) : SimpleLoopSequenceSource p := by
+  induction shape with
+  | branch h => exact .branch h
+  | seq _ _ iha ihb => exact .seq iha ihb
+  | ite cmp r ri live _ _ iha ihb => exact .conditional cmp r ri live iha ihb
+  | loop live exits _ ih => exact .loop live exits ih
+
+/-- The scalar source fragment compiles into the same call-aware shape. -/
+theorem compiled_scalarProgram_shape {width : Nat} [NeZero width] {p : CrepProgHOL width}
+    (shape : ScalarProgram p) (ctxt : CrepToLoopContextExact) (live : NumSet) :
+    SimpleLoopSequenceSource (compileHOLExact ctxt live p) :=
+  scalarLoop_simpleShape (compile_scalar_program shape ctxt live)
+
+private theorem assignmentSequence_shape {width : Nat} [NeZero width]
+    (regs : List Nat) (values : List (HolLoopExp width)) (call : HolLoopProg width)
+    (shape : SimpleLoopSequenceSource call) :
+    SimpleLoopSequenceSource (loopNestedSeqHOL (regs.zipWith HolLoopProg.assign values ++ [call])) := by
+  induction regs generalizing values with
+  | nil => simp [loopNestedSeqHOL]; exact .seq shape (.branch .skip)
+  | cons reg regs ih =>
+    cases values with
+    | nil => simp [loopNestedSeqHOL]; exact .seq shape (.branch .skip)
+    | cons value values =>
+      simp only [List.zipWith_cons_cons,List.cons_append,loopNestedSeqHOL]
+      exact .seq (.branch (.assign reg value)) (ih values)
+
+private theorem nestedSequence_shape {width : Nat} [NeZero width]
+    (front suffix : List (HolLoopProg width))
+    (prefixShape : ∀ p ∈ front, LoopBranch p)
+    (suffixShape : SimpleLoopSequenceSource (loopNestedSeqHOL suffix)) :
+    SimpleLoopSequenceSource (loopNestedSeqHOL (front ++ suffix)) := by
+  induction front with
+  | nil => simpa using suffixShape
+  | cons p rest ih =>
+    simp only [List.cons_append,loopNestedSeqHOL]
+    exact .seq (.branch (prefixShape p (by simp)))
+      (ih (by intro q hq; exact prefixShape q (by simp [hq])))
+
+/-- Scalar-argument tail calls have the recursive optimizer shape. -/
+theorem compiled_tailCall_scalar_shape {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e) :
+    SimpleLoopSequenceSource (compileHOLExact ctxt live (.call none name args)) := by
+  obtain ⟨code,values,next,outLive,compiled,_,prefixShape⟩ :=
+    compiledScalars_prefix args shape ctxt (ctxt.vmax+1) live
+  rw [compileHOLExact,compiled]
+  dsimp only
+  rw [List.append_assoc]
+  apply nestedSequence_shape code _ prefixShape.2.2
+  exact assignmentSequence_shape _ _ _ (.tail _ _)
+
+/-- Scalar-argument returning calls have the optimizer shape for both the
+normal variable mapping and the compiler's fallback mapping. -/
+theorem compiled_returningCall_scalar_shape {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : MlString)
+    (args : List (CrepExpHOL width)) (shape : ∀ e ∈ args, CompiledScalar e)
+    (names : List Nat) :
+    SimpleLoopSequenceSource (compileHOLExact ctxt live (.call (some (names,none)) name args)) := by
+  obtain ⟨code,values,next,outLive,compiled,_,prefixShape⟩ :=
+    compiledScalars_prefix args shape ctxt (ctxt.vmax+1) live
+  rw [compileHOLExact,compiled]
+  dsimp only
+  rw [List.append_assoc]
+  apply nestedSequence_shape code _ prefixShape.2.2
+  cases names.mapM ctxt.vars.lookup with
+  | none => simp only; exact assignmentSequence_shape _ _ _ (.returning _ _ _ _ _ _)
+  | some returnNames => simp only; exact assignmentSequence_shape _ _ _ (.returning _ _ _ _ _ _)
+
+/-- A scalar condition preserves the structural optimizer shape of both
+compiled branches, including branches that contain calls. -/
+theorem compiled_conditional_scalar_shape {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (condition : CrepExpHOL width) (thenBranch elseBranch : CrepProgHOL width)
+    (conditionShape : CompiledScalar condition)
+    (thenShape : SimpleLoopSequenceSource (compileHOLExact ctxt live thenBranch))
+    (elseShape : SimpleLoopSequenceSource (compileHOLExact ctxt live elseBranch)) :
+    SimpleLoopSequenceSource (compileHOLExact ctxt live (.ite condition thenBranch elseBranch)) := by
+  obtain ⟨code,value,next,outLive,compiled,prefixShape⟩ :=
+    compiledScalar_prefix conditionShape ctxt (ctxt.vmax+1) live
+  rw [compileHOLExact,compiled]
+  apply nestedSequence_shape code _ prefixShape.2.2
+  exact .seq (.branch (.assign _ _))
+    (.seq (.conditional _ _ _ _ thenShape elseShape) (.branch .skip))
+
+/-- A scalar while condition compiles to the recursive optimizer shape when
+its body does, including when that body contains calls or further loops. -/
+theorem compiled_while_scalar_shape {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet)
+    (condition : CrepExpHOL width) (body : CrepProgHOL width)
+    (conditionShape : CompiledScalar condition)
+    (bodyShape : SimpleLoopSequenceSource (compileHOLExact ctxt live body)) :
+    SimpleLoopSequenceSource (compileHOLExact ctxt live (.while condition body)) := by
+  obtain ⟨code,value,next,outLive,compiled,prefixShape⟩ :=
+    compiledScalar_prefix conditionShape ctxt (ctxt.vmax+1) live
+  rw [compileHOLExact,compiled]
+  apply SimpleLoopSequenceSource.loop
+  apply nestedSequence_shape code _ prefixShape.2.2
+  exact .seq (.branch (.assign _ _))
+    (.seq (.conditional _ _ _ _ (.seq bodyShape (.branch (.continue 0)))
+      (.branch (.break 0))) (.branch .skip))
+
+/-- A scalar declaration preserves the recursive optimizer shape of its
+body in the compiler's extended variable context. -/
+theorem compiled_decl_scalar_shape {width : Nat} [NeZero width]
+    (ctxt : CrepToLoopContextExact) (live : NumSet) (name : Nat)
+    (value : CrepExpHOL width) (body : CrepProgHOL width)
+    (valueShape : CompiledScalar value)
+    (bodyShape : ∀ ctxt live, SimpleLoopSequenceSource (compileHOLExact ctxt live body)) :
+    SimpleLoopSequenceSource (compileHOLExact ctxt live (.dec name value body)) := by
+  obtain ⟨code,compiledValue,next,outLive,compiled,prefixShape⟩ :=
+    compiledScalar_prefix valueShape ctxt (ctxt.vmax+1) live
+  rw [compileHOLExact,compiled]
+  dsimp only
+  apply SimpleLoopSequenceSource.seq
+  · simpa using (nestedSequence_shape code [] prefixShape.2.2 (.branch .skip))
+  · exact .seq (.branch (.assign _ _)) (bodyShape _ _)
 
 /-- Before optimization, every supported body has the shape required by the
 structural liveness evaluator. -/
@@ -25,7 +146,7 @@ theorem supportedCodeBody_rawLoopShape {width : Nat} [NeZero width]
       branchConditionWhile_loopBranch _ (BranchCondition.toScalar hc) _ hb ctxt live
     simp only [compileHOLExact,loopCompiled]
     exact .seq (.branch (compile_branchProgram_loopBranch hi ctxt live))
-      (.seq (.loop live live loopBody) (.branch (compile_branchProgram_loopBranch ht ctxt live)))
+      (.seq (.loop live live (.branch loopBody)) (.branch (compile_branchProgram_loopBranch ht ctxt live)))
   | @declWhile name value condition body tail hv hc hb ht =>
     right
     have suffix (bc : CrepToLoopContextExact) (bl : NumSet) :
@@ -33,7 +154,7 @@ theorem supportedCodeBody_rawLoopShape {width : Nat} [NeZero width]
       obtain ⟨code,conditionValue,next,outLive,condCompiled,loopCompiled,loopBody⟩ :=
         branchConditionWhile_loopBranch condition (BranchCondition.toScalar hc) body hb bc bl
       simp only [compileHOLExact,loopCompiled]
-      exact .seq (.loop bl bl loopBody) (.branch (compile_branchProgram_loopBranch ht bc bl))
+      exact .seq (.loop bl bl (.branch loopBody)) (.branch (compile_branchProgram_loopBranch ht bc bl))
     obtain ⟨value2,compiled⟩ := directExpression_noCode hv ctxt (ctxt.vmax+1) live
     rw [compileHOLExact,compiled]
     exact .seq (.branch .skip) (.seq (.branch (.assign _ _)) (suffix _ _))
@@ -45,7 +166,7 @@ theorem supportedCodeBody_rawLoopShape {width : Nat} [NeZero width]
         branchConditionWhile_loopBranch condition (BranchCondition.toScalar hc) body hb bc bl
       simp only [compileHOLExact,loopCompiled]
       exact .seq (.branch (compile_branchProgram_loopBranch hi bc bl))
-        (.seq (.loop bl bl loopBody) (.branch (compile_branchProgram_loopBranch ht bc bl)))
+        (.seq (.loop bl bl (.branch loopBody)) (.branch (compile_branchProgram_loopBranch ht bc bl)))
     obtain ⟨value2,compiled⟩ := directExpression_noCode hv ctxt (ctxt.vmax+1) live
     rw [compileHOLExact,compiled]
     exact .seq (.branch .skip) (.seq (.branch (.assign _ _)) (suffix _ _))
@@ -59,11 +180,13 @@ def compileProgWithStructuralLive {width : Nat} [NeZero width] (arch : AsmArchit
   List.zipWith (fun n entry => (n,List.range entry.2.1.length,
     optimiseSequence (comp entry.2.1 (crepSimpProgHOL entry.2.2)))) nums programs
 
-/-- On the supported input fragment the executable frontend is exactly the
-original compiler, including function numbering and live-set annotations. -/
-theorem compileProgWithStructuralLive_eq {width : Nat} [NeZero width] (arch : AsmArchitecture)
+/-- The executable frontend agrees with the original compiler whenever the
+actual function bodies and their compiled Loop forms satisfy the checked shapes. -/
+theorem compileProgWithStructuralLive_eq_of_shapes {width : Nat} [NeZero width] (arch : AsmArchitecture)
     (programs : List (MlString × List Nat × CrepProgHOL width))
-    (shapes : ∀ row ∈ programs, SupportedCodeBody row.2.2) :
+    (fixed : ∀ row ∈ programs, crepSimpProgHOL row.2.2 = row.2.2)
+    (shapes : ∀ row ∈ programs, SimpleLoopSequenceSource
+      (compFuncHOLExact arch (crepToLoopMakeFuncsExactExecutable programs) row.2.1 row.2.2)) :
     compileProgWithStructuralLive arch programs = compileProgHOLExact arch programs := by
   let comp : List Nat → CrepProgHOL width → HolLoopProg width :=
     compFuncHOLExact arch (crepToLoopMakeFuncsExactExecutable programs)
@@ -71,14 +194,8 @@ theorem compileProgWithStructuralLive_eq {width : Nat} [NeZero width] (arch : As
       optimiseSequence (comp row.2.1 (crepSimpProgHOL row.2.2)) =
         optimiseHOL (comp row.2.1 (crepSimpProgHOL row.2.2)) := by
     intro row member
-    have shape := shapes row member
-    rw [supportedCodeBody_simp_fixed shape]
-    have raw := supportedCodeBody_rawLoopShape
-      (mkCtxtExact arch (makeVmapExact row.2.1) (crepToLoopMakeFuncsExactExecutable programs)
-        (row.2.1.length - 1)) (listToNumSetHOLExact (List.range row.2.1.length)) shape
-    rcases raw with tail | loop
-    · exact optimiseSequence_tail_eq tail
-    · exact optimiseSequence_eq loop
+    rw [fixed row member]
+    exact optimiseSequence_eq (shapes row member)
   have zipEq : ∀ (nums : List Nat) (rows : List (MlString × List Nat × CrepProgHOL width)),
       (∀ row ∈ rows, row ∈ programs) →
       List.zipWith (fun n row => (n,List.range row.2.1.length,
@@ -98,5 +215,21 @@ theorem compileProgWithStructuralLive_eq {width : Nat} [NeZero width] (arch : As
           intro item member
           exact subset item (by simp [member]))]
   exact zipEq _ _ (by intros; assumption)
+
+/-- Existing supported bodies instantiate the shared structural compiler proof. -/
+theorem compileProgWithStructuralLive_eq {width : Nat} [NeZero width] (arch : AsmArchitecture)
+    (programs : List (MlString × List Nat × CrepProgHOL width))
+    (shapes : ∀ row ∈ programs, SupportedCodeBody row.2.2) :
+    compileProgWithStructuralLive arch programs = compileProgHOLExact arch programs := by
+  apply compileProgWithStructuralLive_eq_of_shapes arch programs
+  · intro row member
+    exact supportedCodeBody_simp_fixed (shapes row member)
+  · intro row member
+    have raw := supportedCodeBody_rawLoopShape
+      (mkCtxtExact arch (makeVmapExact row.2.1) (crepToLoopMakeFuncsExactExecutable programs)
+        (row.2.1.length - 1)) (listToNumSetHOLExact (List.range row.2.1.length)) (shapes row member)
+    rcases raw with tail | loop
+    · exact tailEntry_to_simple tail
+    · exact loop
 
 end SteppedFlapjack.CrepToLoopSteps

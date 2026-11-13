@@ -1,5 +1,7 @@
 import SteppedFlapjack.Concrete.Phase7Compiler
 import Flapjack.Pancake.Semantics.PanSem.ClockTimeout
+import Flapjack.Pancake.PanLang
+import Flapjack.Pancake.Proofs.PanSimp.StateRelImpSemantics
 
 /-! Finite source clock monotonicity for observational semantics. -/
 namespace SteppedFlapjack.Concrete
@@ -117,4 +119,212 @@ theorem source_semantics_of_return {width : Nat} {σ : Type} [NeZero width]
       res = HolBehaviour.terminate outcome st.ffi.ioEvents) with
     | some res => res | none => _) = _
   rw [chosen]
+open Classical in
+/-- Successful declaration initialization determines the observational
+semantics for an arbitrary source function table. Both initialization checks
+are executable on concrete declarations. -/
+theorem source_declarations_semantics {width : Nat} {σ : Type} [NeZero width]
+    (state declared : PanSemStateFiniteExact width σ)
+    (start : MlS) (decls : List (DeclHOL width)) (structs : StructContextExact)
+    (names : decsStcnamesHOLExact [] decls = some structs)
+    (initialized : evaluateDeclsHOLFinite {state with structs := structs} decls = some declared) :
+    semanticsDecls state start decls = semantics declared start := by
+  unfold semanticsDecls
+  rw [names]
+  simp only
+  rw [initialized]
+
+open Classical in
+/-- Initializing a function-only declaration table installs its functions in
+source order. The only check is the compiler's concrete shape check. -/
+theorem source_function_declarations_init {width : Nat} {σ : Type} [NeZero width]
+    (state : PanSemStateFiniteExact width σ) (functions : List (FunDeclHOL width))
+    (wellFormed : functions.all (fun f =>
+      f.params.all (fun p => isWfShapeExactHOL state.structs p.2) &&
+        isWfShapeExactHOL state.structs f.returnShape) = true) :
+    evaluateDeclsHOLFinite state (functions.map DeclHOL.function) =
+      some {state with code := functions.foldl (fun code f =>
+        code.update (f.name,(f.params,f.body,f.returnShape))) state.code} := by
+  induction functions generalizing state with
+  | nil => rfl
+  | cons f fs ih =>
+    simp only [List.all_cons,Bool.and_eq_true] at wellFormed
+    simp only [List.map_cons,evaluateDeclsHOLFinite,wellFormed.1,List.foldl_cons]
+    exact ih _ wellFormed.2
+
+private theorem lookup_mem {α β : Type} [BEq α] [LawfulBEq α]
+    (l : List (α × β)) (k : α) (v : β) (h : List.lookup k l = some v) : (k,v) ∈ l := by
+  induction l with
+  | nil => simp at h
+  | cons e l ih =>
+    obtain ⟨a,b⟩ := e
+    by_cases hk : k = a
+    · subst hk; simp at h; subst h; simp
+    · have he : (k == a) = false := by simp [hk]
+      simp only [List.lookup_cons,he] at h
+      exact List.mem_cons_of_mem _ (ih h)
+private theorem lookup_reverse_nodup {α β : Type} [BEq α] [LawfulBEq α]
+    (l : List (α × β)) (k : α) (hnd : (l.map Prod.fst).Nodup) :
+    List.lookup k l.reverse = List.lookup k l := by
+  have hnd' : (l.reverse.map Prod.fst).Nodup := by
+    rw [List.map_reverse, List.Nodup, List.pairwise_reverse]
+    exact hnd.imp (fun h => Ne.symm h)
+  cases h : List.lookup k l with
+  | none =>
+    cases h' : List.lookup k l.reverse with
+    | none => rfl
+    | some v =>
+      have hm := lookup_mem _ _ _ h'
+      have eq := Flapjack.list_lookup_of_mem_of_nodup hnd (List.mem_reverse.mp hm)
+      rw [h] at eq; cases eq
+  | some v =>
+    exact Flapjack.list_lookup_of_mem_of_nodup hnd' (List.mem_reverse.mpr (lookup_mem _ _ _ h))
+theorem updateList_reverse_nodup {α β : Type} [BEq α] [LawfulBEq α]
+    (l : List (α × β)) (hnd : (l.map Prod.fst).Nodup) :
+    (HolFiniteMapExact.empty.updateList l) = (HolFiniteMapExact.empty.updateList l.reverse) := by
+  apply HolFiniteMapExact.ext
+  funext k
+  simp only [HolFiniteMapExact.lookup_updateList]
+  change FUPDATE_LIST FEMPTY l k = FUPDATE_LIST FEMPTY l.reverse k
+  have h₁ := FLOOKUP_FUPDATE_LIST_reverse_eq_lookup l.reverse k
+  have h₂ := FLOOKUP_FUPDATE_LIST_reverse_eq_lookup l k
+  simp only [List.reverse_reverse,FLOOKUP] at h₁ h₂
+  rw [h₁,h₂,lookup_reverse_nodup l k hnd]
+
+theorem function_fold_code {width : Nat} [NeZero width] (functions : List (FunDeclHOL width))
+    (code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL)) :
+    functions.foldl (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) code =
+      code.updateList (functionsHOL (functions.map DeclHOL.function)) := by
+  induction functions generalizing code with
+  | nil =>
+    apply HolFiniteMapExact.ext
+    funext key
+    rfl
+  | cons f fs ih =>
+    simp only [List.foldl_cons,List.map_cons,functionsHOL,ih]
+    apply HolFiniteMapExact.ext
+    funext key
+    simp only [HolFiniteMapExact.lookup_updateList,FUPDATE_LIST_cons]
+    rfl
+
+open Classical in
+/-- Function-only declarations have the semantics of their initialized code
+table, with the shape check calculated directly from the declarations. -/
+theorem source_function_declarations_semantics {width : Nat} {σ : Type} [NeZero width]
+    (state : PanSemStateFiniteExact width σ) (start : MlS) (functions : List (FunDeclHOL width))
+    (wellFormed : functions.all (fun f =>
+      f.params.all (fun p => isWfShapeExactHOL ([] : StructContextExact) p.2) &&
+        isWfShapeExactHOL ([] : StructContextExact) f.returnShape) = true) :
+    semanticsDecls state start (functions.map DeclHOL.function) =
+      semantics {state with structs := [], code :=
+        state.code.updateList (functionsHOL (functions.map DeclHOL.function))} start := by
+  have names : decsStcnamesHOLExact [] (functions.map DeclHOL.function) = some [] := by
+    clear wellFormed
+    induction functions with
+    | nil => rfl
+    | cons f fs ih => simpa [decsStcnamesHOLExact] using ih
+  have init := source_function_declarations_init {state with structs := []} functions wellFormed
+  simpa only [function_fold_code] using source_declarations_semantics state _ start _ [] names init
+
+open Classical in
+/-- With distinct function names, the initialized source code is exactly the
+reversed association-list table used by the call-aware frontend. -/
+theorem source_function_declarations_compiler_code {width : Nat} {σ : Type} [NeZero width]
+    (state : PanSemStateFiniteExact width σ) (functions : List (FunDeclHOL width))
+    (emptyCode : state.code = HolFiniteMapExact.empty)
+    (wellFormed : functions.all (fun f =>
+      f.params.all (fun p => isWfShapeExactHOL state.structs p.2) &&
+        isWfShapeExactHOL state.structs f.returnShape) = true)
+    (unique : ((functionsHOL (functions.map DeclHOL.function)).map Prod.fst).Nodup) :
+    evaluateDeclsHOLFinite state (functions.map DeclHOL.function) = some
+      {state with code := (HolFiniteMapExact.empty.updateList
+        (functionsHOL (functions.map DeclHOL.function)).reverse)} := by
+  have init := source_function_declarations_init state functions wellFormed
+  rw [function_fold_code,emptyCode,updateList_reverse_nodup _ unique] at init
+  exact init
+
+theorem simpFunctions {width : Nat} [NeZero width] (fs : List (FunDeclHOL width)) :
+    panSimpDeclsHOL (fs.map DeclHOL.function) =
+      (fs.map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function := by
+  induction fs with
+  | nil => simp [panSimpDeclsHOL]
+  | cons f fs ih => simp [panSimpDeclsHOL,ih]
+
+/-- Initializing any well-formed function-only declaration list derives the
+whole-table relation to the initialized simplified declarations. -/
+theorem source_simp_function_table {width : Nat} {σ : Type} [NeZero width]
+    (state : PanSemStateFiniteExact width σ) (fs : List (FunDeclHOL width))
+    (empty : state.code = HolFiniteMapExact.empty)
+    (wf : fs.all (fun f => f.params.all (fun p => isWfShapeExactHOL state.structs p.2) &&
+      isWfShapeExactHOL state.structs f.returnShape) = true) :
+    let original := fs.foldl (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) state.code
+    let compiled := (fs.map (fun f => {f with body := panSimpCompileHOL f.body})).foldl
+      (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) state.code
+    PanSimp.stateRel {state with code := original} {state with code := compiled} compiled := by
+  let simplified := fs.map (fun f => {f with body := panSimpCompileHOL f.body})
+  let original := fs.foldl (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) state.code
+  let compiled := simplified.foldl (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) state.code
+  have wf' : simplified.all (fun f => f.params.all (fun p => isWfShapeExactHOL state.structs p.2) &&
+      isWfShapeExactHOL state.structs f.returnShape) = true := by
+    simpa [simplified,List.all_map] using wf
+  have sourceInit := source_function_declarations_init state fs wf
+  have targetInit := source_function_declarations_init state simplified wf'
+  let dec : DecidablePred state.memaddrs := fun a => Classical.propDecidable _
+  have codeRel : PanSimp.CodeRel state.code state.code := by
+    rw [empty]
+    constructor <;> simp [HolFiniteMapExact.lookup_empty]
+  obtain ⟨c,targetRun,rel⟩ := PanSimp.evaluateDeclsCodeRel (fs.map DeclHOL.function) state dec state.code
+    {state with code := original} codeRel sourceInit
+  change @evaluateDeclsHOLFinite width σ _ state dec (panSimpDeclsHOL (fs.map DeclHOL.function)) = some {state with code := c} at targetRun
+  rw [simpFunctions] at targetRun
+  change evaluateDeclsHOLFinite state (simplified.map DeclHOL.function) = _ at targetRun
+  rw [targetInit] at targetRun
+  have eq : {state with code := c} = {state with code := compiled} := by
+    simpa [compiled] using (Option.some.inj targetRun).symm
+  have ceq : c = compiled := congrArg (fun s : PanSemStateFiniteExact width σ => s.code) eq
+  subst c
+  exact ⟨rfl,rel⟩
+/-- A supported run is preserved by simplifying the initialized function table. -/
+theorem callSupported_initialized_simp_run {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) {σ : Type}
+    (state sourceFinal : PanSemStateFiniteExact 64 σ) (functions : List (FunDeclHOL 64))
+    (empty : state.code = HolFiniteMapExact.empty)
+    (wf : functions.all (fun f => f.params.all (fun p => isWfShapeExactHOL state.structs p.2) &&
+      isWfShapeExactHOL state.structs f.returnShape) = true)
+    (result : Option (PanSemResultExact 64))
+    (run : let code := functions.foldl (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) state.code
+      ({state with code := code} : PanSemStateFiniteExact 64 σ).evaluateHOLFiniteState (progToHOL program) = (result,sourceFinal))
+    (nonerror : result ≠ some .error) :
+    let code := (functions.map (fun f => {f with body := panSimpCompileHOL f.body})).foldl
+      (fun code f => code.update (f.name,(f.params,f.body,f.returnShape))) state.code
+    ∃ targetFinal, ({state with code := code} : PanSemStateFiniteExact 64 σ).evaluateHOLFiniteState
+        (progToHOL (panSimpProg program)) = (result,targetFinal) ∧
+      PanSimp.stateRel sourceFinal targetFinal targetFinal.code := by
+  exact callSupported_panSimp_run supported _ sourceFinal _ result run nonerror
+    (source_simp_function_table state functions empty wf)
+/-- Simplification leaves the function names unchanged. -/
+theorem simp_function_names {width : Nat} [NeZero width] (fs : List (FunDeclHOL width)) :
+    (functionsHOL ((fs.map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function)).map Prod.fst =
+      (functionsHOL (fs.map DeclHOL.function)).map Prod.fst := by
+  induction fs with
+  | nil => rfl
+  | cons f fs ih => simpa [functionsHOL,List.map_map] using congrArg (List.cons f.name) ih
+
+/-- Simplified function tables have the compiler relation, derived from their original declarations. -/
+theorem source_simp_function_code {width : Nat} {σ : Type} [NeZero width]
+    (state : PanSemStateFiniteExact width σ) (fs : List (FunDeclHOL width))
+    (empty : state.code = HolFiniteMapExact.empty)
+    (wf : fs.all (fun f => f.params.all (fun p => isWfShapeExactHOL state.structs p.2) &&
+      isWfShapeExactHOL state.structs f.returnShape) = true)
+    (unique : ((functionsHOL (fs.map DeclHOL.function)).map Prod.fst).Nodup) :
+    PanSimp.CodeRel
+      (HolFiniteMapExact.empty.updateList (functionsHOL (fs.map DeclHOL.function)).reverse)
+      (HolFiniteMapExact.empty.updateList (functionsHOL ((fs.map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function)).reverse) := by
+  have h := (source_simp_function_table state fs empty wf).2
+  rw [function_fold_code, function_fold_code, empty] at h
+  have unique' : ((functionsHOL ((fs.map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function)).map Prod.fst).Nodup := by
+    rw [simp_function_names]
+    exact unique
+  rw [updateList_reverse_nodup _ unique, updateList_reverse_nodup _ unique'] at h
+  exact h
 end SteppedFlapjack.Concrete

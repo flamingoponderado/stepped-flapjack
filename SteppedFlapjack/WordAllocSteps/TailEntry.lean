@@ -251,28 +251,6 @@ theorem regTail_noInstall {p : WordLangProgHOL (BitVec width)} (shape : RegTailS
     simp only [noInstallSubprogsHOL] at a b
     simpa only [noInstallSubprogsHOL,notCreatedSubprogsWithMemOp,Bool.and_eq_true] using And.intro a b
 
-/-- An explicit visit bound for a start call whose entry calls a bounded callee. -/
-theorem regTail_start_clock_bound (start : Nat) (entry : WordLangProgHOL (BitVec width)) (shape : RegTailShape entry)
-    (s : WordSemStateFiniteExact width C F) (value : WordLocW width) (K : Nat)
-    (lookup : sptLookup start s.code = some (1,entry)) (arg : getVar 0 s = some value)
-    (codeOk : WordProps.noInstallCode s.code)
-    (bodyBound : RegTailControlCodeBound entry s.code K) :
-    steps (.call none (some start) [0] none) s ≤ 1 + wordControlWeight entry * (K+1) * (s.clock+1) := by
-  have args : getVars [0] s = some [value] := by simp [WordSemStateFiniteExact.getVars,arg]
-  have found : wordSemFindCode (some start) [value] s.code s.stackSize =
-      some ([value],entry,sptLookup start s.stackSize) := by simp [wordSemFindCode,lookup]
-  by_cases clock : s.clock = 0
-  · rw [steps.eq_def]
-    simp [args,wordSemBadDestArgs,wordSemAddRetLoc,found,clock]
-  · rw [steps_call_tail (some start) [0] s [value] [value] (sptLookup start s.stackSize) entry
-      args (by simp [wordSemBadDestArgs]) found clock]
-    have bound := regTail_control_bound shape (callEnv [value] (sptLookup start s.stackSize) (decClock s)) K
-      (regTail_noInstall shape) codeOk bodyBound
-    change steps entry (callEnv [value] (sptLookup start s.stackSize) (decClock s)) ≤
-      (wordControlWeight entry * (K+1)) * (s.clock-1+1) at bound
-    have scale := Nat.mul_le_mul_left (wordControlWeight entry * (K+1)) (show s.clock-1+1 ≤ s.clock+1 by omega)
-    omega
-
 /-- Register allocation preserves a completed direct-entry execution and
 bounds its visits by the allocated syntax, clock, and reached callee size. -/
 theorem wordAlloc_tailEntry_correct_with_steps (fc : Nat) (ac : Flapjack.Compiler.Encoders.Asm.AsmConfigExact width)

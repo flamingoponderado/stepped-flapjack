@@ -1,6 +1,7 @@
 import SteppedFlapjack.CrepToLoopSteps.BodySimulation
 import SteppedFlapjack.CrepToLoopSteps.BranchExtraClock
 import SteppedFlapjack.CrepToLoopSteps.ConditionZero
+import SteppedFlapjack.LoopLiveSteps.TailEntryCode
 
 /-! Continuing iterations for general branch conditions. -/
 namespace SteppedFlapjack.CrepToLoopSteps
@@ -171,7 +172,9 @@ theorem branchCondition_continue_run
     (body : CrepProgHOL width) (bodyCost : Nat → Nat)
     (source sourcePost : CrepSemHOLState width F) (bodyResult : Option (CrepResultHOLExact width))
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet)
-    (bodySim : @BodySimulation width _ F body ctxt live bodyCost)
+    (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (tableGood : tableOk target.code)
+    (bodySim : BodySimulationAt body ctxt live (decClockCrepSemHOL source) bodyCost tableOk)
     (w : BitVec width) (guard : evalCrepSemHOLExp source condition = some (.word w))
     (nonzero : w ≠ 0) (clockNonzero : source.clock ≠ 0)
     (bodyRun : evalCrepSemHOLProgExact (decClockCrepSemHOL source) body = (bodyResult,sourcePost))
@@ -187,7 +190,7 @@ theorem branchCondition_continue_run
       crepToLoopStateRelExact sourcePost post ∧
       crepToLoopMemRelHOLExact sourcePost.memory post.memory sourcePost.memaddrs ∧
       crepToLoopGlobalsRelHOLExact sourcePost.globals post.globals ∧
-      crepToLoopCodeRelExact ctxt sourcePost.code post.code ∧
+      crepToLoopCodeRelExact ctxt sourcePost.code post.code ∧ post.code = target.code ∧
       crepToLoopLocalsRelExact ctxt live sourcePost.locals post.locals ∧
       ∀ k, evaluate (compileHOLExact ctxt live (.while condition body))
           {target with clock := target.clock + (extra+k)} =
@@ -217,12 +220,21 @@ theorem branchCondition_continue_run
   have bodyLocals : crepToLoopLocalsRelExact ctxt live (decClockCrepSemHOL source).locals bodyTarget.locals := by
     exact condition_locals_rel_insert_of ctxt live outLive source.locals _ afterCondition.locals initialLocals exprLocals hsub next hfresh _
   have bodyNonerror : bodyResult ≠ some .error := by rcases continues with h | h <;> simp [h]
+  have codeSame : bodyTarget.code = target.code := by
+    have h := SteppedFlapjack.LoopLiveSteps.evaluate_code (loopNestedSeqHOL code)
+      {initial with clock := initial.clock+ck} afterCondition none exprRun
+    simpa [bodyTarget,setVar,initial] using h
+  have bodyTable : tableOk bodyTarget.code := by rw [codeSame]; exact tableGood
   obtain ⟨bodyExtra,out,post,hbody,hstate,hmem,hglobals,hcode,hresult,hlocals,hbodyBound⟩ :=
-    bodySim (decClockCrepSemHOL source) sourcePost bodyResult
-      bodyTarget bodyRun bodyNonerror exprState exprMem exprGlobals exprCode bodyLocals
+    bodySim sourcePost bodyResult
+      bodyTarget bodyRun bodyNonerror exprState exprMem exprGlobals exprCode bodyTable bodyLocals
+  have postCode : post.code = target.code := by
+    have h := SteppedFlapjack.LoopLiveSteps.evaluate_code (compileHOLExact ctxt live body)
+      {bodyTarget with clock := bodyTarget.clock+bodyExtra} post out hbody
+    exact h.trans codeSame
   have hlocals' : crepToLoopLocalsRelExact ctxt live sourcePost.locals post.locals := by
     rcases continues with h | h <;> simpa [h,localsResultRel] using hlocals
-  refine ⟨code,value,next,outLive,ck+bodyExtra,post,compiled,by omega,hstate,hmem,hglobals,hcode,hlocals',?_⟩
+  refine ⟨code,value,next,outLive,ck+bodyExtra,post,compiled,by omega,hstate,hmem,hglobals,hcode,postCode,hlocals',?_⟩
   intro k
   let B := branchConditionWhileBody ctxt live code value next body
   have hcomp : compileHOLExact ctxt live (.while condition body) = .loop live B live := by
@@ -283,7 +295,9 @@ theorem branchCondition_break_run
     (body : CrepProgHOL width) (bodyCost : Nat → Nat)
     (source sourcePost : CrepSemHOLState width F)
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet)
-    (bodySim : @BodySimulation width _ F body ctxt live bodyCost)
+    (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (tableGood : tableOk target.code)
+    (bodySim : BodySimulationAt body ctxt live (decClockCrepSemHOL source) bodyCost tableOk)
     (w : BitVec width) (guard : evalCrepSemHOLExp source condition = some (.word w))
     (nonzero : w ≠ 0) (clockNonzero : source.clock ≠ 0)
     (bodyRun : evalCrepSemHOLProgExact (decClockCrepSemHOL source) body = (some (.break 0),sourcePost))
@@ -326,9 +340,14 @@ theorem branchCondition_break_run
   let bodyTarget := setVar next (.word w) afterCondition
   have bodyLocals : crepToLoopLocalsRelExact ctxt live (decClockCrepSemHOL source).locals bodyTarget.locals := by
     exact condition_locals_rel_insert_of ctxt live outLive source.locals _ afterCondition.locals initialLocals exprLocals hsub next hfresh _
+  have codeSame : bodyTarget.code = target.code := by
+    have h := SteppedFlapjack.LoopLiveSteps.evaluate_code (loopNestedSeqHOL code)
+      {initial with clock := initial.clock+ck} afterCondition none exprRun
+    simpa [bodyTarget,setVar,initial] using h
+  have bodyTable : tableOk bodyTarget.code := by rw [codeSame]; exact tableGood
   obtain ⟨bodyExtra,out,post,hbody,hstate,hmem,hglobals,hcode,hresult,hlocals,hbodyBound⟩ :=
-    bodySim (decClockCrepSemHOL source) sourcePost (some (.break 0))
-      bodyTarget bodyRun (by simp) exprState exprMem exprGlobals exprCode bodyLocals
+    bodySim sourcePost (some (.break 0))
+      bodyTarget bodyRun (by simp) exprState exprMem exprGlobals exprCode bodyTable bodyLocals
   have outEq : out = some (.break 0) := by simpa [resultToLoop] using hresult
   rw [outEq] at hbody
   have hlocals' : crepToLoopLocalsRelExact ctxt live sourcePost.locals post.locals := by
@@ -397,7 +416,9 @@ theorem branchCondition_exit_run
     (body : CrepProgHOL width) (bodyCost : Nat → Nat)
     (source sourcePost : CrepSemHOLState width F) (r : CrepResultHOLExact width)
     (target : LoopSemStateFiniteExact width F) (ctxt : CrepToLoopContextExact) (live : NumSet)
-    (bodySim : @BodySimulation width _ F body ctxt live bodyCost)
+    (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (tableGood : tableOk target.code)
+    (bodySim : BodySimulationAt body ctxt live (decClockCrepSemHOL source) bodyCost tableOk)
     (w : BitVec width) (guard : evalCrepSemHOLExp source condition = some (.word w))
     (nonzero : w ≠ 0) (clockNonzero : source.clock ≠ 0)
     (bodyRun : evalCrepSemHOLProgExact (decClockCrepSemHOL source) body = (some r,sourcePost))
@@ -441,9 +462,14 @@ theorem branchCondition_exit_run
   let bodyTarget := setVar next (.word w) afterCondition
   have bodyLocals : crepToLoopLocalsRelExact ctxt live (decClockCrepSemHOL source).locals bodyTarget.locals := by
     exact condition_locals_rel_insert_of ctxt live outLive source.locals _ afterCondition.locals initialLocals exprLocals hsub next hfresh _
+  have codeSame : bodyTarget.code = target.code := by
+    have h := SteppedFlapjack.LoopLiveSteps.evaluate_code (loopNestedSeqHOL code)
+      {initial with clock := initial.clock+ck} afterCondition none exprRun
+    simpa [bodyTarget,setVar,initial] using h
+  have bodyTable : tableOk bodyTarget.code := by rw [codeSame]; exact tableGood
   obtain ⟨bodyExtra,out,post,hbody,hstate,hmem,hglobals,hcode,hresult,hlocals,hbodyBound⟩ :=
-    bodySim (decClockCrepSemHOL source) sourcePost (some r)
-      bodyTarget bodyRun (by simpa using notError) exprState exprMem exprGlobals exprCode bodyLocals
+    bodySim sourcePost (some r)
+      bodyTarget bodyRun (by simpa using notError) exprState exprMem exprGlobals exprCode bodyTable bodyLocals
   obtain ⟨x,outEq⟩ : ∃ x, out = some x := by
     cases r <;> simp only [resultToLoop] at hresult <;> exact ⟨_,hresult⟩
   have x0 : x ≠ .continue 0 := by

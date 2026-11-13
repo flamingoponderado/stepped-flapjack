@@ -1,4 +1,4 @@
-import SteppedFlapjack.Concrete.CountedShape
+import SteppedFlapjack.Concrete.CountedSource
 import SteppedFlapjack.Concrete.BranchingLoop
 import SteppedFlapjack.Concrete.CountedScalar
 import SteppedFlapjack.PanToCrepSteps.CountedInvert
@@ -84,14 +84,19 @@ example : ∃ word,
   have result := counted_scalar_initializer_invert p (exactState branchingHOL) (source_related _) (source_ranged _) words
     (.const 2) (Scalar.const (scope := []) _) (by simp [ExpByteRanged]) (.word 2) 1 run
   simpa [expToHOL] using result
-/-- The general outcome classification applies to the two-branch loop run. -/
+/-- The counted bridge applies to the two-branch loop run. -/
 example (context : PanValueFfiContext (RiscV.Word 64)) (primitive : PanPrimitiveHandler (RiscV.Word 64))
     (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :
-    BasicControl (.returned (executableState (progToHOL branchingLoop)).locals
-      (executableState (progToHOL branchingLoop)).globals (executableState (progToHOL branchingLoop)).memory
-      (executableState (progToHOL branchingLoop)).ffi [.word 7]) := by
-  exact supported_counted_basic context primitive handler (executableState (progToHOL branchingLoop)).structs []
-    (executableState (progToHOL branchingLoop)).baseAddress (executableState (progToHOL branchingLoop)).topAddress
-    (some (panSemBitVec64MemoryAccess (executableState (progToHOL branchingLoop)))) 7 branchingLoop_supported.1
-    _ _ _ _ _ 23 (branchingLoop_source_run context primitive handler)
+    ∃ final, (exactState (progToHOL branchingLoop)).evaluateHOLFiniteState (progToHOL branchingLoop) =
+      (some (.returned (.val (.word 7))),final) ∧
+      controlSteps (progToHOL branchingLoop) (exactState (progToHOL branchingLoop)) ≤ 23 := by
+  have words : WordLocals (executableState (progToHOL branchingLoop)).locals := by
+    simpa [executableState,singleEntrySourceProduction,sourceProduction] using wordLocals_empty
+  have budget : 23 ≤ (exactState (progToHOL branchingLoop)).clock := by decide
+  obtain ⟨result,final,hol,outcome,bound,_⟩ := supported_counted_source branchingLoop_supported.1
+    (executableState (progToHOL branchingLoop)) (exactState (progToHOL branchingLoop))
+    (source_related _) (source_ranged _) words branchingLoop_supported.2 context primitive handler [] 7 23 _
+    (branchingLoop_source_run context primitive handler) budget
+  cases outcome with
+  | returned _ _ _ _ _ _ _ _ _ => exact ⟨final,hol,by simpa [countedErrorBonus] using bound⟩
 end SteppedFlapjack.Test

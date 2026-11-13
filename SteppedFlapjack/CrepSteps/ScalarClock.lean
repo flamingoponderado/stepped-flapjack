@@ -133,4 +133,48 @@ theorem scalarProgram_clock_consumed {width : Nat} [NeZero width] {σ : Type}
           simp only [nz,false_and,if_false]
           omega
 
+/-- A reached call consumes at most one clock beyond its callee. -/
+theorem call_clock_consumed_from_body {width : Nat} [NeZero width] {σ : Type}
+    (ret : Option (List Nat)) (fname : Flapjack.Basis.Pure.MlString.MlString) (args : List (CrepExpHOL width))
+    (source post : CrepSemHOLState width σ) (values : List (HolWordLab width))
+    (params : List Nat) (body : CrepProgHOL width) (out : Option (CrepResultHOLExact width))
+    (hargs : args.mapM (evalCrepSemHOLExp source) = some values)
+    (found : source.code.lookup fname = some (params,body))
+    (arity : params.length = values.length) (distinct : params.Nodup)
+    (retDistinct : ∀ ns, ret = some ns → ns.Nodup) (clock : source.clock ≠ 0)
+    (bodyRun : evalCrepSemHOLProgExact (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}) body = (out,post))
+    (bodyBound : (decClockCrepSemHOL source).clock - post.clock ≤ steps body (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)})) :
+    let info := ret.map (fun ns => (ns,none))
+    source.clock - (evalCrepSemHOLProgExact source (.call info fname args)).2.clock ≤ steps (.call info fname args) source := by
+  have lookup : lookupCodeFiniteHOL source.code fname values values.length = some (body,HolFiniteMapExact.empty.updateList (params.zip values)) := by
+    simp [lookupCodeFiniteHOL,found,arity,distinct]
+  have bodyClock := evalCrepSemHOLProgExact_clock_le (decClockCrepSemHOL {source with locals := HolFiniteMapExact.empty.updateList (params.zip values)}) body
+  rw [bodyRun] at bodyClock
+  cases ret with
+  | none =>
+    have count := steps_call_tail fname args source values params body hargs found arity distinct clock
+    simp only [Option.map_none]
+    rw [count,evalCrepSemHOLProgExact_call_holShape]
+    simp only [hargs,lookup,crepReturnInfoNodupError,if_false,clock]
+    simp only [decClockCrepSemHOL] at bodyRun ⊢
+    rw [bodyRun]
+    cases out with
+    | none => simp only [decClockCrepSemHOL] at *; omega
+    | some r => cases r <;> simp only [CrepSemHOLState.emptyLocals,decClockCrepSemHOL] at * <;> omega
+  | some names =>
+    have nd := retDistinct names rfl
+    have count := steps_call_returning names fname args source values params body hargs found arity distinct nd clock
+    simp only [Option.map_some]
+    rw [count,evalCrepSemHOLProgExact_call_holShape]
+    simp only [hargs,lookup,crepReturnInfoNodupError,nd,not_true_eq_false,if_false,clock]
+    simp only [decClockCrepSemHOL] at bodyRun ⊢
+    rw [bodyRun]
+    cases out with
+    | none => simp only [decClockCrepSemHOL] at *; omega
+    | some r =>
+      cases r <;> simp only [CrepSemHOLState.emptyLocals,decClockCrepSemHOL] at *
+      all_goals repeat (first | split)
+      all_goals try (cases names.mapM source.locals.lookup <;> simp only <;> omega)
+      all_goals omega
+
 end SteppedFlapjack.CrepSteps

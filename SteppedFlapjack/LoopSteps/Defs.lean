@@ -174,6 +174,26 @@ theorem steps_call_tail {width : Nat} [NeZero width] {F : Type}
     omega
   simp only [get,found,Option.isSome_none,Bool.false_or,beq_iff_eq,nonzero,if_false,dif_pos smaller]
 
+/-- A reached, successful returning call runs its normal continuation. -/
+theorem evaluate_call_returning_success {width : Nat} [NeZero width] {F : Type}
+    (dest : Option Nat) (args names : List Nat) (live liveOut : NumSet)
+    (exception : Nat) (handler normal : HolLoopProg width) (s cut post : LoopSemStateFiniteExact width F)
+    (values returned : List (WordLocW width)) (env : Spt (WordLocW width)) (body : HolLoopProg width)
+    (get : getVars args s = some values) (found : findCode dest values s.code = some (env,body))
+    (distinct : names.Nodup) (cutRun : cutRes live (none,s) = (none,cut))
+    (bodyRun : evaluate body {cut with locals := env} = (some (.result returned),post))
+    (arity : returned.length = names.length) :
+    evaluate (.call (some (names,live)) dest args (some (exception,handler,normal,liveOut))) s =
+      cutRes liveOut (evaluate normal (setVars names returned {post with locals := cut.locals})) := by
+  conv =>
+    lhs
+    rw [evaluate]
+  simp only [get,found,distinct,not_true_eq_false,if_false]
+  rw [cutRun]
+  simp only
+  rw [fix_clock_evaluate,bodyRun]
+  simp [arity]
+
 /-- A successful returning call counts the actual callee execution before any
 selected continuation. -/
 theorem steps_call_returning {width : Nat} [NeZero width] {F : Type}

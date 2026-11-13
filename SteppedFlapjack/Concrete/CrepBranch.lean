@@ -98,7 +98,4 @@ theorem branching_simp_program : panSimpProg branching = branching := by
 theorem branching_simp_source : panSimpSourceState branching (exactState branchingHOL) = exactState branchingHOL := by
   simp [panSimpSourceState,branching_simp_program,exactState,singleEntrySourceTemplate,← branching_hol_eq]
 
-theorem branching_simp_declarations : panSimpDeclsHOL (declarations branchingHOL) = declarations branchingHOL := by
-  simpa [← branching_hol_eq,branching_simp_program] using supported_panSimp_declarations branching branching_supported
-
 end SteppedFlapjack.Concrete

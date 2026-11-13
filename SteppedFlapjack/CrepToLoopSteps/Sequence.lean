@@ -1,5 +1,6 @@
 import SteppedFlapjack.CrepToLoopSteps.DirectLeaf
 import SteppedFlapjack.LoopSteps.Clock
+import SteppedFlapjack.LoopLiveSteps.TailEntryCode
 
 /-! Quantitative Crep-to-Loop simulation for direct leaves and sequences. -/
 namespace SteppedFlapjack.CrepToLoopSteps
@@ -27,9 +28,10 @@ theorem compile_directProgram {width : Nat} [NeZero width]
   | seq ha hb iha ihb =>
     simpa only [compileHOLExact] using LoopToWordSteps.DirectProgram.seq iha ihb
 
-/-- Semantic correctness and a twofold count bound at a fixed source state. -/
+/-- Semantic correctness and a visit bound at a fixed source state. -/
 def BoundPropertyAt {width : Nat} [NeZero width] {σ : Type}
-    (p : CrepProgHOL width) (source : CrepSemHOLState width σ) : Prop :=
+    (p : CrepProgHOL width) (source : CrepSemHOLState width σ) (factor : Nat := 2)
+    (tableOk : Spt (List Nat × HolLoopProg width) → Prop := fun _ => True) : Prop :=
   ∀ (result : Option (CrepResultHOLExact width)) (sourceFinal : CrepSemHOLState width σ)
     (target : LoopSemStateFiniteExact width σ) (ctxt : CrepToLoopContextExact) (live : NumSet),
     evalCrepSemHOLProgExact source p = (result,sourceFinal) → result ≠ some .error →
@@ -37,6 +39,7 @@ def BoundPropertyAt {width : Nat} [NeZero width] {σ : Type}
     crepToLoopMemRelHOLExact source.memory target.memory source.memaddrs →
     crepToLoopGlobalsRelHOLExact source.globals target.globals →
     crepToLoopCodeRelExact ctxt source.code target.code →
+    tableOk target.code →
     crepToLoopLocalsRelExact ctxt live source.locals target.locals →
     ∃ extra targetResult targetFinal,
       evaluate (compileHOLExact ctxt live p) {target with clock := target.clock + extra} =
@@ -48,15 +51,43 @@ def BoundPropertyAt {width : Nat} [NeZero width] {σ : Type}
       targetResult = resultToLoop result ∧
       localsResultRel ctxt live result sourceFinal targetFinal ∧
       LoopSteps.steps (compileHOLExact ctxt live p) {target with clock := target.clock + extra} ≤
-        2 * CrepSteps.steps p source
+        factor * CrepSteps.steps p source
+
+/-- A visit bound remains valid when its program-dependent factor grows. -/
+theorem BoundPropertyAt.mono {width : Nat} [NeZero width] {σ : Type}
+    (p : CrepProgHOL width) (source : CrepSemHOLState width σ) (small large : Nat)
+    (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (le : small ≤ large) (bound : BoundPropertyAt p source small tableOk) : BoundPropertyAt p source large tableOk := by
+  intro result sourceFinal target ctxt live run nonerror stateRel memRel globalsRel codeRel tableGood localsRel
+  obtain ⟨extra,targetResult,targetFinal,he,hs,hm,hg,hc,hr,hl,cost⟩ :=
+    bound result sourceFinal target ctxt live run nonerror stateRel memRel globalsRel codeRel tableGood localsRel
+  exact ⟨extra,targetResult,targetFinal,he,hs,hm,hg,hc,hr,hl,
+    Nat.le_trans cost (Nat.mul_le_mul_right _ le)⟩
+
+/-- Existing bounds remain valid when the target-table condition is strengthened. -/
+theorem BoundPropertyAt.restrict {width : Nat} [NeZero width] {σ : Type}
+    (p : CrepProgHOL width) (source : CrepSemHOLState width σ) (factor : Nat)
+    (old new : Spt (List Nat × HolLoopProg width) → Prop)
+    (h : ∀ code, new code → old code) (bound : BoundPropertyAt p source factor old) :
+    BoundPropertyAt p source factor new := by
+  intro result sourceFinal target ctxt live run nonerror stateRel memRel globalsRel codeRel tableGood localsRel
+  exact bound result sourceFinal target ctxt live run nonerror stateRel memRel globalsRel codeRel (h _ tableGood) localsRel
 
 /-- Sequential composition preserves the quantitative correctness property. -/
 theorem boundedSeq {width : Nat} [NeZero width] {σ : Type}
-    (a b : CrepProgHOL width) (shapeA : DirectProgram a)
-    (source : CrepSemHOLState width σ)
-    (first : BoundPropertyAt a source)
-    (second : ∀ middle : CrepSemHOLState width σ, BoundPropertyAt b middle) : BoundPropertyAt (.seq a b) source := by
-  intro result sourceFinal target ctxt live run nonerror stateRel memRel globalsRel codeRel localsRel
+    (a b : CrepProgHOL width) (source : CrepSemHOLState width σ) (factor : Nat) (positive : 1 ≤ factor)
+    (tableOk : Spt (List Nat × HolLoopProg width) → Prop)
+    (stepShift : ∀ (ctxt : CrepToLoopContextExact) (live : NumSet)
+      (target middle : LoopSemStateFiniteExact width σ) (extra : Nat),
+      tableOk target.code →
+      evaluate (compileHOLExact ctxt live a) target = (none,middle) →
+      LoopSteps.steps (compileHOLExact ctxt live a) {target with clock := target.clock + extra} =
+        LoopSteps.steps (compileHOLExact ctxt live a) target)
+    (first : BoundPropertyAt a source factor tableOk)
+    (second : ∀ middle : CrepSemHOLState width σ,
+      evalCrepSemHOLProgExact source a = (none,middle) → BoundPropertyAt b middle factor tableOk) :
+    BoundPropertyAt (.seq a b) source factor tableOk := by
+  intro result sourceFinal target ctxt live run nonerror stateRel memRel globalsRel codeRel tableGood localsRel
   have sourceSeq := run
   rw [evalCrepSemHOLProgExact_seq_holShape] at sourceSeq
   rcases sourceFirst : evalCrepSemHOLProgExact source a with ⟨firstResult,middle⟩
@@ -66,17 +97,22 @@ theorem boundedSeq {width : Nat} [NeZero width] {σ : Type}
     simp only at sourceSeq
     obtain ⟨firstExtra,firstTargetResult,firstTarget,firstRun,firstState,firstMem,
       firstGlobals,firstCode,firstResultMap,firstLocals,firstSteps⟩ :=
-      first none middle target ctxt live sourceFirst (by simp) stateRel memRel globalsRel codeRel localsRel
+      first none middle target ctxt live sourceFirst (by simp) stateRel memRel globalsRel codeRel tableGood localsRel
     have firstNone : firstTargetResult = none := by simpa [resultToLoop] using firstResultMap
     subst firstTargetResult
+    have codeSame : firstTarget.code = target.code := by
+      have h := SteppedFlapjack.LoopLiveSteps.evaluate_code (compileHOLExact ctxt live a)
+        {target with clock := target.clock + firstExtra} firstTarget none firstRun
+      exact h
+    have firstTable : tableOk firstTarget.code := by rw [codeSame]; exact tableGood
     obtain ⟨secondExtra,targetResult,targetFinal,secondRun,secondState,secondMem,
       secondGlobals,secondCode,secondResultMap,secondLocals,secondSteps⟩ :=
-      second middle result sourceFinal firstTarget ctxt live sourceSeq nonerror firstState firstMem
-        firstGlobals firstCode firstLocals
+      second middle sourceFirst result sourceFinal firstTarget ctxt live sourceSeq nonerror firstState firstMem
+        firstGlobals firstCode firstTable firstLocals
     have firstLift := evaluate_add_clock_eq (compileHOLExact ctxt live a)
       {target with clock := target.clock + firstExtra} none firstTarget secondExtra firstRun (by simp)
-    have stepLift := LoopSteps.directProgram_steps_add_clock (compile_directProgram shapeA ctxt live)
-      {target with clock := target.clock + firstExtra} firstTarget none firstRun (by simp) secondExtra
+    have stepLift := stepShift ctxt live {target with clock := target.clock + firstExtra} firstTarget secondExtra
+      (by simpa using tableGood) firstRun
     have sourceCount := CrepSteps.steps_seq a b source
     rw [sourceFirst] at sourceCount
     have targetCount := LoopSteps.steps_seq (compileHOLExact ctxt live a) (compileHOLExact ctxt live b)
@@ -95,9 +131,9 @@ theorem boundedSeq {width : Nat} [NeZero width] {σ : Type}
       exact secondRun
     · rw [firstLift',stepLift'] at targetCount
       simp only at sourceCount targetCount
-      simpa only [compileHOLExact] using (by omega :
+      simpa only [compileHOLExact] using (by rw [sourceCount]; simp only [Nat.mul_add, Nat.mul_one]; omega :
         LoopSteps.steps (.seq (compileHOLExact ctxt live a) (compileHOLExact ctxt live b))
-          {target with clock := target.clock + (firstExtra + secondExtra)} ≤ 2 * CrepSteps.steps (.seq a b) source)
+          {target with clock := target.clock + (firstExtra + secondExtra)} ≤ factor * CrepSteps.steps (.seq a b) source)
   | some firstValue =>
     have pair : (some firstValue,middle) = (result,sourceFinal) := by simpa using sourceSeq
     have ⟨resultEq,finalEq⟩ := Prod.mk.inj pair
@@ -107,7 +143,7 @@ theorem boundedSeq {width : Nat} [NeZero width] {σ : Type}
     obtain ⟨extra,targetResult,targetFinal,targetRun,finalState,finalMem,finalGlobals,
       finalCode,resultMap,finalLocals,bound⟩ :=
       first (some firstValue) middle target ctxt live sourceFirst firstNonerror stateRel memRel
-        globalsRel codeRel localsRel
+        globalsRel codeRel tableGood localsRel
     have targetSome : targetResult ≠ none := by
       rw [resultMap]
       cases firstValue <;> simp [resultToLoop]
@@ -126,9 +162,9 @@ theorem boundedSeq {width : Nat} [NeZero width] {σ : Type}
       | none => exact (targetSome rfl).elim
       | some r =>
         simp only at sourceCount targetCount
-        simpa only [compileHOLExact] using (by omega :
+        simpa only [compileHOLExact] using (by rw [sourceCount]; simp only [Nat.mul_add, Nat.mul_one]; omega :
           LoopSteps.steps (.seq (compileHOLExact ctxt live a) (compileHOLExact ctxt live b))
-            {target with clock := target.clock + extra} ≤ 2 * CrepSteps.steps (.seq a b) source)
+            {target with clock := target.clock + extra} ≤ factor * CrepSteps.steps (.seq a b) source)
 
 /-- Quantitative correctness for direct Crep programs, with no conjecture
 assumptions about their subprograms. -/
@@ -137,13 +173,13 @@ theorem directProgram_correct_with_steps {width : Nat} [NeZero width] {σ : Type
     ∀ source : CrepSemHOLState width σ, BoundPropertyAt p source := by
   induction shape with
   | leaf leaf =>
-    intro source result sourceFinal target ctxt live run nonerror stateRel memRel globalsRel codeRel localsRel
+    intro source result sourceFinal target ctxt live run nonerror stateRel memRel globalsRel codeRel _ localsRel
     obtain ⟨extra,targetResult,targetFinal,he,hs,hm,hg,hc,hr,hl,steps⟩ :=
       directLeaf_correct_with_steps _ leaf source sourceFinal result target ctxt live run nonerror
         stateRel memRel globalsRel codeRel localsRel
     exact ⟨extra,targetResult,targetFinal,he,hs,hm,hg,hc,hr,hl,by omega⟩
   | returnNil =>
-    intro source result sourceFinal target ctxt live run nonerror stateRel memRel globalsRel codeRel localsRel
+    intro source result sourceFinal target ctxt live run nonerror stateRel memRel globalsRel codeRel _ localsRel
     obtain ⟨extra,targetResult,targetFinal,he,hs,hm,hg,hc,hr,hl⟩ :=
       crepToLoopNcompileCorrectOf (.return []) source result sourceFinal target ctxt live run nonerror
         stateRel memRel globalsRel codeRel localsRel
@@ -154,6 +190,9 @@ theorem directProgram_correct_with_steps {width : Nat} [NeZero width] {σ : Type
       LoopSteps.steps_seq, evaluate, LoopSemStateFiniteExact.getVars, LoopSteps.steps_leaf]
   | @seq a b ha hb iha ihb =>
     intro source
-    exact boundedSeq a b ha source (iha source) ihb
+    apply boundedSeq a b source 2 (by omega) (fun _ => True) ?_ (iha source) (fun middle _ => ihb middle)
+    intro ctxt live target middle extra _ run
+    exact LoopSteps.directProgram_steps_add_clock (compile_directProgram ha ctxt live)
+      target middle none run (by simp) extra
 
 end SteppedFlapjack.CrepToLoopSteps

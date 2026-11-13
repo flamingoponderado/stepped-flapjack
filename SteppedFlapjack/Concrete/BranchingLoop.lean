@@ -10,7 +10,7 @@ def branchingLoop : Prog (RiscV.Word 64) :=
   (.ite (.cmp .equal (.var .local "x") (.const 2))
    (.assign .local "x" (.const 1)) (.assign .local "x" (.const 0)))) (.return (.const 7)))
 
-theorem branchingLoop_supported : Supported branchingLoop := by
+theorem branchingLoop_supported : CallFreeSupported branchingLoop := by
   constructor
   · exact .decl "x" (.const _) (.seq
       (.while (.local "x" (by simp)) (.ite
@@ -60,9 +60,5 @@ theorem branchingLoop_simp_program : panSimpProg branchingLoop = branchingLoop :
 theorem branchingLoop_simp_source :
     panSimpSourceState branchingLoop (exactState (progToHOL branchingLoop)) = exactState (progToHOL branchingLoop) := by
   simp [panSimpSourceState,branchingLoop_simp_program,exactState,singleEntrySourceTemplate]
-
-theorem branchingLoop_simp_declarations :
-    panSimpDeclsHOL (declarations (progToHOL branchingLoop)) = declarations (progToHOL branchingLoop) := by
-  simpa [branchingLoop_simp_program] using supported_panSimp_declarations branchingLoop branchingLoop_supported
 
 end SteppedFlapjack.Concrete
