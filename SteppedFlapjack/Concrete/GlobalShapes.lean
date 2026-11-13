@@ -171,11 +171,11 @@ inductive GlobalValueExpression (shapes : VarName → Option ShapeHOL) (scope : 
 
 theorem globalScalarExpression_word {σ : Type} {shapes : VarName → Option ShapeHOL} {scope : List VarName} {expression : Exp (RiscV.Word 64)}
     (scalar : GlobalScalarExpression shapes scope expression) (production : PanSemState (RiscV.Word 64) (FfiState σ))
-    (words : WordLocals production.locals) (globals : GlobalHOLShapes shapes production.globals)
+    (words : ScopedWordLocals scope production.locals) (globals : GlobalHOLShapes shapes production.globals)
     (value : PanValue (RiscV.Word 64)) (evaluated : evalPanSemStateExp production expression = some value) : ∃ word, value = .word word := by
   rw [evalPanSemStateExp_64_eq_previous] at evaluated
   induction scalar generalizing value with
-  | «local» h => apply scalar_eval_word h production words value; simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
+  | «local» h => apply scalar_eval_word_scoped h production words value; simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
   | global h => apply globalRead_word h production globals value; simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
   | @load address ha ih =>
     simp only [evalPanValueExp] at evaluated
@@ -293,7 +293,7 @@ theorem counted_global_scalar_return_invert {σ : Type} {scope : List VarName} {
       PanSemStateRelExecRanged (panEmptyLocals production) ∧
       controlSteps (.return (expToHOL expression)) source ≤ count := by
   exact counted_word_return_invert production source rel ranged expression
-    (fun value evaluated => globalScalarExpression_word scalar production words globals value evaluated)
+    (fun value evaluated => globalScalarExpression_word scalar production words.scoped globals value evaluated)
     exprRanged value postLocals context primitive handler functions fuel count run
 
 end SteppedFlapjack.Concrete
