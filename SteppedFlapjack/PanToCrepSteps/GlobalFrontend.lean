@@ -105,6 +105,62 @@ theorem globalValue_list_compiled {width : Nat} [NeZero width]
   obtain ⟨field,fieldMember,rfl⟩ := member
   exact globalValue_compiled (h field fieldMember)
 
+/-- Global-aware scalar and value shapes are preserved through global lowering. -/
+theorem FieldPath.compilesFallback {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width)
+    {root e : ExpHOL width} {rootShape shape : ShapeHOL} (path : FieldPath root rootShape e shape)
+    (rootCompiled : compileExpExactHOLW ctxt root = ([.const 0],.one)) :
+    compileExpExactHOLW ctxt e = ([.const 0],.one) := by
+  induction path with
+  | root => exact rootCompiled
+  | field path index shape found ih => simp [compileExpExactHOLW,ih]
+
+theorem globalScalar_original_compiles {width : Nat} [NeZero width]
+    {globals : PanGlobalsContextExact width} {ctxt : PanToCrepContextExact width} {e : ExpHOL width}
+    (h : GlobalScalar globals ctxt e) : ∃ value, compileExpExactHOLW ctxt e = ([value],.one) := by
+  induction h with
+  | «local» h => exact frontendScalar_compile h
+  | globalWord name offset found => exact ⟨.const 0,by simp [compileExpExactHOLW]⟩
+  | globalPath name offset shapes found path =>
+    exact ⟨.const 0,path.compilesFallback ctxt (by simp [compileExpExactHOLW])⟩
+  | load address ih =>
+    obtain ⟨a,ha⟩ := ih
+    exact ⟨.load a,by simp [compileExpExactHOLW,ha,sizeOfShapeHOL,loadShapeBytesHOLW]⟩
+  | heapField fields index selected address ih =>
+    obtain ⟨a,ha⟩ := ih
+    obtain ⟨offset,eq⟩ := scalarPathField_compiles ctxt fields _ _ a ha (.field .root index .one selected)
+    exact ⟨_,eq⟩
+  | op op left right ihl ihr =>
+    obtain ⟨a,ha⟩ := ihl
+    obtain ⟨b,hb⟩ := ihr
+    exact ⟨.op op [a,b],by simp [compileExpExactHOLW,compileExpExactHOLWList,ha,hb,cexpHeads]⟩
+  | cmp op left right ihl ihr =>
+    obtain ⟨a,ha⟩ := ihl
+    obtain ⟨b,hb⟩ := ihr
+    exact ⟨.cmp op a b,by simp [compileExpExactHOLW,ha,hb]⟩
+  | shift op left right ihl ihr =>
+    obtain ⟨a,ha⟩ := ihl
+    obtain ⟨b,hb⟩ := ihr
+    exact ⟨.shift op a b,by simp [compileExpExactHOLW,ha,hb]⟩
+
+theorem globalValue_shape {width : Nat} [NeZero width]
+    {globals : PanGlobalsContextExact width} {ctxt : PanToCrepContextExact width} {e : ExpHOL width}
+    (h : GlobalValue globals ctxt e) :
+    (compileExpExactHOLW ctxt (compileExpExactHOL globals e)).2 = (compileExpExactHOLW ctxt e).2 := by
+  induction h with
+  | scalar h =>
+    obtain ⟨a,ha⟩ := globalScalar_original_compiles h
+    obtain ⟨b,hb⟩ := frontendScalar_compile (globalScalar_compiled h)
+    rw [ha,hb]
+  | «local» name shape registers found size => simp [compileExpExactHOL,compileExpExactHOLW,found]
+  | @tuple fields hs ih =>
+    simp only [compileExpExactHOL,compileExpExactHOLW]
+    rw [frontend_compileList_map,frontend_compileList_map,globalCompile_list_map]
+    simp only [List.map_map]
+    congr 1
+    apply List.map_congr_left
+    intro e member
+    exact ih e member
+
 /-- Programs with scalar globals and recursively nested scalar structs lower to the proven
     frontend. Layout lookup is tracked directly in the fragment. -/
 inductive GlobalFrontend {width : Nat} [NeZero width] (globals : PanGlobalsContextExact width) :
@@ -122,9 +178,7 @@ inductive GlobalFrontend {width : Nat} [NeZero width] (globals : PanGlobalsConte
   | assignGlobalStruct {ctxt name offset fields shapes} :
       globals.globals.lookup name = some (.comb shapes,offset) →
       (∀ e ∈ fields, GlobalValue globals ctxt e) → GlobalFrontend globals ctxt (.assign .global name (.rstruct fields))
-  | decl {ctxt name e body} : GlobalScalar globals ctxt e →
-      GlobalFrontend globals (scalarDeclContext ctxt name) body → GlobalFrontend globals ctxt (.dec name .one e body)
-  | declValue {ctxt name declared e body} : FrontendValue ctxt e →
+  | declValue {ctxt name declared e body} : GlobalValue globals ctxt e →
       GlobalFrontend globals (valueDeclContext ctxt name (compileExpExactHOLW ctxt e).2) body →
       GlobalFrontend globals ctxt (.dec name declared e body)
   | seq {ctxt a b} : GlobalFrontend globals ctxt a → GlobalFrontend globals ctxt b → GlobalFrontend globals ctxt (.seq a b)
@@ -132,6 +186,15 @@ inductive GlobalFrontend {width : Nat} [NeZero width] (globals : PanGlobalsConte
       GlobalFrontend globals ctxt (.ite e a b)
   | while {ctxt e body} : GlobalScalar globals ctxt e → GlobalFrontend globals ctxt body → GlobalFrontend globals ctxt (.while e body)
   | ret {ctxt e} : GlobalScalar globals ctxt e → GlobalFrontend globals ctxt (.return e)
+
+/-- Scalar global declarations are the one-word shaped case. -/
+theorem GlobalFrontend.decl {width : Nat} [NeZero width] {globals : PanGlobalsContextExact width}
+    {ctxt : PanToCrepContextExact width} {name : MlString} {e : ExpHOL width} {body : ProgHOL width}
+    (value : GlobalScalar globals ctxt e) (continuation : GlobalFrontend globals (scalarDeclContext ctxt name) body) :
+    GlobalFrontend globals ctxt (.dec name .one e body) := by
+  obtain ⟨compiled,hcompiled⟩ := globalScalar_original_compiles value
+  apply GlobalFrontend.declValue (.scalar value)
+  simpa [hcompiled, ← scalarDeclContext_eq_value] using continuation
 
 theorem GlobalFrontend.storeStruct {width : Nat} [NeZero width] {globals : PanGlobalsContextExact width}
     {ctxt : PanToCrepContextExact width} {a : ExpHOL width} {fields : List (ExpHOL width)}
@@ -158,15 +221,32 @@ theorem globalFrontend_compiled {width : Nat} [NeZero width]
   | assignGlobalStruct found fields =>
     simp only [compileProgExactHOL,found,compileExpExactHOL]
     exact .storeStruct (.op .sub .topAddr (.const _)) (globalValue_list_compiled _ fields)
-  | decl e body ih => simpa only [compileProgExactHOL] using FrontendProgram.decl (globalScalar_compiled e) ih
   | @declValue ctxt name declared e body he hb ih =>
     simp only [compileProgExactHOL]
-    apply FrontendProgram.declValue (globalCompile_frontendValue globals he)
-    simpa [globalCompile_frontendValue_shape globals he] using ih
+    apply FrontendProgram.declValue (globalValue_compiled he)
+    simpa [globalValue_shape he] using ih
   | seq a b iha ihb => simpa only [compileProgExactHOL] using FrontendProgram.seq iha ihb
   | ite e a b iha ihb => simpa only [compileProgExactHOL] using FrontendProgram.ite (globalScalar_compiled e) iha ihb
   | «while» e body ih => simpa only [compileProgExactHOL] using FrontendProgram.while (globalScalar_compiled e) ih
   | ret e => simpa only [compileProgExactHOL] using FrontendProgram.ret (globalScalar_compiled e)
+/-- A pair initialized from a global can be declared and projected. -/
+theorem globalPairDeclaration_supported {width : Nat} [NeZero width]
+    (globals : PanGlobalsContextExact width) (ctxt : PanToCrepContextExact width)
+    (name pair : MlString) (offset word : BitVec width)
+    (found : globals.globals.lookup name = some (.one,offset)) :
+    GlobalFrontend globals ctxt (.dec pair (.comb [.one,.one]) (.rstruct [.var .global name,.const word])
+      (.return (.rfield 1 (.var .local pair)))) := by
+  apply GlobalFrontend.declValue
+  · apply GlobalValue.tuple
+    intro e member
+    simp only [List.mem_cons,List.not_mem_nil,or_false] at member
+    rcases member with rfl | rfl
+    · exact .scalar (.globalWord name offset found)
+    · exact .scalar (.local (.const _))
+  · apply GlobalFrontend.ret
+    apply GlobalScalar.local
+    simpa [compileExpExactHOLW,compileExpExactHOLWList] using (localPairField_compiled ctxt pair).1
+
 /-- Every existing frontend program is admitted by the global-aware fragment. -/
 theorem GlobalFrontend.of_frontend {width : Nat} [NeZero width]
     (globals : PanGlobalsContextExact width) {ctxt : PanToCrepContextExact width} {p : ProgHOL width}
@@ -179,7 +259,7 @@ theorem GlobalFrontend.of_frontend {width : Nat} [NeZero width]
   | store a v => exact .store (.local a) (.local v)
   | storeValue a value => exact .storeValue (.local a) (GlobalValue.of_frontend globals value)
   | assign reg found e => exact .assignLocal reg found (.local e)
-  | declValue e body ih => exact .declValue e ih
+  | declValue e body ih => exact .declValue (GlobalValue.of_frontend globals e) ih
   | seq a b iha ihb => exact .seq iha ihb
   | ite e a b iha ihb => exact .ite (.local e) iha ihb
   | «while» e body ih => exact .while (.local e) ih
