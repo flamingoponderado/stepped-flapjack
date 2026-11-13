@@ -564,7 +564,7 @@ private theorem frontendProgramBound {width : Nat} [NeZero width]
   | storeValue a value => intro n st t k; exact programBound_static (.storeValue a value) rfl n st t k
   | store a v => intro n st t k; exact programBound_static (.store a v) rfl n st t k
   | assign reg found e => intro n st t k; exact programBound_static (.assign reg found e) rfl n st t k
-  | declValue e positive body ih => intro n st t k; exact programBound_decl _ _ _ _ _ n st t k e (ih n st t k)
+  | declValue e body ih => intro n st t k; exact programBound_decl _ _ _ _ _ n st t k e (ih n st t k)
   | seq a b iha ihb => intro n st t k; exact programBound_seq _ _ _ n st t k (frontendProgram_localised a) (iha n st t k) (ihb n st t k)
   | ite condition a b iha ihb => intro n st t k; exact programBound_ite _ _ _ _ n st t k condition (iha n st t k) (ihb n st t k)
   | «while» condition body ih => intro n st t k; exact programBound_while _ _ _ n st t k condition (frontendProgram_localised body) (ih n st t k)

@@ -17,9 +17,7 @@ inductive FrontendProgram {width : Nat} [NeZero width] : PanToCrepContextExact w
   | store {ctxt a v} : FrontendScalar ctxt a → FrontendScalar ctxt v → FrontendProgram ctxt (.store a v)
   | assign {ctxt name e} (reg : Nat) : ctxt.vars.lookup name = some (.one,[reg]) →
       FrontendScalar ctxt e → FrontendProgram ctxt (.assign .local name e)
-  /-- Nonempty until simplifier overhead accounts for zero-slot declarations. -/
   | declValue {ctxt name declared e body} : FrontendValue ctxt e →
-      0 < sizeOfShapeHOL (compileExpExactHOLW ctxt e).2 →
       FrontendProgram (valueDeclContext ctxt name (compileExpExactHOLW ctxt e).2) body →
       FrontendProgram ctxt (.dec name declared e body)
   | seq {ctxt a b} : FrontendProgram ctxt a → FrontendProgram ctxt b → FrontendProgram ctxt (.seq a b)
@@ -35,8 +33,7 @@ theorem FrontendProgram.decl {width : Nat} [NeZero width] {ctxt : PanToCrepConte
     FrontendProgram ctxt (.dec name .one e body) := by
   obtain ⟨compiled, hcompiled⟩ := frontendScalar_compile value
   apply FrontendProgram.declValue (.scalar value)
-  · simp [hcompiled]
-  · simpa [hcompiled, ← scalarDeclContext_eq_value] using continuation
+  simpa [hcompiled, ← scalarDeclContext_eq_value] using continuation
 
 theorem FrontendProgram.storeStruct {width : Nat} [NeZero width] {ctxt : PanToCrepContextExact width}
     {a : ExpHOL width} {fields : List (ExpHOL width)} (address : FrontendScalar ctxt a)
@@ -50,7 +47,7 @@ theorem frontendProgram_localised {width : Nat} [NeZero width] {ctxt : PanToCrep
   case storeValue ha hv =>
     simp only [localisedProgHOL,Bool.and_eq_true]
     exact ⟨frontendScalar_localised ha, frontendValue_localised hv⟩
-  case declValue he positive hb ih =>
+  case declValue he hb ih =>
     simpa [localisedProgHOL, frontendValue_localised he] using ih
   all_goals simp_all [localisedProgHOL] <;> aesop (add safe frontendScalar_localised)
 
@@ -133,7 +130,7 @@ theorem frontendLoopFree_static {width : Nat} [NeZero width] {ctxt : PanToCrepCo
         cases h : distinctListsHol [reg] (crepExpVarsW (crepExpOfHOL value)) <;> simp_all
       simp [compileProgExactHOLW,compileLocalAssignExactHOLW,compiled,found,overlap,nestedDecsHOL,crepNestedSeqHOL]
       exact .dec _ _ (.seq (.leaf _ rfl) (.leaf _ rfl))
-  | @declValue ctxt name declared e body he positive hb ih =>
+  | @declValue ctxt name declared e body he hb ih =>
     have bodyFree : noWhile body = true := by simpa [noWhile] using loopFree
     obtain ⟨values,shape,compiled,size⟩ := frontendValue_compile he
     rw [valueDecl_compiled ctxt name declared e body shape values compiled size]
@@ -177,8 +174,15 @@ theorem localPairDeclaration_supported {width : Nat} [NeZero width] (ctxt : PanT
     intro e member
     simp only [List.mem_cons,List.not_mem_nil,or_false] at member
     rcases member with rfl | rfl <;> exact .scalar (.const _)
-  · simp [compileExpExactHOLW,compileExpExactHOLWList,sizeOfShapeHOL,sizeOfShapesHOL]
   · apply FrontendProgram.ret
     simpa [compileExpExactHOLW,compileExpExactHOLWList] using (localPairField_compiled ctxt name).1
+
+/-- Empty struct declarations are supported without allocating registers. -/
+theorem emptyStructDeclaration_supported {width : Nat} [NeZero width]
+    (ctxt : PanToCrepContextExact width) (name : MlString) (word : BitVec width) :
+    FrontendProgram ctxt (.dec name (.comb []) (.rstruct []) (.return (.const word))) := by
+  apply FrontendProgram.declValue
+  · exact .tuple (by simp)
+  · exact .ret (.const word)
 
 end SteppedFlapjack.PanToCrepSteps

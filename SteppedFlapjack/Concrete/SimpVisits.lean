@@ -3,7 +3,7 @@ import SteppedFlapjack.CrepSteps.BranchStatic
 
 /-! pan_simp (seqAssoc) overhead charged to the SIMPLIFIED body weight. -/
 namespace SteppedFlapjack.Concrete.SimpVisits
-open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact SteppedFlapjack.PanToCrepSteps
+open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact Flapjack.Basis.Pure.MlString SteppedFlapjack.PanToCrepSteps
 open SteppedFlapjack.Concrete
 
 variable {width : Nat} [NeZero width] {σ : Type}
@@ -655,69 +655,106 @@ theorem callSupported_panSimp_controlSteps {scope : List VarName} {σ : Type}
   have h := seqAssoc_visits_delta (callSupportedIn_plain supported) .skip s
   simpa [prePart,isSkip,after,eval_seq_skip,delta,hwPre] using h
 
-private theorem frontend_hw {width : Nat} [NeZero width] {context : PanToCrepContextExact width} {p : ProgHOL width}
-    (shape : FrontendProgram context p) : hw p ≤ CrepSteps.statementWeight (compileProgExactHOLW context p) := by
-  induction shape with
-  | skip | «break» | «continue» | tick | store | storeValue | assign | ret =>
-    simpa [hw] using CrepSteps.statementWeight_pos (compileProgExactHOLW _ _)
-  | @declValue ctxt name declared e body he positive hb ih =>
-    obtain ⟨values,shape,compiled,size⟩ := frontendValue_compile he
-    have hpos : 0 < sizeOfShapeHOL shape := by simpa [compiled] using positive
-    rw [valueDecl_compiled ctxt name declared e body shape values compiled size]
-    rw [nestedDecs_weight _ _ _ (by simp [size])]
-    simp only [List.length_map,List.length_range,hw]
-    have child := ih
-    simp only [compiled] at child
+private theorem supportedIn_hw {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : SupportedIn scope program) : ∀ ctxt, ScopeRelation scope ctxt →
+    hw (progToHOL program) ≤ CrepSteps.statementWeight (compileProgExactHOLW ctxt (progToHOL program)) := by
+  induction supported with
+  | skip => intro ctxt rel; simpa [progToHOL,hw] using CrepSteps.statementWeight_pos (compileProgExactHOLW ctxt (.skip : ProgHOL 64))
+  | store a v => intro ctxt rel; simpa [progToHOL,hw] using CrepSteps.statementWeight_pos (compileProgExactHOLW ctxt (progToHOL (.store _ _)))
+  | assign name member e => intro ctxt rel; simpa [progToHOL,hw] using CrepSteps.statementWeight_pos (compileProgExactHOLW ctxt (progToHOL (.assign .local name _)))
+  | ret e => intro ctxt rel; simpa [progToHOL,hw] using CrepSteps.statementWeight_pos (compileProgExactHOLW ctxt (progToHOL (.return _)))
+  | decl name e body ih =>
+    intro ctxt rel
+    have he := scalar_frontend_shape rel e
+    obtain ⟨value,compiled⟩ := frontendDecl_compile ctxt (ofString name) (expToHOL _) (progToHOL _) he
+    have child := ih _ (rel.declare name)
+    simp only [progToHOL,shapeToHOL]
+    rw [compiled]
+    simp only [hw,CrepSteps.statementWeight]
     omega
-  | @seq ctxt a b ha hb iha ihb =>
-    simp only [hw,compileProgExactHOLW,CrepSteps.statementWeight]
+  | seq a b iha ihb =>
+    intro ctxt rel
+    have ha := iha ctxt rel
+    have hb := ihb ctxt rel
+    simp only [progToHOL,hw,compileProgExactHOLW,CrepSteps.statementWeight]
     omega
-  | @ite ctxt e a b he ha hb iha ihb =>
+  | ite e a b iha ihb =>
+    intro ctxt rel
+    have he := scalar_frontend_shape rel e
     obtain ⟨value,compiled⟩ := frontendScalar_compile he
-    simp only [hw,compileProgExactHOLW,compileIfExactHOLW,compiled,CrepSteps.statementWeight]
+    have ha := iha ctxt rel
+    have hb := ihb ctxt rel
+    simp only [progToHOL,hw,compileProgExactHOLW,compileIfExactHOLW,compiled,CrepSteps.statementWeight]
     omega
-  | @«while» ctxt e body he hb ih =>
+  | «while» e body ih =>
+    intro ctxt rel
+    have he := scalar_frontend_shape rel e
     obtain ⟨value,compiled⟩ := frontendScalar_compile he
-    simp only [hw,compileProgExactHOLW,compileWhileExactHOLW,compiled,CrepSteps.statementWeight]
+    have hb := ih ctxt rel
+    simp only [progToHOL,hw,compileProgExactHOLW,compileWhileExactHOLW,compiled,CrepSteps.statementWeight]
     omega
 
-private theorem callFrontend_hw {width : Nat} [NeZero width] {context : PanToCrepContextExact width} {p : ProgHOL width}
-    (shape : CallFrontend context p) : hw p ≤ CrepSteps.statementWeight (compileProgExactHOLW context p) := by
-  induction shape with
-  | base h => exact frontend_hw h
-  | tail => simpa [hw] using CrepSteps.statementWeight_pos (compileProgExactHOLW _ _)
-  | @decCall ctxt name sh fn args cont ha hb ih =>
+private theorem callSupportedIn_hw {scope : List VarName} {program : Prog (RiscV.Word 64)}
+    (supported : CallSupportedIn scope program) : ∀ ctxt, ScopeRelation scope ctxt →
+    hw (progToHOL program) ≤ CrepSteps.statementWeight (compileProgExactHOLW ctxt (progToHOL program)) := by
+  induction supported with
+  | base h => exact supportedIn_hw h
+  | tail name args shape =>
+    intro ctxt rel
+    simpa [progToHOL,hw] using CrepSteps.statementWeight_pos (compileProgExactHOLW ctxt (progToHOL (.call none name args)))
+  | call dest name args shape cont ih =>
+    intro ctxt rel
+    have child := ih _ (rel.declare dest)
+    simp only [progToHOL,shapeToHOL,hw]
     rw [decCall_statementWeight]
-    simp only [hw]
+    simp only [sizeOfShapeHOL]
+    have eq : decCallCtxt ctxt (ofString dest) .one = scalarDeclContext ctxt (ofString dest) := by
+      simp [decCallCtxt,decCallSlots,scalarDeclContext,sizeOfShapeHOL]
+    rw [eq]
     omega
-  | @decl ctxt name e body he hb ih =>
-    obtain ⟨value,compiled⟩ := frontendDecl_compile ctxt name e body he
+  | decl name e body ih =>
+    intro ctxt rel
+    have he := scalar_frontend_shape rel e
+    obtain ⟨value,compiled⟩ := frontendDecl_compile ctxt (ofString name) (expToHOL _) (progToHOL _) he
+    have child := ih _ (rel.declare name)
+    simp only [progToHOL,shapeToHOL]
     rw [compiled]
-    simp only [hw, CrepSteps.statementWeight]
+    simp only [hw,CrepSteps.statementWeight]
     omega
-  | @seq ctxt a b ha hb iha ihb =>
-    simp only [hw,compileProgExactHOLW,CrepSteps.statementWeight]
+  | seq a b iha ihb =>
+    intro ctxt rel
+    have ha := iha ctxt rel
+    have hb := ihb ctxt rel
+    simp only [progToHOL,hw,compileProgExactHOLW,CrepSteps.statementWeight]
     omega
-  | @ite ctxt e a b he ha hb iha ihb =>
+  | ite e a b iha ihb =>
+    intro ctxt rel
+    have he := scalar_frontend_shape rel e
     obtain ⟨value,compiled⟩ := frontendScalar_compile he
-    simp only [hw,compileProgExactHOLW,compileIfExactHOLW,compiled,CrepSteps.statementWeight]
+    have ha := iha ctxt rel
+    have hb := ihb ctxt rel
+    simp only [progToHOL,hw,compileProgExactHOLW,compileIfExactHOLW,compiled,CrepSteps.statementWeight]
     omega
-  | @«while» ctxt e body he hb ih =>
+  | «while» e body ih =>
+    intro ctxt rel
+    have he := scalar_frontend_shape rel e
     obtain ⟨value,compiled⟩ := frontendScalar_compile he
-    simp only [hw,compileProgExactHOLW,compileWhileExactHOLW,compiled,CrepSteps.statementWeight]
+    have hb := ih ctxt rel
+    simp only [progToHOL,hw,compileProgExactHOLW,compileWhileExactHOLW,compiled,CrepSteps.statementWeight]
     omega
+
 
 /-- Reassociation overhead is bounded by the actual generated Crep weight for
 call-aware frontend programs. -/
 theorem callSupported_panSimp_controlSteps_compiled {scope : List VarName} {σ : Type}
     {program : Prog (RiscV.Word 64)} (supported : CallSupportedIn scope program)
     (context : PanToCrepContextExact 64)
-    (shape : CallFrontend context (progToHOL (panSimpProg program))) (s : PanSemStateFiniteExact 64 σ) :
+    (relation : ScopeRelation scope context) (s : PanSemStateFiniteExact 64 σ) :
     controlSteps (progToHOL (panSimpProg program)) s ≤
       controlSteps (progToHOL program) s +
         CrepSteps.statementWeight (compileProgExactHOLW context (progToHOL (panSimpProg program))) := by
   have h := callSupported_panSimp_controlSteps supported s
-  have w := callFrontend_hw shape
+  have w := callSupportedIn_hw (callSupported_panSimp supported) context relation
   exact h.trans (Nat.add_le_add_left ((over_le _ _).trans w) _)
 
 /-- Compiled-code-only form: the overhead is at most the statement weight of
@@ -728,7 +765,7 @@ theorem supported_panSimp_controlSteps_compiled {σ : Type} (program : Prog (Ris
       controlSteps (progToHOL program) s +
         CrepSteps.statementWeight (compileProgExactHOLW context (progToHOL (panSimpProg program))) := by
   exact callSupported_panSimp_controlSteps_compiled (.base supported.1) context
-    (.base (supported_frontend_shape (supported_panSimp program supported).1 context)) s
+    (by intro name member; simp at member) s
 
 
 private theorem lookupMem {α β : Type} [BEq α] [LawfulBEq α]

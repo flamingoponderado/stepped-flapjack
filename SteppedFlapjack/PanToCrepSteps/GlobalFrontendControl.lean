@@ -340,7 +340,7 @@ private theorem frontendBound {g : PanGlobalsContextExact 64}
     intro σ source sourceFinal target result budget table run nonerror rel
     simp [compileProgExactHOL,found,controlSteps.eq_def]
   | decl e body ih => exact boundDecl _ .one ih
-  | declValue e positive body ih => exact boundDecl _ _ ih
+  | declValue e body ih => exact boundDecl _ _ ih
   | seq a b iha ihb => exact boundSeq iha ihb
   | ite e a b iha ihb => exact boundIte iha ihb
   | «while» e body ih => exact boundWhile ih
