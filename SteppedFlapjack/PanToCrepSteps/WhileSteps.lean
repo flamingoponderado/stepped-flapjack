@@ -331,6 +331,88 @@ private theorem programBound_ite {width : Nat} [NeZero width]
     nlinarith
 
 
+/-- Fresh nested declarations cost one step per initialized register. -/
+theorem nestedDecs_steps_general {width : Nat} [NeZero width] {σ : Type}
+    (names : List Nat) (expressions : List (CrepExpHOL width)) (values : List (HolWordLab width))
+    (body : CrepProgHOL width) (s : CrepSemHOLState width σ)
+    (hlen : names.length = expressions.length)
+    (heval : expressions.map (evalCrepSemHOLExp s) = values.map some)
+    (hdisjoint : distinctListsHol names (expressions.flatMap crepExpVarsHOL) = true) :
+    CrepSteps.steps (nestedDecsHOL names expressions body) s =
+      names.length + CrepSteps.steps body ((names.zip values).foldl (fun st pair => CrepSemHOLState.setVar pair.1 pair.2 st) s) := by
+  induction names generalizing expressions values s with
+  | nil =>
+    cases expressions with
+    | nil =>
+      cases values with
+      | nil => simp [nestedDecsHOL]
+      | cons v vs => simp at heval
+    | cons e es => simp at hlen
+  | cons name names ih =>
+    cases expressions with
+    | nil => simp at hlen
+    | cons e es =>
+      cases values with
+      | nil => simp at heval
+      | cons value values =>
+        simp only [List.map_cons,List.cons.injEq] at heval
+        obtain ⟨headEval,tailEval⟩ := heval
+        have tailLen : names.length = es.length := by simp at hlen; omega
+        have disjoint := (distinctListsHol_eq_true_iff_listDisjoint _ _).mp hdisjoint
+        have fresh : ∀ x ∈ es, name ∉ crepExpVarsHOL x := by
+          intro x hx hmem
+          apply disjoint name (by simp)
+          exact List.mem_flatMap.mpr ⟨x,by simp [hx],hmem⟩
+        have disjointTail : distinctListsHol names (es.flatMap crepExpVarsHOL) = true := by
+          apply (distinctListsHol_eq_true_iff_listDisjoint _ _).mpr
+          intro n hn hm
+          exact disjoint n (by simp [hn]) (by simp [hm])
+        have evalTail : es.map (evalCrepSemHOLExp (CrepSemHOLState.setVar name value s)) = values.map some := by
+          rw [← tailEval]
+          apply List.map_congr_left
+          intro x hx
+          simpa [CrepSemHOLState.setVar] using evalCrepSemHOLExp_updateLocals_eq_of_not_vars s x name value (fresh x hx)
+        simp only [nestedDecsHOL,CrepSteps.steps_dec,headEval,List.length_cons,List.zip_cons_cons,List.foldl_cons]
+        rw [ih es values _ tailLen evalTail disjointTail]
+        omega
+
+/-- Compiler-generated local slots are fresh for the initializer. -/
+theorem compiledInitializer_fresh {width : Nat} [NeZero width]
+    (ctxt : PanToCrepContextExact width) (initializer : ExpHOL width) (count : Nat)
+    (hmax : ctxtMaxFiniteExact ctxt.vmax ctxt.vars) :
+    distinctListsHol ((List.range count).map (fun i => ctxt.vmax + i + 1))
+      ((compileExpExactHOLW ctxt initializer).1.flatMap crepExpVarsHOL) = true := by
+  have h := pcCompileCorrectCallRetSlotsDistinct ctxt [initializer] count hmax
+  simpa [compileExpExactHOLWList] using h
+
+theorem frontendValueDecl_steps {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (name : MlS) (declared : ShapeHOL)
+    (initializer : ExpHOL width) (body : ProgHOL width) (target : CrepSemHOLState width σ)
+    (hvalue : FrontendValue ctxt initializer) (hmax : ctxtMaxFiniteExact ctxt.vmax ctxt.vars)
+    (values : List (HolWordLab width))
+    (evaluated : (compileExpExactHOLW ctxt initializer).1.map (evalCrepSemHOLExp target) = values.map some) :
+    let shape := (compileExpExactHOLW ctxt initializer).2
+    let names := (List.range (sizeOfShapeHOL shape)).map (fun i => ctxt.vmax + i + 1)
+    CrepSteps.steps (compileProgExactHOLW ctxt (.dec name declared initializer body)) target =
+      names.length + CrepSteps.steps (compileProgExactHOLW (valueDeclContext ctxt name shape) body)
+        ((names.zip values).foldl (fun st pair => CrepSemHOLState.setVar pair.1 pair.2 st) target) := by
+  obtain ⟨expressions,shape,compiled,size⟩ := frontendValue_compile hvalue
+  simp only [compiled] at evaluated
+  have fresh := compiledInitializer_fresh ctxt initializer (sizeOfShapeHOL shape) hmax
+  simp only [compiled] at fresh
+  have count := nestedDecs_steps_general ((List.range (sizeOfShapeHOL shape)).map (fun i => ctxt.vmax + i + 1))
+    expressions values (compileProgExactHOLW (valueDeclContext ctxt name shape) body) target
+    (by simp [size]) evaluated fresh
+  have declaration := valueDecl_compiled ctxt name declared initializer body shape expressions compiled size
+  simpa only [compiled,Prod.snd,declaration] using count
+
+/-- A pair of nonzero initializers takes exactly two declaration steps. -/
+example {width : Nat} [NeZero width] {σ : Type} (body : CrepProgHOL width) (s : CrepSemHOLState width σ) :
+    CrepSteps.steps (nestedDecsHOL [1,2] [.const 7,.const 9] body) s =
+      2 + CrepSteps.steps body (CrepSemHOLState.setVar 2 (.word 9) (CrepSemHOLState.setVar 1 (.word 7) s)) := by
+  simpa using nestedDecs_steps_general [1,2] [.const (7 : BitVec width),.const 9] [.word 7,.word 9] body s
+    (by rfl) (by simp [evalCrepSemHOLExp]) (by simp [distinctListsHol,crepExpVarsHOL])
+
 /-- Declaration composition for the structural induction. -/
 private theorem programBound_decl {width : Nat} [NeZero width]
     (context : PanToCrepContextExact width) (name : MlS) (initializer : ExpHOL width) (body : ProgHOL width) (clockLimit : Nat)
@@ -621,12 +703,22 @@ private theorem nestedDecs_zero_steps {width : Nat} [NeZero width] {σ : Type}
     (names : List Nat) (body : CrepProgHOL width) (s : CrepSemHOLState width σ) :
     CrepSteps.steps (nestedDecsHOL names (List.replicate names.length (.const (0 : BitVec width))) body) s =
       names.length + CrepSteps.steps body (names.foldl (fun st name => CrepSemHOLState.setVar name (.word 0) st) s) := by
-  induction names generalizing s with
-  | nil => simp [nestedDecsHOL]
-  | cons name rest ih =>
-    simp only [List.length_cons,List.replicate_succ,nestedDecsHOL,CrepSteps.steps_dec,evalCrepSemHOLExp,List.foldl_cons]
-    rw [ih]
-    omega
+  have h := nestedDecs_steps_general names (List.replicate names.length (.const (0 : BitVec width)))
+    (List.replicate names.length (.word 0)) body s (by simp) (by simp [evalCrepSemHOLExp]) (by simp [distinctListsHol,crepExpVarsHOL])
+  have folds : ∀ (ns : List Nat) (state : CrepSemHOLState width σ),
+      (ns.zip (List.replicate ns.length (.word 0))).foldl
+        (fun st pair => CrepSemHOLState.setVar pair.1 pair.2 st) state =
+      ns.foldl (fun st name => CrepSemHOLState.setVar name (.word 0) st) state := by
+    intro ns
+    induction ns with
+    | nil => intro state; rfl
+    | cons n ns ih =>
+      intro state
+      simp only [List.length_cons,List.replicate_succ,List.zip_cons_cons,List.foldl_cons]
+      exact ih (CrepSemHOLState.setVar n (.word 0) state)
+  rw [folds names s] at h
+  exact h
+
 
 private theorem zeroInit_eq {width : Nat} [NeZero width] {σ : Type} (names : List Nat) (s : CrepSemHOLState width σ) :
     names.foldl (fun st name => CrepSemHOLState.setVar name (.word 0) st) s =
