@@ -331,6 +331,19 @@ private theorem programBound_ite {width : Nat} [NeZero width]
     nlinarith
 
 
+/-- Sequential local bindings agree with the compiler’s list update. -/
+theorem setVar_fold_update {width : Nat} [NeZero width] {σ : Type}
+    (pairs : List (Nat × HolWordLab width)) (s : CrepSemHOLState width σ) :
+    pairs.foldl (fun st pair => CrepSemHOLState.setVar pair.1 pair.2 st) s =
+      {s with locals := s.locals.updateListEq pairs} := by
+  induction pairs generalizing s with
+  | nil => simp [HolFiniteMapExact.updateListEq, FUPDATE_LIST_HOL]
+  | cons pair rest ih =>
+    rcases pair with ⟨name,value⟩
+    simp only [List.foldl_cons]
+    rw [ih]
+    simp [CrepSemHOLState.setVar,HolFiniteMapExact.updateListEq,HolFiniteMapExact.updateEq,FUPDATE_LIST_HOL_cons]
+
 /-- Fresh nested declarations cost one step per initialized register. -/
 theorem nestedDecs_steps_general {width : Nat} [NeZero width] {σ : Type}
     (names : List Nat) (expressions : List (CrepExpHOL width)) (values : List (HolWordLab width))
@@ -395,7 +408,7 @@ theorem frontendValueDecl_steps {width : Nat} [NeZero width] {σ : Type}
     let names := (List.range (sizeOfShapeHOL shape)).map (fun i => ctxt.vmax + i + 1)
     CrepSteps.steps (compileProgExactHOLW ctxt (.dec name declared initializer body)) target =
       names.length + CrepSteps.steps (compileProgExactHOLW (valueDeclContext ctxt name shape) body)
-        ((names.zip values).foldl (fun st pair => CrepSemHOLState.setVar pair.1 pair.2 st) target) := by
+        {target with locals := target.locals.updateListEq (names.zip values)} := by
   obtain ⟨expressions,shape,compiled,size⟩ := frontendValue_compile hvalue
   simp only [compiled] at evaluated
   have fresh := compiledInitializer_fresh ctxt initializer (sizeOfShapeHOL shape) hmax
@@ -404,7 +417,42 @@ theorem frontendValueDecl_steps {width : Nat} [NeZero width] {σ : Type}
     expressions values (compileProgExactHOLW (valueDeclContext ctxt name shape) body) target
     (by simp [size]) evaluated fresh
   have declaration := valueDecl_compiled ctxt name declared initializer body shape expressions compiled size
-  simpa only [compiled,Prod.snd,declaration] using count
+  simpa only [compiled,Prod.snd,declaration,setVar_fold_update] using count
+
+/-- A successful shaped initializer produces related source and target body states. -/
+theorem frontendValueDecl_entry {width : Nat} [NeZero width] {σ : Type}
+    (ctxt : PanToCrepContextExact width) (name : MlS) (declared : ShapeHOL)
+    (initializer : ExpHOL width) (body : ProgHOL width)
+    (source : PanSemStateFiniteExact width σ) (target : CrepSemHOLState width σ)
+    [DecidablePred source.memaddrs]
+    (value : ValueHOL width) (hvalue : FrontendValue ctxt initializer)
+    (heval : source.evalHOLFinite initializer = some value)
+    (hstate : panToCrepStateRelFiniteExact source target)
+    (hcode : codeRelExactHOLW ctxt source.code target.code)
+    (hlocals : panToCrepLocalsRelFiniteExact ctxt source.locals target.locals) :
+    let shape := shapeOfHOLExact value
+    let names := decCallSlots ctxt shape
+    let next := {target with locals := target.locals.updateListEq (names.zip (flattenHOL value))}
+    CrepSteps.steps (compileProgExactHOLW ctxt (.dec name declared initializer body)) target =
+      names.length + CrepSteps.steps (compileProgExactHOLW (valueDeclContext ctxt name shape) body) next ∧
+    panToCrepLocalsRelFiniteExact (valueDeclContext ctxt name shape)
+      (PanSemStateFiniteExact.setVarHOLFinite name value source).locals next.locals ∧
+    panToCrepStateRelFiniteExact (PanSemStateFiniteExact.setVarHOLFinite name value source) next := by
+  classical
+  let _ : DecidablePred target.memaddrs := fun _ => Classical.propDecidable _
+  obtain ⟨expressions,shape,compiled,size⟩ := frontendValue_compile hvalue
+  obtain ⟨evals,hlen,hshape,hwf⟩ := compileExpValRelHOL source ctxt target initializer value expressions shape
+      heval hstate hcode hlocals (frontendValue_localised hvalue) compiled
+  subst shape
+  have hcount := frontendValueDecl_steps ctxt name declared initializer body target hvalue hlocals.2.1
+    (flattenHOL value) (by simpa only [compiled] using evals)
+  have hrel := localsRelExtendNewVarHOL ctxt source.locals target.locals value name (decCallSlots ctxt (shapeOfHOLExact value))
+    ⟨hlocals,hwf,decCallSlots_nodup ctxt _,fun y hy => decCallSlots_gt ctxt _ y hy,by simp [decCallSlots]⟩
+  constructor
+  · simpa [compiled,decCallSlots] using hcount
+  constructor
+  · simpa [valueDeclContext,decCallSlots,PanSemStateFiniteExact.setVarHOLFinite] using hrel
+  · simpa [panToCrepStateRelFiniteExact,PanSemStateFiniteExact.setVarHOLFinite] using hstate
 
 /-- A pair of nonzero initializers takes exactly two declaration steps. -/
 example {width : Nat} [NeZero width] {σ : Type} (body : CrepProgHOL width) (s : CrepSemHOLState width σ) :
@@ -452,24 +500,26 @@ private theorem programBound_decl {width : Nat} [NeZero width]
             (frontendScalar_localised initializerShape) compiled
           obtain ⟨values,_,_,_⟩ := h
           simpa [flattenHOL] using values
-        have innerLocals := localsRelExtendNewVarHOL context source.locals target.locals
-          (.val word) name [context.vmax+1] (by
-            refine ⟨localsRel, ?_, ?_, ?_, ?_⟩ <;> simp [shapeOfHOLExact])
-        have innerState : panToCrepStateRelFiniteExact
-            (PanSemStateFiniteExact.setVarHOLFinite name (.val word) source)
-            (CrepSemHOLState.setVar (context.vmax+1) word target) := by
-          simpa [panToCrepStateRelFiniteExact,PanSemStateFiniteExact.setVarHOLFinite,
-            CrepSemHOLState.setVar] using stateRel
+        have sourceEval : source.evalHOLFinite initializer = some (.val word) := by
+          unfold PanSemStateFiniteExact.evalHOLFinite
+          exact heval
+        have entry := frontendValueDecl_entry context name .one initializer body source target (.val word)
+          (.scalar initializerShape) sourceEval stateRel codeRel localsRel
         have singletonUpdate : target.locals.updateListEq [(context.vmax+1,word)] =
             target.locals.updateEq (context.vmax+1,word) := by
           apply HolFiniteMapExact.ext
           funext k
           rfl
+        have innerState : panToCrepStateRelFiniteExact
+            (PanSemStateFiniteExact.setVarHOLFinite name (.val word) source)
+            (CrepSemHOLState.setVar (context.vmax+1) word target) := by
+          simpa [valueDeclContext,scalarDeclContext,decCallSlots,sizeOfShapeHOL,shapeOfHOLExact,
+            flattenHOL,singletonUpdate,CrepSemHOLState.setVar] using entry.2.2
         have innerLocals' : panToCrepLocalsRelFiniteExact (scalarDeclContext context name)
             (PanSemStateFiniteExact.setVarHOLFinite name (.val word) source).locals
             (CrepSemHOLState.setVar (context.vmax+1) word target).locals := by
-          simpa [scalarDeclContext,PanSemStateFiniteExact.setVarHOLFinite,CrepSemHOLState.setVar,
-            shapeOfHOLExact,Flapjack.Pancake.PanLang.sizeOfShapeHOL,flattenHOL,singletonUpdate] using innerLocals
+          simpa [valueDeclContext,scalarDeclContext,decCallSlots,sizeOfShapeHOL,shapeOfHOLExact,
+            flattenHOL,singletonUpdate,CrepSemHOLState.setVar] using entry.2.1
         have count := controlSteps_dec name .one initializer body source (.val word) heval
           (by simp [shapeEqHOL,shapeOfHOLExact])
         obtain ⟨compiledValue,comp⟩ := frontendDecl_compile context name initializer body initializerShape
@@ -699,36 +749,31 @@ theorem tailCall_entries {width : Nat} [NeZero width] {σ : Type}
   rw [localsEq]
   simpa [compileProgExactHOLW,compileCallNoReturnExactHOLW,decClockCrepSemHOL] using count
 
+private theorem zeroInit_fold {width : Nat} [NeZero width] {σ : Type}
+    (ns : List Nat) (state : CrepSemHOLState width σ) :
+      (ns.zip (List.replicate ns.length (.word 0))).foldl
+        (fun st pair => CrepSemHOLState.setVar pair.1 pair.2 st) state =
+      ns.foldl (fun st name => CrepSemHOLState.setVar name (.word 0) st) state := by
+  induction ns generalizing state with
+  | nil => rfl
+  | cons n ns ih =>
+    simp only [List.length_cons,List.replicate_succ,List.zip_cons_cons,List.foldl_cons]
+    exact ih (CrepSemHOLState.setVar n (.word 0) state)
+
 private theorem nestedDecs_zero_steps {width : Nat} [NeZero width] {σ : Type}
     (names : List Nat) (body : CrepProgHOL width) (s : CrepSemHOLState width σ) :
     CrepSteps.steps (nestedDecsHOL names (List.replicate names.length (.const (0 : BitVec width))) body) s =
       names.length + CrepSteps.steps body (names.foldl (fun st name => CrepSemHOLState.setVar name (.word 0) st) s) := by
   have h := nestedDecs_steps_general names (List.replicate names.length (.const (0 : BitVec width)))
     (List.replicate names.length (.word 0)) body s (by simp) (by simp [evalCrepSemHOLExp]) (by simp [distinctListsHol,crepExpVarsHOL])
-  have folds : ∀ (ns : List Nat) (state : CrepSemHOLState width σ),
-      (ns.zip (List.replicate ns.length (.word 0))).foldl
-        (fun st pair => CrepSemHOLState.setVar pair.1 pair.2 st) state =
-      ns.foldl (fun st name => CrepSemHOLState.setVar name (.word 0) st) state := by
-    intro ns
-    induction ns with
-    | nil => intro state; rfl
-    | cons n ns ih =>
-      intro state
-      simp only [List.length_cons,List.replicate_succ,List.zip_cons_cons,List.foldl_cons]
-      exact ih (CrepSemHOLState.setVar n (.word 0) state)
-  rw [folds names s] at h
+  rw [zeroInit_fold names s] at h
   exact h
 
 
 private theorem zeroInit_eq {width : Nat} [NeZero width] {σ : Type} (names : List Nat) (s : CrepSemHOLState width σ) :
     names.foldl (fun st name => CrepSemHOLState.setVar name (.word 0) st) s =
       {s with locals := s.locals.updateListEq (names.zip (List.replicate names.length (.word 0)))} := by
-  induction names generalizing s with
-  | nil => simp [HolFiniteMapExact.updateListEq, FUPDATE_LIST_HOL]
-  | cons n ns ih =>
-    simp only [List.foldl_cons,List.length_cons,List.replicate_succ,List.zip_cons_cons]
-    rw [ih]
-    simp [CrepSemHOLState.setVar,HolFiniteMapExact.updateListEq,HolFiniteMapExact.updateEq,FUPDATE_LIST_HOL_cons]
+  rw [← zeroInit_fold names s, setVar_fold_update]
 
 /-- The generated return slots and selected continuation contribute their exact
 Crep visits to a declaration call. -/
