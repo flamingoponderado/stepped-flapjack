@@ -38,6 +38,34 @@ theorem heapPairField_supported (shapes : VarName → Option ShapeHOL) : Support
   refine ⟨.ret (.heapField [.one, .one] 1 (by rfl) (.local (.const _))), ?_⟩
   simp [heapPairField, ProgByteRanged, ExpByteRanged, ShapeByteRanged]
 
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+/-- The selected field evaluates to zero in four source steps. -/
+theorem heapPairField_run :
+    evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
+      (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] []
+      sourceProduction.baseAddress sourceProduction.topAddress 8 10
+      sourceProduction.locals sourceProduction.globals sourceProduction.memory sourceProduction.ffi heapPairField
+      (memoryAccess := some (panSemBitVec64MemoryAccess sourceProduction)) (contracts := none) =
+        some (.returned sourceProduction.locals sourceProduction.globals sourceProduction.memory sourceProduction.ffi [.word 0], 4) := by
+  unfold heapPairField
+  have read0 : panValueFlatReadWord sourceProduction.memory (8 : RiscV.Word 64)
+      (some (panSemBitVec64MemoryAccess sourceProduction)) (2701132032 : RiscV.Word 64) = some 0 := by
+    with_unfolding_all rfl
+  have read1 : panValueFlatReadWord sourceProduction.memory (8 : RiscV.Word 64)
+      (some (panSemBitVec64MemoryAccess sourceProduction)) (2701132040 : RiscV.Word 64) = some 0 := by
+    with_unfolding_all rfl
+  simp only [evalPanValueFfiProgSteps, panValueReturnResult, evalPanValueExpCounted, evalPanValueExp,
+    panValueFlatLoad, panValueFlatLoadFuel, panValueFlatLoadListFuel, isWfShape, panValueFlatContextFuel,
+    panValueFlatShapeFuel, isWfShape.isWfShapeList, panValueFlatShapeFuel.panValueFlatShapeListFuel,
+    panValueFlatOffset, shapeSizeWithContext, panValueExpStepCost]
+  simp only [isWfShapeHOL, Bool.and_self, if_true, Option.map]
+  dsimp only [bind, Bind.bind, Option.bind, Option.map]
+  rw [read0]
+  have offset : (2701132032 : RiscV.Word 64) + 8 = 2701132040 := by decide
+  rw [offset, read1]
+  with_unfolding_all rfl
+
 /-- Store seven in the initialized heap and return the word read back. -/
 def heapWordWitness : Prog (RiscV.Word 64) :=
   .seq (.store (.const 0xa1000100) (.const 7))
