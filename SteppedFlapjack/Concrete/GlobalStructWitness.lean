@@ -389,8 +389,8 @@ example (value : PanValue (RiscV.Word 64))
   have expression : GlobalScalarExpression shapes [] (.op .add [.rField 1 (.var .global "pair"),.const 1]) :=
     .op .add (.global path) (.local (.const _))
   apply globalScalarExpression_word expression globalStructInitial
-  · intro name v hv
-    simp [globalStructInitial,sourceProduction] at hv
+  · intro name member
+    simp at member
   · intro n hn; rfl
   · exact run
 

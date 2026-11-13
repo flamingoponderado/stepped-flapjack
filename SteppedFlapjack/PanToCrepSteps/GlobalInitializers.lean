@@ -86,6 +86,10 @@ theorem globalCompile_frontendScalar {width : Nat} [NeZero width]
   induction scalar with
   | const value => simpa [compileExpExactHOL] using (FrontendScalar.const (ctxt := ctxt) value)
   | «local» name reg h => simpa [compileExpExactHOL] using (FrontendScalar.local name reg h)
+  | localPath name shapes registers found size path =>
+    have mapped := path.globalCompile globals
+    simp only [compileExpExactHOL] at mapped
+    exact FrontendScalar.localPath name shapes registers found size mapped
   | baseAddr => simpa [compileExpExactHOL] using (FrontendScalar.baseAddr (ctxt := ctxt))
   | topAddr => simpa [compileExpExactHOL] using (FrontendScalar.op (ctxt := ctxt) .sub .topAddr (.const _))
   | bytesInWord => simpa [compileExpExactHOL] using (FrontendScalar.bytesInWord (ctxt := ctxt))
@@ -110,6 +114,8 @@ theorem globalCompile_frontendValue {width : Nat} [NeZero width]
     (h : FrontendValue ctxt e) : FrontendValue ctxt (compileExpExactHOL globals e) := by
   induction h with
   | scalar h => exact .scalar (globalCompile_frontendScalar globals h)
+  | «local» name shape registers found size =>
+    simpa [compileExpExactHOL] using FrontendValue.local name shape registers found size
   | @tuple fields hs ih =>
     simp only [compileExpExactHOL]
     apply FrontendValue.tuple
@@ -141,6 +147,9 @@ theorem globalCompile_frontend_initializers {width : Nat} [NeZero width]
       rcases member with rfl | member
       · cases hv with
         | scalar h => exact .store (.op .sub .topAddr (.const _)) (globalCompile_frontendScalar globals h)
+        | «local» localName localShape registers found size =>
+          exact .storeValue (.op .sub .topAddr (.const _))
+            (by simpa [compileExpExactHOL] using FrontendValue.local localName localShape registers found size)
         | tuple h =>
           simp only [compileExpExactHOL]
           apply FrontendProgram.storeStruct (.op .sub .topAddr (.const _))

@@ -7,12 +7,16 @@ open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString SteppedFlapj
 def GlobalLayout (shapes : VarName → Option ShapeHOL) (globals : PanGlobalsContextExact 64) : Prop :=
   ∀ name shape, shapes name = some shape → ∃ offset, globals.globals.lookup (ofString name) = some (shape,offset)
 
-theorem globalRead_path {shapes : VarName → Option ShapeHOL} {e : Exp (RiscV.Word 64)} {shape : ShapeHOL}
-    (read : GlobalRead shapes e shape) :
+def ShapedScopeRelation (shapes : VarName → Option ShapeHOL) (ctxt : PanToCrepContextExact 64) : Prop :=
+  ∀ name shape, shapes name = some shape → ∃ registers,
+    ctxt.vars.lookup (ofString name) = some (shape,registers) ∧ registers.length = sizeOfShapeHOL shape
+
+theorem shapedRead_path {kind : VarKind} {shapes : VarName → Option ShapeHOL} {e : Exp (RiscV.Word 64)} {shape : ShapeHOL}
+    (read : ShapedRead kind shapes e shape) :
     ∃ name rootShape, shapes name = some rootShape ∧
-      FieldPath (.var .global (ofString name)) rootShape (expToHOL e) shape := by
+      FieldPath (.var kind (ofString name)) rootShape (expToHOL e) shape := by
   induction read with
-  | global name shape ranged found => exact ⟨name,shape,found,by simpa [expToHOL] using (FieldPath.root (root := .var .global (ofString name)) (rootShape := shape))⟩
+  | root name shape ranged found => exact ⟨name,shape,found,by simpa [expToHOL] using (FieldPath.root (root := .var kind (ofString name)) (rootShape := shape))⟩
   | field path index shape found ih =>
     obtain ⟨name,rootShape,lookup,rootPath⟩ := ih
     exact ⟨name,rootShape,lookup,by simpa [expToHOL] using FieldPath.field rootPath index shape found⟩
@@ -26,11 +30,32 @@ theorem fieldPath_atomic {root e : ExpHOL 64} {rootShape shape : ShapeHOL}
     obtain ⟨_,eq⟩ := ih
     exact False.elim (atom _ eq.symm)
 
+theorem localRead_frontend {shapes : VarName → Option ShapeHOL} {ctxt : PanToCrepContextExact 64}
+    (relation : ShapedScopeRelation shapes ctxt) {e : Exp (RiscV.Word 64)} (read : LocalRead shapes e .one) :
+    FrontendScalar ctxt (expToHOL e) := by
+  obtain ⟨name,rootShape,found,path⟩ := shapedRead_path read
+  obtain ⟨registers,lookup,size⟩ := relation name rootShape found
+  cases rootShape with
+  | one =>
+    obtain ⟨eq,_⟩ := fieldPath_atomic path (by intro fields h; cases h)
+    rw [eq]
+    cases registers with
+    | nil => simp [sizeOfShapeHOL] at size
+    | cons reg rest =>
+      cases rest with
+      | nil => exact .local (ofString name) reg lookup
+      | cons other rest => simp [sizeOfShapeHOL] at size
+  | named tag =>
+    obtain ⟨_,impossible⟩ := fieldPath_atomic path (by intro fields h; cases h)
+    cases impossible
+  | comb fields =>
+    exact .localPath (ofString name) fields registers lookup (by simpa [sizeOfShapeHOL] using size) path
+
 theorem globalRead_frontend {shapes : VarName → Option ShapeHOL} {globals : PanGlobalsContextExact 64}
     {ctxt : PanToCrepContextExact 64} (layout : GlobalLayout shapes globals)
     {e : Exp (RiscV.Word 64)} (read : GlobalRead shapes e .one) :
     PanToCrepSteps.GlobalScalar globals ctxt (expToHOL e) := by
-  obtain ⟨name,rootShape,found,path⟩ := globalRead_path read
+  obtain ⟨name,rootShape,found,path⟩ := shapedRead_path read
   obtain ⟨offset,lookup⟩ := layout name rootShape found
   cases rootShape with
   | one =>
@@ -49,6 +74,11 @@ theorem globalScalar_frontend {shapes : VarName → Option ShapeHOL} {globals : 
   | «local» h => exact .local (scalar_frontend_shape relation h)
   | global h => exact globalRead_frontend layout h
   | load h ih => simpa [expToHOL,shapeToHOL] using PanToCrepSteps.GlobalScalar.load ih
+  | heapField fields index selected address ih =>
+    simp only [expToHOL, shapeToHOL]
+    apply PanToCrepSteps.GlobalScalar.heapField (fields.map shapeToHOL) index
+    · simp [List.getElem?_map, selected, shapeToHOL]
+    · simpa [expToHOL, shapeToHOL] using ih
   | op op a b iha ihb => simpa [expToHOL] using PanToCrepSteps.GlobalScalar.op op iha ihb
   | cmp op a b iha ihb => simpa [expToHOL] using PanToCrepSteps.GlobalScalar.cmp op iha ihb
   | shift op a b iha ihb => simpa [expToHOL] using PanToCrepSteps.GlobalScalar.shift op iha ihb
@@ -172,5 +202,39 @@ theorem globalSupported_sourceTable {σ : Type} (shapes : VarName → Option Sha
       have h := globalCallSupported_frontend layout supported ctxt (scalar_parameter_scope scope HolFiniteMapExact.empty HolFiniteMapExact.empty)
       simpa [panLangEntryToHOL] using bodyEq ▸ h
     · simp at raw
+
+/-- A concrete local pair read is well-shaped, returns nine, and lowers to the frontend. -/
+theorem localPairRead_source_frontend (ctxt : PanToCrepContextExact 64) :
+    let shapes : VarName → Option ShapeHOL := fun name => if name = "pair" then some (.comb [.one,.one]) else none
+    let locals : VarName → Option (PanValue (RiscV.Word 64)) := updatePanValueMap (fun _ => none) "pair" (.rStruct [.word (7 : BitVec 64),.word 9])
+    let production := {sourceProduction with locals := locals}
+    let context := valueDeclContext ctxt (ofString "pair") (.comb [.one,.one])
+    let expression : Exp (RiscV.Word 64) := .rField 1 (.var .local "pair")
+    ValueHOLShapes shapes locals ∧ LocalRead shapes expression .one ∧
+      ShapedScopeRelation shapes context ∧ FrontendScalar context (expToHOL expression) ∧
+      evalPanSemStateExp production expression = some (.word 9) := by
+  let shapes : VarName → Option ShapeHOL := fun name => if name = "pair" then some (.comb [.one,.one]) else none
+  let locals : VarName → Option (PanValue (RiscV.Word 64)) := updatePanValueMap (fun _ => none) "pair" (.rStruct [.word (7 : BitVec 64),.word 9])
+  let production := {sourceProduction with locals := locals}
+  let context := valueDeclContext ctxt (ofString "pair") (.comb [.one,.one])
+  let expression : Exp (RiscV.Word 64) := .rField 1 (.var .local "pair")
+  have valid : ValueHOLShapes shapes locals := by
+    intro name ranged
+    by_cases eq : name = "pair"
+    · subst name; simp [shapes,locals,updatePanValueMap,shapeOfHOLExact]
+    · simp [shapes,locals,updatePanValueMap,eq]
+  have read : LocalRead shapes expression .one :=
+    .field (.local "pair" (.comb [.one,.one]) (by decide) (by simp [shapes])) 1 .one rfl
+  have relation : ShapedScopeRelation shapes context := by
+    intro name shape found
+    by_cases eq : name = "pair"
+    · subst name
+      simp [shapes] at found
+      subst shape
+      refine ⟨(List.range 2).map (fun index => ctxt.vmax + index + 1), ?_, by simp⟩
+      simpa [context,sizeOfShapeHOL,sizeOfShapesHOL] using (valueDeclContext_local ctxt (ofString "pair") (.comb [.one,.one])).1
+    · simp [shapes,eq] at found
+  refine ⟨valid,read,relation,localRead_frontend relation read,?_⟩
+  simp [evalPanSemStateExp_64_eq_previous,evalPanValueExp,updatePanValueMap]
 
 end SteppedFlapjack.Concrete

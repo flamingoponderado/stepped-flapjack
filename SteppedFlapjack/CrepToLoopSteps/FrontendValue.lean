@@ -13,6 +13,11 @@ theorem frontendValue_scalars {width : Nat} [NeZero width] {ctxt : PanToCrepCont
     intro v hv
     subst v
     exact shape
+  | «local» name shape registers found size =>
+    intro value member
+    simp only [compileExpExactHOLW, found, List.mem_map] at member
+    obtain ⟨reg, _, rfl⟩ := member
+    exact .direct (.var reg)
   | @tuple fields hs ih =>
     simp only [compileExpExactHOLW]
     intro value member

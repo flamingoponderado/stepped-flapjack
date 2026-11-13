@@ -397,7 +397,7 @@ private theorem returnBridge {scope : List VarName} {expression : Exp (RiscV.Wor
         obtain ⟨rfl,rfl⟩ := run
         have expressionRun : evalPanSemStateExp production expression = some value := by
           simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
-        obtain ⟨word,rfl⟩ := globalScalarExpression_word scalar production words globalsOK value expressionRun
+        obtain ⟨word,rfl⟩ := globalScalarExpression_word scalar production words.scoped globalsOK value expressionRun
         have exprRanged : ExpByteRanged expression := by simpa [ProgByteRanged] using byteRanged
         have inverted := counted_return_invert production source rel ranged expression exprRanged word
           context primitive handler functions (fuel+1) (panValueExpStepCost expression+1) originalRun
@@ -413,7 +413,7 @@ private theorem returnBridge {scope : List VarName} {expression : Exp (RiscV.Wor
         · simp [emptyLocalsHOLFinite]
       · have expressionRun : evalPanSemStateExp production expression = some value := by
           simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
-        obtain ⟨word,rfl⟩ := globalScalarExpression_word scalar production words globalsOK value expressionRun
+        obtain ⟨word,rfl⟩ := globalScalarExpression_word scalar production words.scoped globalsOK value expressionRun
         rename_i invalid
         simp at invalid
 
@@ -448,7 +448,7 @@ private theorem assignBridge {scope : List VarName} (name : VarName) {expression
         obtain ⟨rfl,rfl⟩ := run
         have expressionRun : evalPanSemStateExp production expression = some value := by
           simpa only [evalPanSemStateExp_64_eq_previous] using evaluated
-        obtain ⟨word,rfl⟩ := globalScalarExpression_word scalar production words globalsOK value expressionRun
+        obtain ⟨word,rfl⟩ := globalScalarExpression_word scalar production words.scoped globalsOK value expressionRun
         obtain ⟨assigned,postEq,hol,finalRel,finalRanged,bound⟩ :=
           counted_assign_invert production source rel ranged name nameRanged expression exprRanged
             context primitive handler functions (fuel+1) (panValueExpStepCost expression+1)
@@ -544,7 +544,7 @@ private theorem iteBridge {scope : List VarName} {condition : Exp (RiscV.Word 64
       simp [condRun] at run
       obtain ⟨rfl,rfl⟩ := run
       have condExact := counted_scalar_condition_error production source rel ranged condition
-        (fun value evaluated => globalScalarExpression_word scalar production words globalsOK value evaluated) condRanged condRun
+        (fun value evaluated => globalScalarExpression_word scalar production words.scoped globalsOK value evaluated) condRanged condRun
       apply errorLeaf production source rel ranged words (.ite condition a b) 0
       · simp only [progToHOL]
         rw [evaluateHOLFiniteState_ite,condExact]
@@ -764,7 +764,7 @@ private theorem declBridge {scope : List VarName} (name : VarName) {initializer 
       simp [initRun] at run
       obtain ⟨rfl,rfl⟩ := run
       have initExact := counted_scalar_initializer_error production source rel ranged initializer
-        (fun value evaluated => globalScalarExpression_word scalar production words globalsOK value evaluated) initRanged initRun
+        (fun value evaluated => globalScalarExpression_word scalar production words.scoped globalsOK value evaluated) initRanged initRun
       apply errorLeaf production source rel ranged words (.dec name .one initializer body) 0
       · simp only [progToHOL,shapeToHOL]
         rw [evaluateHOLFiniteState_dec_total]
@@ -775,7 +775,7 @@ private theorem declBridge {scope : List VarName} (name : VarName) {initializer 
     | some pair =>
       rcases pair with ⟨value,initCost⟩
       obtain ⟨word,rfl,costEq,initHol⟩ := counted_scalar_initializer_invert production source rel ranged initializer
-        (fun value evaluated => globalScalarExpression_word scalar production words globalsOK value evaluated) initRanged value initCost initRun
+        (fun value evaluated => globalScalarExpression_word scalar production words.scoped globalsOK value evaluated) initRanged value initCost initRun
       subst initCost
       let entry := {production with locals := updatePanValueMap production.locals name (.word word)}
       let sourceEntry := setVarHOLFinite (ofString name) (.val (.word word)) source
@@ -850,7 +850,7 @@ private theorem whileBridge {scope : List VarName} {condition : Exp (RiscV.Word 
         simp [condRun] at run
         obtain ⟨rfl,rfl⟩ := run
         have condExact := counted_scalar_condition_error production source rel ranged condition
-          (fun value evaluated => globalScalarExpression_word scalar production words globalsOK value evaluated) condRanged condRun
+          (fun value evaluated => globalScalarExpression_word scalar production words.scoped globalsOK value evaluated) condRanged condRun
         have condFinite : @evalHOLFinite 64 σ _ source
             (fun address => Classical.propDecidable (source.memaddrs address)) (expToHOL condition) = none := condExact
         apply errorLeaf production source rel ranged words (.while condition body) 0
@@ -1086,7 +1086,7 @@ private theorem tailCallBridge {scope : List VarName} (name : FunName)
           have argsExact : source.evalListHOLFinite (arguments.map expToHOL) = some (values.map panValueToHOL) := by
             simpa using argsAgree.symm
           have valuesWord := scalar_counted_arguments_words arguments production
-            (fun e member value evaluated => globalScalarExpression_word (shape e member) production words globalsOK value evaluated) values argCost (by
+            (fun e member value evaluated => globalScalarExpression_word (shape e member) production words.scoped globalsOK value evaluated) values argCost (by
             simpa [panValueCallArguments] using argsRun)
           have valuesRanged : ∀ value ∈ values, PanValueByteRanged value := by
             intro value member
@@ -1109,7 +1109,7 @@ private theorem tailCallBridge {scope : List VarName} (name : FunName)
           obtain ⟨holBody,exactLocals,returnShape,argsExact,lookupExact,returnLookup,returnRanged,bodyEq,bodyRanged,
             entryRel,entryRanged,entryWords⟩ := countedCallEntry_rel production source rel ranged exceptions
               name nameRanged arguments
-              (fun e member value evaluated => globalScalarExpression_word (shape e member) production words globalsOK value evaluated) exprRanged values argCost argsRun (codeRanged name)
+              (fun e member value evaluated => globalScalarExpression_word (shape e member) production words.scoped globalsOK value evaluated) exprRanged values argCost argsRun (codeRanged name)
               callee calleeLocals targetRun
           let entry := {production with clock := production.clock-1, locals := calleeLocals}
           let exactEntry := callEntryStateHOLFinite source exactLocals
@@ -1707,7 +1707,7 @@ private theorem storeBridge {scope : List VarName} {address value : Exp (RiscV.W
       · rw [progToHOL,controlSteps.eq_def]; rfl
     | some av =>
       have ae' : evalPanSemStateExp production address = some av := by simpa only [evalPanSemStateExp_64_eq_previous] using ae
-      obtain ⟨addr,rfl⟩ := globalScalarExpression_word addressScalar production words globalsOK av ae'
+      obtain ⟨addr,rfl⟩ := globalScalarExpression_word addressScalar production words.scoped globalsOK av ae'
       have ah : @evalHOLExact 64 σ _ source.toExact (fun a => Classical.propDecidable (source.memaddrs a)) (expToHOL address) = some (.val (.word addr)) := by
         rw [evalHOLFinite_eq_classical,← addrAgree,ae']; simp
       cases ve : evalPanValueExp production.structs production.locals production.globals production.memory

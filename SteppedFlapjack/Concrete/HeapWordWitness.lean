@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.SourceState
+import SteppedFlapjack.Concrete.CountedSource
 import SteppedFlapjack.PanValueFfiSemantics
 import SteppedFlapjack.PanToCrepSteps.CountedAssign
 import Flapjack.Pancake.Semantics.CrepRuntimeTarget
@@ -26,6 +27,43 @@ theorem heapWordLoad_run :
       sourceProduction.locals sourceProduction.globals sourceProduction.memory sourceProduction.ffi heapWordLoad
       (memoryAccess := some (panSemBitVec64MemoryAccess sourceProduction)) (contracts := none) =
         some (.returned sourceProduction.locals sourceProduction.globals sourceProduction.memory sourceProduction.ffi [.word 0], 3) := by
+  with_unfolding_all rfl
+
+/-- Read the second field of a two-word heap structure. -/
+def heapPairField : Prog (RiscV.Word 64) :=
+  .return (.rField 1 (.load (.comb [.one, .one]) (.const 0xa1000100)))
+
+/-- The structured load is accepted by the public source fragment. -/
+theorem heapPairField_supported (shapes : VarName → Option ShapeHOL) : Supported shapes heapPairField := by
+  refine ⟨.ret (.heapField [.one, .one] 1 (by rfl) (.local (.const _))), ?_⟩
+  simp [heapPairField, ProgByteRanged, ExpByteRanged, ShapeByteRanged]
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+/-- The selected field evaluates to zero in four source steps. -/
+theorem heapPairField_run :
+    evalPanValueFfiProgSteps (riscv64PanValueFfiContext (fun _ => false))
+      (fun _ _ => none) (fun _ _ _ _ _ _ _ => none) [] []
+      sourceProduction.baseAddress sourceProduction.topAddress 8 10
+      sourceProduction.locals sourceProduction.globals sourceProduction.memory sourceProduction.ffi heapPairField
+      (memoryAccess := some (panSemBitVec64MemoryAccess sourceProduction)) (contracts := none) =
+        some (.returned sourceProduction.locals sourceProduction.globals sourceProduction.memory sourceProduction.ffi [.word 0], 4) := by
+  unfold heapPairField
+  have read0 : panValueFlatReadWord sourceProduction.memory (8 : RiscV.Word 64)
+      (some (panSemBitVec64MemoryAccess sourceProduction)) (2701132032 : RiscV.Word 64) = some 0 := by
+    with_unfolding_all rfl
+  have read1 : panValueFlatReadWord sourceProduction.memory (8 : RiscV.Word 64)
+      (some (panSemBitVec64MemoryAccess sourceProduction)) (2701132040 : RiscV.Word 64) = some 0 := by
+    with_unfolding_all rfl
+  simp only [evalPanValueFfiProgSteps, panValueReturnResult, evalPanValueExpCounted, evalPanValueExp,
+    panValueFlatLoad, panValueFlatLoadFuel, panValueFlatLoadListFuel, isWfShape, panValueFlatContextFuel,
+    panValueFlatShapeFuel, isWfShape.isWfShapeList, panValueFlatShapeFuel.panValueFlatShapeListFuel,
+    panValueFlatOffset, shapeSizeWithContext, panValueExpStepCost]
+  simp only [isWfShapeHOL, Bool.and_self, if_true, Option.map]
+  dsimp only [bind, Bind.bind, Option.bind, Option.map]
+  rw [read0]
+  have offset : (2701132032 : RiscV.Word 64) + 8 = 2701132040 := by decide
+  rw [offset, read1]
   with_unfolding_all rfl
 
 /-- Store seven in the initialized heap and return the word read back. -/

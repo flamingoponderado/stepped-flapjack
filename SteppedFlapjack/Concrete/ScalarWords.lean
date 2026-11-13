@@ -5,6 +5,29 @@ open Flapjack Flapjack.Pancake.PanLang
 def WordLocals (locals : VarName → Option (PanValue (RiscV.Word 64))) : Prop :=
   ∀ name value, locals name = some value → ∃ word, value = .word word
 
+/-- Only names in the scalar scope must hold words; other locals may hold structs. -/
+def ScopedWordLocals (scope : List VarName) (locals : VarName → Option (PanValue (RiscV.Word 64))) : Prop :=
+  ∀ name, name ∈ scope → ∀ value, locals name = some value → ∃ word, value = .word word
+
+theorem WordLocals.scoped {scope : List VarName} {locals : VarName → Option (PanValue (RiscV.Word 64))}
+    (words : WordLocals locals) : ScopedWordLocals scope locals := by
+  intro name _ value found
+  exact words name value found
+
+/-- Updating a non-scalar local preserves the scalar-scope invariant. -/
+theorem scopedWordLocals_update_outside {scope : List VarName}
+    {locals : VarName → Option (PanValue (RiscV.Word 64))}
+    (words : ScopedWordLocals scope locals) (name : VarName) (outside : name ∉ scope)
+    (value : PanValue (RiscV.Word 64)) :
+    ScopedWordLocals scope (updatePanValueMap locals name value) := by
+  intro key member result found
+  have different : key ≠ name := by
+    intro eq
+    subst key
+    exact outside member
+  apply words key member result
+  simpa [updatePanValueMap,different] using found
+
 theorem wordLocals_empty : WordLocals (fun _ => none) := by
   intro name value found
   simp at found
@@ -19,6 +42,14 @@ theorem wordLocals_update {locals : VarName → Option (PanValue (RiscV.Word 64)
     exact ⟨word,found.symm⟩
   · apply words key value
     simpa [updatePanValueMap,same] using found
+
+/-- A scalar local and a struct local may coexist. -/
+example : ScopedWordLocals ["x"]
+    (updatePanValueMap (updatePanValueMap (fun _ => none) "x" (.word (7 : BitVec 64)))
+      "pair" (.rStruct [.word 1, .word 2])) := by
+  apply scopedWordLocals_update_outside
+  · exact (wordLocals_update wordLocals_empty "x" 7).scoped
+  · decide
 
 /-- Binding word arguments gives a callee environment containing only words. -/
 theorem wordLocals_bind (parameters : List VarName) (values : List (PanValue (RiscV.Word 64)))
@@ -60,16 +91,16 @@ theorem wordLocals_restore {current original : VarName → Option (PanValue (Ris
   · apply currentWords key value
     simpa [restorePanValueLocal,same] using found
 
-theorem scalar_eval_word {scope : List VarName} {expression : Exp (RiscV.Word 64)}
+theorem scalar_eval_word_scoped {scope : List VarName} {expression : Exp (RiscV.Word 64)}
     (scalar : Scalar scope expression) (production : PanSemState (RiscV.Word 64) (FfiState σ))
-    (words : WordLocals production.locals) (value : PanValue (RiscV.Word 64))
+    (words : ScopedWordLocals scope production.locals) (value : PanValue (RiscV.Word 64))
     (evaluated : evalPanSemStateExp production expression = some value) : ∃ word, value = .word word := by
   rw [evalPanSemStateExp_64_eq_previous] at evaluated
   induction scalar generalizing value with
   | const n => simp [evalPanValueExp] at evaluated; subst value; exact ⟨n,rfl⟩
   | «local» name member =>
     simp only [evalPanValueExp] at evaluated
-    exact words name value evaluated
+    exact words name member value evaluated
   | @load address ha ih =>
     simp only [evalPanValueExp] at evaluated
     cases addressRun : evalPanValueExp production.structs production.locals production.globals production.memory
@@ -138,6 +169,13 @@ theorem scalar_eval_word {scope : List VarName} {expression : Exp (RiscV.Word 64
           simp [leftRun,rightRun,shiftRun] at evaluated
           subst value
           exact ⟨word,rfl⟩
+/-- The original all-word invariant implies the scoped scalar invariant. -/
+theorem scalar_eval_word {scope : List VarName} {expression : Exp (RiscV.Word 64)}
+    (scalar : Scalar scope expression) (production : PanSemState (RiscV.Word 64) (FfiState σ))
+    (words : WordLocals production.locals) (value : PanValue (RiscV.Word 64))
+    (evaluated : evalPanSemStateExp production expression = some value) : ∃ word, value = .word word :=
+  scalar_eval_word_scoped scalar production words.scoped value evaluated
+
 /-- Scalar argument expressions evaluate to words. -/
 theorem scalar_expressions_eval_words {σ : Type}
     (expressions : List (Exp (RiscV.Word 64)))

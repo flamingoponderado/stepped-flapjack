@@ -47,9 +47,8 @@ theorem frontend_scalar_program {width : Nat} [NeZero width] {ctxt : PanToCrepCo
   | «break» => simpa [compileProgExactHOLW] using (ScalarProgram.break 0 : ScalarProgram (.break 0 : CrepProgHOL width))
   | «continue» => simpa [compileProgExactHOLW] using (ScalarProgram.continue 0 : ScalarProgram (.continue 0 : CrepProgHOL width))
   | tick => simpa [compileProgExactHOLW] using (ScalarProgram.tick : ScalarProgram (.tick : CrepProgHOL width))
-  | @storeStruct ctxt a fields ha hf =>
+  | @storeValue ctxt a value ha hv =>
     obtain ⟨address,ca,sa⟩ := frontendScalar_compiled ha
-    have hv : FrontendValue ctxt (.rstruct fields) := .tuple hf
     obtain ⟨values,sh,cv,size⟩ := frontendValue_compile hv
     have sv := frontendValue_scalars hv
     rw [cv] at sv
@@ -78,10 +77,14 @@ theorem frontend_scalar_program {width : Nat} [NeZero width] {ctxt : PanToCrepCo
         cases h : distinctListsHol [reg] (crepExpVarsW (crepExpOfHOL value)) <;> simp_all
       simp [compileProgExactHOLW,compileLocalAssignExactHOLW,compiled,found,overlap,nestedDecsHOL,crepNestedSeqHOL]
       exact .dec _ scalar (.seq (.assign _ (.direct (.var _))) .skip)
-  | @decl ctxt name e body he hb ih =>
-    obtain ⟨value,compiled,scalar⟩ := frontendScalar_compiled he
-    simp [compileProgExactHOLW,compileDecExactHOLW,compiled,nestedDecsHOL]
-    exact .dec _ scalar ih
+  | @declValue ctxt name declared e body he hb ih =>
+    obtain ⟨values,shape,compiled,size⟩ := frontendValue_compile he
+    have each := frontendValue_scalars he
+    rw [compiled] at each
+    rw [valueDecl_compiled ctxt name declared e body shape values compiled size]
+    apply nestedDecs_scalar
+    · simpa [compiled] using ih
+    · exact each
   | @seq ctxt a b ha hb iha ihb => simpa [compileProgExactHOLW] using ScalarProgram.seq iha ihb
   | @ite ctxt e a b he ha hb iha ihb =>
     obtain ⟨value,compiled,scalar⟩ := frontendScalar_compiled he
