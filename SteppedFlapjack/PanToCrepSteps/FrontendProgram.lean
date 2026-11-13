@@ -139,13 +139,13 @@ theorem frontendLoopFree_static {width : Nat} [NeZero width] {ctxt : PanToCrepCo
 
 /-- A two-register local struct can be stored, and its compiled program is static. -/
 theorem localStructStore_static {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width) (name : MlString) (address : BitVec width) :
-    let pairContext := {ctxt with vars := ctxt.vars.update (name,(.comb [.one,.one],[ctxt.vmax+1,ctxt.vmax+2]))}
+    let pairContext := valueDeclContext ctxt name (.comb [.one,.one])
     FrontendProgram pairContext (.store (.const address) (.var .local name)) ∧
     StaticProgram (compileProgExactHOLW pairContext (.store (.const address) (.var .local name))) := by
-  let pairContext := {ctxt with vars := ctxt.vars.update (name,(.comb [.one,.one],[ctxt.vmax+1,ctxt.vmax+2]))}
+  let pairContext := valueDeclContext ctxt name (.comb [.one,.one])
   have localShape : FrontendValue pairContext (.var .local name) := by
     apply FrontendValue.local name (.comb [.one,.one]) [ctxt.vmax+1,ctxt.vmax+2]
-    · simp [pairContext,FUPDATE]
+    · simp [pairContext,valueDeclContext,FUPDATE,sizeOfShapeHOL,sizeOfShapesHOL,List.range_succ,List.range_zero,Nat.add_assoc]
     · rfl
   have supported : FrontendProgram pairContext (.store (.const address) (.var .local name)) :=
     .storeValue (.const address) localShape

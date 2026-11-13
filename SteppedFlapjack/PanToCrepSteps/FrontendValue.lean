@@ -78,4 +78,17 @@ theorem nestedStruct_frontend_example {width : Nat} [NeZero width] (ctxt : PanTo
     · exact .scalar (.const _)
   · simp [compileExpExactHOLW,compileExpExactHOLWList]
 
+/-- A pair declaration allocates two registers and extends the body context. -/
+theorem localPairDeclaration_compiles {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width) (name : MlString)
+    (a b : BitVec width) (body : ProgHOL width) :
+    compileProgExactHOLW ctxt (.dec name (.comb [.one,.one]) (.rstruct [.const a,.const b]) body) =
+      .dec (ctxt.vmax+1) (.const a) (.dec (ctxt.vmax+2) (.const b)
+        (compileProgExactHOLW (valueDeclContext ctxt name (.comb [.one,.one])) body)) := by
+  have compiled : compileExpExactHOLW ctxt (.rstruct [.const a,.const b]) =
+      ([.const a,.const b],.comb [.one,.one]) := by
+    simp [compileExpExactHOLW,compileExpExactHOLWList]
+  have h := valueDecl_compiled ctxt name (.comb [.one,.one]) (.rstruct [.const a,.const b]) body
+    (.comb [.one,.one]) [.const a,.const b] compiled (by rfl)
+  simpa [sizeOfShapeHOL,sizeOfShapesHOL,List.range_succ,List.range_zero,nestedDecsHOL,Nat.add_assoc] using h
+
 end SteppedFlapjack.PanToCrepSteps

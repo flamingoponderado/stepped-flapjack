@@ -256,7 +256,8 @@ theorem frontendDecl_compile {width : Nat} [NeZero width] (ctxt : PanToCrepConte
       .dec (ctxt.vmax+1) value (compileProgExactHOLW (scalarDeclContext ctxt name) body) := by
   obtain ⟨value,compiled⟩ := frontendScalar_compile shape
   refine ⟨value,?_⟩
-  simp [compileProgExactHOLW,compileDecExactHOLW,compiled,nestedDecsHOL,scalarDeclContext]
+  have result := valueDecl_compiled ctxt name .one initializer body .one [value] compiled (by rfl)
+  simpa [← scalarDeclContext_eq_value,sizeOfShapeHOL,nestedDecsHOL] using result
 
 /-- Generalized scalar conditions are passed to the generated Crep conditional. -/
 theorem frontendIf_compile {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width)
@@ -294,15 +295,15 @@ example (ctxt : PanToCrepContextExact 64) :
 
 /-- The second field of a two-register local struct selects the second register. -/
 theorem localPairField_compiled {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width) (name : MlString) :
-    let pairContext := {ctxt with vars := ctxt.vars.update (name,(.comb [.one,.one],[ctxt.vmax+1,ctxt.vmax+2]))}
+    let pairContext := valueDeclContext ctxt name (.comb [.one,.one])
     FrontendScalar pairContext (.rfield 1 (.var .local name)) ∧
       compileExpExactHOLW pairContext (.rfield 1 (.var .local name)) = ([(.var (ctxt.vmax+2) : CrepExpHOL width)],.one) := by
-  let pairContext := {ctxt with vars := ctxt.vars.update (name,(.comb [.one,.one],[ctxt.vmax+1,ctxt.vmax+2]))}
+  let pairContext := valueDeclContext ctxt name (.comb [.one,.one])
   constructor
   · apply FrontendScalar.localPath name [.one,.one] [ctxt.vmax+1,ctxt.vmax+2]
-    · simp [FUPDATE]
+    · simp [valueDeclContext,FUPDATE,sizeOfShapeHOL,sizeOfShapesHOL, List.range_succ, List.range_zero, Nat.add_assoc]
     · rfl
     · exact .field .root 1 .one rfl
-  · simp [compileExpExactHOLW,FUPDATE,compFieldHOL,sizeOfShapeHOL]
+  · simp [compileExpExactHOLW,valueDeclContext,FUPDATE,compFieldHOL,sizeOfShapeHOL,sizeOfShapesHOL, List.range_succ, List.range_zero, Nat.add_assoc]
 
 end SteppedFlapjack.PanToCrepSteps
