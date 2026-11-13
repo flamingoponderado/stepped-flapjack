@@ -3,7 +3,7 @@ import SteppedFlapjack.CrepSteps.BranchStatic
 
 /-! General frontend program shapes and loop-free Crep compilation. -/
 namespace SteppedFlapjack.PanToCrepSteps
-open Flapjack Flapjack.Pancake.PanLang
+open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 open SteppedFlapjack.CrepSteps
 
 /-- The generalized Pancake frontend fragment, tracking the compiler context
@@ -13,8 +13,7 @@ inductive FrontendProgram {width : Nat} [NeZero width] : PanToCrepContextExact w
   | break {ctxt} : FrontendProgram ctxt .break
   | continue {ctxt} : FrontendProgram ctxt .continue
   | tick {ctxt} : FrontendProgram ctxt .tick
-  | storeStruct {ctxt a fields} : FrontendScalar ctxt a →
-      (∀ e ∈ fields, FrontendValue ctxt e) → FrontendProgram ctxt (.store a (.rstruct fields))
+  | storeValue {ctxt a v} : FrontendScalar ctxt a → FrontendValue ctxt v → FrontendProgram ctxt (.store a v)
   | store {ctxt a v} : FrontendScalar ctxt a → FrontendScalar ctxt v → FrontendProgram ctxt (.store a v)
   | assign {ctxt name e} (reg : Nat) : ctxt.vars.lookup name = some (.one,[reg]) →
       FrontendScalar ctxt e → FrontendProgram ctxt (.assign .local name e)
@@ -26,21 +25,18 @@ inductive FrontendProgram {width : Nat} [NeZero width] : PanToCrepContextExact w
   | while {ctxt e body} : FrontendScalar ctxt e → FrontendProgram ctxt body → FrontendProgram ctxt (.while e body)
   | ret {ctxt e} : FrontendScalar ctxt e → FrontendProgram ctxt (.return e)
 
+theorem FrontendProgram.storeStruct {width : Nat} [NeZero width] {ctxt : PanToCrepContextExact width}
+    {a : ExpHOL width} {fields : List (ExpHOL width)} (address : FrontendScalar ctxt a)
+    (values : ∀ e ∈ fields, FrontendValue ctxt e) : FrontendProgram ctxt (.store a (.rstruct fields)) :=
+  .storeValue address (.tuple values)
+
 /-- Frontend programs contain no global-variable references. -/
 theorem frontendProgram_localised {width : Nat} [NeZero width] {ctxt : PanToCrepContextExact width}
     {p : ProgHOL width} (shape : FrontendProgram ctxt p) : localisedProgHOL p = true := by
   induction shape
-  case storeStruct ha hf =>
-    rename_i ctxt a fields
+  case storeValue ha hv =>
     simp only [localisedProgHOL,Bool.and_eq_true]
-    refine ⟨frontendScalar_localised ha, ?_⟩
-    simp only [localisedExpHOL,everyExpHOL,Bool.true_and]
-    induction fields with
-    | nil => rfl
-    | cons e es ih =>
-      simp only [everyExpListHOL,Bool.and_eq_true]
-      exact ⟨frontendValue_localised (hf e (by simp)),
-        ih (fun x hx => hf x (by simp [hx]))⟩
+    exact ⟨frontendScalar_localised ha, frontendValue_localised hv⟩
   all_goals simp_all [localisedProgHOL] <;> aesop (add safe frontendScalar_localised)
 
 /-- The previously established loop-free frontend shape is a subset of the
@@ -100,9 +96,9 @@ theorem frontendLoopFree_static {width : Nat} [NeZero width] {ctxt : PanToCrepCo
   | «break» => simpa [compileProgExactHOLW] using (StaticProgram.leaf (.break 0 : CrepProgHOL width) rfl)
   | «continue» => simpa [compileProgExactHOLW] using (StaticProgram.leaf (.continue 0 : CrepProgHOL width) rfl)
   | tick => simpa [compileProgExactHOLW] using (StaticProgram.leaf (.tick : CrepProgHOL width) rfl)
-  | @storeStruct ctxt a fields ha hf =>
+  | @storeValue ctxt a value ha hv =>
     obtain ⟨address,ca⟩ := frontendScalar_compile ha
-    obtain ⟨values,sh,cv,size⟩ := frontendValue_compile (FrontendValue.tuple hf)
+    obtain ⟨values,sh,cv,size⟩ := frontendValue_compile hv
     simp only [compileProgExactHOLW,compileStoreExactHOLW,ca,cv,size,
       bne_self_eq_false, Bool.false_eq_true, if_false]
     apply nestedDecs_static
@@ -140,5 +136,19 @@ theorem frontendLoopFree_static {width : Nat} [NeZero width] {ctxt : PanToCrepCo
     obtain ⟨value,compiled⟩ := frontendScalar_compile he
     simp [compileProgExactHOLW,compileReturnExactHOLW,compiled]
     exact .leaf _ rfl
+
+/-- A two-register local struct can be stored, and its compiled program is static. -/
+theorem localStructStore_static {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width) (name : MlString) (address : BitVec width) :
+    let pairContext := {ctxt with vars := ctxt.vars.update (name,(.comb [.one,.one],[ctxt.vmax+1,ctxt.vmax+2]))}
+    FrontendProgram pairContext (.store (.const address) (.var .local name)) ∧
+    StaticProgram (compileProgExactHOLW pairContext (.store (.const address) (.var .local name))) := by
+  let pairContext := {ctxt with vars := ctxt.vars.update (name,(.comb [.one,.one],[ctxt.vmax+1,ctxt.vmax+2]))}
+  have localShape : FrontendValue pairContext (.var .local name) := by
+    apply FrontendValue.local name (.comb [.one,.one]) [ctxt.vmax+1,ctxt.vmax+2]
+    · simp [pairContext,FUPDATE]
+    · rfl
+  have supported : FrontendProgram pairContext (.store (.const address) (.var .local name)) :=
+    .storeValue (.const address) localShape
+  exact ⟨supported, frontendLoopFree_static supported rfl⟩
 
 end SteppedFlapjack.PanToCrepSteps

@@ -1,10 +1,13 @@
 import SteppedFlapjack.PanToCrepSteps.FrontendScalar
 namespace SteppedFlapjack.PanToCrepSteps
-open Flapjack Flapjack.Pancake.PanLang
+open Flapjack Flapjack.Pancake.PanLang Flapjack.Basis.Pure.MlString
 
 /-- A scalar or recursively nested tuple of scalar expressions. -/
 inductive FrontendValue {width : Nat} [NeZero width] (ctxt : PanToCrepContextExact width) : ExpHOL width → Prop
   | scalar {e} : FrontendScalar ctxt e → FrontendValue ctxt e
+  | local (name : MlString) (shape : ShapeHOL) (registers : List Nat) :
+      ctxt.vars.lookup name = some (shape, registers) → sizeOfShapeHOL shape = registers.length →
+      FrontendValue ctxt (.var .local name)
   | tuple {fields} : (∀ e ∈ fields, FrontendValue ctxt e) → FrontendValue ctxt (.rstruct fields)
 
 private theorem shapeListSize {width : Nat} [NeZero width] (items : List (List (CrepExpHOL width) × ShapeHOL))
@@ -29,6 +32,8 @@ theorem frontendValue_compile {width : Nat} [NeZero width] {ctxt : PanToCrepCont
   | scalar h =>
     obtain ⟨value,compiled⟩ := frontendScalar_compile h
     exact ⟨[value],.one,compiled,by simp [sizeOfShapeHOL]⟩
+  | «local» name shape registers found size =>
+    exact ⟨registers.map CrepExpHOL.var, shape, by simp [compileExpExactHOLW, found], by simpa using size⟩
   | @tuple fields hs ih =>
     let items := compileExpExactHOLWList ctxt fields
     have each : ∀ item ∈ items, sizeOfShapeHOL item.2 = item.1.length := by
@@ -46,6 +51,7 @@ theorem frontendValue_localised {width : Nat} [NeZero width] {ctxt : PanToCrepCo
     (h : FrontendValue ctxt e) : localisedExpHOL e = true := by
   induction h with
   | scalar h => exact frontendScalar_localised h
+  | «local» name shape registers found size => simp [localisedExpHOL, everyExpHOL]
   | @tuple fields hs ih =>
     simp only [localisedExpHOL,everyExpHOL,Bool.true_and]
     induction fields with

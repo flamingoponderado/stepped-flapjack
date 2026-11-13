@@ -67,6 +67,9 @@ theorem globalScalar_list_compiled {width : Nat} [NeZero width]
 inductive GlobalValue {width : Nat} [NeZero width]
     (globals : PanGlobalsContextExact width) (ctxt : PanToCrepContextExact width) : ExpHOL width → Prop
   | scalar {e} : GlobalScalar globals ctxt e → GlobalValue globals ctxt e
+  | local (name : MlString) (shape : ShapeHOL) (registers : List Nat) :
+      ctxt.vars.lookup name = some (shape, registers) → sizeOfShapeHOL shape = registers.length →
+      GlobalValue globals ctxt (.var .local name)
   | tuple {fields} : (∀ e ∈ fields, GlobalValue globals ctxt e) → GlobalValue globals ctxt (.rstruct fields)
 
 /-- Global lowering preserves recursive nested value structure. -/
@@ -75,6 +78,8 @@ theorem globalValue_compiled {width : Nat} [NeZero width]
     (h : GlobalValue globals ctxt e) : FrontendValue ctxt (compileExpExactHOL globals e) := by
   induction h with
   | scalar h => exact .scalar (globalScalar_compiled h)
+  | «local» name shape registers found size =>
+    simpa [compileExpExactHOL] using FrontendValue.local name shape registers found size
   | @tuple fields hs ih =>
     simp only [compileExpExactHOL]
     apply FrontendValue.tuple
@@ -88,6 +93,7 @@ theorem GlobalValue.of_frontend {width : Nat} [NeZero width] (globals : PanGloba
     {ctxt : PanToCrepContextExact width} {e : ExpHOL width} (h : FrontendValue ctxt e) : GlobalValue globals ctxt e := by
   induction h with
   | scalar h => exact .scalar (.local h)
+  | «local» name shape registers found size => exact .local name shape registers found size
   | tuple fields ih => exact .tuple ih
 
 theorem globalValue_list_compiled {width : Nat} [NeZero width]
@@ -108,6 +114,7 @@ inductive GlobalFrontend {width : Nat} [NeZero width] (globals : PanGlobalsConte
   | continue {ctxt} : GlobalFrontend globals ctxt .continue
   | tick {ctxt} : GlobalFrontend globals ctxt .tick
   | store {ctxt a v} : GlobalScalar globals ctxt a → GlobalScalar globals ctxt v → GlobalFrontend globals ctxt (.store a v)
+  | storeValue {ctxt a v} : GlobalScalar globals ctxt a → GlobalValue globals ctxt v → GlobalFrontend globals ctxt (.store a v)
   | storeStruct {ctxt a fields} : GlobalScalar globals ctxt a →
       (∀ e ∈ fields, GlobalValue globals ctxt e) → GlobalFrontend globals ctxt (.store a (.rstruct fields))
   | assignLocal {ctxt name e} (reg : Nat) : ctxt.vars.lookup name = some (.one,[reg]) →
@@ -136,6 +143,8 @@ theorem globalFrontend_compiled {width : Nat} [NeZero width]
   | «continue» => simpa only [compileProgExactHOL] using (FrontendProgram.continue (ctxt := _))
   | tick => simpa only [compileProgExactHOL] using (FrontendProgram.tick (ctxt := _))
   | store a v => simpa only [compileProgExactHOL] using FrontendProgram.store (globalScalar_compiled a) (globalScalar_compiled v)
+  | storeValue a value =>
+    simpa [compileProgExactHOL] using FrontendProgram.storeValue (globalScalar_compiled a) (globalValue_compiled value)
   | storeStruct a fields =>
     simpa only [compileProgExactHOL,compileExpExactHOL] using
       FrontendProgram.storeStruct (globalScalar_compiled a) (globalValue_list_compiled _ fields)
@@ -161,7 +170,7 @@ theorem GlobalFrontend.of_frontend {width : Nat} [NeZero width]
   | «continue» => exact .continue
   | tick => exact .tick
   | store a v => exact .store (.local a) (.local v)
-  | storeStruct a fields => exact .storeStruct (.local a) (by intro e member; exact GlobalValue.of_frontend globals (fields e member))
+  | storeValue a value => exact .storeValue (.local a) (GlobalValue.of_frontend globals value)
   | assign reg found e => exact .assignLocal reg found (.local e)
   | decl e body ih => exact .decl (.local e) ih
   | seq a b iha ihb => exact .seq iha ihb
