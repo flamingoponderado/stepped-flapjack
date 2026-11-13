@@ -41,7 +41,6 @@ import SteppedFlapjack.WordToStackSteps.RaiseClock
 import SteppedFlapjack.StackSteps.TableBound
 import SteppedFlapjack.LoopToWordSteps.WholeCallProgram
 import SteppedFlapjack.CrepToLoopSteps.CallFrontendShape
-import SteppedFlapjack.Concrete.NestedLoopRun
 import SteppedFlapjack.Concrete.NestedSourceHOL
 import SteppedFlapjack.Concrete.Phase7Witnesses
 import SteppedFlapjack.LabToTargetSteps.GoodCodeFilter

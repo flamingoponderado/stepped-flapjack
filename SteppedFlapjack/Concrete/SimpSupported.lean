@@ -251,53 +251,6 @@ theorem callSupported_panSimp_hol {scope : List VarName} {program : Prog (RiscV.
   simp only [progToHOL] at converted
   rw [panSimpCompileHOL,← converted,retCallHOLIdentity shape,panSimpProg,retCallSupportedIdentity shape]
 
-private theorem assocCallRanged {scope : List VarName} {program : Prog (RiscV.Word 64)}
-    (supported : CallSupportedIn scope program) : ProgByteRanged program →
-      ∀ pre, ProgByteRanged pre → ProgByteRanged (seqAssoc pre program) := by
-  induction supported with
-  | base h => exact assocRanged h
-  | tail name args scalar =>
-    intro ranged pre hpre
-    simpa only [seqAssoc] using smartRanged pre _ hpre ranged
-  | call dest name args scalar cont ih =>
-    intro ranged pre hpre
-    simp only [ProgByteRanged] at ranged
-    rw [seqAssoc]
-    apply smartRanged pre _ hpre
-    simpa only [ProgByteRanged] using ⟨ranged.1,ranged.2.1,ranged.2.2.1,ranged.2.2.2.1,
-      ih ranged.2.2.2.2 .skip (by simp [ProgByteRanged])⟩
-  | decl name scalar body ih =>
-    intro ranged pre hpre
-    simp only [ProgByteRanged] at ranged
-    rw [seqAssoc]
-    apply smartRanged pre _ hpre
-    simpa only [ProgByteRanged] using ⟨ranged.1,ranged.2.1,ranged.2.2.1,ih ranged.2.2.2 .skip (by simp [ProgByteRanged])⟩
-  | seq a b iha ihb =>
-    intro ranged pre hpre
-    simp only [ProgByteRanged] at ranged
-    simpa only [seqAssoc] using ihb ranged.2 _ (iha ranged.1 pre hpre)
-  | ite scalar a b iha ihb =>
-    intro ranged pre hpre
-    simp only [ProgByteRanged] at ranged
-    rw [seqAssoc]
-    apply smartRanged pre _ hpre
-    simpa only [ProgByteRanged] using ⟨ranged.1,iha ranged.2.1 .skip (by simp [ProgByteRanged]),
-      ihb ranged.2.2 .skip (by simp [ProgByteRanged])⟩
-  | «while» scalar body ih =>
-    intro ranged pre hpre
-    simp only [ProgByteRanged] at ranged
-    rw [seqAssoc]
-    apply smartRanged pre _ hpre
-    simpa only [ProgByteRanged] using ⟨ranged.1,ih ranged.2 .skip (by simp [ProgByteRanged])⟩
-
-/-- Simplification preserves the byte-range requirement used by the source bridge. -/
-theorem callSupported_panSimp_ranged {scope : List VarName} {program : Prog (RiscV.Word 64)}
-    (supported : CallSupportedIn scope program) (ranged : ProgByteRanged program) :
-    ProgByteRanged (panSimpProg program) := by
-  have shape := assocCallSupported supported .skip (.base .skip)
-  have range := assocCallRanged supported ranged .skip (by simp [ProgByteRanged])
-  simpa [panSimpProg,retCallSupportedIdentity shape] using range
-
 /-- On the call-aware fragment, simplification consists of reassociation. -/
 theorem callSupported_seqAssocHOL {scope : List VarName} {program : Prog (RiscV.Word 64)}
     (supported : CallSupportedIn scope program) :

@@ -23,22 +23,6 @@ def nestedSourceState (bitmapWords : Nat) : PanSemStateFiniteExact 64 Unit :=
 def nestedCountedProduction : PanSemState (RiscV.Word 64) (FfiState Unit) :=
   {sourceProduction with code := functionEntries nestedCallDeclarations}
 
-/-- A replay clock equal to the counted source budget. -/
-def nestedClockedSource : PanSemStateFiniteExact 64 Unit := {nestedSourceState 1 with clock := 6}
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 3000000 in
-theorem nestedEntryCode : (nestedClockedSource).code = HolFiniteMapExact.empty.updateList
-    (functionsHOL (nestedCallDeclarations.map declToHOL)).reverse := by
-  apply HolFiniteMapExact.ext_lookup
-  intro name
-  simp [nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate,HolFiniteMapExact.lookup_update,
-    HolFiniteMapExact.lookup_updateList,FUPDATE_LIST,FUPDATE,nestedCallDeclarations,declToHOL,
-    funDeclToHOL,functionsHOL,progToHOL,expToHOL,shapeToHOL]
-  by_cases ha : name = ofString "main" <;> by_cases hb : name = ofString "middle" <;>
-    by_cases hc : name = ofString "leaf" <;> simp_all [eq_comm]
-  all_goals subst name; contradiction
-
 /-- The executable functions of the nested witness. -/
 def nestedSourceFunctions : List (FunDeclOf 64) :=
   [⟨"main",false,true,[],nestedCallEntry,.one⟩,
@@ -59,12 +43,6 @@ theorem nested_table_supported : FunctionTableSupported nestedSourceFunctions :=
     · simp [FunDeclByteRanged,ListParamByteRanged,ProgByteRanged,ExpByteRanged,ShapeByteRanged,NameRanged]
     · simp
 
-
-theorem nestedSourceExact_eq (n clock : Nat) :
-    functionSourceExact nestedSourceFunctions n clock = {nestedSourceState n with clock := clock} := by
-  simp only [functionSourceExact, nestedSourceState]
-  congr 1
-  simpa [nestedSourceFunctions,nestedCallDeclarations,declToHOL,funDeclToHOL,nestedClockedSource,nestedSourceState,sourceTemplateFor,sourceTemplate] using nestedEntryCode.symm
 
 theorem nestedCounted_run (memory : BitVec 64 → Option (PanValue (RiscV.Word 64))) (context : PanValueFfiContext (RiscV.Word 64))
     (primitive : PanPrimitiveHandler (RiscV.Word 64)) (handler : PanValueStatefulFfiHandler (RiscV.Word 64) Unit) :

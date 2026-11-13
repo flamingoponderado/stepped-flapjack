@@ -106,15 +106,6 @@ theorem functionEntriesHOL_map (fs : List (FunDeclOf 64)) :
     simpa [functionsHOL,funDeclToHOL,List.map_map] using
       congrArg (List.cons (ofString f.name, f.params.map paramToHOL, progToHOL f.body, shapeToHOL f.returnShape)) ih
 
-theorem original_entry_shapes (fs : List (FunDeclOf 64)) (h : FunctionTableSupported fs) :
-    ∀ entry ∈ functionsHOL ((fs.map funDeclToHOL).map DeclHOL.function),
-      ∃ scope, ∃ program : Prog (RiscV.Word 64),
-        entry.2.2.1 = progToHOL program ∧ CallSupportedIn scope program ∧ ProgByteRanged program := by
-  rw [functionEntriesHOL_map]
-  intro entry he
-  obtain ⟨f,hf,rfl⟩ := List.mem_map.mp he
-  exact ⟨f.params.map Prod.fst,f.body,rfl,(h f hf).2.1,(h f hf).1.2.2.1⟩
-
 /-- Scalar parameters keep their names and scalar shapes in HOL. -/
 theorem scalarParams_toHOL (params : List (VarName × Shape))
     (scalar : ∀ p ∈ params, p.2 = .one) :
@@ -124,28 +115,6 @@ theorem scalarParams_toHOL (params : List (VarName × Shape))
   intro p hp
   have hp' := scalar p hp
   simp [paramToHOL,hp',shapeToHOL]
-
-/-- Simplification preserves scalar, call-aware function table shapes. -/
-theorem simplified_entry_shapes (sourceFs : List (FunDeclOf 64)) (supported : FunctionTableSupported sourceFs) :
-    ∀ entry ∈ functionsHOL (((sourceFs.map funDeclToHOL).map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function),
-      ∃ names, ∃ body : Prog (RiscV.Word 64),
-        entry.2.1 = names.map (fun n => (ofString n,ShapeHOL.one)) ∧
-        entry.2.2.1 = progToHOL body ∧ CallSupportedIn names body ∧ ProgByteRanged body := by
-  have eq : functionsHOL (((sourceFs.map funDeclToHOL).map (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function) =
-      sourceFs.map (fun f => (ofString f.name, f.params.map paramToHOL, panSimpCompileHOL (progToHOL f.body), shapeToHOL f.returnShape)) := by
-    clear supported
-    induction sourceFs with
-    | nil => rfl
-    | cons f fs ih =>
-      simpa [functionsHOL,funDeclToHOL,List.map_map] using congrArg
-        (List.cons (ofString f.name, f.params.map paramToHOL, panSimpCompileHOL (progToHOL f.body), shapeToHOL f.returnShape)) ih
-  rw [eq]
-  intro entry he
-  obtain ⟨f,hf,rfl⟩ := List.mem_map.mp he
-  obtain ⟨ranged,shape,params,ret⟩ := supported f hf
-  have paramEq := scalarParams_toHOL f.params params
-  refine ⟨f.params.map Prod.fst,panSimpProg f.body,paramEq,?_,callSupported_panSimp shape,callSupported_panSimp_ranged shape ranged.2.2.1⟩
-  exact callSupported_panSimp_hol shape
 
 /-- Original supported functions have the scalar frontend table shape. -/
 theorem original_function_shapes (fs : List (FunDeclOf 64)) (supported : FunctionTableSupported fs) :
@@ -231,16 +200,6 @@ theorem call_structs_top (fs : List (FunDeclOf 64)) (supported : FunctionTableSu
     | cons f fs ih => simpa [getNamesExact] using ih
   change (compileDeclsExact (getNamesExact ctxt (simplified.map DeclHOL.function)) (simplified.map DeclHOL.function)).1 = _
   rw [names,call_structs_declarations fs supported ctxt]
-
-theorem call_panToWord (fs : List (FunDeclOf 64)) (supported : FunctionTableSupported fs) :
-    panToWordCompileProgHOL riscvConfig.isa ((fs.map funDeclToHOL).map DeclHOL.function) =
-      loopToWordCompileHOL (compileProgHOLExact riscvConfig.isa
-        (compileProgDeclsHOLW (compileTopExactHOL ((((fs.map funDeclToHOL).map
-          (fun f => {f with body := panSimpCompileHOL f.body})).map DeclHOL.function)) (ofString "main")))) := by
-  unfold panToWordCompileProgHOL
-  rw [simpFunctions]
-  dsimp only
-  rw [call_structs_top fs supported]
 
 /-- Supported function declarations satisfy the source compiler good-code check. -/
 theorem table_good (fs : List (FunDeclOf 64)) (supported : FunctionTableSupported fs) :

@@ -11,11 +11,6 @@ open SteppedFlapjack.LoopLiveSteps SteppedFlapjack.LoopToWordSteps
 
 def nestedCallCrepPrograms : List (MlString × List Nat × CrepProgHOL 64) := compileProgDeclsHOLW (compileTopExactHOL (nestedCallDeclarations.map declToHOL) (ofString "main"))
 
-/-- The wrapper visit limit is computed from the counted source run and source declarations. -/
-def nestedSourceEntryLimit : Nat :=
-  1 + SimpVisits.simpTableFactor (functionsHOL (nestedCallDeclarations.map declToHOL)) * 6 +
-    SimpVisits.hw (progToHOL (panSimpProg nestedCallEntry)) + 2
-
 /-- The shared structural optimizer computes the original Loop compiler output
 for every function of the nested-call witness. -/
 theorem nestedCall_structuralLive_eq :

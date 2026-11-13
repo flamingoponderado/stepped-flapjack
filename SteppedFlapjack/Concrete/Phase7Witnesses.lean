@@ -124,14 +124,6 @@ private theorem cmpRate (ctx : CrepToLoopContextExact) (name : MlString) (clock 
     simp [callTableCost,twoPrograms,callSyntaxCost,callExpressionCost,callArgumentsCost,branchCrepBody,
       compileExpHOLExact,compileExpsHOLExact,progIfHOLExact,loopNestedSeqHOL,LoopSteps.structuralWeight]
   simp [callClockFactor,entry,table]
-private theorem cmpRateRaw (ctx : CrepToLoopContextExact) (clock : Nat) :
-    callClockFactor ctx (([(ofString "main",[],.seq .skip (.call none (entryName branchingHOL) [])),
-   (entryName branchingHOL,[],.ite (.cmp .lower (.const 0) (.const 1)) (.return [.const 7]) (.return [.const 9]))] : List (MlString × List Nat × CrepProgHOL 64)).map (fun row => (row.2.1,row.2.2))) clock
-      (.seq .skip (.call none (entryName branchingHOL) [])) = 192 := by
-  simpa only [twoPrograms,branchCrepBody] using cmpRate ctx (entryName branchingHOL) clock
-private theorem cmpCodeWeightRaw : CrepSteps.codeWeight ([(ofString "main",[],.seq .skip (.call none (entryName branchingHOL) [])),
-   (entryName branchingHOL,[],.ite (.cmp .lower (.const 0) (.const 1)) (.return [.const 7]) (.return [.const 9]))] : List (MlString × List Nat × CrepProgHOL 64)) = 3 := by
-  simpa only [twoPrograms,branchCrepBody] using cmpCodeWeight (entryName branchingHOL)
 private theorem cmpLoopWeightRaw : loopCodeWeight (sptFromAList (compileProgHOLExact riscvConfig.isa
     ([(ofString "main",[],.seq .skip (.call none (entryName branchingHOL) [])),
       (entryName branchingHOL,[],.ite (.cmp .lower (.const 0) (.const 1)) (.return [.const 7]) (.return [.const 9]))] : List (MlString × List Nat × CrepProgHOL 64)))) = 46 := by
