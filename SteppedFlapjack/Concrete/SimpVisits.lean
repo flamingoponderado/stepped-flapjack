@@ -660,10 +660,14 @@ private theorem frontend_hw {width : Nat} [NeZero width] {context : PanToCrepCon
   induction shape with
   | skip | «break» | «continue» | tick | store | storeValue | assign | ret =>
     simpa [hw] using CrepSteps.statementWeight_pos (compileProgExactHOLW _ _)
-  | @decl ctxt name e body he hb ih =>
-    obtain ⟨value,compiled⟩ := frontendDecl_compile ctxt name e body he
-    rw [compiled]
-    simp only [hw, CrepSteps.statementWeight]
+  | @declValue ctxt name declared e body he positive hb ih =>
+    obtain ⟨values,shape,compiled,size⟩ := frontendValue_compile he
+    have hpos : 0 < sizeOfShapeHOL shape := by simpa [compiled] using positive
+    rw [valueDecl_compiled ctxt name declared e body shape values compiled size]
+    rw [nestedDecs_weight _ _ _ (by simp [size])]
+    simp only [List.length_map,List.length_range,hw]
+    have child := ih
+    simp only [compiled] at child
     omega
   | @seq ctxt a b ha hb iha ihb =>
     simp only [hw,compileProgExactHOLW,CrepSteps.statementWeight]

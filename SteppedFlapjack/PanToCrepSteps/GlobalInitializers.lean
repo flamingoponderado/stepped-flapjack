@@ -124,6 +124,26 @@ theorem globalCompile_frontendValue {width : Nat} [NeZero width]
     obtain ⟨field,fieldMember,rfl⟩ := member
     exact ih field fieldMember
 
+/-- Global lowering preserves the compiled shape of frontend values. -/
+theorem globalCompile_frontendValue_shape {width : Nat} [NeZero width]
+    (globals : PanGlobalsContextExact width) {ctxt : PanToCrepContextExact width} {e : ExpHOL width}
+    (h : FrontendValue ctxt e) :
+    (compileExpExactHOLW ctxt (compileExpExactHOL globals e)).2 = (compileExpExactHOLW ctxt e).2 := by
+  induction h with
+  | scalar h =>
+    obtain ⟨a,ha⟩ := frontendScalar_compile h
+    obtain ⟨b,hb⟩ := frontendScalar_compile (globalCompile_frontendScalar globals h)
+    rw [ha,hb]
+  | «local» name shape registers found size => simp [compileExpExactHOL,compileExpExactHOLW,found]
+  | @tuple fields hs ih =>
+    simp only [compileExpExactHOL,compileExpExactHOLW]
+    rw [frontend_compileList_map,frontend_compileList_map,globalCompile_list_map]
+    simp only [List.map_map]
+    congr 1
+    apply List.map_congr_left
+    intro e member
+    exact ih e member
+
 theorem globalCompile_frontend_initializers {width : Nat} [NeZero width]
     (ctxt : PanToCrepContextExact width) (declarations : List (DeclHOL width))
     (shape : ∀ sh name value, DeclHOL.decl sh name value ∈ declarations → FrontendValue ctxt value)

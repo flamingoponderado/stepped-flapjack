@@ -73,8 +73,8 @@ private theorem boundIte {g : PanGlobalsContextExact 64} {P : HolFiniteMapExact 
     simp only [if_pos zero]
     rw [ha source sourceFinal target result budget table run nonerror rel]
 
-private theorem boundDecl {g : PanGlobalsContextExact 64} {P : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL) → Prop} {limit : Nat} (name : MlS) {initializer : ExpHOL 64} {body : ProgHOL 64}
-    (bodyBound : Bound g P limit body) : Bound g P limit (.dec name .one initializer body) := by
+private theorem boundDecl {g : PanGlobalsContextExact 64} {P : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL) → Prop} {limit : Nat} (name : MlS) (declared : ShapeHOL) {initializer : ExpHOL 64} {body : ProgHOL 64}
+    (bodyBound : Bound g P limit body) : Bound g P limit (.dec name declared initializer body) := by
   intro σ source sourceFinal target result budget table run nonerror rel
   rw [evaluateHOLFiniteState_dec_total] at run
   dsimp only at run
@@ -84,7 +84,7 @@ private theorem boundDecl {g : PanGlobalsContextExact 64} {P : HolFiniteMapExact
     exact absurd (Prod.mk.inj run).1.symm nonerror
   | some value =>
     simp only [evaluated] at run
-    by_cases valid : shapeEqHOL .one (shapeOfHOLExact value) = true
+    by_cases valid : shapeEqHOL declared (shapeOfHOLExact value) = true
     · simp only [valid,ite_true] at run
       have targetEval := PanGlobalsCompileExpCorrect.compileExpCorrectHOL source initializer value g target ⟨rel,evaluated⟩
       have bodyRel := PanGlobalsStateRelationLocals.stateRelSetVarHOL g source target true name value rel
@@ -339,7 +339,8 @@ private theorem frontendBound {g : PanGlobalsContextExact 64}
   | assignGlobalStruct found e =>
     intro σ source sourceFinal target result budget table run nonerror rel
     simp [compileProgExactHOL,found,controlSteps.eq_def]
-  | decl e body ih => exact boundDecl _ ih
+  | decl e body ih => exact boundDecl _ .one ih
+  | declValue e positive body ih => exact boundDecl _ _ ih
   | seq a b iha ihb => exact boundSeq iha ihb
   | ite e a b iha ihb => exact boundIte iha ihb
   | «while» e body ih => exact boundWhile ih
@@ -485,7 +486,7 @@ private theorem globalCallBound (g : PanGlobalsContextExact 64) (limit : Nat) :
                 intro value h; exact returned ⟨value,h⟩
               exact terminalReached g dest name shape args callee cont source target values locals rsh bodyResult bodyFinal
                 argsEval found noClock bodyRun bodyNonerror terminal rel calleeBound
-    | decl e body ih => exact boundDecl _ ih
+    | decl e body ih => exact boundDecl _ .one ih
     | seq a b iha ihb => exact boundSeq iha ihb
     | ite e a b iha ihb => exact boundIte iha ihb
     | «while» e body ih => exact boundWhile ih

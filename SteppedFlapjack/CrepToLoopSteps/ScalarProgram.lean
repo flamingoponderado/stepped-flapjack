@@ -77,10 +77,14 @@ theorem frontend_scalar_program {width : Nat} [NeZero width] {ctxt : PanToCrepCo
         cases h : distinctListsHol [reg] (crepExpVarsW (crepExpOfHOL value)) <;> simp_all
       simp [compileProgExactHOLW,compileLocalAssignExactHOLW,compiled,found,overlap,nestedDecsHOL,crepNestedSeqHOL]
       exact .dec _ scalar (.seq (.assign _ (.direct (.var _))) .skip)
-  | @decl ctxt name e body he hb ih =>
-    obtain ⟨value,compiled,scalar⟩ := frontendScalar_compiled he
-    simp [compileProgExactHOLW,compileDecExactHOLW,compiled,nestedDecsHOL]
-    exact .dec _ scalar ih
+  | @declValue ctxt name declared e body he positive hb ih =>
+    obtain ⟨values,shape,compiled,size⟩ := frontendValue_compile he
+    have each := frontendValue_scalars he
+    rw [compiled] at each
+    rw [valueDecl_compiled ctxt name declared e body shape values compiled size]
+    apply nestedDecs_scalar
+    · simpa [compiled] using ih
+    · exact each
   | @seq ctxt a b ha hb iha ihb => simpa [compileProgExactHOLW] using ScalarProgram.seq iha ihb
   | @ite ctxt e a b he ha hb iha ihb =>
     obtain ⟨value,compiled,scalar⟩ := frontendScalar_compiled he

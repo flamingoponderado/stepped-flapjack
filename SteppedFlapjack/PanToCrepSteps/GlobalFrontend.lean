@@ -124,6 +124,10 @@ inductive GlobalFrontend {width : Nat} [NeZero width] (globals : PanGlobalsConte
       (∀ e ∈ fields, GlobalValue globals ctxt e) → GlobalFrontend globals ctxt (.assign .global name (.rstruct fields))
   | decl {ctxt name e body} : GlobalScalar globals ctxt e →
       GlobalFrontend globals (scalarDeclContext ctxt name) body → GlobalFrontend globals ctxt (.dec name .one e body)
+  | declValue {ctxt name declared e body} : FrontendValue ctxt e →
+      0 < sizeOfShapeHOL (compileExpExactHOLW ctxt e).2 →
+      GlobalFrontend globals (valueDeclContext ctxt name (compileExpExactHOLW ctxt e).2) body →
+      GlobalFrontend globals ctxt (.dec name declared e body)
   | seq {ctxt a b} : GlobalFrontend globals ctxt a → GlobalFrontend globals ctxt b → GlobalFrontend globals ctxt (.seq a b)
   | ite {ctxt e a b} : GlobalScalar globals ctxt e → GlobalFrontend globals ctxt a → GlobalFrontend globals ctxt b →
       GlobalFrontend globals ctxt (.ite e a b)
@@ -156,6 +160,11 @@ theorem globalFrontend_compiled {width : Nat} [NeZero width]
     simp only [compileProgExactHOL,found,compileExpExactHOL]
     exact .storeStruct (.op .sub .topAddr (.const _)) (globalValue_list_compiled _ fields)
   | decl e body ih => simpa only [compileProgExactHOL] using FrontendProgram.decl (globalScalar_compiled e) ih
+  | @declValue ctxt name declared e body he positive hb ih =>
+    simp only [compileProgExactHOL]
+    apply FrontendProgram.declValue (globalCompile_frontendValue globals he)
+    · simpa [globalCompile_frontendValue_shape globals he] using positive
+    · simpa [globalCompile_frontendValue_shape globals he] using ih
   | seq a b iha ihb => simpa only [compileProgExactHOL] using FrontendProgram.seq iha ihb
   | ite e a b iha ihb => simpa only [compileProgExactHOL] using FrontendProgram.ite (globalScalar_compiled e) iha ihb
   | «while» e body ih => simpa only [compileProgExactHOL] using FrontendProgram.while (globalScalar_compiled e) ih
@@ -172,7 +181,7 @@ theorem GlobalFrontend.of_frontend {width : Nat} [NeZero width]
   | store a v => exact .store (.local a) (.local v)
   | storeValue a value => exact .storeValue (.local a) (GlobalValue.of_frontend globals value)
   | assign reg found e => exact .assignLocal reg found (.local e)
-  | decl e body ih => exact .decl (.local e) ih
+  | declValue e positive body ih => exact .declValue e positive ih
   | seq a b iha ihb => exact .seq iha ihb
   | ite e a b iha ihb => exact .ite (.local e) iha ihb
   | «while» e body ih => exact .while (.local e) ih
