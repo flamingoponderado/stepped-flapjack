@@ -49,6 +49,11 @@ theorem globalScalar_frontend {shapes : VarName → Option ShapeHOL} {globals : 
   | «local» h => exact .local (scalar_frontend_shape relation h)
   | global h => exact globalRead_frontend layout h
   | load h ih => simpa [expToHOL,shapeToHOL] using PanToCrepSteps.GlobalScalar.load ih
+  | heapField fields index selected address ih =>
+    simp only [expToHOL, shapeToHOL]
+    apply PanToCrepSteps.GlobalScalar.heapField (fields.map shapeToHOL) index
+    · simp [List.getElem?_map, selected, shapeToHOL]
+    · simpa [expToHOL, shapeToHOL] using ih
   | op op a b iha ihb => simpa [expToHOL] using PanToCrepSteps.GlobalScalar.op op iha ihb
   | cmp op a b iha ihb => simpa [expToHOL] using PanToCrepSteps.GlobalScalar.cmp op iha ihb
   | shift op a b iha ihb => simpa [expToHOL] using PanToCrepSteps.GlobalScalar.shift op iha ihb

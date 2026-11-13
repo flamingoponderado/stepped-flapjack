@@ -105,11 +105,60 @@ theorem globalRead_word {σ : Type} {shapes : VarName → Option ShapeHOL} {e : 
   | rStruct fields => simp [shapeOfHOLExact] at h
   | nStruct name fields => simp [shapeOfHOLExact] at h
 
+theorem flatList_one_word {α : Type} [BEq α] [Add α]
+    (structs : StructContext) (readWord : α → Option α) (bytes : α) :
+    ∀ (fuel : Nat) (shapes : List Shape) (address : α) (values : List (PanValue α)) (index : Nat) (value : PanValue α),
+      panValueFlatLoadListFuel structs readWord bytes fuel shapes address = some values →
+      shapes[index]? = some .one → values[index]? = some value →
+      ∃ word, value = .word word := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro shapes address values index value loaded selected got
+    cases shapes <;> simp [panValueFlatLoadListFuel] at loaded
+    subst values
+    simp at got
+  | succ fuel ih =>
+    intro shapes address values index value loaded selected got
+    cases shapes with
+    | nil =>
+      simp [panValueFlatLoadListFuel] at loaded
+      subst values
+      simp at got
+    | cons shape shapes =>
+      cases hv : panValueFlatLoadFuel structs readWord bytes fuel shape address with
+      | none => simp [panValueFlatLoadListFuel, hv] at loaded
+      | some head =>
+        cases ht : panValueFlatLoadListFuel structs readWord bytes fuel shapes
+            (panValueFlatOffset bytes address (shapeSizeWithContext structs shape)) with
+        | none => simp [panValueFlatLoadListFuel, hv, ht] at loaded
+        | some tail =>
+          simp [panValueFlatLoadListFuel, hv, ht] at loaded
+          subst values
+          cases index with
+          | zero =>
+            simp at selected got
+            subst shape
+            subst value
+            cases fuel with
+            | zero => simp [panValueFlatLoadFuel] at hv
+            | succ fuel =>
+              cases hw : readWord address with
+              | none => simp [panValueFlatLoadFuel, hw] at hv
+              | some word =>
+                simp [panValueFlatLoadFuel, hw] at hv
+                exact ⟨word,hv.symm⟩
+          | succ index =>
+            exact ih shapes _ tail index value ht (by simpa using selected) (by simpa using got)
+
 /-- Global-aware scalar expressions retain word-valued successful evaluations. -/
 inductive GlobalScalarExpression (shapes : VarName → Option ShapeHOL) (scope : List VarName) : Exp (RiscV.Word 64) → Prop
   | local {e} : Scalar scope e → GlobalScalarExpression shapes scope e
   | global {e} : GlobalRead shapes e .one → GlobalScalarExpression shapes scope e
   | load {address} : GlobalScalarExpression shapes scope address → GlobalScalarExpression shapes scope (.load .one address)
+  | heapField (fields : List Shape) (index : Nat) : fields[index]? = some .one →
+      ∀ {address}, GlobalScalarExpression shapes scope address →
+      GlobalScalarExpression shapes scope (.rField index (.load (.comb fields) address))
   | op (operator) {a b} : GlobalScalarExpression shapes scope a → GlobalScalarExpression shapes scope b → GlobalScalarExpression shapes scope (.op operator [a,b])
   | cmp (operator) {a b} : GlobalScalarExpression shapes scope a → GlobalScalarExpression shapes scope b → GlobalScalarExpression shapes scope (.cmp operator a b)
   | shift (operator) {a b} : GlobalScalarExpression shapes scope a → GlobalScalarExpression shapes scope b → GlobalScalarExpression shapes scope (.shift operator a b)
@@ -143,6 +192,29 @@ theorem globalScalarExpression_word {σ : Type} {shapes : VarName → Option Sha
         simp [addressRun,panValueFlatLoad,isWfShape,panValueFlatLoadFuel,read] at evaluated
         subst value
         exact ⟨word,rfl⟩
+  | @heapField fields index selected address ha ih =>
+    simp only [evalPanValueExp] at evaluated
+    cases addressRun : evalPanValueExp production.structs production.locals production.globals production.memory
+        production.baseAddress production.topAddress panSemBitVec64BytesInWord address
+        (some (panSemBitVec64MemoryAccess production)) with
+    | none => simp [addressRun] at evaluated
+    | some result =>
+      obtain ⟨addressWord,rfl⟩ := ih result addressRun
+      simp only [addressRun] at evaluated
+      unfold panValueFlatLoad at evaluated
+      split at evaluated
+      · cases fuelEq : panValueFlatContextFuel production.structs + panValueFlatShapeFuel (.comb fields) + 1 with
+        | zero => simp [fuelEq,panValueFlatLoadFuel] at evaluated
+        | succ fuel =>
+          cases loaded : panValueFlatLoadListFuel production.structs
+              (panValueFlatReadWord production.memory panSemBitVec64BytesInWord
+                (some (panSemBitVec64MemoryAccess production))) panSemBitVec64BytesInWord
+              fuel fields addressWord with
+          | none => simp [fuelEq,panValueFlatLoadFuel,loaded] at evaluated
+          | some values =>
+            simp [fuelEq,panValueFlatLoadFuel,loaded] at evaluated
+            exact flatList_one_word production.structs _ _ fuel fields addressWord values index value loaded selected evaluated
+      · simp at evaluated
   | @op operator a b ha hb iha ihb =>
     simp only [evalPanValueExp] at evaluated
     cases argsRun : evalPanValueExp.evalPanValueExps production.structs production.locals production.globals production.memory

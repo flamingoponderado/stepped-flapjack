@@ -15,6 +15,9 @@ inductive GlobalScalar {width : Nat} [NeZero width]
       globals.globals.lookup name = some (.comb shapes,offset) →
       FieldPath (.var .global name) (.comb shapes) e .one → GlobalScalar globals ctxt e
   | load {address} : GlobalScalar globals ctxt address → GlobalScalar globals ctxt (.load .one address)
+  | heapField (fields : List ShapeHOL) (index : Nat) : fields[index]? = some .one →
+      ∀ {address}, GlobalScalar globals ctxt address →
+      GlobalScalar globals ctxt (.rfield index (.load (.comb fields) address))
   | op (operator) {a b} : GlobalScalar globals ctxt a → GlobalScalar globals ctxt b →
       GlobalScalar globals ctxt (.op operator [a,b])
   | cmp (operator) {a b} : GlobalScalar globals ctxt a → GlobalScalar globals ctxt b →
@@ -41,6 +44,8 @@ theorem globalScalar_compiled {width : Nat} [NeZero width]
     simp only [compileExpExactHOL,found] at mapped
     exact FrontendScalar.fieldPath shapes (.op .sub .topAddr (.const offset)) mapped
   | load h ih => simpa [compileExpExactHOL] using FrontendScalar.load ih
+  | heapField fields index selected address ih =>
+    simpa [compileExpExactHOL] using FrontendScalar.fieldLoad index fields selected ih
   | op operator a b iha ihb => simpa [compileExpExactHOL,compileExpExactHOLList] using FrontendScalar.op operator iha ihb
   | cmp operator a b iha ihb => simpa [compileExpExactHOL] using FrontendScalar.cmp operator iha ihb
   | shift operator a b iha ihb => simpa [compileExpExactHOL] using FrontendScalar.shift operator iha ihb

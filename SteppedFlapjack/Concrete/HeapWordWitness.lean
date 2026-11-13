@@ -1,4 +1,5 @@
 import SteppedFlapjack.Concrete.SourceState
+import SteppedFlapjack.Concrete.CountedSource
 import SteppedFlapjack.PanValueFfiSemantics
 import SteppedFlapjack.PanToCrepSteps.CountedAssign
 import Flapjack.Pancake.Semantics.CrepRuntimeTarget
@@ -27,6 +28,15 @@ theorem heapWordLoad_run :
       (memoryAccess := some (panSemBitVec64MemoryAccess sourceProduction)) (contracts := none) =
         some (.returned sourceProduction.locals sourceProduction.globals sourceProduction.memory sourceProduction.ffi [.word 0], 3) := by
   with_unfolding_all rfl
+
+/-- Read the second field of a two-word heap structure. -/
+def heapPairField : Prog (RiscV.Word 64) :=
+  .return (.rField 1 (.load (.comb [.one, .one]) (.const 0xa1000100)))
+
+/-- The structured load is accepted by the public source fragment. -/
+theorem heapPairField_supported (shapes : VarName → Option ShapeHOL) : Supported shapes heapPairField := by
+  refine ⟨.ret (.heapField [.one, .one] 1 (by rfl) (.local (.const _))), ?_⟩
+  simp [heapPairField, ProgByteRanged, ExpByteRanged, ShapeByteRanged]
 
 /-- Store seven in the initialized heap and return the word read back. -/
 def heapWordWitness : Prog (RiscV.Word 64) :=
